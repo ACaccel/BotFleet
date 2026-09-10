@@ -166,7 +166,7 @@ touch "$3/conda-meta/history"
     expect(calls).toContain('yarn@1.22.22 mongosh@2.10.0');
   });
 
-  it.each(['valid', 'wrong-name', 'malformed', 'mismatch'])(
+  it.each(['valid', 'valid-relative', 'wrong-name', 'wrong-directory', 'malformed', 'mismatch'])(
     'validates automatically downloaded checksum: %s',
     (mode) => {
       const bin = path.join(directory, 'download-bin');
@@ -194,7 +194,9 @@ if [[ "$url" == *.sha256 ]]; then
   asset=\${asset%.sha256}
   case "$BOOTSTRAP_TEST_CHECKSUM_MODE" in
     valid) printf '%s  %s\\n' "$BOOTSTRAP_TEST_CHECKSUM" "$asset" > "$output" ;;
+    valid-relative) printf '%s  ./%s\\n' "$BOOTSTRAP_TEST_CHECKSUM" "$asset" > "$output" ;;
     wrong-name) printf '%s  wrong.sh\\n' "$BOOTSTRAP_TEST_CHECKSUM" > "$output" ;;
+    wrong-directory) printf '%s  ../%s\\n' "$BOOTSTRAP_TEST_CHECKSUM" "$asset" > "$output" ;;
     malformed) printf 'malformed\\n' > "$output" ;;
     mismatch) printf '%064d  %s\\n' 0 "$asset" > "$output" ;;
   esac
@@ -213,8 +215,9 @@ fi
         BOOTSTRAP_TEST_CHECKSUM_MODE: mode,
         BOOTSTRAP_TEST_DOWNLOAD_LOG: downloadLog,
       });
-      expect(result.status, result.stderr).toBe(mode === 'valid' ? 0 : 1);
-      expect(existsSync(prefix)).toBe(mode === 'valid');
+      const valid = mode === 'valid' || mode === 'valid-relative';
+      expect(result.status, result.stderr).toBe(valid ? 0 : 1);
+      expect(existsSync(prefix)).toBe(valid);
       expect(readFileSync(downloadLog, 'utf8')).toMatch(
         /https:\/\/github.com\/conda-forge\/miniforge\/releases\/download\/26\.5\.3-0\/Miniforge3-26\.5\.3-0-Linux-(x86_64|aarch64)\.sh\.sha256/,
       );

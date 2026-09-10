@@ -129,7 +129,9 @@ if [[ ! -x "$conda" ]]; then
     checksum_entry=$(< "$temporary/installer.sha256")
     [[ "$checksum_entry" =~ ^([a-fA-F0-9]{64})[[:blank:]]+\*?([^[:space:]]+)$ ]] || fail 'Invalid official installer checksum'
     installer_sha256=${BASH_REMATCH[1]}
-    [[ "${BASH_REMATCH[2]}" == "$asset" ]] || fail 'Official installer checksum names a different asset'
+    checksum_asset=${BASH_REMATCH[2]}
+    # Official release checksums may prefix the asset basename with ./.
+    [[ "${checksum_asset#./}" == "$asset" ]] || fail 'Official installer checksum names a different asset'
   fi
   if [[ -z "$installer" ]]; then
     installer="$temporary/miniforge.sh"
