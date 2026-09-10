@@ -168,7 +168,10 @@ it.skipIf(!binDirectory)(
           authDatabase: 'admin',
         }),
       );
-      const uri = `mongodb://${user}:${password}@127.0.0.1:${port}/?authSource=admin`;
+      const connectionUrl = new URL(`mongodb://127.0.0.1:${port}/?authSource=admin`);
+      connectionUrl.username = user;
+      connectionUrl.password = password;
+      const uri = connectionUrl.href;
       succeed(invoke('ping', uri));
       execute(
         uri,
