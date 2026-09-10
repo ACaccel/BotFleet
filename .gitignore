@@ -33,4 +33,12 @@ tools/msg_backup/logs/
 tools/msg_backup/tmp/
 tools/db/config.json
 tools/db/backups/
-
+tools/migration/config.*.json
+!tools/migration/config.example.json
+tools/migration/*.local.*
+tools/migration/runs/
+tools/migration/.state/
+tools/migration/backups/
+tools/migration/dump/
+tools/migration/*.tar.gz
+tools/migration/*.archive.gz

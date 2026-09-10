@@ -290,6 +290,13 @@ each guild's database — clear it with `yarn db drop-xfeed`, which counts
 only until you set `dry_run: false` (see
 [`tools/db/README.md`](tools/db/README.md)).
 
+## Moving to another host
+
+Use the [host migration tool](tools/migration/README.md) to prepare an empty
+Linux target, install a conda runtime, and transfer MongoDB data and gitignored
+runtime files. Application code comes from Git clone; the runbook covers restore
+and rollback.
+
 ## Adding a command, button, modal, or plugin
 
 See the step-by-step guides under

@@ -3,6 +3,11 @@
 Part of the [contributing guide](../../CONTRIBUTING.md). Covers the
 pre-deploy smoke check and the dependency-override policy.
 
+## Host migration
+
+The [migration tool runbook](../../tools/migration/README.md) owns host setup,
+database transfer, runtime validation and cutover instructions.
+
 ## Pre-deploy smoke
 
 `yarn smoke` is a boundary-only sanity check intended to run against a

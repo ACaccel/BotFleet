@@ -55,6 +55,13 @@ nothing under `src/` may import from it. Logic needed at both build time
 `src/handlers/commands/` and is consumed from both sides — for example
 `buildCommandJsonBody`, whose input type is a handler-layer contract.
 
+`tools/migration/` is an operational boundary outside the application layers.
+Its Bash bootstrap prepares an empty target; dependency-free Node orchestration
+then coordinates Git-ignored file inventories and external MongoDB tools.
+Application code is obtained separately through Git clone.
+It does not import application services or change database schemas. See the
+[migration runbook](../tools/migration/README.md) for its configuration and workflow.
+
 ## 2. Key abstractions
 
 ### `BaseBot` ([src/bot/index.ts](../src/bot/index.ts))

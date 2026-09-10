@@ -1,0 +1,5 @@
+{
+  "environment": "/home/OPERATOR/miniforge3/envs/ENVIRONMENT_NAME",
+  "mongoEnv": "src/bot/tomori/.env",
+  "backupDir": "/home/OPERATOR/botfleet-backups"
+}
