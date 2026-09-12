@@ -13,7 +13,6 @@ export { createTempRolePlugin } from './temp-role';
 export { createActivityPlugin } from './activity';
 export { createMessageBackupPlugin } from './message-backup';
 export { createLlmChatPlugin } from './llm-chat';
-export { createVoicePlugin } from './voice/plugin';
 export { createEarthquakePlugin } from './earthquake';
 export { createLlmAutoReplyPlugin } from './llm-auto-reply';
 export { createSocialLinkPreviewPlugin } from './social-link-preview';

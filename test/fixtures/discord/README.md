@@ -9,7 +9,7 @@ minimum the SUT reads — no third-party mock libraries.
 - `guild-builder.ts` — `buildGuild({ id, name, channels, members, me, roles })`
   and `buildGuildRoles({ roleCount, roles, createdRoleId })`, whose
   `create` / `delete` mocks drive the role-creation failure branches.
-- `member-builder.ts` — `buildGuildMember({ id, displayName, voiceChannelId, roleIds, roles })`
+- `member-builder.ts` — `buildGuildMember({ id, displayName, roleIds, roles })`
   and `buildMemberRoles()` for the `roles.add` / `roles.remove` spies.
 - `channel-builder.ts` — `buildTextChannel({ id, name, type, parent, viewableBy, permissionsBySubject })`
   for the `/traffic` visibility filter and for the `/feed_*` permission

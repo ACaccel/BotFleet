@@ -164,6 +164,8 @@ touch "$3/conda-meta/history"
     expect(calls).toContain('--dry-run');
     expect(calls).toContain('mongodb=7.0.34 mongo-tools=100.13.0 nodejs=22.13.0');
     expect(calls).toContain('yarn@1.22.22 mongosh@2.10.0');
+    expect(calls).toContain('cairo pango libjpeg-turbo giflib librsvg');
+    expect(calls).not.toMatch(/\bffmpeg\b/);
   });
 
   it.each(['valid', 'valid-relative', 'wrong-name', 'wrong-directory', 'malformed', 'mismatch'])(

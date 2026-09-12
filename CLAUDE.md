@@ -23,7 +23,7 @@ in strict mode.
 
 - Runtime: Node.js `>=22.13.0` (`.nvmrc`: `22.13.0`) · Yarn 1 (classic)
 - Language: TypeScript `^5.6` (strict; `tsconfig.strict.json`)
-- Discord: discord.js `^14.21` (+ `@discordjs/voice` `^0.17`)
+- Discord: discord.js `^14.21`
 - Persistence: Mongoose `^8.22` / MongoDB
 - Validation: zod `^3.23` · i18n: i18next `^23.15` · Logging: pino `^10` ·
   HTTP: express `^4.21` · Charts: `canvas` `^3`

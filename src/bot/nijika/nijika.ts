@@ -10,7 +10,6 @@ import {
   createSocialFeedPlugin,
   createSocialLinkPreviewPlugin,
   createTempRolePlugin,
-  createVoicePlugin,
 } from '@plugins';
 
 import {
@@ -97,7 +96,6 @@ export class Nijika extends BaseBot<NijikaConfig> {
     // Temporary, permission-less notification roles with a self-claim
     // button and a hard 30-day expiry (see `createTempRolePlugin`).
     this.use(createTempRolePlugin());
-    this.use(createVoicePlugin());
     if (RETIRED_FEED_CONFIG_KEY in config) {
       throw new Error(
         `nijika config.json still declares "${RETIRED_FEED_CONFIG_KEY}"; it is now "social_feed", ` +

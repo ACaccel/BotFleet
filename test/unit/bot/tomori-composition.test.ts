@@ -56,7 +56,6 @@ describe('Tomori composition', () => {
         'giveaway',
         'temp-role',
         'activity',
-        'voice',
       ]),
     );
   });

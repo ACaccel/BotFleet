@@ -98,7 +98,7 @@ if [[ ! -x "$conda" && ( -z "$installer" || -z "$installer_sha256" ) ]]; then
 fi
 
 packages=("mongodb=$mongodb_version" "mongo-tools=$mongo_tools_version" "nodejs=$node_version"
-  ffmpeg tmux rsync git python compilers make pkg-config cairo pango libjpeg-turbo giflib librsvg curl)
+  tmux rsync git python compilers make pkg-config cairo pango libjpeg-turbo giflib librsvg curl)
 asset="Miniforge3-$miniforge_version-Linux-$architecture.sh"
 url="https://github.com/conda-forge/miniforge/releases/download/$miniforge_version/$asset"
 action=create

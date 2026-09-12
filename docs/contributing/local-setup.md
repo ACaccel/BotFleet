@@ -8,7 +8,6 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 - Yarn 1 (classic) — `yarn install --frozen-lockfile`
 - MongoDB for development (a free Atlas cluster works; integration
   tests use `mongodb-memory-server` and do not need a live database)
-- `ffmpeg` on `PATH` if you plan to run the voice plugin
 
 ```bash
 git clone git@github.com:ACaccel/BotFleet.git

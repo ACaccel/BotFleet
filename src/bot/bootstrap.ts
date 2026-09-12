@@ -18,8 +18,8 @@ import { runOrExit, type StartablePersonality } from './run-or-exit';
 
 /**
  * Intents for a personality that observes the whole guild: message
- * edits and deletes, member and role changes, voice state, invites,
- * scheduled events, automod. What the guild-events / voice / activity /
+ * edits and deletes, member and role changes, invites,
+ * scheduled events, automod. What the guild-events / activity /
  * message-backup feature set needs to see.
  */
 export const GUILD_OBSERVER_INTENTS: readonly GatewayIntentBits[] = [
@@ -30,7 +30,6 @@ export const GUILD_OBSERVER_INTENTS: readonly GatewayIntentBits[] = [
   GatewayIntentBits.GuildIntegrations,
   GatewayIntentBits.GuildWebhooks,
   GatewayIntentBits.GuildInvites,
-  GatewayIntentBits.GuildVoiceStates,
   GatewayIntentBits.GuildPresences,
   GatewayIntentBits.GuildMessages,
   GatewayIntentBits.GuildMessageReactions,

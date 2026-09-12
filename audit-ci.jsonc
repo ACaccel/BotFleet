@@ -21,46 +21,6 @@
   "package-manager": "yarn",
   "allowlist": [
     // -------------------------------------------------------------------
-    // @kirdock/discordjs-voice-recorder tree (9 entries below).
-    //
-    // The package is used by the /record command (nijika, tomori) and
-    // has not seen maintenance updates that would address its
-    // transitives. Risk surface:
-    //   - opus decoding only runs on incoming voice frames inside a
-    //     voice channel the bot was invited to; not remotely reachable
-    //     from arbitrary users.
-    //   - tar is invoked at install time by @discordjs/node-pre-gyp to
-    //     fetch the prebuilt opus binary. The fetched URL is pinned in
-    //     the lockfile (deterministic), not user-controlled. The
-    //     path-traversal advisories require attacker-supplied tar
-    //     archives, which is not our use case.
-    //
-    // Remediation plan: post-overhaul, evaluate replacing
-    // @kirdock/discordjs-voice-recorder with a maintained alternative
-    // (discord-voip, or @discordjs/voice + a current opus binding).
-    // Owner: ACaccel. Tracked separately from the architecture overhaul.
-    // -------------------------------------------------------------------
-
-    // opus DoS (no upstream patch).
-    "GHSA-43wq-xrcm-3vgr|@kirdock/discordjs-voice-recorder>@discordjs/opus",
-
-    // tar advisories (path traversal / symlink / hardlink / race /
-    // decompression DoS). @discordjs/node-pre-gyp pins `tar@^6.1.11`, and
-    // upstream ships fixes only on the 7.x line (7.5.21+) — there is no
-    // 6.x backport, so no in-range remediation exists short of replacing
-    // the recorder. A `resolutions` jump to tar 7 would break node-pre-gyp
-    // (ESM-only, changed API) and so is not an option here.
-    "GHSA-34x7-hfp2-rc4v|@kirdock/discordjs-voice-recorder>@discordjs/opus>@discordjs/node-pre-gyp>tar",
-    "GHSA-8qq5-rm4j-mr97|@kirdock/discordjs-voice-recorder>@discordjs/opus>@discordjs/node-pre-gyp>tar",
-    "GHSA-83g3-92jg-28cx|@kirdock/discordjs-voice-recorder>@discordjs/opus>@discordjs/node-pre-gyp>tar",
-    "GHSA-qffp-2rhf-9h96|@kirdock/discordjs-voice-recorder>@discordjs/opus>@discordjs/node-pre-gyp>tar",
-    "GHSA-9ppj-qmqm-q256|@kirdock/discordjs-voice-recorder>@discordjs/opus>@discordjs/node-pre-gyp>tar",
-    "GHSA-r6q2-hw4h-h46w|@kirdock/discordjs-voice-recorder>@discordjs/opus>@discordjs/node-pre-gyp>tar",
-    "GHSA-23hp-3jrh-7fpw|@kirdock/discordjs-voice-recorder>@discordjs/opus>@discordjs/node-pre-gyp>tar",
-    "GHSA-8x88-c5mf-7j5w|@kirdock/discordjs-voice-recorder>@discordjs/opus>@discordjs/node-pre-gyp>tar",
-    "GHSA-r292-9mhp-454m|@kirdock/discordjs-voice-recorder>@discordjs/opus>@discordjs/node-pre-gyp>tar",
-
-    // -------------------------------------------------------------------
     // discord.js > @discordjs/builders > @sapphire/shapeshift > lodash
     //
     // GHSA-r5fr-rjxr-66jc — lodash code injection via `_.template`. The

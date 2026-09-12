@@ -187,17 +187,6 @@
     "map_line": "地圖:{{map}}",
     "failed": "唔...餐廳抽取失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
   },
-  "record": {
-    "join_voice_first": "請先加入語音頻道",
-    "cannot_join_voice": "無法加入語音頻道",
-    "started": "開始錄音",
-    "no_recording": "目前沒有錄音",
-    "stopped": "停止錄音",
-    "no_audio": "未收到音訊,不儲存音檔",
-    "invalid_action": "無效的指令",
-    "failed": "無法錄音 (錯誤代碼:{{traceId}})",
-    "saved": "已儲存倒數 {{duration}} 分鐘的錄音"
-  },
   "role_message": {
     "no_permission": "你沒有權限發送身份組領取訊息",
     "format_error": "格式錯誤!regex: match(/^<@&\\d+>(\\s*<@&\\d+>)*$/)",

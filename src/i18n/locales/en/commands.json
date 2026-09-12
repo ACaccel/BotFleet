@@ -287,22 +287,6 @@
       }
     }
   },
-  "record": {
-    "description": "Record audio",
-    "options": {
-      "action": {
-        "description": "Start or stop recording",
-        "choices": {
-          "start": "Start",
-          "stop": "Stop",
-          "save": "Save audio (last n minutes)"
-        }
-      },
-      "duration": {
-        "description": "Recording length (last n minutes) (optional)"
-      }
-    }
-  },
   "role_message": {
     "description": "Send a role-claim message",
     "options": {

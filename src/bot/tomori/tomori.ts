@@ -10,7 +10,6 @@ import {
   createGuildEventsPlugin,
   createSocialLinkPreviewPlugin,
   createTempRolePlugin,
-  createVoicePlugin,
 } from '@plugins';
 
 // Tomori is the public-facing personality: nijika's interactive feature
@@ -55,7 +54,7 @@ export class Tomori extends BaseBot<TomoriConfig> {
     // key is resolved once the translator is loaded (see BaseBot.run).
     this.helpMessageKey = 'replies:tomori.help_message';
     // Tomori opts into auto-reply, guild-event mirroring, social-link
-    // preview, giveaway, activity, temporary-role and voice behaviour
+    // preview, giveaway, activity and temporary-role behaviour
     // by registering the corresponding plugins explicitly. Plugins
     // resolve their dependencies through `ctx`, so the composition root
     // does not deep-import `plugins/*/internal`.
@@ -74,7 +73,6 @@ export class Tomori extends BaseBot<TomoriConfig> {
     // Temporary, permission-less notification roles with a self-claim
     // button and a hard 30-day expiry (see `createTempRolePlugin`).
     this.use(createTempRolePlugin());
-    this.use(createVoicePlugin());
     this.registerPresence();
   }
 

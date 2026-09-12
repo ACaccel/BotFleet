@@ -15,7 +15,6 @@ interface BuildGuildMemberInput {
   readonly id?: string;
   readonly displayName?: string;
   readonly username?: string;
-  readonly voiceChannelId?: string | null;
   readonly roleIds?: readonly string[];
   /** Spies the built member's `roles.add` / `roles.remove` write into. */
   readonly roles?: MemberRolesFake;
@@ -42,7 +41,6 @@ export const buildGuildMember = (input: BuildGuildMemberInput = {}): GuildMember
       bot: false,
       displayAvatarURL: () => `https://cdn.example/${id}.png`,
     },
-    voice: { channelId: input.voiceChannelId ?? null },
     roles: { cache: roleCache, ...(input.roles ?? buildMemberRoles()) },
   } as unknown as GuildMember;
 };

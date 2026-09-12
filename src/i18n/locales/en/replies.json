@@ -187,17 +187,6 @@
     "map_line": "Map: {{map}}",
     "failed": "Hmm... the restaurant pick failed. Give it another try later! (error code: {{traceId}})"
   },
-  "record": {
-    "join_voice_first": "Please join a voice channel first.",
-    "cannot_join_voice": "Could not join the voice channel.",
-    "started": "Recording started.",
-    "no_recording": "There is no recording in progress.",
-    "stopped": "Recording stopped.",
-    "no_audio": "No audio received; the recording will not be saved.",
-    "invalid_action": "Invalid action.",
-    "failed": "Could not record. (error code: {{traceId}})",
-    "saved": "Saved the last {{duration}} minutes of the recording."
-  },
   "role_message": {
     "no_permission": "You do not have permission to send a role-claim message.",
     "format_error": "Format error! regex: match(/^<@&\\d+>(\\s*<@&\\d+>)*$/)",

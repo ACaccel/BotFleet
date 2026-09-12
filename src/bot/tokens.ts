@@ -3,8 +3,8 @@
  *
  * Lives under `src/bot/` (not `src/core/ioc/`) because the catalog is
  * the one place that must name every concrete service type the bot
- * wires: a Mongo connection manager, the repository bundle, the voice
- * controller, the LLM model catalog. Declaring it inside `core/` would
+ * wires: a Mongo connection manager, the repository bundle, the LLM
+ * model catalog. Declaring it inside `core/` would
  * force `core` to import from `infra/`, `persistence/`, and `plugins/`
  * — a dependency running the wrong way through the layer stack. The
  * container mechanism itself (`ServiceToken`, `token()`,
@@ -43,7 +43,6 @@ import type { ModelCatalog } from '../infra/llm/models-catalog';
 import type { ConnectionManager } from '../infra/mongo/connection-manager';
 import type { FeedPlatformRegistry } from '../infra/social-feed';
 import type { Repos } from '../persistence/repositories';
-import type { VoiceController } from '../plugins/voice/internal';
 
 import type { GuildRegistry } from './guild-registry';
 
@@ -104,13 +103,6 @@ interface Tokens {
    */
   readonly PermissionRankPolicy: ServiceToken<PermissionRankPolicy>;
   /**
-   * Voice controller, published by VoicePlugin's `init` hook via
-   * {@link PluginInitContext.registerInstance}. Resolved by BaseBot's
-   * `voice` getter and any handler that needs to drive recording.
-   * Unbound for bots that do not register VoicePlugin.
-   */
-  readonly VoiceController: ServiceToken<VoiceController>;
-  /**
    * LLM model catalog, published by LlmChatPlugin's `init` hook via
    * {@link PluginInitContext.registerInstance}. Provides the live model
    * list used by `/ai_settings`. Unbound for bots that do not register
@@ -145,7 +137,6 @@ export const TOKENS: Tokens = {
   JobMap: token<Map<string, Job>>('JobMap'),
   GuildOnboardingPort: token<GuildOnboardingPort>('GuildOnboardingPort'),
   PermissionRankPolicy: token<PermissionRankPolicy>('PermissionRankPolicy'),
-  VoiceController: token<VoiceController>('VoiceController'),
   ModelCatalog: token<ModelCatalog>('ModelCatalog'),
   DefaultModelResolver: token<DefaultModelResolver>('DefaultModelResolver'),
   FeedPlatformRegistry: token<FeedPlatformRegistry>('FeedPlatformRegistry'),

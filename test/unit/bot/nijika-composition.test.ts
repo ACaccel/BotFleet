@@ -65,7 +65,6 @@ describe('Nijika composition', () => {
         'giveaway',
         'temp-role',
         'activity',
-        'voice',
         'social-feed',
         'earthquake',
       ]),

@@ -45,7 +45,6 @@ single-page overview.
 
 - Slash commands, buttons, modals, select menus, and reaction handlers.
 - Multi-provider LLM chat with web-search toggle and per-user session persistence.
-- Voice channel recording.
 - Message backup to MongoDB.
 - Giveaways with reaction-driven winner selection.
 - Per-member activity tracking.
@@ -68,7 +67,6 @@ Prerequisites:
 - Node.js **>= 22.13** (see [`.nvmrc`](.nvmrc))
 - Yarn 1 (classic)
 - MongoDB (local or hosted) — only the bots that use persistent state need it
-- `ffmpeg` on `PATH` if the voice plugin will be enabled
 
 For **each** personality you want to run, create the two configuration
 files in its directory:

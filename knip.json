@@ -16,7 +16,7 @@
     "@core/*": ["src/core/*"],
     "@plugins": ["src/plugins/index.ts"]
   },
-  "ignoreDependencies": ["libsodium-wrappers", "tsconfig-paths"],
+  "ignoreDependencies": ["tsconfig-paths"],
   "ignore": [
     "src/persistence/index.ts",
     "src/persistence/repositories/index.ts",

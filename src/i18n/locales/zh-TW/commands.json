@@ -287,22 +287,6 @@
       }
     }
   },
-  "record": {
-    "description": "錄音",
-    "options": {
-      "action": {
-        "description": "開始或停止錄音",
-        "choices": {
-          "start": "開始",
-          "stop": "停止",
-          "save": "儲存音檔 (last n minutes)"
-        }
-      },
-      "duration": {
-        "description": "錄音時間長度 (last n minutes) (optional)"
-      }
-    }
-  },
   "role_message": {
     "description": "發送身份組領取訊息",
     "options": {

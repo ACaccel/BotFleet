@@ -8,6 +8,20 @@ pre-deploy smoke check and the dependency-override policy.
 The [migration tool runbook](../../tools/migration/README.md) owns host setup,
 database transfer, runtime validation and cutover instructions.
 
+## Recording removal rollout
+
+Recording is no longer supported. When upgrading a deployment that used
+`/record`, remove `record` from each affected bot's `config.json` commands
+list, stop the old process, and start the updated bot. Republish the affected
+bots' Discord command lists using the [command registration procedure](local-setup.md#registering-slash-commands)
+to remove the existing `/record` registration. Review its guild-command
+pruning behavior before deploying; updating source files alone does not
+change Discord registrations.
+
+Existing recordings under `data/voice_record` remain on disk. Bootstrap no
+longer installs FFmpeg; it does not uninstall FFmpeg from an existing host.
+Voice and stage channel text-message backups remain supported.
+
 ## Pre-deploy smoke
 
 `yarn smoke` is a boundary-only sanity check intended to run against a

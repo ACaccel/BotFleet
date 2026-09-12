@@ -97,7 +97,7 @@ Two process-level safety nets are installed in step 1 (before login), so they sp
 
 Startup failure is terminal. Each personality entry point starts the bot through `bootstrapPersonality` ([src/bot/bootstrap.ts](../src/bot/bootstrap.ts)), which loads the personality's `.env`, validates it into a typed `Env`, builds the Discord client from the requested gateway intents, and hands the bot to `runOrExit` ([src/bot/run-or-exit.ts](../src/bot/run-or-exit.ts)). `runOrExit` exits 1 when `run()` rejects: a detached `run()` leaves a live process with no commands registered and no reason for a supervisor to restart it.
 
-Everything handlers and bridges read off a live bot goes through a typed accessor — `getRepos`, `guildRegistry`, `jobMap`, `permissionRankPolicy`, `connectionManager`, `voice`, `modelCatalog`, `feedPlatformRegistry`, `requireLogger()`. Each resolves the container binding a plugin would reach through `ctx.resolve(TOKENS.X)`, so both sides of a feature observe one instance rather than two parallel copies.
+Everything handlers and bridges read off a live bot goes through a typed accessor — `getRepos`, `guildRegistry`, `jobMap`, `permissionRankPolicy`, `connectionManager`, `modelCatalog`, `feedPlatformRegistry`, `requireLogger()`. Each resolves the container binding a plugin would reach through `ctx.resolve(TOKENS.X)`, so both sides of a feature observe one instance rather than two parallel copies.
 
 ### Plugin contract ([src/core/plugin/](../src/core/plugin/))
 
@@ -144,7 +144,7 @@ per-guild state is reached through an explicit factory token
 `core/ioc` owns the mechanism only. The catalog of what gets bound
 lives with the composition root at
 [src/bot/tokens.ts](../src/bot/tokens.ts) — naming `ConnectionManager`,
-`Repos`, `VoiceController` and friends inside `core` would invert the
+`Repos` and friends inside `core` would invert the
 layer arrows. Plugins import `TOKENS` from there and reach the
 container itself through nothing but `ctx.resolve`, a typed-token
 accessor.
@@ -699,7 +699,6 @@ consume the whole shutdown budget the signal handler is working within.
 | `ActivityPlugin`          | `src/plugins/activity/`            | per-member activity tracking via message / reaction events                                                              |
 | `MessageBackupPlugin`     | `src/plugins/message-backup/`      | message create / delete / update archival (used by the `msg-archive` worker)                                            |
 | `LlmChatPlugin`           | `src/plugins/llm-chat/`            | multi-provider LLM chat with web-search toggle and session persistence                                                  |
-| `VoicePlugin`             | `src/plugins/voice/`               | voice channel join + recording controller                                                                               |
 | `EarthquakePlugin`        | `src/plugins/earthquake/`          | earthquake alert broadcast (nijika exposes the HTTP webhook)                                                            |
 | `LlmAutoReplyPlugin`      | `src/plugins/llm-auto-reply/`      | probability-gated, context-aware `messageCreate` reply via a self-hosted LLM (gopher)                                   |
 | `SocialLinkPreviewPlugin` | `src/plugins/social-link-preview/` | rewrites/embeds social-media share-link previews and suppresses the original (nijika, tomori)                           |
