@@ -10,11 +10,11 @@ output, `.plan`, and migration settings/state. MongoDB `admin`, `config`, and
 
 Copy `config.example.json` to `config.json` beside this README:
 
-| Field         | Meaning                                                                                                                                |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `environment` | Full conda environment path, e.g. `/home/guest/miniforge3/envs/botfleet`. If omitted, use the active conda environment.                |
-| `mongoEnv`    | Bot `.env` providing `MONGO_URI`, relative to the Git checkout. Defaults to `src/bot/tomori/.env`. No password belongs in this config. |
-| `backupDir`   | Parent directory for automatically named backups, outside the repository. Defaults to `botfleet-backups` beside the checkout.          |
+| Field         | Meaning                                                                                                                               |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `environment` | Full conda environment path, e.g.`/home/guest/miniforge3/envs/botfleet`. If omitted, use the active conda environment.                |
+| `mongoEnv`    | Bot`.env` providing `MONGO_URI`, relative to the Git checkout. Defaults to `src/bot/tomori/.env`. No password belongs in this config. |
+| `backupDir`   | Parent directory for automatically named backups, outside the repository. Defaults to`botfleet-backups` beside the checkout.          |
 
 Paths are literal: use absolute paths for `environment` and `backupDir`, not `~`.
 No target config is needed after activating its conda environment. Versions and

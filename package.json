@@ -2,18 +2,6 @@
   "name": "botfleet",
   "version": "1.1.0",
   "description": "Multi-personality Discord bot framework on TypeScript, discord.js and MongoDB, with a layered plugin architecture and bilingual i18n.",
-  "keywords": [
-    "botfleet",
-    "discord.js",
-    "typescript",
-    "mongodb",
-    "plugin-architecture",
-    "i18n",
-    "llm",
-    "openai",
-    "anthropic",
-    "gemini"
-  ],
   "private": true,
   "engines": {
     "node": ">=22.13.0"
