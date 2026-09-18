@@ -300,9 +300,14 @@ const rebootRetry = async <T>(op: () => Promise<T>): Promise<T> => {
  * roles and immediately expire any whose deadline already passed while
  * the process was down.
  */
-export const rebootTempRoleJobs = async (deps: TempRoleDeps): Promise<void> => {
+export const rebootTempRoleJobs = async (
+  deps: TempRoleDeps,
+  recoveredGuildId?: string,
+): Promise<void> => {
+  const guildIds =
+    recoveredGuildId === undefined ? deps.registry.listGuildIds() : [recoveredGuildId];
   await Promise.all(
-    deps.registry.listGuildIds().map(async (guildId) => {
+    guildIds.map(async (guildId) => {
       try {
         const repos = deps.registry.getRepos(guildId);
         if (!repos) return;

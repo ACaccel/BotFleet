@@ -1,8 +1,7 @@
 /**
  * Boot-time job rebuild for the activity and giveaway plugins.
  *
- * `onReady` is the only path that repopulates the scheduler after a
- * restart: rows whose deadline is still ahead become scheduled jobs,
+ * Startup and guild database recovery repopulate the scheduler: rows whose deadline is still ahead become scheduled jobs,
  * rows already past their deadline are reaped, and a guild whose
  * `listAll` fails must not take the remaining guilds' jobs down with
  * it. The registry here holds two guilds with real rows so those three
@@ -151,6 +150,22 @@ describe.each([
     jobKey: (id: string) => `activity:${id}`,
   },
 ])('$label plugin onReady — job reboot', ({ create, jobKey }) => {
+  it('rebuilds only the recovered guild without replacing healthy jobs', async () => {
+    const healthy = new FakeGuildRepos([{ id: 'healthy', deadline: future() }]);
+    const recovered = new FakeGuildRepos([{ id: 'recovered', deadline: future() }]);
+    const repos = new Map([['healthy-guild', healthy]]);
+    const ctx = buildCtx(buildRegistry(repos), jobMap);
+    const plugin = create();
+    await plugin.onReady?.(ctx);
+    const healthyJob = jobMap.get(jobKey('healthy'));
+    repos.set('recovered-guild', recovered);
+
+    await plugin.onGuildDatabaseReady?.(ctx, 'recovered-guild');
+
+    expect([...jobMap.keys()].sort()).toEqual([jobKey('healthy'), jobKey('recovered')].sort());
+    expect(jobMap.get(jobKey('healthy'))).toBe(healthyJob);
+  });
+
   it('schedules a job for every row whose deadline is still ahead', async () => {
     const repos = new FakeGuildRepos([
       { id: 'row-a', deadline: future() },

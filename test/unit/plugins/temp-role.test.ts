@@ -339,6 +339,31 @@ describe('expireTempRole', () => {
 });
 
 describe('rebootTempRoleJobs', () => {
+  it('rebuilds expiry jobs only for the recovered guild', async () => {
+    const repos = makeRepos({
+      listAll: vi
+        .fn()
+        .mockResolvedValue(ok([{ role_id: 'recovered-role', expires_at: BASE_NOW + MS_PER_DAY }])),
+    });
+    const deps = makeDeps({ repos, listGuildIds: ['healthy', 'recovered'] });
+    const getRepos = vi.spyOn(deps.registry, 'getRepos');
+    const container = createContainer();
+    container.registerSingleton(TOKENS.DiscordClient, () => deps.client);
+    container.registerSingleton(TOKENS.GuildRegistry, () => deps.registry);
+    container.registerSingleton(TOKENS.JobMap, () => deps.jobMap);
+    const ctx: PluginRuntimeContext = {
+      logger: deps.logger,
+      translator: { t: (k: string) => k } as PluginRuntimeContext['translator'],
+      clock: deps.clock,
+      resolve: container.resolve.bind(container) as PluginRuntimeContext['resolve'],
+    };
+
+    await createTempRolePlugin().onGuildDatabaseReady?.(ctx, 'recovered');
+
+    expect(getRepos).toHaveBeenCalledExactlyOnceWith('recovered');
+    expect(deps.jobMap.has(tempRoleJobKey('recovered-role'))).toBe(true);
+  });
+
   it('reschedules a still-pending role and immediately expires a past-due one', async () => {
     const future = {
       role_id: 'future',

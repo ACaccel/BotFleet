@@ -68,3 +68,24 @@ security` reports. Because the pin is exact, nothing else in the tree
 A resolution that merely restates what the dependency's own range
 already permits is dead weight — it hides which overrides are
 load-bearing. Check with `yarn why <pkg>` before adding one.
+
+## Database recovery
+
+After startup or guild onboarding exhausts its connection retries, transient
+network failures and timeouts are retried in the background. Configure
+`MONGO_RECOVERY_INTERVAL_MS` in the bot environment (default `60000`, positive
+integer no greater than `2147483647`). It controls the recovery polling interval
+and the per-guild cooldown after failed attempts. Passes do not overlap.
+Authentication, authorization and other persistent errors remain disabled;
+correct the cause and restart the bot.
+
+Recovered repositories are attached before the guild database-ready plugin hook
+runs. Giveaway, activity and temporary-role jobs are rebuilt only for that guild;
+healthy guilds are not replayed. Shutdown cancels recovery and prevents in-flight
+attempts from publishing new repositories. Giveaway failures display the database
+error ID, which can be matched to the connection log.
+
+A refused TCP connection means the configured Mongo endpoint is not accepting
+connections. Restore the database service or network route first; restarting the
+bot alone cannot repair that failure. Deploy this recovery code and restart the
+bot once to activate it; later transient startup failures recover automatically.

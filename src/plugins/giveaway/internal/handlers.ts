@@ -8,6 +8,7 @@ import {
   type StringSelectMenuInteraction,
 } from 'discord.js';
 
+import { asGuildId } from '../../../core/ids';
 import type { BaseBot } from '../../../bot';
 import { bindTranslator } from '../../../core/i18n';
 import type { BoundTranslate } from '../../../core/i18n';
@@ -27,6 +28,13 @@ import { replyForError } from '../../../infra/discord/reply-for-error';
 // Discord allows at most 25 options per string-select and 5 selects per
 // message, so the delete prompt pages giveaways across multiple selects
 // instead of silently dropping any past the first 25.
+const databaseUnavailableMessage = (bot: BaseBot, guildId: string, t: BoundTranslate): string => {
+  const disabled = bot.connectionManager?.isDisabled(asGuildId(guildId));
+  return disabled === undefined
+    ? t('errors:db.not_found')
+    : t('errors:db.guild_disabled', { traceId: disabled.traceId });
+};
+
 const MAX_OPTIONS_PER_SELECT = 25;
 // Discord caps a select-option label at 100 chars; keep the prize short
 // enough that the formatted "<prize> — ends at <time>" label still fits.
@@ -83,7 +91,7 @@ export const handleGiveawayCreate = async (
 
     const repos = deps.registry.getRepos(guild.id);
     if (!repos) {
-      await interaction.editReply({ content: t('errors:db.not_found') });
+      await interaction.editReply({ content: databaseUnavailableMessage(bot, guild.id, t) });
       return;
     }
 
@@ -195,7 +203,7 @@ export const handleGiveawayDeletePrompt = async (
 
     const repos = deps.registry.getRepos(guild.id);
     if (!repos) {
-      await interaction.editReply({ content: t('errors:db.not_found') });
+      await interaction.editReply({ content: databaseUnavailableMessage(bot, guild.id, t) });
       return;
     }
 
@@ -248,7 +256,7 @@ export const handleGiveawayDeleteSelection = async (
         await interaction.editReply({ content: t('errors:command.guild_not_found') });
         return;
       case 'no_db':
-        await interaction.editReply({ content: t('errors:db.not_found') });
+        await interaction.editReply({ content: databaseUnavailableMessage(bot, guild.id, t) });
         return;
       default: {
         // Compile-time exhaustiveness guard: a new

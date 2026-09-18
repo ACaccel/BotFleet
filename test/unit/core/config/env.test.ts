@@ -24,6 +24,26 @@ describe('loadEnv', () => {
     vi.restoreAllMocks();
   });
 
+  it('validates the recovery interval and supplies its default', () => {
+    expect(loadEnv({ exitOnFailure: false, source: validBase }).MONGO_RECOVERY_INTERVAL_MS).toBe(
+      60_000,
+    );
+    expect(
+      loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, MONGO_RECOVERY_INTERVAL_MS: '5000' },
+      }).MONGO_RECOVERY_INTERVAL_MS,
+    ).toBe(5000);
+    for (const value of ['0', '-1', '1.5', 'invalid', '2147483648']) {
+      expect(() =>
+        loadEnv({
+          exitOnFailure: false,
+          source: { ...validBase, MONGO_RECOVERY_INTERVAL_MS: value },
+        }),
+      ).toThrow(EnvLoadError);
+    }
+  });
+
   describe('success paths', () => {
     it('parses a valid environment and returns a frozen object', () => {
       const env = loadEnv({ exitOnFailure: false, source: { ...validBase } });

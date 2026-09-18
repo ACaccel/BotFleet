@@ -110,7 +110,7 @@ export interface PluginInitContext extends PluginRuntimeServices {
 /** Context handed to `Plugin.start` (Discord login done, ready event pending). */
 export type PluginStartContext = PluginRuntimeServices;
 
-/** Context handed to `Plugin.onReady` and `Plugin.onShutdown`. */
+/** Context handed to runtime lifecycle hooks. */
 export type PluginRuntimeContext = PluginRuntimeServices;
 
 /** Context handed to event subscriptions per dispatch. */
@@ -166,6 +166,9 @@ export interface Plugin {
 
   /** Runs once after the Discord `ready` event. */
   onReady?(ctx: PluginRuntimeContext): Promise<void>;
+
+  /** Rebuild guild-scoped state after a previously unavailable database connects. */
+  onGuildDatabaseReady?(ctx: PluginRuntimeContext, guildId: string): Promise<void>;
 
   /**
    * Runs during graceful shutdown — in **reverse** registration order,

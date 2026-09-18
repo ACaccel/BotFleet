@@ -130,6 +130,11 @@ export class PluginHost {
     await this.getLifecycleRunner().runReady();
   }
 
+  /** Notify enabled plugins that a guild database has become available. */
+  public async guildDatabaseReady(guildId: string): Promise<void> {
+    await this.getLifecycleRunner().runGuildDatabaseReady(guildId);
+  }
+
   /**
    * Run `onShutdown` in **reverse** registration order. Failures are
    * always non-fatal here — the bot is shutting down regardless.

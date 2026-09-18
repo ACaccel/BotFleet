@@ -165,3 +165,79 @@ describe('GuildDbConnector.isDisabled', () => {
     expect(connector.isDisabled('g-1')).toBeUndefined();
   });
 });
+
+describe('GuildDbConnector recovery', () => {
+  it('recovers missing repos once and leaves healthy and permanently disabled guilds alone', async () => {
+    vi.useFakeTimers();
+    const repos = fakeRepos();
+    const factory = vi.fn(async () => repos);
+    const permanent = new DatabaseError({
+      code: 'DATABASE_UNKNOWN',
+      messageKey: 'errors:db.not_found',
+      context: { operation: 'test' },
+    });
+    const cm = {
+      isDisabled: (id: string) =>
+        id === 'blocked' ? { traceId: 'blocked', error: permanent } : undefined,
+    } as unknown as ConnectionManager;
+    const connector = new GuildDbConnector(containerWith(factory, cm), 'mongodb://x', silent);
+    const guilds = new Map<string, GuildInfo>([
+      ['missing', { bot_name: '', guild: fakeGuild('missing') }],
+      ['healthy', { bot_name: '', guild: fakeGuild('healthy'), repos }],
+      ['blocked', { bot_name: '', guild: fakeGuild('blocked') }],
+    ]);
+    const recovered = vi.fn(async (id: string) => {
+      expect(guilds.get(id)?.repos).toBe(repos);
+    });
+    try {
+      connector.startRecovery(
+        guilds,
+        (id, value) => {
+          guilds.set(id, { ...guilds.get(id)!, repos: value });
+        },
+        recovered,
+        100,
+      );
+      await vi.advanceTimersByTimeAsync(300);
+      expect(factory).toHaveBeenCalledExactlyOnceWith('missing');
+      expect(recovered).toHaveBeenCalledExactlyOnceWith('missing');
+    } finally {
+      connector.stopRecovery();
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries failed passes without overlap and never publishes after shutdown', async () => {
+    vi.useFakeTimers();
+    let finish!: (repos: Repos) => void;
+    const factory = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockImplementation(
+        () =>
+          new Promise<Repos>((resolve) => {
+            finish = resolve;
+          }),
+      );
+    const connector = new GuildDbConnector(containerWith(factory), 'mongodb://x', silent);
+    const guilds = new Map<string, GuildInfo>([
+      ['missing', { bot_name: '', guild: fakeGuild('missing') }],
+    ]);
+    const attach = vi.fn();
+    const recovered = vi.fn(async () => {});
+    try {
+      connector.startRecovery(guilds, attach, recovered, 100);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(factory).toHaveBeenCalledTimes(2);
+      connector.stopRecovery();
+      finish(fakeRepos());
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(attach).not.toHaveBeenCalled();
+      expect(recovered).not.toHaveBeenCalled();
+      expect(factory).toHaveBeenCalledTimes(2);
+    } finally {
+      connector.stopRecovery();
+      vi.useRealTimers();
+    }
+  });
+});

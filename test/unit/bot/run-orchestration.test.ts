@@ -33,6 +33,7 @@ vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
 vi.mock('@reaction', () => barrelStubs.reaction);
 
+import { GuildDbConnector } from '../../../src/bot/guild-db-connector';
 import { BaseBot, type Config } from '../../../src/bot/index';
 
 /** Build a minimal Discord.js Client fake usable by BaseBot.run(). */
@@ -208,4 +209,20 @@ describe('BaseBot.run() — contract baseline', () => {
       }
     }
   });
+});
+
+it('does not start database recovery when shutdown overtakes clientReady', async () => {
+  const fake = buildRunFakeClient();
+  const bot = new MinimalBot(fake.client, 'tk', '', 'bot-1', {});
+  const startRecovery = vi.spyOn(GuildDbConnector.prototype, 'startRecovery');
+  try {
+    await bot.run(async () => {
+      await bot.shutdown();
+    });
+    await fake.fire(Events.ClientReady);
+    expect(startRecovery).not.toHaveBeenCalled();
+  } finally {
+    startRecovery.mockRestore();
+    await bot.shutdown();
+  }
 });

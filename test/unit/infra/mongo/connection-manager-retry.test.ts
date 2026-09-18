@@ -10,11 +10,12 @@
  * `sleep`, so the suite runs in zero wall time while still asserting
  * the delay schedule.
  */
-import type { Connection } from 'mongoose';
-import { describe, expect, it, vi } from 'vitest';
+import mongoose, { type Connection } from 'mongoose';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { asGuildId } from '../../../../src/core/ids';
 import { DatabaseError } from '../../../../src/core/errors';
 import {
+  MongoConnectionManager,
   StaticConnectionManager,
   type GuildConnection,
   type RetryPolicy,
@@ -342,5 +343,178 @@ describe('ConnectionManager — retry / disable', () => {
     expect(rejection).toBeInstanceOf(DatabaseError);
     // ECONNREFUSED is classified as a network failure.
     expect((rejection as DatabaseError).code).toBe('DATABASE_NETWORK');
+  });
+});
+
+describe('ConnectionManager — automatic recovery', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const createManager = (
+    openOverride: (id: ReturnType<typeof asGuildId>) => Promise<GuildConnection>,
+  ) =>
+    new StaticConnectionManager(fakeConnection, {
+      retryPolicy: { maxAttempts: 1, initialDelayMs: 1, maxDelayMs: 1 },
+      recoveryIntervalMs: 1_000,
+      openOverride,
+    });
+
+  it('recovers a production connection without closing another healthy guild', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const close = vi.fn(async () => {});
+    const model = { init: vi.fn(async () => {}) };
+    const connection = { model: vi.fn(() => model), close } as unknown as Connection;
+    const asPromise = vi
+      .fn<() => Promise<Connection>>()
+      .mockResolvedValueOnce(connection)
+      .mockRejectedValueOnce(transientError())
+      .mockResolvedValue(connection);
+    const create = vi
+      .spyOn(mongoose, 'createConnection')
+      .mockReturnValue({ asPromise } as unknown as Connection);
+    const mgr = new MongoConnectionManager(
+      'mongodb://localhost/',
+      {
+        maxAttempts: 1,
+        initialDelayMs: 1,
+        maxDelayMs: 1,
+      },
+      undefined,
+      1_000,
+    );
+    const otherGuild = asGuildId('987654321098765432');
+    const healthy = await mgr.getConnection(otherGuild);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(mgr.getConnection(guildId)).resolves.toMatchObject({ guildId });
+    expect(mgr.isDisabled(guildId)).toBeUndefined();
+    await expect(mgr.getConnection(otherGuild)).resolves.toBe(healthy);
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(close).not.toHaveBeenCalled();
+    await mgr.closeAll();
+  });
+
+  it('retries only after cooldown and caches the recovered connection', async () => {
+    vi.useFakeTimers();
+    const recovered = guildConnection();
+    const open = vi
+      .fn<() => Promise<GuildConnection>>()
+      .mockRejectedValueOnce(transientError())
+      .mockResolvedValue(recovered);
+    const mgr = createManager(open);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    await vi.advanceTimersByTimeAsync(999);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    expect(open).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(mgr.getConnection(guildId)).resolves.toBe(recovered);
+    expect(mgr.isDisabled(guildId)).toBeUndefined();
+    await expect(mgr.getConnection(guildId)).resolves.toBe(recovered);
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains the marker and deduplicates concurrent recovery attempts', async () => {
+    vi.useFakeTimers();
+    let release: (entry: GuildConnection) => void = () => {};
+    const recovering = new Promise<GuildConnection>((resolve) => {
+      release = resolve;
+    });
+    const open = vi
+      .fn<() => Promise<GuildConnection>>()
+      .mockRejectedValueOnce(transientError())
+      .mockReturnValue(recovering);
+    const mgr = createManager(open);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    const disabled = mgr.isDisabled(guildId);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const first = mgr.getConnection(guildId);
+    const second = mgr.getConnection(guildId);
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(mgr.isDisabled(guildId)).toBe(disabled);
+    const recovered = guildConnection();
+    release(recovered);
+    expect(await Promise.all([first, second])).toEqual([recovered, recovered]);
+    expect(mgr.isDisabled(guildId)).toBeUndefined();
+  });
+
+  it('refreshes cooldown after another transient failure while preserving trace id', async () => {
+    vi.useFakeTimers();
+    const open = vi.fn<() => Promise<GuildConnection>>().mockRejectedValue(transientError());
+    const mgr = createManager(open);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    const traceId = mgr.isDisabled(guildId)?.traceId;
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    expect(mgr.isDisabled(guildId)?.traceId).toBe(traceId);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    expect(open).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    expect(open).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops recovery when a retry discovers a persistent error', async () => {
+    vi.useFakeTimers();
+    const permanent = persistentError();
+    const open = vi
+      .fn<() => Promise<GuildConnection>>()
+      .mockRejectedValueOnce(transientError())
+      .mockRejectedValue(permanent);
+    const mgr = createManager(open);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(mgr.getConnection(guildId)).rejects.toBe(permanent);
+    expect(mgr.isDisabled(guildId)?.error).toBe(permanent);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(mgr.getConnection(guildId)).rejects.toBe(permanent);
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not restore a disabled marker when recovery rejects after shutdown drains out', async () => {
+    vi.useFakeTimers();
+    let rejectOpen: (error: Error) => void = () => {};
+    const recovering = new Promise<GuildConnection>((_resolve, reject) => {
+      rejectOpen = reject;
+    });
+    const open = vi
+      .fn<() => Promise<GuildConnection>>()
+      .mockRejectedValueOnce(transientError())
+      .mockReturnValue(recovering);
+    const mgr = createManager(open);
+    await expect(mgr.getConnection(guildId)).rejects.toBeInstanceOf(DatabaseError);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const recovery = mgr.getConnection(guildId).catch((error: unknown) => error);
+    const closing = mgr.closeAll();
+    await vi.advanceTimersByTimeAsync(1_500);
+    await closing;
+    rejectOpen(transientError());
+    expect(await recovery).toMatchObject({ name: 'ShutdownRaceError' });
+    expect(mgr.isDisabled(guildId)).toBeUndefined();
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not resume retry backoff after shutdown', async () => {
+    let release: () => void = () => {};
+    const backoff = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const open = vi.fn<() => Promise<GuildConnection>>().mockRejectedValue(transientError());
+    const sleep = vi.fn(() => backoff);
+    const mgr = new StaticConnectionManager(fakeConnection, {
+      retryPolicy: fastPolicy,
+      openOverride: open,
+      sleep,
+    });
+    const pending = mgr.getConnection(guildId).catch((error: unknown) => error);
+    await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(1));
+    const closing = mgr.closeAll();
+    release();
+    await closing;
+    expect(await pending).toMatchObject({ name: 'ShutdownRaceError' });
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(mgr.isDisabled(guildId)).toBeUndefined();
   });
 });

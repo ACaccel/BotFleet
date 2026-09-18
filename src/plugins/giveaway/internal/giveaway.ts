@@ -259,10 +259,15 @@ const rebootRetry = async <T>(op: () => Promise<T>): Promise<T> => {
   throw lastErr;
 };
 
-export const rebootGiveawayJobs = async (deps: GiveawayDeps): Promise<void> => {
+export const rebootGiveawayJobs = async (
+  deps: GiveawayDeps,
+  recoveredGuildId?: string,
+): Promise<void> => {
   const jobManager = new JobManager(deps.jobMap, deps.logger);
+  const guildIds =
+    recoveredGuildId === undefined ? deps.registry.listGuildIds() : [recoveredGuildId];
   await Promise.all(
-    deps.registry.listGuildIds().map(async (guildId) => {
+    guildIds.map(async (guildId) => {
       try {
         const repos = deps.registry.getRepos(guildId);
         if (!repos) return;

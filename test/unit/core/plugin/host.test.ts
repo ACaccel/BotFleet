@@ -90,3 +90,45 @@ describe('PluginHost lifecycle wiring', () => {
     expect(host.getDisabledPlugins()).toEqual([]);
   });
 });
+
+describe('PluginHost.guildDatabaseReady', () => {
+  it('dispatches in order, isolates errors and skips disabled plugins', async () => {
+    const { host } = buildHost();
+    const calls: string[] = [];
+    const ready = vi.fn();
+    host.register(
+      plugin({
+        id: 'disabled',
+        init: async () => {
+          throw new Error('init failed');
+        },
+        onGuildDatabaseReady: async () => void calls.push('disabled'),
+      }),
+    );
+    host.register(
+      plugin({
+        id: 'broken',
+        onReady: ready,
+        onGuildDatabaseReady: async (_ctx, guildId) => {
+          calls.push(`broken:${guildId}`);
+          throw new Error('recovery failed');
+        },
+      }),
+    );
+    host.register(
+      plugin({
+        id: 'healthy',
+        onGuildDatabaseReady: async (ctx, guildId) => {
+          expect(ctx.clock).toBe(systemClock);
+          calls.push(`healthy:${guildId}`);
+        },
+      }),
+    );
+    await host.initAll();
+    await host.guildDatabaseReady('g1');
+    await host.guildDatabaseReady('g2');
+    expect(calls).toEqual(['broken:g1', 'healthy:g1', 'broken:g2', 'healthy:g2']);
+    expect(host.getDisabledPlugins().map(({ id }) => id)).toEqual(['disabled']);
+    expect(ready).not.toHaveBeenCalled();
+  });
+});

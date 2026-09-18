@@ -104,7 +104,7 @@ Everything handlers and bridges read off a live bot goes through a typed accesso
 A `Plugin` declares:
 
 - `id` and a SemVer `version`. `id` must be unique per host; that is the only register-time check.
-- Lifecycle hooks: `init`, `start`, `onReady`, `onShutdown`. `init` is the only phase allowed to publish singletons via `ctx.registerInstance(token, instance)`. `onShutdown` runs in **reverse** registration order; failures are logged but never fatal. Shutdown ignores disabled status: a plugin disabled during `onReady` has already opened whatever `start` opened and still holds live event subscriptions, so both its `onShutdown` and its `unsubscribeAll` run. Teardown is best-effort by contract, which is what makes running it unconditionally safe.
+- Lifecycle hooks: `init`, `start`, `onReady`, `onGuildDatabaseReady`, `onShutdown`. The database-ready hook runs after a missing guild repository is recovered; scheduling plugins rebuild only that guild. See [database recovery](contributing/operations.md#database-recovery) for recovery policy and configuration. `init` is the only phase allowed to publish singletons via `ctx.registerInstance(token, instance)`. `onShutdown` runs in **reverse** registration order; failures are logged but never fatal. Shutdown ignores disabled status: a plugin disabled during `onReady` has already opened whatever `start` opened and still holds live event subscriptions, so both its `onShutdown` and its `unsubscribeAll` run. Teardown is best-effort by contract, which is what makes running it unconditionally safe.
 - Event subscriptions over discord.js `ClientEvents`.
 
 Configuration is **not** part of the contract. Each plugin factory

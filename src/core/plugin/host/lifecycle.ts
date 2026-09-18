@@ -149,6 +149,21 @@ export class PluginLifecycleRunner {
     }
   }
 
+  /** A guild recovery failure must not disable a plugin for healthy guilds. */
+  public async runGuildDatabaseReady(guildId: string): Promise<void> {
+    for (const [id, entry] of this.host.registered) {
+      if (this.host.disabled.has(id)) continue;
+      try {
+        await entry.plugin.onGuildDatabaseReady?.(this.buildRuntimeContext(entry), guildId);
+      } catch (err: unknown) {
+        this.host.logger.error(
+          { plugin: id, guildId, err: err instanceof Error ? err : new Error(String(err)) },
+          'plugin onGuildDatabaseReady threw; guild recovery may be incomplete',
+        );
+      }
+    }
+  }
+
   /**
    * Run `onShutdown` in reverse registration order. Failures are always
    * non-fatal — the bot is shutting down regardless.

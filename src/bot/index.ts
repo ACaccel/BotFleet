@@ -75,10 +75,13 @@ import { TOKENS, type ReposFactory } from './tokens';
  * setups that pass distinct URIs get distinct managers.
  */
 const sharedConnectionManagers = new Map<string, MongoConnectionManager>();
-const sharedConnectionManagerForUri = (uri: string): MongoConnectionManager => {
+const sharedConnectionManagerForUri = (
+  uri: string,
+  recoveryIntervalMs?: number,
+): MongoConnectionManager => {
   const existing = sharedConnectionManagers.get(uri);
   if (existing !== undefined) return existing;
-  const created = new MongoConnectionManager(uri);
+  const created = new MongoConnectionManager(uri, undefined, undefined, recoveryIntervalMs);
   sharedConnectionManagers.set(uri, created);
   return created;
 };
@@ -321,6 +324,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   private readonly guildRegistrar: GuildRegistrar;
   private readonly clientEventBridge: ClientEventBridge;
   private readonly guildDbConnector: GuildDbConnector;
+  private shuttingDown = false;
 
   public constructor(
     client: Client,
@@ -362,7 +366,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     const uri = this.mongoURI;
     if (uri !== undefined && uri.length > 0) {
       this.container.registerSingleton(TOKENS.ConnectionManager, () =>
-        sharedConnectionManagerForUri(uri),
+        sharedConnectionManagerForUri(uri, this.env?.MONGO_RECOVERY_INTERVAL_MS),
       );
     }
     const reposFactory: ReposFactory = async (guildId: ReturnType<typeof asGuildId>) => {
@@ -534,6 +538,8 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    * the rest of the teardown.
    */
   public shutdown = async (): Promise<void> => {
+    this.shuttingDown = true;
+    this.guildDbConnector.stopRecovery();
     const log = this.container.tryResolve<Logger>(TOKENS.Logger);
     if (this.pluginHost !== undefined) {
       try {
@@ -746,6 +752,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
       await this.guildDbConnector.connectAll(this.#guildInfo, (guildId, repos) =>
         this.attachRepos(guildId, repos),
       );
+      if (this.shuttingDown) return;
       await registerCommands(this);
       await registerButtons(this);
       await registerSSMs(this);
@@ -755,6 +762,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
       if (callback !== undefined) {
         await callback();
       }
+      if (this.shuttingDown) return;
       // readyAll runs AFTER clientReady so plugins observe a
       // fully-online client when their `onReady` hook fires.
       // Failures here are logged but never fatal — the bot is
@@ -766,6 +774,15 @@ export abstract class BaseBot<TConfig extends Config = Config> {
           logError(this.logger, null, readyErr);
         }
       }
+      if (this.shuttingDown) return;
+      this.guildDbConnector.startRecovery(
+        this.#guildInfo,
+        (guildId, repos) => this.attachRepos(guildId, repos),
+        async (guildId) => {
+          await this.pluginHost?.guildDatabaseReady(guildId);
+        },
+        this.env?.MONGO_RECOVERY_INTERVAL_MS ?? 60_000,
+      );
     } catch (err) {
       logError(this.logger, null, err);
     }

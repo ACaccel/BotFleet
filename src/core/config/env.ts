@@ -93,6 +93,8 @@ const envShape = {
   TOKEN: nonPlaceholder('TOKEN'),
   CLIENT_ID: nonPlaceholder('CLIENT_ID'),
   MONGO_URI: mongoUriSchema.optional(),
+  /** Cooldown and polling interval for transient per-guild connection failures. */
+  MONGO_RECOVERY_INTERVAL_MS: z.coerce.number().int().positive().max(2_147_483_647).default(60_000),
   /** HTTP port for the earthquake webhook (nijika) / settings API (gopher). */
   PORT: z.coerce.number().int().positive().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),

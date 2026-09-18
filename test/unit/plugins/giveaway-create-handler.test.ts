@@ -158,3 +158,19 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     expect(interaction.deleteReply).not.toHaveBeenCalled();
   });
 });
+
+it('reports disabled database state with its trace ID', async () => {
+  const repos = makeRepos();
+  const channel = makeChannel(true);
+  const bot = makeBot(repos, scheduledJobs);
+  const interaction = makeInteraction(channel);
+  const translate = vi.fn((key: string) => key);
+  Object.defineProperty(bot, 'translator', { value: { t: translate } });
+  Object.defineProperty(bot, 'connectionManager', {
+    value: { isDisabled: () => ({ traceId: 'trace-db' }) },
+  });
+  bot.guildRegistry.getRepos = () => undefined;
+  await handleGiveawayCreate(interaction, bot);
+  expect(translate).toHaveBeenCalledWith('errors:db.guild_disabled', { traceId: 'trace-db' });
+  expect(interaction.editReply).toHaveBeenCalledWith({ content: 'errors:db.guild_disabled' });
+});
