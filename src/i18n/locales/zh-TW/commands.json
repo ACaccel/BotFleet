@@ -225,7 +225,16 @@
     }
   },
   "giveaway_create": {
-    "description": "建立抽獎"
+    "description": "建立抽獎",
+    "options": {
+      "destination": {
+        "description": "抽獎發布頻道（預設為當前頻道）",
+        "choices": {
+          "current": "當前頻道",
+          "configured": "預設抽獎頻道"
+        }
+      }
+    }
   },
   "giveaway_delete": {
     "description": "刪除抽獎"

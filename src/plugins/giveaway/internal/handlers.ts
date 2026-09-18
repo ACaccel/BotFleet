@@ -80,10 +80,11 @@ export const handleGiveawayCreate = async (
       return;
     }
 
-    // The giveaway is published directly in the channel the command
-    // was invoked from — there is no dedicated `giveaway` channel
-    // to configure.
-    const channel = interaction.channel;
+    // Preserve the selected destination across the modal submission.
+    const useConfiguredChannel = interaction.customId === 'giveaway_create|configured';
+    const channel = useConfiguredChannel
+      ? deps.registry.getChannel(guild.id, 'giveaway')
+      : interaction.channel;
     if (!channel?.isSendable()) {
       await interaction.editReply({ content: t('errors:command.channel_not_found') });
       return;
@@ -121,7 +122,7 @@ export const handleGiveawayCreate = async (
 
     // `create` returns Result<GiveawayDoc, DatabaseError>. An
     // `err` is re-thrown into the surrounding catch. `channel_id`
-    // records the invoking channel so the reboot path
+    // records the announcement channel so the reboot path
     // (`scheduleGiveaway`) re-resolves the same channel when it
     // announces the result.
     const createResult = await repos.giveaway.create({

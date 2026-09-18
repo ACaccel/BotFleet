@@ -21,6 +21,12 @@ describe('buildGiveawayModal', () => {
     expect(data.custom_id).toBe('giveaway_create');
   });
 
+  it('carries the configured destination in the modal custom id', () => {
+    expect(buildGiveawayModal(stubTranslator, true).toJSON().custom_id).toBe(
+      'giveaway_create|configured',
+    );
+  });
+
   it('keeps four label components on the modal', () => {
     const modal = buildGiveawayModal(stubTranslator);
     // discord.js v14 builders may attach components on the builder root

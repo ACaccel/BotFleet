@@ -706,6 +706,9 @@ consume the whole shutdown budget the signal handler is working within.
 | `IdentitySyncPlugin`      | `src/plugins/identity-sync/`       | daily avatar/nickname sync with a source user, or a static fallback identity (gopher)                                   |
 | `SocialFeedPlugin`        | `src/plugins/social-feed/`         | polls each guild's stored feed subscriptions and forwards the new posts each subscription's own filter accepts (nijika) |
 
+Giveaway [destination selection](../README.md#features) is carried in the modal custom ID;
+the announcement channel ID is persisted for scheduled draws.
+
 ## 6. Personalities
 
 Each composition root under `src/bot/<name>/` is a thin `BaseBot`

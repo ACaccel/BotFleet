@@ -225,7 +225,16 @@
     }
   },
   "giveaway_create": {
-    "description": "Create a giveaway"
+    "description": "Create a giveaway",
+    "options": {
+      "destination": {
+        "description": "Where to publish the giveaway (default: current channel)",
+        "choices": {
+          "current": "Current channel",
+          "configured": "Configured giveaway channel"
+        }
+      }
+    }
   },
   "giveaway_delete": {
     "description": "Delete a giveaway"

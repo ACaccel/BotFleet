@@ -10,6 +10,15 @@ export default class giveaway_create extends Command {
     this.setConfig({
       name: 'giveaway_create',
       category: 'server_activity',
+      options: {
+        string: [
+          {
+            name: 'destination',
+            required: false,
+            choices: [{ value: 'current' }, { value: 'configured' }],
+          },
+        ],
+      },
     });
   }
 
@@ -17,9 +26,7 @@ export default class giveaway_create extends Command {
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    // The giveaway parameters are collected through a modal rather
-    // than slash-command options; the submitted modal is handled by
-    // the `giveaway_create` modal handler.
-    await interaction.showModal(buildGiveawayModal(bot.translator));
+    const useConfiguredChannel = interaction.options.getString('destination') === 'configured';
+    await interaction.showModal(buildGiveawayModal(bot.translator, useConfiguredChannel));
   }
 }

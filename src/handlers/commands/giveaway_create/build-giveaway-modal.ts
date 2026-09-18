@@ -7,12 +7,15 @@ import type { BaseBot } from '@bot';
  * — but pulls the component assembly out of the command handler so
  * `index.ts` stays well under the 150-line cap.
  *
- * The four text inputs carry the whole command payload (duration /
+ * The four text inputs carry the giveaway details (duration /
  * prize / winner_num / description). `winner_num` is a free-text field
  * because modals have no numeric input type; the submit handler parses
  * and validates it.
  */
-export const buildGiveawayModal = (translator: BaseBot['translator']): ModalBuilder => {
+export const buildGiveawayModal = (
+  translator: BaseBot['translator'],
+  useConfiguredChannel = false,
+): ModalBuilder => {
   const t = (key: string, params?: Record<string, string | number>): string =>
     translator?.t(key, params) ?? '';
 
@@ -41,7 +44,7 @@ export const buildGiveawayModal = (translator: BaseBot['translator']): ModalBuil
     .setPlaceholder(t('replies:giveaway.modal_description_placeholder'));
 
   return new ModalBuilder()
-    .setCustomId('giveaway_create')
+    .setCustomId(useConfiguredChannel ? 'giveaway_create|configured' : 'giveaway_create')
     .setTitle(t('replies:giveaway.modal_title'))
     .setLabelComponents(
       new LabelBuilder()

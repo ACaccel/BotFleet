@@ -3,7 +3,7 @@
  * redesign:
  *   - parameters arrive through modal text inputs (not slash options),
  *   - the giveaway is published in the channel the command was invoked
- *     from (no dedicated `giveaway` channel config),
+ *     from unless the configured giveaway channel is selected,
  *   - `winner_num` is parsed/validated server-side (modals have no
  *     numeric input type), and
  *   - the interaction's own reply is removed on success (the
@@ -72,6 +72,7 @@ const makeInteraction = (
   fields: Fields = DEFAULT_FIELDS,
 ) =>
   ({
+    customId: 'giveaway_create',
     deferReply: vi.fn().mockResolvedValue(undefined),
     editReply: vi.fn().mockResolvedValue(undefined),
     deleteReply: vi.fn().mockResolvedValue(undefined),
@@ -113,6 +114,52 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     expect(interaction.deleteReply).toHaveBeenCalledTimes(1);
     expect(interaction.editReply).not.toHaveBeenCalled();
   });
+
+  it('publishes in the configured channel and persists it', async () => {
+    const repos = makeRepos();
+    const current = makeChannel(false);
+    const configured = { ...makeChannel(true), id: 'configured-channel' };
+    const bot = makeBot(repos, scheduledJobs);
+    const getChannel = vi
+      .spyOn(bot.guildRegistry, 'getChannel')
+      .mockReturnValue(configured as unknown as ReturnType<BaseBot['guildRegistry']['getChannel']>);
+    const interaction = makeInteraction(current);
+    Object.defineProperty(interaction, 'customId', { value: 'giveaway_create|configured' });
+
+    await handleGiveawayCreate(interaction, bot);
+
+    expect(getChannel).toHaveBeenCalledWith(GUILD_ID, 'giveaway');
+    expect(configured.send).toHaveBeenCalledTimes(1);
+    expect(current.send).not.toHaveBeenCalled();
+    expect(repos.giveaway.create).toHaveBeenCalledWith(
+      expect.objectContaining({ channel_id: configured.id }),
+    );
+    expect(interaction.deleteReply).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['missing', 'not-sendable'] as const)(
+    'does not fall back when the configured channel is %s',
+    async (state) => {
+      const repos = makeRepos();
+      const current = makeChannel(true);
+      const bot = makeBot(repos, scheduledJobs);
+      vi.spyOn(bot.guildRegistry, 'getChannel').mockReturnValue(
+        (state === 'missing' ? undefined : makeChannel(false)) as unknown as ReturnType<
+          BaseBot['guildRegistry']['getChannel']
+        >,
+      );
+      const interaction = makeInteraction(current);
+      Object.defineProperty(interaction, 'customId', { value: 'giveaway_create|configured' });
+
+      await handleGiveawayCreate(interaction, bot);
+
+      expect(current.send).not.toHaveBeenCalled();
+      expect(repos.giveaway.create).not.toHaveBeenCalled();
+      expect(interaction.editReply).toHaveBeenCalledWith({
+        content: 'errors:command.channel_not_found',
+      });
+    },
+  );
 
   it('rejects ephemerally when winner_num is not a positive integer', async () => {
     const repos = makeRepos();

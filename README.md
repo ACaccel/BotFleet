@@ -46,7 +46,10 @@ single-page overview.
 - Slash commands, buttons, modals, select menus, and reaction handlers.
 - Multi-provider LLM chat with web-search toggle and per-user session persistence.
 - Message backup to MongoDB.
-- Giveaways with reaction-driven winner selection.
+- Giveaways with reaction-driven winner selection. `/giveaway_create` accepts an optional
+  `destination`: `current` (default) publishes in the invoking channel; `configured` uses
+  `guilds.<id>.channels.giveaway` from the bot's `config.json`. An unavailable configured
+  channel returns an error without falling back to the invoking channel.
 - Per-member activity tracking.
 - Social-media share-link previews (Twitter/X, Instagram, Threads, Facebook, Reddit, Bahamut, Bilibili) with original-embed suppression.
 - Subscription-driven social feed: `/feed_subscribe`, `/feed_unsubscribe`, and `/feed_list` forward followed accounts' new posts into a chosen channel, each subscription carrying its own media / keyword filter. Subscribing and unsubscribing take a comma-separated list of accounts, up to 20 per command, and unsubscribing suggests the accounts the target channel has already subscribed as you type. Unsubscribing without naming a platform or an account clears the whole channel, so it asks for confirmation before deleting anything.

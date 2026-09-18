@@ -150,8 +150,7 @@ export const scheduleGiveaway = async (
   if (!giveawayResult.ok) throw giveawayResult.error;
   const giveaway = giveawayResult.value;
   if (!giveaway) return { status: 'giveaway_not_found' };
-  // The giveaway is announced in whatever channel `/giveaway_create`
-  // was invoked from — which may be a thread or a channel that is not
+  // The saved announcement channel may be a thread or a channel that is not
   // in `guild.channels.cache` after a restart (threads in particular
   // are not all delivered on GUILD_CREATE). Fall back to an API fetch
   // so a persisted `channel_id` the cache cannot resolve does not

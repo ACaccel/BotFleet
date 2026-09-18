@@ -3,7 +3,7 @@
   "language": "zh-TW",
   "guilds": {
     "YOUR_GUILD_ID": {
-      "channels": { "debug": "YOUR_DEBUG_CHANNEL_ID" },
+      "channels": { "debug": "YOUR_DEBUG_CHANNEL_ID", "giveaway": "YOUR_GIVEAWAY_CHANNEL_ID" },
       "roles": { "ban_user": "YOUR_BAN_USER_ROLE_ID" },
       "permission_rank": {
         "channels": { "YOUR_PRIVATE_CHANNEL_ID": 1 },
