@@ -171,8 +171,11 @@ describe('file-router stream', () => {
     const guildDir = join(rootDir, 'bot-A', 'g1');
     const files = readdirSync(guildDir).sort();
     expect(files).toEqual([`${dateKey(day1)}.log`, `${dateKey(day2)}.log`]);
-    expect(readFileSync(join(guildDir, files[0]!), 'utf8')).toContain('"before"');
-    expect(readFileSync(join(guildDir, files[1]!), 'utf8')).toContain('"after"');
+    // Rotated streams close independently of the current file's final flush.
+    await vi.waitFor(() => {
+      expect(readFileSync(join(guildDir, files[0]!), 'utf8')).toContain('"before"');
+      expect(readFileSync(join(guildDir, files[1]!), 'utf8')).toContain('"after"');
+    });
   });
 
   it('rejects an empty rootDir option', () => {
