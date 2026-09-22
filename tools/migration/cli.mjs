@@ -20,7 +20,7 @@ import {
 } from './files.mjs';
 
 /** @typedef {{version:string,databases:{name:string,collections:unknown[]}[]}} DatabaseInventory */
-/** @typedef {{MONGODB_VERSION:string,MONGO_TOOLS_VERSION:string,NODE_VERSION:string,YARN_VERSION:string,MONGOSH_VERSION:string}} Runtime */
+/** @typedef {{MONGODB_VERSION:string,MONGO_TOOLS_VERSION:string,NODE_VERSION:string,NPM_VERSION:string,MONGOSH_VERSION:string}} Runtime */
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
 const usage = `Usage (inside a BotFleet git checkout):
   migration.sh inspect
@@ -161,7 +161,7 @@ async function runtime(config, serverVersion) {
     MONGODB_VERSION: serverVersion,
     MONGO_TOOLS_VERSION: toolsVersion,
     NODE_VERSION: nodeVersion,
-    YARN_VERSION: await readVersion('yarn'),
+    NPM_VERSION: await readVersion('npm'),
     MONGOSH_VERSION: await readVersion('mongosh'),
   };
 }
@@ -179,7 +179,7 @@ async function noWriters(config) {
     }
     if (
       (cwd === config.repo || command.includes(`${config.repo}/`)) &&
-      /(?:ts-node|node|yarn).*src\/bot\/[^/]+\/index\.(?:ts|js)/.test(command)
+      /(?:ts-node|node|npm|yarn).*src\/bot\/[^/]+\/index\.(?:ts|js)/.test(command)
     )
       fail('A BotFleet writer is still running; stop it before exporting or restoring.');
   }
@@ -308,7 +308,7 @@ async function installDependencies(config) {
   const actual = (await run(await binary(config, 'node'), ['--version'])).text.trim();
   if (actual !== `v${expected}`)
     fail('Target Node does not match .nvmrc; bootstrap using the source runtime.');
-  await run(await binary(config, 'yarn'), ['install', '--frozen-lockfile'], {
+  await run(await binary(config, 'npm'), ['ci'], {
     cwd: config.repo,
     env: {
       ...environment(config),
@@ -422,7 +422,7 @@ async function restoreBackup(config, backup, mongoDir) {
     throw error;
   }
   process.stdout.write(
-    `Restored ${manifest.databases.length} databases and ${records.length} ignored files. MongoDB is running; bots are not started.\nMongoDB config: ${conf}\nStart the desired bots with their usual yarn commands.\n`,
+    `Restored ${manifest.databases.length} databases and ${records.length} ignored files. MongoDB is running; bots are not started.\nMongoDB config: ${conf}\nStart the desired bots with their usual npm run commands.\n`,
   );
 }
 

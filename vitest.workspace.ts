@@ -5,7 +5,7 @@ import path from 'path';
  * Vitest workspace — defines six independent projects (unit,
  * integration, integration-nodb, contract, i18n, tools). Each project's
  * include glob is the ground truth for what files it picks up; the
- * corresponding yarn script (`test:unit`, `test:int`, `test:contract`,
+ * corresponding npm run script (`test:unit`, `test:int`, `test:contract`,
  * `test:i18n`, `test:tools`) selects via `--project <name>`.
  *
  * CI runs the integration and contract projects with `--reporter=json`

@@ -18,10 +18,10 @@ beforeEach(() => {
   prefix = mkdtempSync(join(tmpdir(), 'botfleet-runtime-'));
   mkdirSync(join(prefix, 'bin'));
   mkdirSync(join(prefix, 'conda-meta'));
-  mkdirSync(join(prefix, 'lib/node_modules/yarn/bin'), { recursive: true });
+  mkdirSync(join(prefix, 'lib/node_modules/npm/bin'), { recursive: true });
   writeFileSync(join(prefix, 'conda-meta/history'), 'fixture');
   symlinkSync(process.execPath, join(prefix, 'bin/node'));
-  writeFileSync(join(prefix, 'lib/node_modules/yarn/bin/yarn.js'), "console.log('1.22.22');");
+  writeFileSync(join(prefix, 'lib/node_modules/npm/bin/npm-cli.js'), "console.log('10.9.2');");
 });
 afterEach(() => rmSync(prefix, { recursive: true, force: true }));
 
@@ -40,6 +40,29 @@ describe('project runtime launcher', () => {
       join(prefix, 'bin/node'),
     ]);
     expect(run('path').stdout.trim()).toBe(join(prefix, 'bin/node'));
+  });
+
+  it('runs npm from the selected prefix and preserves forwarded script arguments', () => {
+    const cli = join(prefix, 'lib/node_modules/npm/bin/npm-cli.js');
+    writeFileSync(
+      cli,
+      `if (process.argv[2] === '--version') console.log('10.9.2');
+else console.log(JSON.stringify({ args: process.argv.slice(2), manager: process.env.npm_execpath }));`,
+    );
+    const result = run('exec', 'npm', 'run', 'register', '--', '-t', 'nijika', '--dry-run');
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      args: ['run', 'register', '--', '-t', 'nijika', '--dry-run'],
+      manager: cli,
+    });
+  });
+
+  it('rejects a missing or mismatched npm without falling back to PATH', () => {
+    const cli = join(prefix, 'lib/node_modules/npm/bin/npm-cli.js');
+    writeFileSync(cli, "console.log('9.0.0');");
+    expect(run('path').stderr).toContain('npm 10.9.2');
+    rmSync(cli);
+    expect(run('path').stderr).toContain('runtime is missing');
   });
 
   it('refuses missing runtimes without using system Node', () => {

@@ -11,7 +11,7 @@
  *      mismatch, intent rejections, and missing-network issues.
  *
  * What it does NOT do:
- *   - Register slash commands (`yarn register` is the canonical path).
+ *   - Register slash commands (`npm run register` is the canonical path).
  *   - Spin up plugins, web routes, or the BaseBot lifecycle. Smoke is
  *     a connectivity probe, not a full boot.
  *   - Send messages to a live guild. The previous plan considered a
@@ -23,10 +23,10 @@
  * it.
  *
  * Usage:
- *   yarn smoke              # defaults to --bot nijika
- *   yarn smoke --bot konata
- *   yarn smoke -b msg-archive
- *   SMOKE_TIMEOUT_MS=60000 yarn smoke --bot tomori
+ *   npm run smoke              # defaults to --bot nijika
+ *   npm run smoke -- --bot konata
+ *   npm run smoke -- -b msg-archive
+ *   SMOKE_TIMEOUT_MS=60000 npm run smoke -- --bot tomori
  */
 import * as path from 'node:path';
 import { Client, GatewayIntentBits } from 'discord.js';

@@ -23,7 +23,7 @@ unchecked rather than deleting the line.
 - [ ] `src/plugins/`
 - [ ] `src/bot/<name>/` (composition root)
 - [ ] `src/i18n/locales/` (new or modified i18n keys)
-- [ ] `package.json` / `yarn.lock` / `audit-ci.jsonc`
+- [ ] `package.json` / `package-lock.json` / `audit-ci.jsonc`
 - [ ] `.github/workflows/`
 - [ ] `tsconfig*` / `eslint.config.mjs` / `vitest.config.ts`
 - [ ] Tests added or updated
@@ -38,15 +38,15 @@ unchecked rather than deleting the line.
   If a gate was skipped, say why.
 -->
 
-- [ ] `yarn typecheck`
-- [ ] `yarn typecheck:emit`
-- [ ] `yarn lint`
-- [ ] `yarn format:check`
-- [ ] `yarn handlers:gen:check`
-- [ ] `yarn test` (unit / int / int-nodb / contract / i18n / tools)
-- [ ] `yarn test:coverage`
-- [ ] `yarn knip`
-- [ ] `yarn security`
+- [ ] `npm run typecheck`
+- [ ] `npm run typecheck:emit`
+- [ ] `npm run lint`
+- [ ] `npm run format:check`
+- [ ] `npm run handlers:gen:check`
+- [ ] `npm run test` (unit / int / int-nodb / contract / i18n / tools)
+- [ ] `npm run test:coverage`
+- [ ] `npm run knip`
+- [ ] `npm run security`
 - [ ] Manual smoke against a dev guild (describe what you invoked)
 
 ## Reviewer-agent results

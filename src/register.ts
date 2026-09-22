@@ -16,11 +16,11 @@
  * global commands.
  *
  * Usage:
- *   yarn register -t nijika                 # global (default; also prunes guild-scoped commands)
- *   yarn register -t nijika --dev-guild ID  # guild-side fast iteration
- *   yarn register -t nijika --dry-run       # print resolved command text, register nothing
- *   yarn register -t nijika --keep-guild-commands     # global registration without pruning guild commands
- *   yarn register -t nijika --cleanup-guild-commands  # only clear guild-scoped commands
+ *   npm run register -- -t nijika                 # global (default; also prunes guild-scoped commands)
+ *   npm run register -- -t nijika --dev-guild ID  # guild-side fast iteration
+ *   npm run register -- -t nijika --dry-run       # print resolved command text, register nothing
+ *   npm run register -- -t nijika --keep-guild-commands     # global registration without pruning guild commands
+ *   npm run register -- -t nijika --cleanup-guild-commands  # only clear guild-scoped commands
  *
  * The default global registration registers the global command set AND clears
  * guild-scoped registrations from every guild, so a stale guild-scoped
@@ -322,11 +322,11 @@ async function main() {
   if (!bot) {
     logger.error(
       'Usage:\n' +
-        '  yarn register -t <bot_name>                          # global (default)\n' +
-        '  yarn register -t <bot_name> --dev-guild <guild_id>   # guild-side fast iteration\n' +
-        '  yarn register -t <bot_name> --dry-run                # print resolved command text, register nothing\n' +
-        '  yarn register -t <bot_name> --keep-guild-commands    # global registration WITHOUT pruning guild-scoped commands\n' +
-        '  yarn register -t <bot_name> --cleanup-guild-commands # remove legacy guild-scoped commands',
+        '  npm run register -- -t <bot_name>                          # global (default)\n' +
+        '  npm run register -- -t <bot_name> --dev-guild <guild_id>   # guild-side fast iteration\n' +
+        '  npm run register -- -t <bot_name> --dry-run                # print resolved command text, register nothing\n' +
+        '  npm run register -- -t <bot_name> --keep-guild-commands    # global registration WITHOUT pruning guild-scoped commands\n' +
+        '  npm run register -- -t <bot_name> --cleanup-guild-commands # remove legacy guild-scoped commands',
     );
     process.exit(1);
   }

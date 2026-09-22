@@ -24,16 +24,16 @@ Voice and stage channel text-message backups remain supported.
 
 ## Pre-deploy smoke
 
-`yarn smoke` is a boundary-only sanity check intended to run against a
+`npm run smoke` is a boundary-only sanity check intended to run against a
 staging or production deployment **before** promoting a release. It
 needs a real bot `.env` (TOKEN + CLIENT_ID, plus MONGO_URI for bots
 that talk to Mongo) and live network access to Discord.
 
 ```bash
-yarn smoke                 # defaults to --bot nijika
-yarn smoke --bot konata
-yarn smoke -b msg-archive
-SMOKE_TIMEOUT_MS=60000 yarn smoke --bot tomori
+npm run smoke                 # defaults to --bot nijika
+npm run smoke -- --bot konata
+npm run smoke -- -b msg-archive
+SMOKE_TIMEOUT_MS=60000 npm run smoke -- --bot tomori
 ```
 
 What the script verifies, in order:
@@ -55,19 +55,18 @@ is printed to stderr).
 
 ## Dependency overrides
 
-`package.json` carries a single `resolutions` entry:
+`package.json` carries a single `overrides` entry:
 
 - **`undici: ^6.27.0`** — `discord.js` depends on `undici` at an exact
-  pin (`6.24.1`), which sits below the fix for the advisory `yarn
-security` reports. Because the pin is exact, nothing else in the tree
-  can lift it; the resolution is the only lever. Re-verify it on every
+  pin (`6.24.1`), which sits below the fix for the advisory `npm run security` reports. Because the pin is exact, nothing else in the tree
+  can lift it; the override is required. Re-verify it on every
   `discord.js` bump: if the new release pins a version at or above the
-  override, drop the entry rather than leaving a resolution that no
+  override, drop the entry rather than leaving an override that no
   longer does anything.
 
-A resolution that merely restates what the dependency's own range
+An override that merely restates what the dependency's own range
 already permits is dead weight — it hides which overrides are
-load-bearing. Check with `yarn why <pkg>` before adding one.
+load-bearing. Check with `npm explain <pkg>` before adding one.
 
 ## Database recovery
 

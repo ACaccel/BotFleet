@@ -132,7 +132,7 @@ export function makeRelease(root: string, config: DeploymentConfig, mongodbOnly:
           throw new Error(`Missing config.json for ${bot}`);
       }
       cpSync(join(root, 'src'), join(directory, 'src'), { recursive: true, dereference: false });
-      for (const name of ['package.json', 'yarn.lock', 'tsconfig.json'])
+      for (const name of ['package.json', 'package-lock.json', 'tsconfig.json'])
         cpSync(join(root, name), join(directory, name));
       cpSync(join(root, 'scripts/mongo-ready.ts'), join(directory, 'scripts/mongo-ready.ts'), {
         recursive: true,

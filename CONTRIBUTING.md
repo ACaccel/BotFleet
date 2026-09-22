@@ -8,14 +8,14 @@ vulnerability. The step-by-step guides live under
 
 - [Local setup and development loop](docs/contributing/local-setup.md) —
   prerequisites, `config.json` / `.env`, running a personality,
-  registering slash commands (`yarn register`)
+  registering slash commands (`npm run register`)
 - [Adding a slash command](docs/contributing/adding-a-command.md) —
   the recipe, the handler 150-line cap, shared handler utilities
 - [Adding a plugin](docs/contributing/adding-a-plugin.md) — the plugin
   recipe and the plugin ↔ IoC contract
 - [Adding or removing a persisted model](docs/contributing/persisted-models.md)
 - [Operations](docs/contributing/operations.md) — the pre-deploy
-  `yarn smoke` check and the dependency-override policy
+  `npm run smoke` check and the dependency-override policy
 - [Commits, branching, and releases](docs/contributing/branching-and-releases.md)
   — commit conventions, the Git Flow variant, when a PR is needed
 
@@ -28,21 +28,21 @@ architecture overview and why things are arranged the way they are.
 
 All gates run in CI; please run them locally before opening a PR.
 
-| Command                   | What it checks                                                                                                                                 |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `yarn typecheck`          | Strict TypeScript (`tsconfig.strict.json`) over the whole `src/`                                                                               |
-| `yarn typecheck:emit`     | Emit-mode compile (`tsconfig.build.json`); catches broken imports outside the strict include scope. Not a deploy build (runtime is `ts-node`). |
-| `yarn lint`               | ESLint                                                                                                                                         |
-| `yarn format:check`       | Prettier (use `yarn format` to fix)                                                                                                            |
-| `yarn handlers:gen:check` | Codegen registries match the on-disk handler layout                                                                                            |
-| `yarn test:unit`          | Unit tests (Vitest project `unit`)                                                                                                             |
-| `yarn test:int`           | Integration tests: the `integration` project (`mongodb-memory-server`) plus `integration-nodb` (real TCP ports, no database)                   |
-| `yarn test:contract`      | LLM provider contract tests via `nock`                                                                                                         |
-| `yarn test:i18n`          | Catalog parity + CJK-literal scanner                                                                                                           |
-| `yarn test`               | All six Vitest projects                                                                                                                        |
-| `yarn security`           | `audit-ci` against the documented allowlist (HIGH+). The `gitleaks` secret scan and CodeQL run on GitHub only                                  |
-| `yarn knip`               | Unused files, dependencies, unlisted imports, exports and types — all errors                                                                   |
-| `yarn smoke`              | Pre-deploy boundary probe: `.env` load + Mongo `admin.ping` + Discord login until `ready`. Manual; not in the CI matrix.                       |
+| Command                      | What it checks                                                                                                                                 |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck`          | Strict TypeScript (`tsconfig.strict.json`) over the whole `src/`                                                                               |
+| `npm run typecheck:emit`     | Emit-mode compile (`tsconfig.build.json`); catches broken imports outside the strict include scope. Not a deploy build (runtime is `ts-node`). |
+| `npm run lint`               | ESLint                                                                                                                                         |
+| `npm run format:check`       | Prettier (use `npm run format` to fix)                                                                                                         |
+| `npm run handlers:gen:check` | Codegen registries match the on-disk handler layout                                                                                            |
+| `npm run test:unit`          | Unit tests (Vitest project `unit`)                                                                                                             |
+| `npm run test:int`           | Integration tests: the `integration` project (`mongodb-memory-server`) plus `integration-nodb` (real TCP ports, no database)                   |
+| `npm run test:contract`      | LLM provider contract tests via `nock`                                                                                                         |
+| `npm run test:i18n`          | Catalog parity + CJK-literal scanner                                                                                                           |
+| `npm run test`               | All six Vitest projects                                                                                                                        |
+| `npm run security`           | `audit-ci` against the documented allowlist (HIGH+). The `gitleaks` secret scan and CodeQL run on GitHub only                                  |
+| `npm run knip`               | Unused files, dependencies, unlisted imports, exports and types — all errors                                                                   |
+| `npm run smoke`              | Pre-deploy boundary probe: `.env` load + Mongo `admin.ping` + Discord login until `ready`. Manual; not in the CI matrix.                       |
 
 ## Architectural rules
 

@@ -36,5 +36,5 @@ unavoidable literal with `// i18n-ignore: <reason>`.
 3. Register the locale in `src/core/i18n/locale-resolver.ts`
    (`SUPPORTED` set + `normalizeDiscordLocale` mapping if Discord sends a
    regional variant).
-4. Run `yarn test:i18n` — the catalog-completeness test will fail until
+4. Run `npm run test:i18n` — the catalog-completeness test will fail until
    every key is translated.

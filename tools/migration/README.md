@@ -60,7 +60,7 @@ keep it private. Partial exports have no valid manifest and cannot be restored.
 ## 2. Prepare the target and clone
 
 The target needs Linux/glibc, Bash, coreutils, tar, and curl or wget (or a locally
-copied installer). It does not need conda, Node, MongoDB, Yarn, or Git installed.
+copied installer). It does not need conda, Node, MongoDB, npm, or Git installed.
 Bootstrap installs these and native build dependencies without sudo:
 
 ```bash
@@ -76,9 +76,12 @@ git checkout SOURCE_COMMIT_PRINTED_BY_EXPORT
 Omit `--apply` to preview. The Miniforge release is pinned in
 `bootstrap-runtime.conf`; its installer and SHA256 are fetched from that fixed
 [official release](https://github.com/conda-forge/miniforge/releases). Database,
-Node, Yarn and mongosh versions come from the backup. No manual version list is
-needed. Use `--prefix /absolute/conda` if conda belongs elsewhere; activate that
-installation afterward. Reusing an environment can update its packages.
+Node, npm and mongosh versions come from the backup. No manual version list is
+needed. Backups exported before the npm transition retain their bundled Yarn-based
+recovery tool; use that bundled tool with the recorded source commit. Do not mix
+its runtime inventory with a newer bootstrap. Use `--prefix /absolute/conda` if
+conda belongs elsewhere; activate that installation afterward. Reusing an
+environment can update its packages.
 
 ## 3. Restore and run
 
@@ -123,7 +126,7 @@ export/restore paths are covered by the isolated MongoDB drill.
 
 To transition the recovered host to the normal split layout:
 
-1. Run `yarn setup` to build the checkout's `.conda` application runtime and locked
+1. Run `npm run setup` to build the checkout's `.conda` application runtime and locked
    native dependencies. Keep the recovery environment available for rollback.
 2. Run `bash scripts/setup-mongo.sh /absolute/mongodb-botfleet/.conda` to prepare
    the independent database runtime. Confirm its versions match `runtime.conf`;
@@ -153,6 +156,6 @@ credential is supported. Replica sets, sharding, other administrative users,
 and version upgrades are outside scope. Database verification compares counts
 and metadata, not each document's content; complete writer shutdown is required.
 
-Tests: `yarn test:tools tools/migration`. For an isolated real MongoDB drill, set
+Tests: `npm run test:tools -- tools/migration`. For an isolated real MongoDB drill, set
 `MIGRATION_TEST_BIN_DIR` to a directory containing the database binaries and put
 `mongosh` on PATH. Tests never use the production database or bot credentials.

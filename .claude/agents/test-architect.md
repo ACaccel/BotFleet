@@ -74,7 +74,7 @@ behavior — not whether a coverage number is high.
    right seam.
 3. **Audit** (`Audit: <scope>`, default = `git diff` vs HEAD) — for
    each changed `src/` file, verify corresponding tests exist and are
-   meaningful; run `yarn test` and `yarn test:coverage`.
+   meaningful; run `npm run test` and `npm run test:coverage`.
 
 ## Verdict policy
 

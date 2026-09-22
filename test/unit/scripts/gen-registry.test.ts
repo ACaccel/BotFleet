@@ -7,7 +7,7 @@ import { quoteKey } from '../../../scripts/gen-registry';
 /**
  * Codegen integrity smoke test.
  *
- * Runs `yarn handlers:gen:check` and asserts exit 0. If a developer adds
+ * Runs `npm run handlers:gen:check` and asserts exit 0. If a developer adds
  * a handler subdirectory without regenerating the registry, this fails
  * before CI even sees the PR.
  *
@@ -30,7 +30,7 @@ describe('handlers codegen', () => {
     // Exit 0 means no drift; non-zero means a developer added/renamed a
     // handler dir without regenerating. Test surfaces it locally before CI.
     expect(() =>
-      execSync('yarn handlers:gen:check', { cwd: REPO_ROOT, stdio: 'pipe' }),
+      execSync('npm run handlers:gen:check', { cwd: REPO_ROOT, stdio: 'pipe' }),
     ).not.toThrow();
   });
 

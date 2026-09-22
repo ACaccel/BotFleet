@@ -50,7 +50,7 @@ Decide before writing:
 - Apply the rules in [`coding-standards`](../coding-standards/SKILL.md):
   SRP, design-pattern justification, naming, guard clauses, security,
   structured errors, comments, testing discipline.
-- After adding or deleting a handler, run `yarn handlers:gen`.
+- After adding or deleting a handler, run `npm run handlers:gen`.
 
 ## Step 4 — Self-check
 
@@ -80,12 +80,12 @@ Resolve any BLOCK finding before moving on; treat WARN seriously.
 Run, until each is green:
 
 ```bash
-yarn typecheck
-yarn lint
-yarn test
-yarn format:check
-yarn handlers:gen:check
-yarn knip
+npm run typecheck
+npm run lint
+npm run test
+npm run format:check
+npm run handlers:gen:check
+npm run knip
 ```
 
 Do not bypass `--no-verify`, do not skip tests, do not loosen a

@@ -16,7 +16,7 @@
  * rejects a misdeclared option, but only a command whose own test
  * happens to call it would ever reach that check. Running it over every
  * command is what makes that rejection a test-time failure rather than
- * a `yarn register` one.
+ * a `npm run register` one.
  */
 import { describe, expect, it } from 'vitest';
 

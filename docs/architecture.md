@@ -665,7 +665,7 @@ the edge cannot silently return.
 
 The registry files are produced by
 [scripts/gen-registry.ts](../scripts/gen-registry.ts); a drift check
-(`yarn handlers:gen:check`) fails CI if the directory tree and the
+(`npm run handlers:gen:check`) fails CI if the directory tree and the
 generated registry disagree.
 
 ## 4. Plugin lifecycle
@@ -785,7 +785,7 @@ obvious alternative.
 ## Service deployment
 
 The [runtime launcher](../scripts/runtime.mjs) selects the project Conda
-Node and Yarn for manual commands. [Deployment](../scripts/deploy.ts)
+Node and npm for manual commands. [Deployment](../scripts/deploy.ts)
 creates separate systemd units for each bot and for MongoDB, using explicit
 runtime paths rather than interactive shell activation.
 

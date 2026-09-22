@@ -17,7 +17,7 @@ counts, missing attachment metadata, etc.).
 
 Run `msg_backup` when a guild's `messages` collection has drifted from
 Discord-side truth and needs a one-shot reconciliation — typically
-signalled by `yarn db verify` reporting non-zero violations for
+signalled by `npm run db -- verify` reporting non-zero violations for
 `messageId-null`, `messageId-empty-string`, or `messageId-duplicate`, or
 by a report that DB-side reaction counts / edited content no longer
 match Discord.
@@ -57,7 +57,7 @@ There are **no CLI arguments**.
 ## Running
 
 ```
-yarn msg_backup
+npm run msg_backup
 ```
 
 The tool logs in as the configured bot, waits for the gateway
@@ -212,7 +212,7 @@ file with the `FAILED` status in the footer.
 - After the tool finishes, restart the affected bot. On startup
   the bot's `Model.init()` should build the `messages.messageId_1`
   unique index cleanly (the symptom this tool is designed to fix).
-  Re-run `yarn db verify` to confirm.
+  Re-run `npm run db -- verify` to confirm.
 
 ## Field-skip behaviour
 
@@ -256,7 +256,7 @@ The pure internals (`parseConfig`, `buildBackfillDoc`,
 suite under `tools/msg_backup/msg_backup.test.ts`:
 
 ```
-yarn msg_backup:test
+npm run msg_backup:test
 ```
 
 The suite runs in the `tools` vitest project and exercises the

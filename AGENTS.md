@@ -21,7 +21,7 @@ in strict mode.
 
 ## Tech stack and versions
 
-- Runtime: Node.js `>=22.13.0` (`.nvmrc`: `22.13.0`) · Yarn 1 (classic)
+- Runtime: Node.js `>=22.13.0` (`.nvmrc`: `22.13.0`) · npm `10.9.2`
 - Language: TypeScript `^5.6` (strict; `tsconfig.strict.json`)
 - Discord: discord.js `^14.21`
 - Persistence: Mongoose `^8.22` / MongoDB
@@ -36,15 +36,15 @@ in strict mode.
 
 ```
 Setup:      bash scripts/setup-env.sh (requires CONDA_EXE or conda on PATH)
-Install:    yarn install-lock       (uses project Conda runtime)
-Dev:        yarn tomori | yarn nijika | yarn konata | yarn gopher | yarn msg-archive
-            (register slash commands: yarn register)
-Test:       yarn test               (subsets: test:unit | test:int | test:contract | test:i18n | test:tools)
-Lint:       yarn lint               (format check: yarn format:check)
-Type-check: yarn typecheck          (tsc -p tsconfig.strict.json)
-Build:      yarn typecheck:emit     (declaration build; runtime is ts-node, no bundling step)
-Services:   yarn deploy:prepare | yarn deploy | yarn undeploy
-Codegen:    yarn handlers:gen       (after adding or deleting a handler)
+Install:    npm run install-lock       (uses project Conda runtime)
+Dev:        npm run tomori | npm run nijika | npm run konata | npm run gopher | npm run msg-archive
+            (register slash commands: npm run register)
+Test:       npm run test               (subsets: test:unit | test:int | test:contract | test:i18n | test:tools)
+Lint:       npm run lint               (format check: npm run format:check)
+Type-check: npm run typecheck          (tsc -p tsconfig.strict.json)
+Build:      npm run typecheck:emit     (declaration build; runtime is ts-node, no bundling step)
+Services:   npm run deploy:prepare | npm run deploy | npm run undeploy
+Codegen:    npm run handlers:gen       (after adding or deleting a handler)
 ```
 
 Runtime and deployment operations: [`docs/contributing/deployment.md`](docs/contributing/deployment.md).
@@ -80,15 +80,15 @@ This set mirrors the GitHub CI jobs (`.github/workflows/ci.yml`) and is a
 commit on a red or unrun gate.
 
 ```bash
-yarn typecheck
-yarn typecheck:emit
-yarn lint
-yarn format:check
-yarn handlers:gen:check
-yarn test
-yarn test:coverage
-yarn knip
-yarn security
+npm run typecheck
+npm run typecheck:emit
+npm run lint
+npm run format:check
+npm run handlers:gen:check
+npm run test
+npm run test:coverage
+npm run knip
+npm run security
 ```
 
 Two CI checks cannot run locally — **`gitleaks`** (secret scan) and CodeQL —

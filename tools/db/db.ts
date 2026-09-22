@@ -4,9 +4,9 @@
  * One entry point for every database-maintenance operation, selected by a
  * subcommand:
  *
- *   yarn db verify              # read-only structural validation (one guild)
- *   yarn db migrate-timestamp   # Message.timestamp String -> numeric
- *   yarn db drop-todo           # drop the retired todos collection
+ *   npm run db -- verify              # read-only structural validation (one guild)
+ *   npm run db -- migrate-timestamp   # Message.timestamp String -> numeric
+ *   npm run db -- drop-todo           # drop the retired todos collection
  *
  * Optional `--config <path>` overrides the default `tools/db/config.json`
  * (gitignored — never commit operator credentials). Each command reads
@@ -41,7 +41,7 @@ const main = async (): Promise<void> => {
     const reason =
       subcommand === undefined ? 'no subcommand given' : `unknown subcommand "${subcommand}"`;
     process.stderr.write(
-      `[db] ${reason}\nUsage: yarn db <subcommand> [--config <path>]\n\n${describeCommands()}\n`,
+      `[db] ${reason}\nUsage: npm run db -- <subcommand> [--config <path>]\n\n${describeCommands()}\n`,
     );
     process.exit(1);
   }

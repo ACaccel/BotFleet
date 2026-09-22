@@ -46,7 +46,7 @@ export function parseAction(args: readonly string[]): string {
   const [action, ...extra] = args;
   if (extra.length > 0)
     throw new Error(
-      'Service commands take no registration flags. Use yarn register -t <bot> for Discord commands; edit deployment.json for service selection.',
+      'Service commands take no registration flags. Use npm run register -- -t <bot> for Discord commands; edit deployment.json for service selection.',
     );
   if (
     !action ||

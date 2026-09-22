@@ -10,12 +10,16 @@ export PATH="$PWD/.conda/bin:$PATH"
 ```
 
 The application environment is defined by `environment.yml` (Node 22.13.0).
-Setup installs Yarn 1.22.22 and rebuilds native dependencies using the frozen
-lockfile. `BOTFLEET_CONDA_PREFIX` selects another absolute Conda prefix;
+Setup installs npm 10.9.2 and rebuilds native dependencies with `npm ci` using
+`package-lock.json`. `BOTFLEET_CONDA_PREFIX` selects another absolute Conda prefix;
 otherwise scripts use the checkout's `.conda`. The runtime must have no
 unhandled activation hooks. Invalid or missing environments fail explicitly.
 The system Node is only a bootstrap option; application code uses the
 selected Conda Node. Systemd uses its absolute path and explicit PATH.
+Both manual commands and deployed services require their configured Conda
+runtime directories to remain available. Systemd does not run `conda activate`
+or depend on the environment activated in your terminal. The bot units launch
+Node directly; npm is used for installation and management commands.
 
 Set up the independent database runtime without moving existing data:
 
@@ -60,21 +64,21 @@ database, not provisioning a new database or rotating credentials.
 ## Commands
 
 ```bash
-yarn register -t nijika           # Discord command registration
-yarn register -t nijika --dry-run # No Discord writes
-yarn mongo:prepare               # Preview the independent database unit
-yarn deploy:prepare              # Type-check, snapshot, and preview bot units
-yarn mongo:deploy                # Install/start/enable the database unit
-yarn deploy                      # Install/update/start/enable selected bots
-yarn undeploy                    # Remove managed bot units
-yarn mongo:undeploy              # Remove database unit; requires bots undeployed
-yarn deploy:recover              # Recover an interrupted service transaction
+npm run register -- -t nijika           # Discord command registration
+npm run register -- -t nijika --dry-run # No Discord writes
+npm run mongo:prepare               # Preview the independent database unit
+npm run deploy:prepare              # Type-check, snapshot, and preview bot units
+npm run mongo:deploy                # Install/start/enable the database unit
+npm run deploy                      # Install/update/start/enable selected bots
+npm run undeploy                    # Remove managed bot units
+npm run mongo:undeploy              # Remove database unit; requires bots undeployed
+npm run deploy:recover              # Recover an interrupted service transaction
 ```
 
-The old registration command `yarn deploy -t ...` is now `yarn register -t ...`.
+Use `npm run register -- -t ...` for Discord command registration.
 Unexpected arguments on deployment commands fail with migration guidance.
 Service deployment never implicitly registers Discord commands. A normal
-code update uses `yarn deploy` directly; it does not require undeploy first.
+code update uses `npm run deploy` directly; it does not require undeploy first.
 To restart one deployed bot without updating its release:
 
 ```bash
@@ -137,7 +141,7 @@ journal records old unit definitions, enabled/active state, and manifests.
 
 An ordinary failure restores old units, reinstates their enabled/active
 state, and verifies restarted services. A crash/interruption leaves a journal;
-run `yarn deploy:recover` before retrying. If rollback itself fails, keep the
+run `npm run deploy:recover` before retrying. If rollback itself fails, keep the
 journal and inspect the service logs before recovery. A transaction whose
 manifest was already committed is finalized without reverting its services.
 

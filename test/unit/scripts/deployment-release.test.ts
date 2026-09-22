@@ -41,7 +41,7 @@ beforeEach(() => {
   );
   file('src/bot/tomori/config.json', '{}');
   for (const name of ['package.json', 'tsconfig.json']) file(name, '{}');
-  file('yarn.lock');
+  file('package-lock.json');
   file('scripts/mongo-ready.ts', 'export {};');
   file('scripts/deployment/mongo-probe.ts', 'export {};');
   file('node_modules/test-package/index.js', 'module.exports = 1;');

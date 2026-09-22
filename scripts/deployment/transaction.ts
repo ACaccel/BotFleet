@@ -46,7 +46,7 @@ export async function restore(transaction: Transaction, ops: ServiceOps): Promis
   if (failures.length > 0)
     throw new AggregateError(
       failures,
-      'Rollback incomplete; run yarn deploy:recover after inspecting the journal',
+      'Rollback incomplete; run npm run deploy:recover after inspecting the journal',
     );
 }
 export async function applyUnits(
@@ -78,7 +78,7 @@ export async function applyUnits(
     } catch (rollback) {
       throw new AggregateError(
         [error, rollback],
-        'Deployment failed; rollback requires yarn deploy:recover',
+        'Deployment failed; rollback requires npm run deploy:recover',
       );
     }
     throw error;

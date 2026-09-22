@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 /**
  * Root Vitest config — coverage / shared settings only. The project
  * layout (unit / integration / contract / i18n / tools) lives in
- * `vitest.workspace.ts`. Yarn scripts pick a project via `--project`.
+ * `vitest.workspace.ts`. npm scripts pick a project via `--project`.
  *
  * Coverage thresholds:
  *   - `src/core/**` carries a high floor (90% line / func / statement,

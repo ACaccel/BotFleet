@@ -11,7 +11,7 @@ import type { LocalizedCommandConfig, LocalizedCommandOption } from './command';
  * Discord will not accept it on.
  *
  * Both are authoring mistakes in a handler's `setConfig`, and both
- * would otherwise surface as an opaque REST 400 during `yarn register` —
+ * would otherwise surface as an opaque REST 400 during `npm run register` —
  * with no indication of which option of which command caused it.
  * Failing here catches them in the unit suite instead, since every
  * registration path funnels through this builder.

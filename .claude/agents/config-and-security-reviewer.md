@@ -35,7 +35,7 @@ surface is sound.
 - **tsconfig integrity**: a gate must not silently shrink its scope.
   `typecheck` and `typecheck:emit` cover all of `src`.
 - **Dependency risk**: new dependencies are justified and minimal;
-  `renovate` and lockfile integrity; `yarn.lock` consistent; no
+  `renovate` and lockfile integrity; `package-lock.json` consistent; no
   `resolutions` that mask a vulnerability; `audit-ci` allowlist entries
   are narrowly scoped with a reason.
 - **Secret detection**: no hard-coded secret / token / API key / Mongo
@@ -60,8 +60,8 @@ surface is sound.
 2. **Review** (`Review: <files>`) — read each config / workflow /
    `core/config` / `core/logger` file; check the items above.
 3. **Audit** (`Audit: <scope>`, default = `git diff` vs HEAD) — per
-   changed config / CI file, run the checklist; run `yarn lint`,
-   `yarn knip`, `yarn handlers:gen:check`, `yarn security` where
+   changed config / CI file, run the checklist; run `npm run lint`,
+   `npm run knip`, `npm run handlers:gen:check`, `npm run security` where
    relevant.
 
 ## Verdict policy

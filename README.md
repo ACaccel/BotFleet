@@ -33,13 +33,13 @@ single-page overview.
 
 ## Built-in personalities
 
-| Bot           | Yarn script        | Surface                                                      |
-| ------------- | ------------------ | ------------------------------------------------------------ |
-| `nijika`      | `yarn nijika`      | Web-facing; exposes an Express`/discord/earthquake` webhook  |
-| `konata`      | `yarn konata`      | Full interactive feature set                                 |
-| `tomori`      | `yarn tomori`      | Full interactive feature set                                 |
-| `msg-archive` | `yarn msg-archive` | Worker-style; runs only the message-backup plugin            |
-| `gopher`      | `yarn gopher`      | Database-free; self-hosted-LLM auto-reply and a settings API |
+| Bot           | npm script            | Surface                                                      |
+| ------------- | --------------------- | ------------------------------------------------------------ |
+| `nijika`      | `npm run nijika`      | Web-facing; exposes an Express`/discord/earthquake` webhook  |
+| `konata`      | `npm run konata`      | Full interactive feature set                                 |
+| `tomori`      | `npm run tomori`      | Full interactive feature set                                 |
+| `msg-archive` | `npm run msg-archive` | Worker-style; runs only the message-backup plugin            |
+| `gopher`      | `npm run gopher`      | Database-free; self-hosted-LLM auto-reply and a settings API |
 
 ## Features
 
@@ -68,7 +68,7 @@ export PATH="$PWD/.conda/bin:$PATH"
 
 Prerequisites:
 
-- Conda / Miniforge; setup installs the pinned Node 22 and Yarn 1 runtime
+- Conda / Miniforge; setup installs the pinned Node 22 and npm 10.9.2 runtime
 - MongoDB (local or hosted) — only the bots that use persistent state need it
 
 For **each** personality you want to run, create the two configuration
@@ -82,13 +82,13 @@ cp src/bot/nijika/config.example.json src/bot/nijika/config.json
 Run the bot:
 
 ```bash
-yarn nijika        # or yarn konata / yarn tomori / yarn msg-archive
+npm run nijika        # or npm run konata / npm run tomori / npm run msg-archive
 ```
 
 Register / refresh slash commands (run once after editing commands):
 
 ```bash
-yarn register
+npm run register
 ```
 
 ## Runtime and service deployment
@@ -96,22 +96,22 @@ yarn register
 Install Conda (for example Miniforge), then run `bash scripts/setup-env.sh`
 with `CONDA_EXE` pointing to its executable. The project environment is
 `.conda/`, defined by [environment.yml](environment.yml), with Node 22 and
-Yarn 1. Package scripts select it explicitly; `conda activate` is optional.
-Use `yarn install-lock` for dependency installation through that runtime.
+npm 10.9.2. Package scripts select it explicitly; `conda activate` is optional.
+Use `npm run install-lock` for dependency installation through that runtime.
 `BOTFLEET_CONDA_PREFIX` can select another absolute prefix with the same
 versions and no unhandled activation hooks. Setup refuses runtime changes
 while a managed bot deployment exists.
 
 For automatic startup after reboot, configure `deployment.json` from
 [deployment.example.json](deployment.example.json), then use
-`yarn deploy:prepare`, `yarn deploy`, and `yarn undeploy`. Each bot has an
+`npm run deploy:prepare`, `npm run deploy`, and `npm run undeploy`. Each bot has an
 independent systemd service. MongoDB has a separate runtime and service;
 bot deployment never removes its data. See the [deployment guide](docs/contributing/deployment.md)
 for initial cutover, database setup, rollback, and service commands.
 
-`yarn register` registers Discord commands; `yarn deploy` now manages
-system services. Existing `yarn deploy -t ...` invocations must change to
-`yarn register -t ...`. Service deployment does not register commands.
+`npm run register` registers Discord commands; `npm run deploy` now manages
+system services. Pass registration arguments after `--`, for example
+`npm run register -- -t nijika`. Service deployment does not register commands.
 
 ## Configuration
 
@@ -169,14 +169,14 @@ every id must be a JSON **string**.
 
 Common fields:
 
-| Field                         | Type                | Required | Notes                                                                                                                                                                           |
-| ----------------------------- | ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                       | `string[]`          | no       | User ids with bot-admin privileges. Gates `/ai_whitelist_*`; `/bug_report` DMs every id. Default `[]`.                                                                          |
-| `language`                    | `"zh-TW"` \| `"en"` | no       | Default display locale, also used for registered slash-command text. Default `"zh-TW"`; an unsupported value warns and falls back.                                              |
-| `commands`                    | `string[]`          | no       | The slash commands this personality registers with Discord. Removing an entry only stops re-registering it — run `yarn register -t <name>` to take the command down on Discord. |
-| `guilds.<id>.channels`        | `Record<name, id>`  | no       | Symbolic channel names (`"debug"`, `"event"`, …) → Discord ids, so handlers look channels up by name.                                                                           |
-| `guilds.<id>.roles`           | `Record<name, id>`  | no       | Symbolic role names → Discord ids.                                                                                                                                              |
-| `guilds.<id>.permission_rank` | object              | no       | Privacy / clearance ranks for this guild — see below. Validated at startup; a malformed block fails the boot naming the guild.                                                  |
+| Field                         | Type                | Required | Notes                                                                                                                                                                                 |
+| ----------------------------- | ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin`                       | `string[]`          | no       | User ids with bot-admin privileges. Gates `/ai_whitelist_*`; `/bug_report` DMs every id. Default `[]`.                                                                                |
+| `language`                    | `"zh-TW"` \| `"en"` | no       | Default display locale, also used for registered slash-command text. Default `"zh-TW"`; an unsupported value warns and falls back.                                                    |
+| `commands`                    | `string[]`          | no       | The slash commands this personality registers with Discord. Removing an entry only stops re-registering it — run `npm run register -- -t <name>` to take the command down on Discord. |
+| `guilds.<id>.channels`        | `Record<name, id>`  | no       | Symbolic channel names (`"debug"`, `"event"`, …) → Discord ids, so handlers look channels up by name.                                                                                 |
+| `guilds.<id>.roles`           | `Record<name, id>`  | no       | Symbolic role names → Discord ids.                                                                                                                                                    |
+| `guilds.<id>.permission_rank` | object              | no       | Privacy / clearance ranks for this guild — see below. Validated at startup; a malformed block fails the boot naming the guild.                                                        |
 
 `guilds` and both of its maps are optional. A bot may omit a map, a
 guild entry, or the whole block: unresolvable ids are dropped and the
@@ -301,7 +301,7 @@ ignored block would leave the feed dark.
    symbolic name is unused.
 4. **Register the commands.** Add `feed_subscribe`, `feed_unsubscribe`
    and `feed_list` to the personality's `commands` array and run
-   `yarn register -t nijika`; they do not appear in Discord until then.
+   `npm run register -- -t nijika`; they do not appear in Discord until then.
 5. **Re-add every account** with `/feed_subscribe`, naming the channel
    it should post into. The `account` option takes a comma-separated
    list, so one command per channel is usually enough — up to 20
@@ -314,7 +314,7 @@ ignored block would leave the feed dark.
 The old cursors are not migrated: they were keyed by handle alone,
 while a subscription now tracks its own position per platform, account,
 and channel. The retired `xfeedcursors` collection is left behind in
-each guild's database — clear it with `yarn db drop-xfeed`, which counts
+each guild's database — clear it with `npm run db -- drop-xfeed`, which counts
 only until you set `dry_run: false` (see
 [`tools/db/README.md`](tools/db/README.md)).
 

@@ -45,18 +45,18 @@ done
 [[ -f "$runtime" && -r "$runtime" ]] || fail 'Runtime file is missing or unreadable; use --runtime FILE'
 declare -A versions=()
 while IFS= read -r line || [[ -n "$line" ]]; do
-  [[ "$line" =~ ^(MONGODB_VERSION|MONGO_TOOLS_VERSION|NODE_VERSION|YARN_VERSION|MONGOSH_VERSION)=([0-9]+\.[0-9]+\.[0-9]+)$ ]] || fail 'Invalid runtime entry'
+  [[ "$line" =~ ^(MONGODB_VERSION|MONGO_TOOLS_VERSION|NODE_VERSION|NPM_VERSION|MONGOSH_VERSION)=([0-9]+\.[0-9]+\.[0-9]+)$ ]] || fail 'Invalid runtime entry'
   key=${BASH_REMATCH[1]}
   [[ -z "${versions[$key]+present}" ]] || fail "Duplicate runtime entry: $key"
   versions[$key]=${BASH_REMATCH[2]}
 done < "$runtime"
-for key in MONGODB_VERSION MONGO_TOOLS_VERSION NODE_VERSION YARN_VERSION MONGOSH_VERSION; do
+for key in MONGODB_VERSION MONGO_TOOLS_VERSION NODE_VERSION NPM_VERSION MONGOSH_VERSION; do
   [[ -n "${versions[$key]:-}" ]] || fail "Missing runtime entry: $key"
 done
 mongodb_version=${versions[MONGODB_VERSION]}
 mongo_tools_version=${versions[MONGO_TOOLS_VERSION]}
 node_version=${versions[NODE_VERSION]}
-yarn_version=${versions[YARN_VERSION]}
+npm_version=${versions[NPM_VERSION]}
 mongosh_version=${versions[MONGOSH_VERSION]}
 if [[ -z "$miniforge_version" ]]; then
   [[ -r "$script_dir/bootstrap-runtime.conf" ]] || fail 'Missing bootstrap-runtime.conf'
@@ -70,7 +70,7 @@ fi
 for version in "$mongodb_version" "$mongo_tools_version" "$node_version" "$mongosh_version"; do
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'Exact X.Y.Z versions are required'
 done
-[[ "$yarn_version" =~ ^1\.[0-9]+\.[0-9]+$ ]] || fail 'YARN_VERSION must pin Yarn Classic (1.Y.Z)'
+[[ "$npm_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'NPM_VERSION must pin an exact version (X.Y.Z)'
 [[ "$miniforge_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]] || fail '--miniforge-version must pin a release (X.Y.Z-N)'
 [[ -z "$installer_sha256" || "$installer_sha256" =~ ^[a-fA-F0-9]{64}$ ]] || fail '--installer-sha256 must be a trusted SHA256 checksum'
 for command in uname realpath sha256sum mktemp rm mkdir dirname tar bash; do
@@ -106,7 +106,7 @@ action=create
 printf 'Conda prefix: %s\nEnvironment: %s\nMiniforge release: %s\n' "$prefix" "$environment" "$miniforge_version"
 printf 'Conda %s packages:' "$action"
 printf ' %s' "${packages[@]}"
-printf '\nNpm tools: yarn@%s mongosh@%s\n' "$yarn_version" "$mongosh_version"
+printf '\nNpm tools: npm@%s mongosh@%s\n' "$npm_version" "$mongosh_version"
 if (( ! apply )); then
   printf 'Plan only. Rerun with --apply to install. Existing environments will be updated.\n'
   exit 0
@@ -150,7 +150,7 @@ conda_arguments=("$action" --prefix "$environment" --override-channels --channel
 "$conda" "${conda_arguments[@]}" --dry-run
 "$conda" "${conda_arguments[@]}" --yes
 "$conda" run --prefix "$environment" --no-capture-output npm install --global --prefix "$environment" \
-  "yarn@$yarn_version" "mongosh@$mongosh_version"
+  "npm@$npm_version" "mongosh@$mongosh_version"
 
 # Check installed metadata and executable health, including reused environments.
 "$conda" run --prefix "$environment" --no-capture-output python -c '
@@ -168,7 +168,7 @@ for name, expected in [("mongodb", mongo), ("mongo-tools", tools), ("nodejs", no
 for binary in mongod mongodump mongorestore git; do
   "$conda" run --prefix "$environment" --no-capture-output "$environment/bin/$binary" --version
 done
-for specification in "node:$node_version" "yarn:$yarn_version" "mongosh:$mongosh_version"; do
+for specification in "node:$node_version" "npm:$npm_version" "mongosh:$mongosh_version"; do
   binary=${specification%%:*}
   expected=${specification#*:}
   actual=$("$conda" run --prefix "$environment" "$environment/bin/$binary" --version)

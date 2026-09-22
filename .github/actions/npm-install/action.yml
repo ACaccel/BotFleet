@@ -1,5 +1,5 @@
-name: 'Yarn install'
-description: 'Create the project Conda runtime and install the frozen Yarn lockfile'
+name: 'npm install'
+description: 'Create the project Conda runtime and install the npm lockfile'
 
 runs:
   using: 'composite'

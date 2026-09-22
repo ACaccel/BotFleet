@@ -7,7 +7,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "install-lock": "node scripts/runtime.mjs exec yarn install --frozen-lockfile",
+    "install-lock": "node scripts/runtime.mjs exec npm ci",
     "tomori": "node scripts/runtime.mjs exec ts-node src/bot/tomori/index.ts",
     "nijika": "node scripts/runtime.mjs exec ts-node src/bot/nijika/index.ts",
     "msg-archive": "node scripts/runtime.mjs exec ts-node src/bot/msg-archive/index.ts",
@@ -96,8 +96,8 @@
     "typescript-eslint": "^8.10.0",
     "vitest": "^3.2.6"
   },
-  "resolutions": {
+  "packageManager": "npm@10.9.2",
+  "overrides": {
     "undici": "^6.27.0"
-  },
-  "packageManager": "yarn@1.22.22"
+  }
 }

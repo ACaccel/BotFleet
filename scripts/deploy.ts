@@ -125,7 +125,7 @@ async function main(): Promise<void> {
       return;
     }
     if (existsSync(journalPath))
-      throw new Error('An interrupted deployment needs yarn deploy:recover first');
+      throw new Error('An interrupted deployment needs npm run deploy:recover first');
     const mongodbOnly = action.startsWith('mongo-');
     const stateName = mongodbOnly ? 'mongodb.json' : 'current.json';
     const statePath = join(stateDirectory, stateName);

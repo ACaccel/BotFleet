@@ -59,10 +59,10 @@ discipline — is doing the enforcing.
    type vs plain, union vs enum, interface vs class, generic vs
    overload. Give the concrete signature.
 2. **Review** (`Review: <files>`) — read each file; check every item
-   above; verify `yarn typecheck` would pass for the strict subtree.
+   above; verify `npm run typecheck` would pass for the strict subtree.
 3. **Audit** (`Audit: <scope>`, default = `git diff` vs HEAD) — per
-   changed file, run the checklist; run `yarn typecheck` and
-   `yarn typecheck:emit`.
+   changed file, run the checklist; run `npm run typecheck` and
+   `npm run typecheck:emit`.
 
 ## Verdict policy
 

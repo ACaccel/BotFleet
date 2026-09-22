@@ -199,7 +199,7 @@ it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
       writeFileSync(join(repo, '.gitignore'), 'node_modules/\n.env\nconfig.json\ndata/\nlogs/\n');
       writeFileSync(join(repo, '.nvmrc'), process.version.slice(1));
       writeFileSync(join(repo, 'package.json'), '{}');
-      writeFileSync(join(repo, 'yarn.lock'), '');
+      writeFileSync(join(repo, 'package-lock.json'), '{"lockfileVersion":3}');
       writeFileSync(join(repo, 'src/bot/tomori/index.ts'), '// Application code comes from Git.\n');
       succeed(run('git', ['init', '--quiet'], testEnvironment, repo));
       succeed(run('git', ['add', '.'], testEnvironment, repo));
@@ -244,12 +244,12 @@ it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
       symlinkSync(shellPath, join(databaseBinaries, 'mongosh'));
       // Stub package installation only; all database commands and CLI stages use real executables.
       writeFileSync(
-        join(binaries, 'yarn'),
+        join(binaries, 'npm'),
         `#!${process.execPath}
 const fs = require('node:fs');
 const path = require('node:path');
-if (process.argv[2] === '--version') console.log('1.22.22');
-else if (process.argv.slice(2).join(' ') === 'install --frozen-lockfile') {
+if (process.argv[2] === '--version') console.log('10.9.2');
+else if (process.argv.slice(2).join(' ') === 'ci') {
   fs.mkdirSync('node_modules', { recursive: true });
   fs.cpSync(${JSON.stringify(resolve(__dirname, '../../node_modules/dotenv'))}, path.join(process.cwd(), 'node_modules/dotenv'), { recursive: true });
 } else process.exit(2);
@@ -265,6 +265,7 @@ else if (process.argv.slice(2).join(' ') === 'install --frozen-lockfile') {
       const manifestText = readFileSync(join(backup, 'manifest.json'), 'utf8');
       const manifest = JSON.parse(manifestText);
       expect(manifest.format).toBe(2);
+      expect(readFileSync(join(backup, 'runtime.conf'), 'utf8')).toContain('NPM_VERSION=10.9.2');
       expect(manifest.databases).toEqual(databases);
       expect(manifestText).not.toContain(password);
       expect(existsSync(join(backup, 'code'))).toBe(false);

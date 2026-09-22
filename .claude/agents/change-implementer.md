@@ -40,15 +40,15 @@ expects to change). No external task-tracker file is required.
 4. **Implement** — apply the rules of
    [`project-conventions`](../skills/project-conventions/SKILL.md) and
    [`coding-standards`](../skills/coding-standards/SKILL.md) while
-   writing. Run `yarn handlers:gen` after adding or deleting a handler.
+   writing. Run `npm run handlers:gen` after adding or deleting a handler.
 5. **Self-check** — walk through both skills' self-check lists. Fix
    any failing item before continuing.
 6. **Dispatch reviewers** — using the table below, invoke each
    reviewer in `Audit:` mode against the diff. Resolve every BLOCK,
    address every WARN that holds up correctness.
 7. **Run quality gates** until green:
-   `yarn typecheck`, `yarn lint`, `yarn test`, `yarn format:check`,
-   `yarn handlers:gen:check`, `yarn knip`. Root-cause any failure; do
+   `npm run typecheck`, `npm run lint`, `npm run test`, `npm run format:check`,
+   `npm run handlers:gen:check`, `npm run knip`. Root-cause any failure; do
    not bypass.
 8. **Sync the documentation surfaces** — `docs/architecture.md`,
    `README.md`, `CONTRIBUTING.md` / `docs/contributing/`, and the

@@ -13,7 +13,7 @@ let runtime: string;
 const runtimeContents = `MONGODB_VERSION=7.0.34
 MONGO_TOOLS_VERSION=100.13.0
 NODE_VERSION=22.13.0
-YARN_VERSION=1.22.22
+NPM_VERSION=10.9.2
 MONGOSH_VERSION=2.10.0
 `;
 
@@ -41,7 +41,7 @@ if [[ "$1" == run ]]; then
   case "$1" in
     python) exit "\${BOOTSTRAP_TEST_METADATA_EXIT:-0}" ;;
     */node) printf 'v22.13.0\\n' ;;
-    */yarn) printf '1.22.22\\n' ;;
+    */npm) printf '10.9.2\\n' ;;
     */mongosh) printf '%s\\n' "\${BOOTSTRAP_TEST_MONGOSH_VERSION:-2.10.0}" ;;
   esac
 fi
@@ -84,7 +84,7 @@ describe('migration bootstrap', () => {
     ['--env', 'base'],
     ['--env', '../other'],
     ['--node-version', 'latest'],
-    ['--yarn-version', '4.0.0'],
+    ['--npm-version', 'latest'],
     ['--miniforge-version', 'latest'],
     ['--installer-sha256', 'invalid'],
   ])('rejects invalid %s before mutations', (flag, value) => {
@@ -96,7 +96,7 @@ describe('migration bootstrap', () => {
 
   it.each([
     runtimeContents.replace('22.13.0', 'latest'),
-    runtimeContents.replace('1.22.22', '4.0.0'),
+    runtimeContents.replace('10.9.2', 'latest'),
     runtimeContents + 'NODE_VERSION=22.13.0\n',
     runtimeContents.replace('MONGOSH_VERSION=2.10.0\n', ''),
     runtimeContents + 'UNKNOWN=1.2.3\n',
@@ -163,7 +163,7 @@ touch "$3/conda-meta/history"
     expect(calls).toContain('create --prefix');
     expect(calls).toContain('--dry-run');
     expect(calls).toContain('mongodb=7.0.34 mongo-tools=100.13.0 nodejs=22.13.0');
-    expect(calls).toContain('yarn@1.22.22 mongosh@2.10.0');
+    expect(calls).toContain('npm@10.9.2 mongosh@2.10.0');
     expect(calls).toContain('cairo pango libjpeg-turbo giflib librsvg');
     expect(calls).not.toMatch(/\bffmpeg\b/);
   });

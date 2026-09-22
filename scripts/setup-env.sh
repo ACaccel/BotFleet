@@ -24,7 +24,7 @@ export PATH="$project_prefix/bin:$PATH"
 export CONDA_PREFIX="$project_prefix"
 unset NODE_PATH npm_config_prefix NPM_CONFIG_PREFIX
 cd "$project_root"
-"$project_prefix/bin/node" "$project_prefix/lib/node_modules/npm/bin/npm-cli.js" install --global --prefix "$project_prefix" yarn@1.22.22 --no-audit --no-fund
-# Force installation scripts to rebuild native dependencies for the selected runtime.
-"$project_prefix/bin/node" scripts/runtime.mjs exec yarn install --frozen-lockfile --force
+"$project_prefix/bin/node" "$project_prefix/lib/node_modules/npm/bin/npm-cli.js" install --global --prefix "$project_prefix" npm@10.9.2 --no-audit --no-fund
+# A clean install rebuilds native dependencies for the selected runtime.
+"$project_prefix/bin/node" scripts/runtime.mjs exec npm ci
 "$project_prefix/bin/node" scripts/runtime.mjs exec node -e 'require("canvas").createCanvas(1, 1).toBuffer()'

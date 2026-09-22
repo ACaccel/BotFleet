@@ -6,10 +6,10 @@ and `drop_todo_collection` tools, sharing one connection/config/logging
 layer and a single `config.json`.
 
 ```bash
-yarn db verify              # read-only structural validation (one guild)
-yarn db migrate-timestamp   # migrate Message.timestamp String -> numeric
-yarn db drop-todo           # drop the retired todo_list `todos` collection
-yarn db drop-xfeed          # drop the retired x-media-feed `xfeedcursors` collection
+npm run db -- verify              # read-only structural validation (one guild)
+npm run db -- migrate-timestamp   # migrate Message.timestamp String -> numeric
+npm run db -- drop-todo           # drop the retired todo_list `todos` collection
+npm run db -- drop-xfeed          # drop the retired x-media-feed `xfeedcursors` collection
 ```
 
 Optional `--config <path>` overrides the default `tools/db/config.json`.
@@ -201,11 +201,11 @@ Per-guild `status`: `would-drop` (dry run), `dropped`, `absent`, or
 
 ```bash
 # 1. Audit — confirm the per-guild counts (dry_run: true, the default).
-yarn db drop-todo
+npm run db -- drop-todo
 # 2. Drop — set operations.drop-todo.dry_run = false, then re-run.
-yarn db drop-todo
+npm run db -- drop-todo
 # 3. (optional) Re-run to confirm every guild now reports "absent".
-yarn db drop-todo
+npm run db -- drop-todo
 ```
 
 ## `db drop-xfeed`
@@ -224,17 +224,17 @@ Per-guild `status`: `would-drop` (dry run), `dropped`, `absent`, or
 
 ```bash
 # 1. Audit — confirm the per-guild counts (dry_run: true, the default).
-yarn db drop-xfeed
+npm run db -- drop-xfeed
 # 2. Drop — set operations.drop-xfeed.dry_run = false, then re-run.
-yarn db drop-xfeed
+npm run db -- drop-xfeed
 # 3. (optional) Re-run to confirm every guild now reports "absent".
-yarn db drop-xfeed
+npm run db -- drop-xfeed
 ```
 
 ## Tests
 
 ```bash
-yarn db:test
+npm run db:test
 ```
 
 The pure helpers (config loader, per-guild runner, progress writer, the

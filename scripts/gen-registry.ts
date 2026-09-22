@@ -7,8 +7,8 @@
  * registry files generated from the on-disk handler layout.
  *
  * Usage:
- *   yarn handlers:gen           # write registry.generated.ts files
- *   yarn handlers:gen:check     # CI mode: fail if generated content is stale
+ *   npm run handlers:gen           # write registry.generated.ts files
+ *   npm run handlers:gen:check     # CI mode: fail if generated content is stale
  *
  * Determinism contract (so CI `--check` is meaningful):
  *   - Entries sorted by directory name (ASCII).
@@ -18,11 +18,11 @@
  *
  * Adding a handler:
  *   1. drop a new `<name>/index.ts` with `export default class … extends X`
- *   2. run `yarn handlers:gen`
+ *   2. run `npm run handlers:gen`
  *   3. commit the regenerated registry alongside the new handler file
  *
  * Renaming or moving handler files keeps the registry in sync via the
- * same regeneration step; the CI check (`yarn handlers:gen:check`) ensures
+ * same regeneration step; the CI check (`npm run handlers:gen:check`) ensures
  * a forgotten regeneration fails the build instead of shipping a stale
  * registry.
  */
@@ -88,9 +88,9 @@ const parseArgs = (argv: readonly string[]): CliOptions => ({ check: argv.includ
 
 const GENERATED_FILE_NAME = 'registry.generated.ts';
 const HEADER = `// AUTO-GENERATED — do not edit. Source: scripts/gen-registry.ts
-// Run \`yarn handlers:gen\` after adding, renaming, or removing a handler
+// Run \`npm run handlers:gen\` after adding, renaming, or removing a handler
 // subdirectory; CI verifies this file matches the on-disk layout via
-// \`yarn handlers:gen:check\`.
+// \`npm run handlers:gen:check\`.
 `;
 
 const scanHandlers = (absDir: string): HandlerEntry[] => {
@@ -165,7 +165,7 @@ const main = async (): Promise<void> => {
       if (current !== generated) {
         staleCount += 1;
         process.stderr.write(
-          `[gen-registry] STALE: ${target.dir}/${GENERATED_FILE_NAME} — run \`yarn handlers:gen\` and commit.\n`,
+          `[gen-registry] STALE: ${target.dir}/${GENERATED_FILE_NAME} — run \`npm run handlers:gen\` and commit.\n`,
         );
       } else {
         process.stdout.write(

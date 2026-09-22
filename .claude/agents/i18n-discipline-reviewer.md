@@ -63,7 +63,7 @@ user-facing text is fully externalised and the catalogs stay complete.
    plugin file; flag literals, mis-routed text, key-naming drift,
    missing translations.
 3. **Audit** (`Audit: <scope>`, default = `git diff` vs HEAD) — check
-   catalog completeness across locales; run `yarn test:i18n`; verify
+   catalog completeness across locales; run `npm run test:i18n`; verify
    the CJK scanner is green and its scope is correct.
 
 ## Verdict policy

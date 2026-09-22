@@ -82,7 +82,7 @@ carry business behavior.
    pattern-label comment matches the implementation.
 3. **Audit** (`Audit: <scope>`, default = `git diff --name-only` vs
    HEAD) — for each changed `src/` file: layer check + pattern check +
-   DI check. Run `yarn handlers:gen:check` if `src/handlers/` changed.
+   DI check. Run `npm run handlers:gen:check` if `src/handlers/` changed.
 
 ## Verdict policy
 

@@ -78,7 +78,7 @@ Discord.
    }
    ```
 
-   Rules the `yarn test:i18n` catalog-completeness gate enforces:
+   Rules the `npm run test:i18n` catalog-completeness gate enforces:
    - **Every key must exist in both locales.** A key added to one
      locale only fails the cross-locale parity check.
    - **`{{placeholder}}` sets must match across locales** for the same key.
@@ -95,7 +95,7 @@ Discord.
 3. **Regenerate the codegen registry.**
 
    ```bash
-   yarn handlers:gen
+   npm run handlers:gen
    ```
 
    This rewrites `src/handlers/commands/registry.generated.ts`. Commit
@@ -119,7 +119,7 @@ Discord.
    `NO_DB_INTEGRATION` in `vitest.workspace.ts` so a memory-server
    failure cannot take it down.
 
-6. **Register with Discord.** `yarn register -t <bot-name>` after the bot
+6. **Register with Discord.** `npm run register -- -t <bot-name>` after the bot
    has been started at least once. Default is global; `--dev-guild <id>`
    is for fast iteration on a single test guild.
 
@@ -133,7 +133,7 @@ types, instead of offering a fixed list.
    exclusive with `choices`** — Discord rejects an option carrying both.
    `buildCommandJsonBody` fails with a `TypeError` naming the command
    and the option on either misuse, so the mistake surfaces in the unit
-   suite rather than as an opaque REST 400 at `yarn register` time.
+   suite rather than as an opaque REST 400 at `npm run register` time.
 
 2. **Implement the hook.**
 
@@ -215,7 +215,7 @@ deferrals.
    kebab-cased files (e.g. `parse-range.ts`, `render-reactions.ts`)
    with **named** exports. Do not use `export default`. Every export
    from `src/` names its return type — `explicit-module-boundary-types`
-   is an error, so an omitted annotation fails `yarn lint`. `any` is an
+   is an error, so an omitted annotation fails `npm run lint`. `any` is an
    error everywhere in `src/`; reach for `unknown` and narrow.
 3. **Do NOT extract Discord I/O, permission checks, or `Translator`
    calls to compress the line count.** Those four belong in

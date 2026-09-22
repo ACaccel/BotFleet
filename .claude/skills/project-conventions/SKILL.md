@@ -133,7 +133,7 @@ There is no business-behavior carrier outside the plugin layer;
 
 - `src/handlers/<type>/<name>/index.ts` contains `export default class`.
 - `registry.generated.ts` is a pure generated artifact — never
-  hand-edit; run `yarn handlers:gen` after adding a handler. CI
+  hand-edit; run `npm run handlers:gen` after adding a handler. CI
   `handlers:gen:check` detects drift.
 - `src/handlers/<type>/<name>/index.ts` is capped at 150 lines (ESLint
   `max-lines`, hard error). Pure helpers above the cap move into a

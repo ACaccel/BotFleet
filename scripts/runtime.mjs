@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const prefix = process.env.BOTFLEET_CONDA_PREFIX || join(root, '.conda');
 const node = join(prefix, 'bin', 'node');
-const yarn = join(prefix, 'lib', 'node_modules', 'yarn', 'bin', 'yarn.js');
+const npm = join(prefix, 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
 
 function runtimeEnvironment() {
   const environment = { ...process.env };
@@ -20,17 +20,13 @@ function runtimeEnvironment() {
     ),
     CONDA_PREFIX: prefix,
     npm_node_execpath: node,
-    npm_execpath: yarn,
+    npm_execpath: npm,
   };
 }
 
 function requireRuntime() {
   if (!isAbsolute(prefix)) throw new Error('BOTFLEET_CONDA_PREFIX must be an absolute path.');
-  if (
-    !existsSync(join(prefix, 'conda-meta', 'history')) ||
-    !existsSync(node) ||
-    !existsSync(yarn)
-  ) {
+  if (!existsSync(join(prefix, 'conda-meta', 'history')) || !existsSync(node) || !existsSync(npm)) {
     throw new Error('Project Conda runtime is missing. Run bash scripts/setup-env.sh first.');
   }
   // The application definition uses only Node. Refuse silently skipping hooks if operators add packages.
@@ -42,7 +38,7 @@ function requireRuntime() {
   }
   const version = spawnSync(node, ['--version'], { encoding: 'utf8', env: runtimeEnvironment() });
   const match = /^v22\.(\d+)\.\d+\s*$/.exec(version.stdout || '');
-  const manager = spawnSync(node, [yarn, '--version'], {
+  const manager = spawnSync(node, [npm, '--version'], {
     encoding: 'utf8',
     env: runtimeEnvironment(),
   });
@@ -51,10 +47,10 @@ function requireRuntime() {
     !match ||
     Number(match[1]) < 13 ||
     manager.status !== 0 ||
-    manager.stdout.trim() !== '1.22.22'
+    manager.stdout.trim() !== '10.9.2'
   ) {
     throw new Error(
-      'Project runtime requires Node 22.13+ within 22 and Yarn 1.22.22. Run bash scripts/setup-env.sh.',
+      'Project runtime requires Node 22.13+ within 22 and npm 10.9.2. Run bash scripts/setup-env.sh.',
     );
   }
 }
@@ -81,17 +77,17 @@ async function main(args) {
   const executable =
     command === 'node'
       ? node
-      : command === 'yarn'
+      : command === 'npm'
         ? node
         : join(root, 'node_modules', '.bin', command);
   if (
     command !== 'node' &&
-    command !== 'yarn' &&
+    command !== 'npm' &&
     (!/^[a-zA-Z0-9_-]+$/.test(command) || !existsSync(executable))
   ) {
     throw new Error(`Project executable is unavailable: ${command}`);
   }
-  const childArgs = command === 'yarn' ? [yarn, ...rest] : rest;
+  const childArgs = command === 'npm' ? [npm, ...rest] : rest;
   const detached = process.platform !== 'win32' && !process.stdin.isTTY;
   const child = spawn(executable, childArgs, {
     cwd: root,

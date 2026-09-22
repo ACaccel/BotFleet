@@ -1,5 +1,5 @@
 // audit-ci configuration — fails CI on HIGH or CRITICAL advisories from
-// `yarn audit`, with a path-scoped allowlist for advisories we have
+// `npm audit`, with a path-scoped allowlist for advisories we have
 // explicitly decided to accept (with rationale tracked here).
 //
 // Allowlist policy:
@@ -18,23 +18,6 @@
   "moderate": false,
   "low": false,
   "report-type": "full",
-  "package-manager": "yarn",
-  "allowlist": [
-    // -------------------------------------------------------------------
-    // discord.js > @discordjs/builders > @sapphire/shapeshift > lodash
-    //
-    // GHSA-r5fr-rjxr-66jc — lodash code injection via `_.template`. The
-    // advisory's "patched in >=4.18.0" cites a version that does NOT
-    // exist on the public registry (lodash latest is 4.17.21 and
-    // upstream is in maintenance-only mode). discord.js v14 carries
-    // this chain via @sapphire/shapeshift's argument-validation
-    // helpers; the affected `_.template` API is not called by any
-    // code we control.
-    //
-    // Remediation plan: track discord.js v15 / @sapphire/shapeshift v5
-    // for a dependency swap; revisit at every discord.js minor bump.
-    // -------------------------------------------------------------------
-    "GHSA-r5fr-rjxr-66jc|discord.js>@discordjs/builders>@sapphire/shapeshift>lodash",
-    "GHSA-r5fr-rjxr-66jc|@discordjs/builders>@sapphire/shapeshift>lodash",
-  ],
+  "package-manager": "npm",
+  "allowlist": [],
 }

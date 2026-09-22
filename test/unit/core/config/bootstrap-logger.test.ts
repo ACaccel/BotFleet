@@ -4,7 +4,7 @@ import { createBootstrapLogger } from '../../../../src/core/config/bootstrap-log
 
 describe('createBootstrapLogger', () => {
   it('with fileRouter:false yields a console-only logger that needs no `bot` binding', () => {
-    // Regression for the `yarn register` crash: the file-router sink throws
+    // Regression for the `npm run register` crash: the file-router sink throws
     // on any record missing a `bot` binding. The register CLI has none, so
     // it must opt out of the file router. With fileRouter:false the sink
     // is never attached, so logging a `bot`-less record is safe.
