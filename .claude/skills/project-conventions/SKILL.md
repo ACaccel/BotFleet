@@ -12,7 +12,7 @@ self-check list.
 
 Authoritative public sources:
 [`docs/architecture.md`](../../../docs/architecture.md),
-[`CLAUDE.md`](../../../CLAUDE.md),
+[`AGENTS.md`](../../../AGENTS.md),
 [`CONTRIBUTING.md`](../../../CONTRIBUTING.md). When this file conflicts
 with the public design documents, the design documents win.
 

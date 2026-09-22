@@ -27,7 +27,7 @@ unchecked rather than deleting the line.
 - [ ] `.github/workflows/`
 - [ ] `tsconfig*` / `eslint.config.mjs` / `vitest.config.ts`
 - [ ] Tests added or updated
-- [ ] Docs (`docs/architecture.md` / `README.md` / `CONTRIBUTING.md` / `docs/contributing/` / `CLAUDE.md`)
+- [ ] Docs (`docs/architecture.md` / `README.md` / `CONTRIBUTING.md` / `docs/contributing/` / `AGENTS.md`)
 - [ ] `config.example.json` (a config field was added, removed, or redefaulted)
 - [ ] `CHANGELOG.md` (release PRs only — one entry per notable commit since the last tag)
 

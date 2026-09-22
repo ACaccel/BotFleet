@@ -15,7 +15,7 @@ Authoritative public sources:
 [`README.md`](../../../README.md),
 [`CONTRIBUTING.md`](../../../CONTRIBUTING.md) and the guides under
 [`docs/contributing/`](../../../docs/contributing/),
-[`CLAUDE.md`](../../../CLAUDE.md),
+[`AGENTS.md`](../../../AGENTS.md),
 [`docs/architecture.md`](../../../docs/architecture.md).
 
 ## Step 1 — Understand the area
