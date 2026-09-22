@@ -87,6 +87,7 @@ export const createMessageBackupPlugin = (rawConfig: MessageBackupPluginConfig):
 
       const runOnce = async (): Promise<void> => {
         for (const guildId of config.backupServers) {
+          if (stopped) return;
           if (running.has(guildId)) {
             logError(ctx.logger, guildId, 'Backup already running, skipping this tick');
             continue;
@@ -105,26 +106,21 @@ export const createMessageBackupPlugin = (rawConfig: MessageBackupPluginConfig):
         }
       };
 
-      await runOnce();
-      const scheduleNext = (): void => {
-        if (stopped) return;
-        loopHandle = setTimeout(() => {
-          // Run the pass in a self-contained async IIFE: a throw must be
-          // caught here and the loop always rescheduled in `finally`.
-          // Without this, a rejected pass would die as an
-          // unhandledRejection and silently kill the repeat loop.
-          void (async (): Promise<void> => {
-            try {
-              await runOnce();
-            } catch (err: unknown) {
-              logError(ctx.logger, null, err);
-            } finally {
-              scheduleNext();
-            }
-          })();
-        }, config.backupIntervalMs);
+      const runPass = async (): Promise<void> => {
+        try {
+          await runOnce();
+        } catch (err: unknown) {
+          logError(ctx.logger, null, err);
+        } finally {
+          if (!stopped) {
+            loopHandle = setTimeout(() => {
+              void runPass();
+            }, config.backupIntervalMs);
+          }
+        }
       };
-      scheduleNext();
+      // Readiness means the worker is initialized, not that its history walk finished.
+      void runPass();
     },
 
     async onShutdown(): Promise<void> {

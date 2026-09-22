@@ -263,7 +263,10 @@ two lists share are each maintained in place. A caller may pass
 retrying a 429 against a shared host whose rate-limit budget it does not
 own — or pass `maxAttempts` / `initialDelayMs` to stretch the budget:
 `message-backup` runs unattended, so its walker waits out an outage of
-several minutes before it gives up on a channel.
+several minutes before it gives up on a channel. Its initial pass runs in the
+background so plugin readiness does not wait for the history walk. Repeat
+passes start one configured interval after the previous pass completes;
+shutdown prevents later guilds and repeat passes from starting.
 
 ### Branded IDs ([src/core/ids.ts](../src/core/ids.ts))
 

@@ -106,7 +106,8 @@ an installed unit or recovery journal.
 Systemd creates `/run/botfleet-<bot>/` before startup. The bot atomically
 writes its startup attestation after Discord, guild repositories, and
 plugins are ready. Deployment checks the marker PID and timestamp against
-the active systemd process. This is startup verification, not a continuous
+the active systemd process. The archive worker starts its first backup in the background; readiness does
+not wait for the history walk to finish. This is startup verification, not a continuous
 health endpoint. Process crashes restart automatically; database recovery
 continues to use the application's existing retry behavior.
 

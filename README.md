@@ -217,6 +217,9 @@ guild's `permission_rank.features` map.
 | `backup_log_enabled`      | msg-archive    | `false` — when `true`, each backup pass also writes a transcript under `logs/backup/`                                                                                                                                                                                                                                                                                                    |
 | `backup_interval_minutes` | msg-archive    | `60` — minutes between backup passes                                                                                                                                                                                                                                                                                                                                                     |
 
+The archive worker starts its initial backup in the background. Service readiness
+does not wait for that pass to finish; repeat intervals begin after each completed pass.
+
 Several fields carry a required-when rule worth calling out:
 
 - `weather_forecast.locationKey` and `random_restaurant.apiUrl` — both

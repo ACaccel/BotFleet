@@ -50,6 +50,57 @@ describe('createMessageBackupPlugin onReady loop resilience', () => {
     vi.useRealTimers();
   });
 
+  it('reports ready during the first pass and schedules repeats only after it completes', async () => {
+    let finish: () => void = () => {};
+    mockedPerformBackup
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const plugin = createMessageBackupPlugin({ backupServers: ['g1'], backupIntervalMs: 1000 });
+    const ctx = buildCtx();
+
+    await plugin.onReady!(ctx);
+    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
+
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mockedPerformBackup).toHaveBeenCalledTimes(2);
+    await plugin.onShutdown!(ctx);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(mockedPerformBackup).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start another guild or repeat after shutdown during the initial pass', async () => {
+    let finish: () => void = () => {};
+    mockedPerformBackup.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const plugin = createMessageBackupPlugin({
+      backupServers: ['g1', 'g2'],
+      backupIntervalMs: 1000,
+    });
+    const ctx = buildCtx();
+
+    await plugin.onReady!(ctx);
+    await plugin.onShutdown!(ctx);
+    finish();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(mockedPerformBackup.mock.calls.map((call) => call[0])).toEqual(['g1']);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('backs up only the guilds present at construction, ignoring a later push into the caller array', async () => {
     mockedPerformBackup.mockResolvedValue(undefined);
     const servers = ['g1', 'g2'];
