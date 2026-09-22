@@ -2,8 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { contains, fail, readJson, safePath } from './files.mjs';
 
-/** @typedef {{environment?:string,mongoEnv?:string,backupDir?:string}} Settings */
-/** @typedef {{repo:string,environment:string,mongoEnv:string,backupDir:string,stateDir:string}} Config */
+/** @typedef {{environment?:string,databaseEnvironment?:string,mongoEnv?:string,backupDir?:string}} Settings */
+/** @typedef {{repo:string,environment:string,databaseEnvironment:string,mongoEnv:string,backupDir:string,stateDir:string}} Config */
 
 /** @param {string} repo @param {string} [filename] @param {string} [activeEnvironment] @returns {Promise<Config>} */
 export async function loadConfig(repo, filename, activeEnvironment = process.env.CONDA_PREFIX) {
@@ -17,8 +17,12 @@ export async function loadConfig(repo, filename, activeEnvironment = process.env
   }
   if (!settings || typeof settings !== 'object' || Array.isArray(settings))
     fail('Configuration must be an object.');
-  if (Object.keys(settings).some((key) => !['environment', 'mongoEnv', 'backupDir'].includes(key)))
-    fail('Unknown setting; use environment, mongoEnv and backupDir only.');
+  if (
+    Object.keys(settings).some(
+      (key) => !['environment', 'databaseEnvironment', 'mongoEnv', 'backupDir'].includes(key),
+    )
+  )
+    fail('Unknown setting; use environment, databaseEnvironment, mongoEnv and backupDir only.');
   for (const value of Object.values(settings))
     if (typeof value !== 'string' || !value) fail('Settings must be nonempty strings.');
   const selectedEnvironment = settings.environment ?? activeEnvironment;
@@ -27,6 +31,9 @@ export async function loadConfig(repo, filename, activeEnvironment = process.env
   const environment = await safePath(selectedEnvironment);
   if (!(await fs.stat(path.join(environment, 'conda-meta/history'))).isFile())
     fail('environment must point to a conda environment.');
+  const databaseEnvironment = await safePath(settings.databaseEnvironment ?? environment);
+  if (!(await fs.stat(path.join(databaseEnvironment, 'conda-meta/history'))).isFile())
+    fail('databaseEnvironment must point to a conda environment.');
   const backupDir = await safePath(
     settings.backupDir ?? path.join(path.dirname(repo), 'botfleet-backups'),
   );
@@ -40,7 +47,10 @@ export async function loadConfig(repo, filename, activeEnvironment = process.env
     fail('mongoEnv must name an env file inside the repository.');
   for (const [first, second] of [
     [repo, backupDir],
-    [repo, environment],
+    ...(environment === path.join(repo, '.conda') ? [] : [[repo, environment]]),
+    ...(databaseEnvironment === environment ? [] : [[repo, databaseEnvironment]]),
+    [backupDir, databaseEnvironment],
+    ...(databaseEnvironment === environment ? [] : [[environment, databaseEnvironment]]),
     [backupDir, environment],
   ]) {
     if (contains(first, second) || contains(second, first))
@@ -49,6 +59,7 @@ export async function loadConfig(repo, filename, activeEnvironment = process.env
   return {
     repo,
     environment,
+    databaseEnvironment,
     mongoEnv,
     backupDir,
     stateDir: path.join(repo, '.git/botfleet-migration'),

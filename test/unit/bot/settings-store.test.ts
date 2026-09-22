@@ -4,7 +4,15 @@
  * tolerates a missing/malformed endpoint, and persists updates to config.json
  * while preserving every other key with a 2-space indent.
  */
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
@@ -69,6 +77,24 @@ describe('GopherSettingsStore', () => {
     expect(llm.enabled).toBe(true);
     expect(persisted.language).toBe('zh-TW');
     expect(persisted.identity_sync).toEqual({ enabled: true });
+  });
+
+  it('updates the shared config target while preserving release symlinks', async () => {
+    const release = path.join(dir, 'release');
+    mkdirSync(release);
+    const linkedConfig = path.join(release, 'config.json');
+    symlinkSync('../config.json', linkedConfig);
+    const store = new GopherSettingsStore(linkedConfig, { endpoint: 'https://old.invalid/chat' });
+    await store.setEndpoint('https://new.invalid/chat');
+
+    expect(lstatSync(linkedConfig).isSymbolicLink()).toBe(true);
+    const persisted = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+    expect(persisted.language).toBe('zh-TW');
+    expect(persisted.llm_auto_reply).toMatchObject({
+      endpoint: 'https://new.invalid/chat',
+      probability: 0.03,
+    });
+    expect(readFileSync(linkedConfig, 'utf8')).toBe(readFileSync(file, 'utf8'));
   });
 
   it('writes 2-space-indented JSON with a trailing newline', async () => {

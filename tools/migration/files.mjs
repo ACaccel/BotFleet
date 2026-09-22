@@ -122,7 +122,10 @@ function validRelative(relative) {
 export function excludeCode(relative) {
   const parts = relative.split(path.sep);
   return (
-    parts.some((part) => ['.git', '.plan', 'node_modules', 'dist', 'coverage'].includes(part)) ||
+    parts.some((part) =>
+      ['.git', '.plan', '.conda', '.deploy', 'node_modules', 'dist', 'coverage'].includes(part),
+    ) ||
+    relative === 'deployment.json' ||
     (parts[0] === 'tools' &&
       parts[1] === 'migration' &&
       (['.state', 'runs', 'dump', 'tmp', 'temp', '.local', 'backups'].includes(parts[2]) ||

@@ -11,7 +11,7 @@ import type { LocalizedCommandConfig, LocalizedCommandOption } from './command';
  * Discord will not accept it on.
  *
  * Both are authoring mistakes in a handler's `setConfig`, and both
- * would otherwise surface as an opaque REST 400 during `yarn deploy` —
+ * would otherwise surface as an opaque REST 400 during `yarn register` —
  * with no indication of which option of which command caused it.
  * Failing here catches them in the unit suite instead, since every
  * registration path funnels through this builder.
@@ -41,7 +41,7 @@ const assertAutocompleteUsable = (
  * Translates a {@link LocalizedCommandConfig} into the Discord REST JSON
  * payload for command registration.
  *
- * Consumed both at deploy time (`src/deploy.ts`) and at runtime command
+ * Consumed both at deploy time (`src/register.ts`) and at runtime command
  * registration (`getCommandJsonBody`). It lives next to `command.ts`
  * because it operates purely on the localised command-metadata contract.
  */

@@ -67,6 +67,7 @@ import { GuildRegistrar } from './guild-registrar';
 import { resolveLocalesDir } from './locales-dir';
 import { createChannelLoggingMiddleware, createDispatchMiddleware } from './middlewares';
 import { TOKENS, type ReposFactory } from './tokens';
+import { ServiceReadiness } from './service-readiness';
 
 /**
  * Process-wide pool of {@link MongoConnectionManager}s keyed by base
@@ -325,6 +326,12 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   private readonly clientEventBridge: ClientEventBridge;
   private readonly guildDbConnector: GuildDbConnector;
   private shuttingDown = false;
+  private serviceReadiness: ServiceReadiness | undefined;
+  private readyLifecycleSucceeded = false;
+  private readonly retryServiceReadiness = (): void => {
+    // discord.js marks the whole client ready after emitting shardReady.
+    queueMicrotask(() => this.publishServiceReadiness());
+  };
 
   public constructor(
     client: Client,
@@ -499,6 +506,11 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   public run = async (callback?: () => Promise<void>): Promise<void> => {
     const rootLogger = this.setupContainer();
+    if (this.env?.BOTFLEET_READY_FILE !== undefined) {
+      this.serviceReadiness = new ServiceReadiness(this.env.BOTFLEET_READY_FILE);
+      this.client.on(Events.ShardReady, this.retryServiceReadiness);
+      this.client.on(Events.ShardResume, this.retryServiceReadiness);
+    }
     const host = await this.buildHost(rootLogger);
     const releaseReadyLatch = this.armReadyLatch(callback);
     let startupSucceeded = false;
@@ -540,6 +552,12 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   public shutdown = async (): Promise<void> => {
     this.shuttingDown = true;
     this.guildDbConnector.stopRecovery();
+    this.detachServiceReadinessListeners();
+    try {
+      this.serviceReadiness?.stop();
+    } catch (err: unknown) {
+      logError(this.logger, null, err);
+    }
     const log = this.container.tryResolve<Logger>(TOKENS.Logger);
     if (this.pluginHost !== undefined) {
       try {
@@ -767,25 +785,55 @@ export abstract class BaseBot<TConfig extends Config = Config> {
       // fully-online client when their `onReady` hook fires.
       // Failures here are logged but never fatal — the bot is
       // already serving, mirroring the host docstring policy.
+      let pluginsReady = true;
       if (this.pluginHost !== undefined) {
         try {
           await this.pluginHost.readyAll();
         } catch (readyErr: unknown) {
+          pluginsReady = false;
           logError(this.logger, null, readyErr);
         }
       }
       if (this.shuttingDown) return;
+      this.readyLifecycleSucceeded = pluginsReady;
+      this.publishServiceReadiness();
       this.guildDbConnector.startRecovery(
         this.#guildInfo,
         (guildId, repos) => this.attachRepos(guildId, repos),
         async (guildId) => {
           await this.pluginHost?.guildDatabaseReady(guildId);
+          this.publishServiceReadiness();
         },
         this.env?.MONGO_RECOVERY_INTERVAL_MS ?? 60_000,
       );
     } catch (err) {
       logError(this.logger, null, err);
     }
+  }
+
+  /** Publish startup readiness only after every joined guild has its required repos. */
+  private publishServiceReadiness(): void {
+    if (this.serviceReadiness === undefined || this.shuttingDown || !this.readyLifecycleSucceeded)
+      return;
+    if (!this.client.isReady() || (this.pluginHost?.getDisabledPlugins().length ?? 0) > 0) return;
+    for (const guildId of this.client.guilds.cache.keys()) {
+      const info = this.#guildInfo.get(guildId);
+      if (info === undefined || (this.mongoURI && info.repos === undefined)) return;
+      if (this.mongoURI && this.guildDbConnector.isDisabled(guildId) !== undefined) return;
+    }
+    try {
+      this.serviceReadiness.publish();
+      this.detachServiceReadinessListeners();
+    } catch (err: unknown) {
+      // A marker write failure must not prevent database recovery from starting.
+      logError(this.logger, null, err);
+    }
+  }
+
+  private detachServiceReadinessListeners(): void {
+    if (this.serviceReadiness === undefined) return;
+    this.client.off(Events.ShardReady, this.retryServiceReadiness);
+    this.client.off(Events.ShardResume, this.retryServiceReadiness);
   }
 
   /**

@@ -51,7 +51,7 @@ to plugins, which ESLint enforces.
 
 `scripts/` sits outside the table and outside the dependency graph:
 nothing under `src/` may import from it. Logic needed at both build time
-(`src/deploy.ts`) and runtime (command registration) lives under
+(`src/register.ts`) and runtime (command registration) lives under
 `src/handlers/commands/` and is consumed from both sides — for example
 `buildCommandJsonBody`, whose input type is a handler-layer contract.
 
@@ -70,13 +70,18 @@ Thin lifecycle owner. Subclasses (`nijika`, `konata`, `tomori`,
 `msg-archive`) opt plugins in via `this.use(...)` and override
 configuration; `BaseBot.run()` orchestrates startup in a fixed order:
 
-1. Load env + build composition-root container.
-2. Initialise the i18n translator (in the bot's configured `language`, default `zh-TW`) and load locale catalogs.
-3. Connect every configured guild's MongoDB via the shared connection manager.
-4. Resolve each guild's channels, roles, and repositories.
-5. Attach the Discord client event bridge.
-6. Run plugin `init` → `start` hooks in registration order.
-7. Login to Discord, await `ClientReady`, run `onReady` hooks.
+1. Load env and build the composition-root container and process safety nets.
+2. Initialise the translator, router, and plugin host; run plugin `init` hooks.
+3. Arm the deferred `ClientReady` body, then log in to Discord.
+4. Run plugin `start` hooks and attach the client event bridge before releasing the ready latch.
+5. On `ClientReady`, register guilds, connect their repositories, register handlers, and run the callback and plugin `onReady` hooks.
+6. If `BOTFLEET_READY_FILE` is configured, publish a startup marker only when Discord is ready, all joined guilds are registered, required repositories are available, and no plugins are disabled. Database recovery and shard reconnection can retry publication. A database-free or zero-guild bot does not fabricate a guild connection; deployment separately probes configured MongoDB.
+
+The marker is a startup attestation, not continuous health monitoring.
+It contains the PID and startup/ready timestamps, is written atomically,
+and is cleared on shutdown. Deployment checks it against systemd's current
+MainPID and active state. Operational details live in the
+[deployment guide](contributing/deployment.md).
 
 Three single-purpose collaborators back the orchestrator:
 
@@ -168,7 +173,7 @@ Two contracts are load-bearing:
   fallback directory. `bot` is path-encoded only — the routing step
   strips it from the record before serialising, while `guildId` stays in
   so cross-guild aggregators can join on it. A one-shot CLI with no
-  `bot` binding that must not create a `logs/` tree — `src/deploy.ts` —
+  `bot` binding that must not create a `logs/` tree — `src/register.ts` —
   opts out with `createBootstrapLogger(base, { fileRouter: false })`,
   the only console-only escape.
 - **Reaction events and `MESSAGE_CREATE` are intentionally not
@@ -773,3 +778,18 @@ obvious alternative.
   a one-time `db migrate-timestamp` backfill.
 - **Fail-fast zod configuration** validated at startup; a malformed
   `permission_rank` block aborts the boot per-guild rather than fail-open.
+
+## Service deployment
+
+The [runtime launcher](../scripts/runtime.mjs) selects the project Conda
+Node and Yarn for manual commands. [Deployment](../scripts/deploy.ts)
+creates separate systemd units for each bot and for MongoDB, using explicit
+runtime paths rather than interactive shell activation.
+
+Prepared releases contain independent source and dependency snapshots;
+local configuration, secrets, logs, and application data remain shared
+with the checkout. A durable journal records prior service definitions and
+states before changes. Failure restores prior units and verifies their
+readiness; an interrupted transaction can be recovered explicitly. MongoDB
+data and runtime have an independent lifecycle. See the
+[deployment guide](contributing/deployment.md) for configuration and limits.

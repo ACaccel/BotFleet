@@ -8,7 +8,7 @@ vulnerability. The step-by-step guides live under
 
 - [Local setup and development loop](docs/contributing/local-setup.md) —
   prerequisites, `config.json` / `.env`, running a personality,
-  registering slash commands (`yarn deploy`)
+  registering slash commands (`yarn register`)
 - [Adding a slash command](docs/contributing/adding-a-command.md) —
   the recipe, the handler 150-line cap, shared handler utilities
 - [Adding a plugin](docs/contributing/adding-a-plugin.md) — the plugin
@@ -21,6 +21,8 @@ vulnerability. The step-by-step guides live under
 
 See [`docs/architecture.md`](docs/architecture.md) for the layered
 architecture overview and why things are arranged the way they are.
+
+- [Service deployment](docs/contributing/deployment.md) — project runtime, systemd, MongoDB cutover, and recovery
 
 ## Quality gates
 

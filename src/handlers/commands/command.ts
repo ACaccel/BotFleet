@@ -29,7 +29,7 @@ import type { Translator } from '../../core/i18n';
  *
  * The optional `description` therefore models the *pre-localisation*
  * shape stored by handlers; consumers that build the Discord command
- * JSON (`getCommandJsonBody`, `deploy.ts`) run the config through
+ * JSON (`getCommandJsonBody`, `register.ts`) run the config through
  * `localizeCommandConfig` first so `description` is defined.
  */
 /**

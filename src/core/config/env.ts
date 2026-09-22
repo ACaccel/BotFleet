@@ -90,6 +90,11 @@ const llmKeySchema = z.preprocess(
  * projection, and the contract test at once.
  */
 const envShape = {
+  /** Deployment-owned marker path; unset for ordinary interactive startup. */
+  BOTFLEET_READY_FILE: z
+    .string()
+    .refine(path.isAbsolute, 'BOTFLEET_READY_FILE must be absolute')
+    .optional(),
   TOKEN: nonPlaceholder('TOKEN'),
   CLIENT_ID: nonPlaceholder('CLIENT_ID'),
   MONGO_URI: mongoUriSchema.optional(),

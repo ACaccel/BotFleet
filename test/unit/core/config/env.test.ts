@@ -44,6 +44,29 @@ describe('loadEnv', () => {
     }
   });
 
+  it('accepts only absolute deployment readiness paths', () => {
+    expect(
+      loadEnv({
+        exitOnFailure: false,
+        source: {
+          ...validBase,
+          BOTFLEET_READY_FILE: '/run/botfleet/ready.json',
+        },
+      }).BOTFLEET_READY_FILE,
+    ).toBe('/run/botfleet/ready.json');
+    for (const value of ['', 'ready.json']) {
+      expect(() =>
+        loadEnv({
+          exitOnFailure: false,
+          source: {
+            ...validBase,
+            BOTFLEET_READY_FILE: value,
+          },
+        }),
+      ).toThrow(EnvLoadError);
+    }
+  });
+
   describe('success paths', () => {
     it('parses a valid environment and returns a frozen object', () => {
       const env = loadEnv({ exitOnFailure: false, source: { ...validBase } });

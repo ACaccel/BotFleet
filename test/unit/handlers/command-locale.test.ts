@@ -1,9 +1,9 @@
 /**
  * Guards that command-registration JSON is localised to the translator's
- * locale — the behaviour `src/deploy.ts` relies on so a bot deployed with
+ * locale — the behaviour `src/register.ts` relies on so a bot registered with
  * `config.language: "en"` registers English slash-command descriptions.
  *
- * The translator deploy builds carries the bot's `fallbackLocale`;
+ * The translator register builds carries the bot's `fallbackLocale`;
  * without it every bot would register `zh-TW` text regardless of its
  * configured language.
  *
@@ -29,7 +29,7 @@ const descriptionFor = async (locale: Locale): Promise<string | undefined> => {
   return json.description;
 };
 
-describe('deploy command localization honors the configured locale', () => {
+describe('register command localization honors the configured locale', () => {
   it('resolves a command description in the translator locale, differing per locale', async () => {
     const en = await descriptionFor('en');
     const zh = await descriptionFor('zh-TW');

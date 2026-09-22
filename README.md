@@ -62,13 +62,13 @@ single-page overview.
 ```bash
 git clone https://github.com/ACaccel/BotFleet.git
 cd BotFleet
-yarn install --frozen-lockfile
+CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-env.sh
+export PATH="$PWD/.conda/bin:$PATH"
 ```
 
 Prerequisites:
 
-- Node.js **>= 22.13** (see [`.nvmrc`](.nvmrc))
-- Yarn 1 (classic)
+- Conda / Miniforge; setup installs the pinned Node 22 and Yarn 1 runtime
 - MongoDB (local or hosted) — only the bots that use persistent state need it
 
 For **each** personality you want to run, create the two configuration
@@ -85,11 +85,33 @@ Run the bot:
 yarn nijika        # or yarn konata / yarn tomori / yarn msg-archive
 ```
 
-Deploy / refresh slash commands (run once after editing commands):
+Register / refresh slash commands (run once after editing commands):
 
 ```bash
-yarn deploy
+yarn register
 ```
+
+## Runtime and service deployment
+
+Install Conda (for example Miniforge), then run `bash scripts/setup-env.sh`
+with `CONDA_EXE` pointing to its executable. The project environment is
+`.conda/`, defined by [environment.yml](environment.yml), with Node 22 and
+Yarn 1. Package scripts select it explicitly; `conda activate` is optional.
+Use `yarn install-lock` for dependency installation through that runtime.
+`BOTFLEET_CONDA_PREFIX` can select another absolute prefix with the same
+versions and no unhandled activation hooks. Setup refuses runtime changes
+while a managed bot deployment exists.
+
+For automatic startup after reboot, configure `deployment.json` from
+[deployment.example.json](deployment.example.json), then use
+`yarn deploy:prepare`, `yarn deploy`, and `yarn undeploy`. Each bot has an
+independent systemd service. MongoDB has a separate runtime and service;
+bot deployment never removes its data. See the [deployment guide](docs/contributing/deployment.md)
+for initial cutover, database setup, rollback, and service commands.
+
+`yarn register` registers Discord commands; `yarn deploy` now manages
+system services. Existing `yarn deploy -t ...` invocations must change to
+`yarn register -t ...`. Service deployment does not register commands.
 
 ## Configuration
 
@@ -98,21 +120,22 @@ yarn deploy
 Each personality reads its own `.env` from `src/bot/<name>/.env`. The
 authoritative schema lives in [`src/core/config/env.ts`](src/core/config/env.ts).
 
-| Key                          | Required | Notes                                                                                                                                       |
-| ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TOKEN`                      | yes      | Discord bot token                                                                                                                           |
-| `CLIENT_ID`                  | yes      | Discord application client id                                                                                                               |
-| `MONGO_RECOVERY_INTERVAL_MS` | optional | Transient database recovery interval in milliseconds (default `60000`); see [operations](docs/contributing/operations.md#database-recovery) |
-| `MONGO_URI`                  | optional | Required for any personality that uses persistent state                                                                                     |
-| `PORT`                       | optional | HTTP port for the earthquake webhook (nijika) / settings API (gopher)                                                                       |
-| `NODE_ENV`                   | optional | `development` (default), `test`, `production`                                                                                               |
-| `LOG_LEVEL`                  | optional | `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`                                                                                |
-| `OPENAI_API_KEY`             | optional | Enables OpenAI provider for the LLM chat plugin                                                                                             |
-| `ANTHROPIC_API_KEY`          | optional | Enables Anthropic provider                                                                                                                  |
-| `GEMINI_API_KEY`             | optional | Enables Gemini provider                                                                                                                     |
-| `XAI_API_KEY`                | optional | Enables xAI provider                                                                                                                        |
-| `ACCUWEATHER_KEY`            | optional | Weather command                                                                                                                             |
-| `GOPHER_SETTINGS_API_KEY`    | optional | Bearer key for gopher's settings REST API (required when it is enabled)                                                                     |
+| Key                          | Required | Notes                                                                                                                                              |
+| ---------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TOKEN`                      | yes      | Discord bot token                                                                                                                                  |
+| `CLIENT_ID`                  | yes      | Discord application client id                                                                                                                      |
+| `MONGO_RECOVERY_INTERVAL_MS` | optional | Transient database recovery interval in milliseconds (default `60000`); see [operations](docs/contributing/operations.md#database-recovery)        |
+| `MONGO_URI`                  | optional | Required for any personality that uses persistent state                                                                                            |
+| `PORT`                       | optional | HTTP port for the earthquake webhook (nijika) / settings API (gopher)                                                                              |
+| `NODE_ENV`                   | optional | `development` (default), `test`, `production`                                                                                                      |
+| `LOG_LEVEL`                  | optional | `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`                                                                                       |
+| `OPENAI_API_KEY`             | optional | Enables OpenAI provider for the LLM chat plugin                                                                                                    |
+| `ANTHROPIC_API_KEY`          | optional | Enables Anthropic provider                                                                                                                         |
+| `GEMINI_API_KEY`             | optional | Enables Gemini provider                                                                                                                            |
+| `XAI_API_KEY`                | optional | Enables xAI provider                                                                                                                               |
+| `ACCUWEATHER_KEY`            | optional | Weather command                                                                                                                                    |
+| `GOPHER_SETTINGS_API_KEY`    | optional | Bearer key for gopher's settings REST API (required when it is enabled)                                                                            |
+| `BOTFLEET_READY_FILE`        | optional | Absolute startup marker path supplied by systemd deployment; omit for manual startup. See the [deployment guide](docs/contributing/deployment.md). |
 
 Secrets must never be committed. The schema rejects obvious
 placeholders (`your_token`, `changeme`, etc.) at startup.
@@ -146,14 +169,14 @@ every id must be a JSON **string**.
 
 Common fields:
 
-| Field                         | Type                | Required | Notes                                                                                                                                                                         |
-| ----------------------------- | ------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                       | `string[]`          | no       | User ids with bot-admin privileges. Gates `/ai_whitelist_*`; `/bug_report` DMs every id. Default `[]`.                                                                        |
-| `language`                    | `"zh-TW"` \| `"en"` | no       | Default display locale, also used for registered slash-command text. Default `"zh-TW"`; an unsupported value warns and falls back.                                            |
-| `commands`                    | `string[]`          | no       | The slash commands this personality registers with Discord. Removing an entry only stops re-registering it — run `yarn deploy -t <name>` to take the command down on Discord. |
-| `guilds.<id>.channels`        | `Record<name, id>`  | no       | Symbolic channel names (`"debug"`, `"event"`, …) → Discord ids, so handlers look channels up by name.                                                                         |
-| `guilds.<id>.roles`           | `Record<name, id>`  | no       | Symbolic role names → Discord ids.                                                                                                                                            |
-| `guilds.<id>.permission_rank` | object              | no       | Privacy / clearance ranks for this guild — see below. Validated at startup; a malformed block fails the boot naming the guild.                                                |
+| Field                         | Type                | Required | Notes                                                                                                                                                                           |
+| ----------------------------- | ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin`                       | `string[]`          | no       | User ids with bot-admin privileges. Gates `/ai_whitelist_*`; `/bug_report` DMs every id. Default `[]`.                                                                          |
+| `language`                    | `"zh-TW"` \| `"en"` | no       | Default display locale, also used for registered slash-command text. Default `"zh-TW"`; an unsupported value warns and falls back.                                              |
+| `commands`                    | `string[]`          | no       | The slash commands this personality registers with Discord. Removing an entry only stops re-registering it — run `yarn register -t <name>` to take the command down on Discord. |
+| `guilds.<id>.channels`        | `Record<name, id>`  | no       | Symbolic channel names (`"debug"`, `"event"`, …) → Discord ids, so handlers look channels up by name.                                                                           |
+| `guilds.<id>.roles`           | `Record<name, id>`  | no       | Symbolic role names → Discord ids.                                                                                                                                              |
+| `guilds.<id>.permission_rank` | object              | no       | Privacy / clearance ranks for this guild — see below. Validated at startup; a malformed block fails the boot naming the guild.                                                  |
 
 `guilds` and both of its maps are optional. A bot may omit a map, a
 guild entry, or the whole block: unresolvable ids are dropped and the
@@ -275,7 +298,7 @@ ignored block would leave the feed dark.
    symbolic name is unused.
 4. **Register the commands.** Add `feed_subscribe`, `feed_unsubscribe`
    and `feed_list` to the personality's `commands` array and run
-   `yarn deploy -t nijika`; they do not appear in Discord until then.
+   `yarn register -t nijika`; they do not appear in Discord until then.
 5. **Re-add every account** with `/feed_subscribe`, naming the channel
    it should post into. The `account` option takes a comma-separated
    list, so one command per channel is usually enough — up to 20

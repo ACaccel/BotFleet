@@ -11,7 +11,7 @@
  *      mismatch, intent rejections, and missing-network issues.
  *
  * What it does NOT do:
- *   - Register slash commands (`yarn deploy` is the canonical path).
+ *   - Register slash commands (`yarn register` is the canonical path).
  *   - Spin up plugins, web routes, or the BaseBot lifecycle. Smoke is
  *     a connectivity probe, not a full boot.
  *   - Send messages to a live guild. The previous plan considered a

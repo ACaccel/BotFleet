@@ -7,7 +7,7 @@
  * and the pairing is the part no type can express: `setConfig` runs in
  * a constructor, so the compiler never sees the flag next to the hook.
  * Its failure mode is also the quietest one in the framework. A flag
- * with no hook deploys cleanly and offers an empty dropdown forever; a
+ * with no hook registers cleanly and offers an empty dropdown forever; a
  * hook with no flag is code Discord never calls. Neither raises
  * anything at runtime, so this sweep is the only thing that can catch
  * them.
@@ -16,7 +16,7 @@
  * rejects a misdeclared option, but only a command whose own test
  * happens to call it would ever reach that check. Running it over every
  * command is what makes that rejection a test-time failure rather than
- * a `yarn deploy` one.
+ * a `yarn register` one.
  */
 import { describe, expect, it } from 'vitest';
 

@@ -1,5 +1,5 @@
 /**
- * Paginated fetch of the bot's guild list for the deploy CLI.
+ * Paginated fetch of the bot's guild list for the register CLI.
  *
  * `GET /users/@me/guilds` (`Routes.userGuilds()`) returns at most 200
  * guilds per page. A single request therefore silently truncates the
@@ -7,8 +7,8 @@
  * guild-scoped commands un-pruned. This follows Discord's `after`
  * cursor (a guild id) until a short page (< limit) signals the end.
  *
- * Kept in its own module (not inline in `deploy.ts`) so it can be unit
- * tested without `deploy.ts` running its `main()` on import.
+ * Kept in its own module (not inline in `register.ts`) so it can be unit
+ * tested without `register.ts` running its `main()` on import.
  */
 import { Routes } from 'discord.js';
 import type { REST } from 'discord.js';

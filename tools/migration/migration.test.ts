@@ -7,6 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 type Config = {
   repo: string;
   environment: string;
+  databaseEnvironment: string;
   mongoEnv: string;
   backupDir: string;
   stateDir: string;
@@ -105,13 +106,45 @@ async function backup(change: Record<string, unknown> = {}): Promise<string> {
   return directory;
 }
 
-describe('three-field configuration', () => {
+describe('runtime configuration', () => {
   it('uses the active environment and derives backup/state paths', async () => {
     const result = await loadConfig(repo, undefined, environment);
     expect(result.environment).toBe(environment);
     expect(result.mongoEnv).toBe('src/bot/tomori/.env');
     expect(result.backupDir).toBe(path.join(root, 'botfleet-backups'));
     expect(result.stateDir).toBe(path.join(repo, '.git/botfleet-migration'));
+  });
+  it('accepts project-local application and separate database environments', async () => {
+    const app = path.join(repo, '.conda');
+    await fs.mkdir(path.join(app, 'conda-meta'), { recursive: true });
+    await fs.writeFile(path.join(app, 'conda-meta/history'), '');
+    const result = await loadConfig(
+      repo,
+      await config({ environment: app, databaseEnvironment: environment }),
+    );
+    expect(result.environment).toBe(app);
+    expect(result.databaseEnvironment).toBe(environment);
+  });
+  it('defaults the database runtime to the legacy combined environment', async () => {
+    expect((await loadConfig(repo, undefined, environment)).databaseEnvironment).toBe(environment);
+  });
+  it('rejects separate database runtime inside the repository or backup', async () => {
+    const databaseEnvironment = path.join(repo, 'database');
+    await fs.mkdir(path.join(databaseEnvironment, 'conda-meta'), { recursive: true });
+    await fs.writeFile(path.join(databaseEnvironment, 'conda-meta/history'), '');
+    await expect(
+      loadConfig(repo, await config({ environment, databaseEnvironment })),
+    ).rejects.toThrow('overlap');
+    await expect(
+      loadConfig(
+        repo,
+        await config({
+          environment,
+          databaseEnvironment: environment,
+          backupDir: path.dirname(environment),
+        }),
+      ),
+    ).rejects.toThrow('overlap');
   });
   it('reads all three source settings without exposing credentials', async () => {
     const values = {
@@ -193,6 +226,20 @@ describe('simplified CLI failures', () => {
     const result = invoke(['restore', directory]);
     expect(result.stderr).toContain('versions differ');
     expect(await exists(path.join(repo, 'src/bot/tomori/.env'))).toBe(false);
+  });
+  it('does not fall back to PATH for a missing configured database executable', async () => {
+    const directory = await backup();
+    const databaseEnvironment = path.join(root, 'missing-tools');
+    await fs.mkdir(path.join(databaseEnvironment, 'conda-meta'), { recursive: true });
+    await fs.writeFile(path.join(databaseEnvironment, 'conda-meta/history'), '');
+    await stub('mongorestore', 'console.log("mongorestore version: 100.13.0")');
+    const result = invoke([
+      'restore',
+      directory,
+      '--config',
+      await config({ environment, databaseEnvironment }),
+    ]);
+    expect(result.stderr).toContain('Missing mongorestore in configured runtime');
   });
   it('rejects malformed metadata before running external tools', async () => {
     const directory = await backup({ mongoPort: 0 });

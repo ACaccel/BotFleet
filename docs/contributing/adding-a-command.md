@@ -119,7 +119,7 @@ Discord.
    `NO_DB_INTEGRATION` in `vitest.workspace.ts` so a memory-server
    failure cannot take it down.
 
-6. **Register with Discord.** `yarn deploy -t <bot-name>` after the bot
+6. **Register with Discord.** `yarn register -t <bot-name>` after the bot
    has been started at least once. Default is global; `--dev-guild <id>`
    is for fast iteration on a single test guild.
 
@@ -133,7 +133,7 @@ types, instead of offering a fixed list.
    exclusive with `choices`** — Discord rejects an option carrying both.
    `buildCommandJsonBody` fails with a `TypeError` naming the command
    and the option on either misuse, so the mistake surfaces in the unit
-   suite rather than as an opaque REST 400 at `yarn deploy` time.
+   suite rather than as an opaque REST 400 at `yarn register` time.
 
 2. **Implement the hook.**
 

@@ -58,28 +58,23 @@ function run(binary, args, options = {}) {
 /** @param {import('./config.mjs').Config} config @returns {NodeJS.ProcessEnv} */
 const environment = (config) => ({
   ...process.env,
-  PATH: `${config.environment}/bin:${process.env.PATH ?? ''}`,
+  PATH: `${config.environment}/bin:${config.databaseEnvironment}/bin:${process.env.PATH ?? ''}`,
 });
 
 /** @param {import('./config.mjs').Config} config @param {string} name @returns {Promise<string>} */
 async function binary(config, name) {
-  const candidates = [
-    path.join(config.environment, 'bin', name),
-    path.join(path.dirname(process.execPath), name),
-    ...(process.env.PATH ?? '')
-      .split(path.delimiter)
-      .filter(Boolean)
-      .map((directory) => path.join(directory, name)),
-  ];
-  for (const candidate of candidates) {
-    try {
-      await fs.access(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      /* Try the next runtime location. */
-    }
+  const prefix = ['mongod', 'mongodump', 'mongorestore', 'mongosh'].includes(name)
+    ? config.databaseEnvironment
+    : config.environment;
+  const candidate = path.join(prefix, 'bin', name);
+  try {
+    await fs.access(candidate, constants.X_OK);
+    return candidate;
+  } catch {
+    fail(
+      `Missing ${name} in configured runtime; run bootstrap or correct migration configuration.`,
+    );
   }
-  fail(`Missing ${name}; activate the source runtime or run bootstrap on the target.`);
 }
 
 /** @param {import('./config.mjs').Config} config @param {object} request @returns {Promise<void>} */
@@ -147,7 +142,9 @@ async function databaseTool(config, uri, name, args) {
 /** @param {import('./config.mjs').Config} config @param {string} serverVersion @returns {Promise<Runtime>} */
 async function runtime(config, serverVersion) {
   const readVersion = async (name) => {
-    const result = await run(await binary(config, name), ['--version']);
+    const result = await run(await binary(config, name), ['--version'], {
+      env: environment(config),
+    });
     const match = result.text.match(/\b\d+\.\d+\.\d+\b/);
     if (!match) fail(`Cannot determine ${name} version.`);
     return match[0];
@@ -324,8 +321,11 @@ async function installDependencies(config) {
 async function restoreBackup(config, backup, mongoDir) {
   const { manifest, id } = await compatibleBackup(config, backup);
   await noWriters(config);
-  for (const location of [config.repo, backup, config.environment])
-    if (contains(location, mongoDir) || contains(mongoDir, location))
+  for (const location of [config.repo, backup, config.environment, config.databaseEnvironment])
+    if (
+      (contains(location, mongoDir) || contains(mongoDir, location)) &&
+      !(location === config.databaseEnvironment && location === path.join(mongoDir, '.conda'))
+    )
       fail('MongoDB directory must be separate from the repository, backup and conda environment.');
   await unusedPort(manifest.mongoPort);
   if (
@@ -336,8 +336,17 @@ async function restoreBackup(config, backup, mongoDir) {
         throw error;
       },
     )
-  )
-    fail('MongoDB directory already exists; use a new destination.');
+  ) {
+    const entries = await fs.readdir(mongoDir);
+    if (
+      config.databaseEnvironment !== path.join(mongoDir, '.conda') ||
+      entries.length !== 1 ||
+      entries[0] !== '.conda'
+    )
+      fail(
+        'MongoDB directory already exists; use a new destination containing only its .conda runtime.',
+      );
+  }
   const records = manifest.files
     .filter((file) => file.path.startsWith('runtime/'))
     .map((file) => ({ ...file, path: file.path.slice(8) }));
@@ -365,7 +374,7 @@ async function restoreBackup(config, backup, mongoDir) {
   const uri = await readUri(config.repo, manifest.mongoEnv);
   if (Number(new URL(uri).port || 27017) !== manifest.mongoPort)
     fail('Backup MongoDB port does not match its env file.');
-  await fs.mkdir(mongoDir, { mode: 0o700 });
+  await fs.mkdir(mongoDir, { recursive: true, mode: 0o700 });
   await fs.mkdir(path.join(mongoDir, 'data'), { mode: 0o700 });
   const conf = path.join(mongoDir, 'mongod.conf');
   await writeJson(conf, {

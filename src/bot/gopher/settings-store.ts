@@ -18,7 +18,7 @@
  * settings-api plugin's zod schema), so `setEndpoint` trusts it receives a
  * well-formed URL and focuses solely on persistence (single responsibility).
  */
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { readFile, realpath, rename, writeFile } from 'node:fs/promises';
 
 /** Shape of the `config.json` slice this store reads/writes. */
 interface MutableConfigShape {
@@ -96,11 +96,13 @@ export class GopherSettingsStore {
    * temp file + rename so a crash mid-write cannot truncate the live config.
    */
   private async persist(url: string): Promise<void> {
-    const raw = await readFile(this.configPath, 'utf8');
+    // Release directories link to shared settings; replace the target, not the link.
+    const configPath = await realpath(this.configPath);
+    const raw = await readFile(configPath, 'utf8');
     const config = JSON.parse(raw) as MutableConfigShape;
     config.llm_auto_reply = { ...(config.llm_auto_reply ?? {}), endpoint: url };
-    const tmpPath = `${this.configPath}.tmp`;
+    const tmpPath = `${configPath}.tmp`;
     await writeFile(tmpPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
-    await rename(tmpPath, this.configPath);
+    await rename(tmpPath, configPath);
   }
 }

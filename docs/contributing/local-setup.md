@@ -4,16 +4,23 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 
 ## Prerequisites
 
-- Node.js **>= 22.13** (see [`.nvmrc`](../../.nvmrc))
-- Yarn 1 (classic) — `yarn install --frozen-lockfile`
-- MongoDB for development (a free Atlas cluster works; integration
-  tests use `mongodb-memory-server` and do not need a live database)
+- Conda / Miniforge; `environment.yml` supplies Node 22.13.0 and setup installs Yarn 1.22.22.
+- MongoDB for development (a hosted instance works; integration tests use an isolated `mongodb-memory-server`).
 
 ```bash
 git clone git@github.com:ACaccel/BotFleet.git
 cd BotFleet
-yarn install --frozen-lockfile
+CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-env.sh
+export PATH="$PWD/.conda/bin:$PATH"
 ```
+
+The launcher selects `.conda` for application and verification commands,
+even from a shell using another Node version. The scoped `.yarnrc` permits
+Yarn's `run` bootstrap on that shell; it does not disable install engine
+checks or the launcher's runtime validation. Use `yarn install-lock` for
+locked installs and `yarn setup` to recreate/update the environment.
+Setup refuses changes while managed bot services are deployed. See
+[systemd deployment](deployment.md) for production operations.
 
 ## Per-personality configuration
 
@@ -56,14 +63,14 @@ yarn nijika          # or konata / tomori / msg-archive
 Register slash commands with Discord (run after editing commands):
 
 ```bash
-yarn deploy -t nijika                          # GLOBAL — register global set AND prune guild-scoped commands (propagation ~minutes, up to 1h)
-yarn deploy -t nijika --dev-guild <guild_id>   # guild-scoped fast iteration (instant)
-yarn deploy -t nijika --dry-run                # print resolved command name/description locally, register nothing
-yarn deploy -t nijika --keep-guild-commands    # global deploy WITHOUT pruning guild-scoped commands
-yarn deploy -t nijika --cleanup-guild-commands # only clear guild-scoped registrations
+yarn register -t nijika                          # GLOBAL — register global set AND prune guild-scoped commands (propagation ~minutes, up to 1h)
+yarn register -t nijika --dev-guild <guild_id>   # guild-scoped fast iteration (instant)
+yarn register -t nijika --dry-run                # print resolved command name/description locally, register nothing
+yarn register -t nijika --keep-guild-commands    # global deploy WITHOUT pruning guild-scoped commands
+yarn register -t nijika --cleanup-guild-commands # only clear guild-scoped registrations
 ```
 
-The default global deploy **prunes guild-scoped commands** from
+The default global registration **prunes guild-scoped commands** from
 every guild after registering the global set, so a stale guild-scoped
 command (e.g. from a prior `--dev-guild` run) can no longer override the
 global one in that guild. This walks every guild the bot is in under the
@@ -77,6 +84,6 @@ touching Discord, ruling out propagation delay (global takes up to an
 hour) and guild-override effects.
 
 The default is **global** registration so a freshly-invited guild
-sees the full command set without an operator re-running deploy. Use
+sees the full command set without an operator re-running register. Use
 `--dev-guild` only while iterating on a test guild; production rolls
 through the default global path.

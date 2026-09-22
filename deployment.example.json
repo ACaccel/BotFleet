@@ -1,0 +1,10 @@
+{
+  "user": "botfleet",
+  "bots": ["tomori", "nijika", "msg-archive"],
+  "readinessTimeoutSeconds": 120,
+  "mongodb": {
+    "prefix": "/home/botfleet/mongodb-botfleet/.conda",
+    "configFile": "/home/botfleet/mongodb-botfleet/mongod.conf",
+    "probeEnvFile": "/home/botfleet/BotFleet/src/bot/nijika/.env"
+  }
+}

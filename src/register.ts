@@ -1,5 +1,5 @@
 /**
- * Slash-command deploy CLI.
+ * Slash-command registration CLI.
  *
  * The default registration scope is **global**: a single
  * `rest.put(Routes.applicationCommands)` call publishes the bot's
@@ -16,20 +16,20 @@
  * global commands.
  *
  * Usage:
- *   yarn deploy -t nijika                 # global (default; also prunes guild-scoped commands)
- *   yarn deploy -t nijika --dev-guild ID  # guild-side fast iteration
- *   yarn deploy -t nijika --dry-run       # print resolved command text, register nothing
- *   yarn deploy -t nijika --keep-guild-commands     # global deploy without pruning guild commands
- *   yarn deploy -t nijika --cleanup-guild-commands  # only clear guild-scoped commands
+ *   yarn register -t nijika                 # global (default; also prunes guild-scoped commands)
+ *   yarn register -t nijika --dev-guild ID  # guild-side fast iteration
+ *   yarn register -t nijika --dry-run       # print resolved command text, register nothing
+ *   yarn register -t nijika --keep-guild-commands     # global registration without pruning guild commands
+ *   yarn register -t nijika --cleanup-guild-commands  # only clear guild-scoped commands
  *
- * The default global deploy registers the global command set AND clears
+ * The default global registration registers the global command set AND clears
  * guild-scoped registrations from every guild, so a stale guild-scoped
  * command (e.g. from a prior `--dev-guild` run) cannot keep overriding
  * the global one. Pass `--keep-guild-commands` to skip that step on
  * large bots or when guild-scoped commands are intentional.
  *
  * Command text is localised to the bot's `config.language` (see
- * `buildDeployTranslator`). Global registrations can take up to an hour
+ * `buildRegisterTranslator`). Global registrations can take up to an hour
  * to propagate; use `--dev-guild` for instant iteration.
  */
 import type { ApplicationCommandDataResolvable } from 'discord.js';
@@ -43,18 +43,18 @@ import { createBootstrapLogger, loadEnv } from '@core/config';
 import { createDefaultTranslator, isLocale, type Locale, type Translator } from '@core/i18n';
 
 import { resolveLocalesDir } from './bot/locales-dir';
-import { fetchAllUserGuilds } from './deploy-guilds';
+import { fetchAllUserGuilds } from './register-guilds';
 
-// Deploy runs before the IoC container is built, so the typed `Logger`
+// Register runs before the IoC container is built, so the typed `Logger`
 // bound to `TOKENS.Logger` is not available. Use the bootstrap logger
 // (the same construct `BaseBot.run()` falls back to during phase 1)
-// so the deploy CLI still emits structured pino lines instead of raw
-// `console.*` writes. `fileRouter: false` keeps it console-only: deploy
+// so the register CLI still emits structured pino lines instead of raw
+// `console.*` writes. `fileRouter: false` keeps it console-only: register
 // is a one-shot CLI with no `bot` binding (which the file router
 // requires) and must not create a `logs/<botId>/` tree.
-const logger = createBootstrapLogger({ component: 'deploy' }, { fileRouter: false });
+const logger = createBootstrapLogger({ component: 'register' }, { fileRouter: false });
 
-type DeployArgs = {
+type RegisterArgs = {
   bot?: string;
   devGuild?: string;
   cleanupGuildCommands?: boolean;
@@ -67,8 +67,8 @@ type BotConfig = {
   language?: string;
 };
 
-function parseArgs(argv: string[]): DeployArgs {
-  const out: DeployArgs = {};
+function parseArgs(argv: string[]): RegisterArgs {
+  const out: RegisterArgs = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if ((a === '-b' || a === '--bot' || a === '-t' || a === '--target') && argv[i + 1]) {
@@ -126,19 +126,19 @@ function loadBotConfig(botName: string): {
 }
 
 /**
- * Build the translator the deployed command JSON is localised against,
+ * Build the translator the registered command JSON is localised against,
  * honouring the bot's `config.language` (mirrors `BaseBot.buildHost`).
  * An unsupported value warns and falls back to the framework default so
  * command descriptions register in the locale the running bot will use.
  */
-async function buildDeployTranslator(language: string | undefined): Promise<Translator> {
+async function buildRegisterTranslator(language: string | undefined): Promise<Translator> {
   let fallbackLocale: Locale | undefined;
   if (isLocale(language)) {
     fallbackLocale = language;
   } else if (language !== undefined) {
     logger.warn(
       { language },
-      'config.language is not a supported locale; deploying command text in the default locale.',
+      'config.language is not a supported locale; registering command text in the default locale.',
     );
   }
   return createDefaultTranslator({ localesDir: resolveLocalesDir(), fallbackLocale });
@@ -158,7 +158,7 @@ function buildCommandsFromConfig(
     }
 
     // Command / option descriptions are i18n keys resolved here
-    // against the `commands` catalog so the deployed JSON keeps its
+    // against the `commands` catalog so the registered JSON keeps its
     // localised text.
     out.push(buildCommandJsonBody(localizeCommandConfig(instance.config, translator)));
   }
@@ -166,13 +166,13 @@ function buildCommandsFromConfig(
   return out;
 }
 
-async function deployGlobal(botName: string, keepGuildCommands: boolean): Promise<void> {
+async function registerGlobal(botName: string, keepGuildCommands: boolean): Promise<void> {
   const { token, clientId, commands, language } = loadBotConfig(botName);
 
-  const translator = await buildDeployTranslator(language);
+  const translator = await buildRegisterTranslator(language);
   const body = buildCommandsFromConfig(commands, translator);
   if (body.length === 0) {
-    logger.error('No commands to deploy (after filtering).');
+    logger.error('No commands to register (after filtering).');
     process.exit(1);
   }
 
@@ -181,7 +181,7 @@ async function deployGlobal(botName: string, keepGuildCommands: boolean): Promis
 
   logger.info(
     { bot: botName, count: body.length, scope: 'global' },
-    'Deploying commands GLOBALLY (visible in every guild after Discord propagation, typically minutes).',
+    'Registering commands GLOBALLY (visible in every guild after Discord propagation, typically minutes).',
   );
 
   const res = (await rest.put(Routes.applicationCommands(clientId), {
@@ -203,13 +203,13 @@ async function deployGlobal(botName: string, keepGuildCommands: boolean): Promis
   await clearAllGuildCommands(rest, clientId);
 }
 
-async function deployDevGuild(botName: string, guildId: string): Promise<void> {
+async function registerDevGuild(botName: string, guildId: string): Promise<void> {
   const { token, clientId, commands, language } = loadBotConfig(botName);
 
-  const translator = await buildDeployTranslator(language);
+  const translator = await buildRegisterTranslator(language);
   const body = buildCommandsFromConfig(commands, translator);
   if (body.length === 0) {
-    logger.error('No commands to deploy (after filtering).');
+    logger.error('No commands to register (after filtering).');
     process.exit(1);
   }
 
@@ -217,7 +217,7 @@ async function deployDevGuild(botName: string, guildId: string): Promise<void> {
 
   logger.info(
     { bot: botName, count: body.length, scope: 'guild', guildId },
-    'Deploying commands to dev guild (guild-scoped — instant propagation).',
+    'Registering commands to dev guild (guild-scoped — instant propagation).',
   );
 
   const res = (await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
@@ -234,9 +234,9 @@ async function deployDevGuild(botName: string, guildId: string): Promise<void> {
  * locally, sidestepping global-command propagation delay (up to ~1h)
  * and stale guild-scoped registrations when debugging command text.
  */
-async function deployDryRun(botName: string): Promise<void> {
+async function registerDryRun(botName: string): Promise<void> {
   const { commands, language } = loadBotConfig(botName);
-  const translator = await buildDeployTranslator(language);
+  const translator = await buildRegisterTranslator(language);
   const body = buildCommandsFromConfig(commands, translator);
 
   logger.info(
@@ -253,7 +253,7 @@ async function deployDryRun(botName: string): Promise<void> {
  * Discord's per-route + global rate limits apply when walking guilds, so
  * the `rateLimited` listener surfaces throttling and this explicit
  * per-iteration delay paces the worst case under the 50 req/s global
- * ceiling. Increase it if a deployment regularly hits the global limit.
+ * ceiling. Increase it if a registration regularly hits the global limit.
  */
 const PER_ITER_DELAY_MS = 250;
 
@@ -322,29 +322,29 @@ async function main() {
   if (!bot) {
     logger.error(
       'Usage:\n' +
-        '  yarn deploy -t <bot_name>                          # global (default)\n' +
-        '  yarn deploy -t <bot_name> --dev-guild <guild_id>   # guild-side fast iteration\n' +
-        '  yarn deploy -t <bot_name> --dry-run                # print resolved command text, register nothing\n' +
-        '  yarn deploy -t <bot_name> --keep-guild-commands    # global deploy WITHOUT pruning guild-scoped commands\n' +
-        '  yarn deploy -t <bot_name> --cleanup-guild-commands # remove legacy guild-scoped commands',
+        '  yarn register -t <bot_name>                          # global (default)\n' +
+        '  yarn register -t <bot_name> --dev-guild <guild_id>   # guild-side fast iteration\n' +
+        '  yarn register -t <bot_name> --dry-run                # print resolved command text, register nothing\n' +
+        '  yarn register -t <bot_name> --keep-guild-commands    # global registration WITHOUT pruning guild-scoped commands\n' +
+        '  yarn register -t <bot_name> --cleanup-guild-commands # remove legacy guild-scoped commands',
     );
     process.exit(1);
   }
 
   try {
     if (args.dryRun === true) {
-      await deployDryRun(bot);
+      await registerDryRun(bot);
     } else if (args.cleanupGuildCommands === true) {
       await cleanupGuildCommands(bot);
     } else if (args.devGuild !== undefined) {
-      await deployDevGuild(bot, args.devGuild);
+      await registerDevGuild(bot, args.devGuild);
     } else {
-      await deployGlobal(bot, args.keepGuildCommands === true);
+      await registerGlobal(bot, args.keepGuildCommands === true);
     }
   } catch (err) {
     logger.error(
       { err: err instanceof Error ? err : new Error(String(err)) },
-      'Deploy CLI failed.',
+      'Register CLI failed.',
     );
     process.exit(1);
   }

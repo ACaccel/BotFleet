@@ -29,6 +29,7 @@ const FULL_SOURCE: NodeJS.ProcessEnv = {
   PORT: '8080',
   NODE_ENV: 'test',
   LOG_LEVEL: 'warn',
+  BOTFLEET_READY_FILE: '/run/botfleet-test/ready.json',
   OPENAI_API_KEY: 'sk-openai',
   ANTHROPIC_API_KEY: 'sk-anthropic',
   GEMINI_API_KEY: 'sk-gemini',

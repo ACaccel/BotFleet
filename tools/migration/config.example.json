@@ -1,5 +1,6 @@
 {
-  "environment": "/home/OPERATOR/miniforge3/envs/ENVIRONMENT_NAME",
+  "environment": "/home/OPERATOR/BotFleet/.conda",
+  "databaseEnvironment": "/home/OPERATOR/mongodb-botfleet/.conda",
   "mongoEnv": "src/bot/tomori/.env",
   "backupDir": "/home/OPERATOR/botfleet-backups"
 }

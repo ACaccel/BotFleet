@@ -1,6 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["scripts/*.ts"],
+  "entry": [
+    "scripts/*.ts",
+    "src/register.ts",
+    "src/bot/*/index.ts",
+    "tools/db/db.ts",
+    "tools/msg_backup/msg_backup.ts"
+  ],
   "project": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "tools/**/*.ts"],
   "vitest": {
     "config": ["vitest.config.ts", "vitest.workspace.ts"],
@@ -16,7 +22,7 @@
     "@core/*": ["src/core/*"],
     "@plugins": ["src/plugins/index.ts"]
   },
-  "ignoreDependencies": ["tsconfig-paths"],
+  "ignoreDependencies": ["tsconfig-paths", "ts-node", "audit-ci", "prettier"],
   "ignore": [
     "src/persistence/index.ts",
     "src/persistence/repositories/index.ts",

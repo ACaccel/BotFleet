@@ -13,7 +13,7 @@ import {
   fetchAllUserGuilds,
   GUILD_PAGE_LIMIT,
   type PartialUserGuild,
-} from '../../src/deploy-guilds';
+} from '../../src/register-guilds';
 
 const makeGuilds = (count: number, startId: number): PartialUserGuild[] =>
   Array.from({ length: count }, (_, i) => ({ id: String(startId + i), name: `g${startId + i}` }));

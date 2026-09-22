@@ -3,22 +3,27 @@
 Git clone supplies the application code. This tool moves **all application
 MongoDB databases** and **gitignored files** such as `.env`, `config.json`,
 `logs/`, `data/`, and tool backups. It excludes `node_modules`, build/coverage
-output, `.plan`, and migration settings/state. MongoDB `admin`, `config`, and
+output, `.plan`, `.conda`, `.deploy`, `deployment.json`, and migration settings/state. MongoDB `admin`, `config`, and
 `local` internals are excluded; the shared application user is recreated.
 
-## Configuration: source only
+## Configuration: source and split targets
 
 Copy `config.example.json` to `config.json` beside this README:
 
-| Field         | Meaning                                                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `environment` | Full conda environment path, e.g.`/home/guest/miniforge3/envs/botfleet`. If omitted, use the active conda environment.                |
-| `mongoEnv`    | Bot`.env` providing `MONGO_URI`, relative to the Git checkout. Defaults to `src/bot/tomori/.env`. No password belongs in this config. |
-| `backupDir`   | Parent directory for automatically named backups, outside the repository. Defaults to`botfleet-backups` beside the checkout.          |
+| Field                 | Meaning                                                                                                                                             |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `environment`         | Application conda environment path, e.g.`/home/guest/miniforge3/envs/botfleet`. If omitted, use the active conda environment.                       |
+| `databaseEnvironment` | MongoDB runtime prefix containing `mongod`, `mongodump`, `mongorestore`, and `mongosh`. Defaults to `environment` for combined legacy environments. |
+| `mongoEnv`            | Bot`.env` providing `MONGO_URI`, relative to the Git checkout. Defaults to `src/bot/tomori/.env`. No password belongs in this config.               |
+| `backupDir`           | Parent directory for automatically named backups, outside the repository. Defaults to`botfleet-backups` beside the checkout.                        |
 
-Paths are literal: use absolute paths for `environment` and `backupDir`, not `~`.
-No target config is needed after activating its conda environment. Versions and
-all application database names are discovered during export.
+Paths are literal: use absolute paths for both environments and `backupDir`, not `~`.
+The application environment may be `<checkout>/.conda`; the database environment
+must remain outside the checkout unless it is the same legacy combined environment.
+Binaries must exist in their configured prefix; no system/PATH fallback is used.
+No target config is needed for an active combined environment. A split target
+must pass `--config /absolute/target-config.json` on restore and verify.
+Versions and all application database names are discovered during export.
 
 A **backup** is one directory containing the database dump, ignored files,
 checksums and a small recovery tool. The tool stores locks and completion records
@@ -86,20 +91,53 @@ bash ~/botfleet-backup/tool/migration.sh restore ~/botfleet-backup
 One command installs locked application dependencies, restores ignored files,
 creates a dedicated local MongoDB, restores every application database and
 verifies counts, views, indexes and file checksums. Existing runtime files or a
-MongoDB destination are never overwritten. The MongoDB directory defaults to
+MongoDB data or configuration are never overwritten. A pre-created MongoDB
+destination is accepted only when it contains exactly the configured `.conda`
+database runtime and no other entries. The MongoDB directory defaults to
 `mongodb-<checkout-name>` beside the checkout; override with `--mongo-dir PATH`.
 The source MongoDB port must be available. Auth stays enabled, bound to localhost;
 application credentials and `.env` contents are preserved.
 
-MongoDB remains running; start the desired bots with their usual `yarn tomori`,
-`yarn nijika`, etc. Update webhook/API routing if used. No slash-command
-registration is needed. There is no bot process manager or reboot automation.
-After reboot, activate `dc`, run `mongod --config PATH_PRINTED_BY_RESTORE`, then
-start the bots. To recheck before bot startup:
+MongoDB remains running; bots are not started. Update webhook/API routing if used.
+No slash-command registration is needed. This recovery tool does not install
+systemd services. For temporary combined-environment operation, set
+`BOTFLEET_CONDA_PREFIX="$CONDA_PREFIX"` before bot commands only if that runtime satisfies the launcher version checks and has no activation hooks. Otherwise complete the split setup below before starting bots.
+For persistent deployment, complete the split-runtime transition below and follow
+the [operations guide](../../docs/contributing/operations.md). To recheck before bot startup:
 
 ```bash
 bash ~/botfleet-backup/tool/migration.sh verify ~/botfleet-backup
 ```
+
+## Split-runtime recovery
+
+Export supports the split layout directly with the example configuration. Backup
+`runtime.conf` records application and database versions independently; neither
+Conda binaries nor machine-specific systemd deployment state are copied.
+
+The portable bootstrap intentionally retains its combined-environment interface.
+It can recover a split source using the same steps above: bootstrap a dedicated
+combined environment from the backup's exact version inventory, clone the source
+commit, restore, then verify before starting bots. Both combined and split
+export/restore paths are covered by the isolated MongoDB drill.
+
+To transition the recovered host to the normal split layout:
+
+1. Run `yarn setup` to build the checkout's `.conda` application runtime and locked
+   native dependencies. Keep the recovery environment available for rollback.
+2. Run `bash scripts/setup-mongo.sh /absolute/mongodb-botfleet/.conda` to prepare
+   the independent database runtime. Confirm its versions match `runtime.conf`;
+   do not combine this transition with a database upgrade.
+3. Update local migration configuration to the new application and database
+   prefixes. Preserve the restored data path, MongoDB configuration, and credentials.
+4. Follow the operations guide to prepare/review systemd deployment, stop the
+   recovery server cleanly, and cut over once. Do not run two servers against
+   the same `dbPath`. Validate readiness before enabling bots.
+
+Alternatively, prepare both runtimes at the exported versions before restoring,
+set `environment` and `databaseEnvironment` in an external target config, and
+pass it to restore and verify. The database parent may already contain `.conda`
+only; existing `data`, logs, or configuration cause restore to fail closed.
 
 ## Failure and rollback
 

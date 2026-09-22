@@ -34,7 +34,7 @@ describe('ignored runtime inventory', () => {
   it('includes ignored runtime data and backups, excluding source and regenerated artifacts', async () => {
     await file(
       '.gitignore',
-      '.env\nconfig.json\nlogs/\ndata/\nbackups/\nnode_modules/\ndist/\ncoverage/\n.plan/\ntools/migration/\n',
+      '.env\nconfig.json\nlogs/\ndata/\nbackups/\nnode_modules/\ndist/\ncoverage/\n.plan/\n.conda/\n.deploy/\ndeployment.json\ntools/migration/\n',
     );
     const included = [
       '.env',
@@ -45,6 +45,9 @@ describe('ignored runtime inventory', () => {
       'tools/backups/snapshot',
     ];
     const excluded = [
+      '.conda/bin/node',
+      '.deploy/releases/old/src/bot/tomori/.env',
+      'deployment.json',
       'index.ts',
       'src/other.ts',
       'node_modules/pkg/a',

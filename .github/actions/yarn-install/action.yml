@@ -1,12 +1,15 @@
 name: 'Yarn install'
-description: 'Setup Node from .nvmrc and run yarn install --frozen-lockfile with cache'
+description: 'Create the project Conda runtime and install the frozen Yarn lockfile'
 
 runs:
   using: 'composite'
   steps:
-    - uses: actions/setup-node@v4
+    - uses: conda-incubator/setup-miniconda@v3
       with:
-        node-version-file: '.nvmrc'
-        cache: 'yarn'
-    - run: yarn install --frozen-lockfile
+        miniforge-version: latest
+        activate-environment: ''
+        auto-activate-base: false
+    - run: |
+        CONDA_EXE="$CONDA/bin/conda" bash scripts/setup-env.sh
+        echo "$GITHUB_WORKSPACE/.conda/bin" >> "$GITHUB_PATH"
       shell: bash

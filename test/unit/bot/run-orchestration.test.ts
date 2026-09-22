@@ -17,7 +17,10 @@
  */
 /* eslint-disable import/first */
 import { Events } from 'discord.js';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Client } from 'discord.js';
 
 // Stub the handler barrels: their real registry.generated.ts files eagerly
@@ -35,6 +38,8 @@ vi.mock('@reaction', () => barrelStubs.reaction);
 
 import { GuildDbConnector } from '../../../src/bot/guild-db-connector';
 import { BaseBot, type Config } from '../../../src/bot/index';
+import type { Repos } from '../../../src/persistence/repositories';
+import { ServiceReadiness } from '../../../src/bot/service-readiness';
 
 /** Build a minimal Discord.js Client fake usable by BaseBot.run(). */
 interface RunFakeClient {
@@ -68,6 +73,7 @@ const buildRunFakeClient = (
   };
   const client = {
     user: fakeUser,
+    isReady: () => true,
     guilds: { cache: guildCache },
     channels: { cache: new Map() },
     application: { commands: { set: vi.fn(async () => []) } },
@@ -225,4 +231,140 @@ it('does not start database recovery when shutdown overtakes clientReady', async
     startRecovery.mockRestore();
     await bot.shutdown();
   }
+});
+
+describe('deployment startup readiness', () => {
+  let directory: string;
+  let marker: string;
+  let bot: MinimalBot | undefined;
+
+  beforeEach(() => {
+    directory = mkdtempSync(join(tmpdir(), 'botfleet-ready-'));
+    marker = join(directory, 'ready.json');
+    vi.stubEnv('BOTFLEET_READY_FILE', marker);
+    vi.stubEnv('TOKEN', 'real-bot-token-value');
+    vi.stubEnv('CLIENT_ID', '123456789012345678');
+    vi.stubEnv('MONGO_URI', 'mongodb://localhost:27017');
+  });
+
+  afterEach(async () => {
+    await bot?.shutdown();
+    bot = undefined;
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  it('clears stale readiness, waits for Discord, and clears readiness on shutdown', async () => {
+    writeFileSync(marker, '{"pid":1}');
+    const fake = buildRunFakeClient();
+    bot = new MinimalBot(fake.client, 'tk', '', 'bot-1', {});
+    await bot.run();
+    expect(existsSync(marker)).toBe(false);
+    await fake.fire(Events.ClientReady);
+    const content = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, number>;
+    expect(content.pid).toBe(process.pid);
+    expect(content.readyAt).toBeGreaterThanOrEqual(content.startedAt!);
+    expect(Object.keys(content).sort()).toEqual(['pid', 'readyAt', 'startedAt']);
+    await bot.shutdown();
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it('allows a database-free bot with joined guilds to become ready', async () => {
+    const fake = buildRunFakeClient({ guilds: [{ id: 'g-1', name: 'G' }] });
+    bot = new MinimalBot(fake.client, 'tk', '', 'bot-1', {});
+    await bot.run();
+    await fake.fire(Events.ClientReady);
+    expect(existsSync(marker)).toBe(true);
+  });
+
+  it('withholds readiness until every guild database has recovered', async () => {
+    const fake = buildRunFakeClient({ guilds: [{ id: 'g-1', name: 'G' }] });
+    vi.spyOn(GuildDbConnector.prototype, 'connectAll').mockResolvedValue();
+    vi.spyOn(GuildDbConnector.prototype, 'isDisabled').mockReturnValue(undefined);
+    const recovery = vi
+      .spyOn(GuildDbConnector.prototype, 'startRecovery')
+      .mockImplementation(() => {});
+    bot = new MinimalBot(fake.client, 'tk', 'mongodb://localhost:27017', 'bot-1', {});
+    await bot.run();
+    await fake.fire(Events.ClientReady);
+    expect(existsSync(marker)).toBe(false);
+    const [, attach, onRecovered] = recovery.mock.calls[0]!;
+    attach('g-1', {} as Repos);
+    await onRecovered('g-1');
+    expect(existsSync(marker)).toBe(true);
+  });
+
+  it('withholds readiness when a plugin fails its ready hook', async () => {
+    const fake = buildRunFakeClient();
+    bot = new MinimalBot(fake.client, 'tk', '', 'bot-1', {});
+    bot.use({
+      id: 'broken',
+      version: '1.0.0',
+      onReady: async () => {
+        throw new Error('broken hook');
+      },
+    });
+    await bot.run();
+    await fake.fire(Events.ClientReady);
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it('keeps database recovery installed when the readiness marker cannot be written', async () => {
+    const fake = buildRunFakeClient();
+    const publish = vi.spyOn(ServiceReadiness.prototype, 'publish').mockImplementation(() => {
+      throw new Error('Read-only runtime directory');
+    });
+    const recovery = vi.spyOn(GuildDbConnector.prototype, 'startRecovery');
+    bot = new MinimalBot(fake.client, 'tk', '', 'bot-1', {});
+    await bot.run();
+    await fake.fire(Events.ClientReady);
+    expect(publish).toHaveBeenCalledOnce();
+    expect(recovery).toHaveBeenCalledOnce();
+    expect(existsSync(marker)).toBe(false);
+    publish.mockRestore();
+    await fake.fire(Events.ShardResume);
+    expect(existsSync(marker)).toBe(true);
+  });
+
+  it.each([Events.ShardReady, Events.ShardResume])(
+    'publishes after %s restores Discord and removes retry listeners',
+    async (event) => {
+      const fake = buildRunFakeClient();
+      const isReady = vi.spyOn(fake.client, 'isReady').mockReturnValue(false);
+      bot = new MinimalBot(fake.client, 'tk', '', 'bot-1', {});
+      await bot.run();
+      await fake.fire(Events.ClientReady);
+      expect(existsSync(marker)).toBe(false);
+      const initialListeners = fake.listeners.get(event)?.length ?? 0;
+      isReady.mockReturnValue(true);
+      await fake.fire(event);
+      expect(existsSync(marker)).toBe(true);
+      expect(fake.listeners.get(event)?.length).toBe(initialListeners - 1);
+    },
+  );
+
+  it('removes retry listeners before shutdown and ignores a pending reconnect callback', async () => {
+    const fake = buildRunFakeClient();
+    vi.spyOn(fake.client, 'isReady').mockReturnValue(false);
+    bot = new MinimalBot(fake.client, 'tk', '', 'bot-1', {});
+    await bot.run();
+    await fake.fire(Events.ClientReady);
+    const initialListeners = fake.listeners.get(Events.ShardResume)?.length ?? 0;
+    const pending = fake.fire(Events.ShardResume);
+    await bot.shutdown();
+    await pending;
+    expect(fake.listeners.get(Events.ShardResume)?.length).toBe(initialListeners - 1);
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it('never publishes when shutdown overtakes startup', async () => {
+    const fake = buildRunFakeClient();
+    bot = new MinimalBot(fake.client, 'tk', '', 'bot-1', {});
+    await bot.run(async () => {
+      await bot?.shutdown();
+    });
+    await fake.fire(Events.ClientReady);
+    expect(existsSync(marker)).toBe(false);
+  });
 });

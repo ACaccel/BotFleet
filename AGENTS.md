@@ -35,15 +35,19 @@ in strict mode.
 ## Command cheat sheet
 
 ```
-Install:    yarn install            (reproducible: yarn install-lock)
+Setup:      bash scripts/setup-env.sh (requires CONDA_EXE or conda on PATH)
+Install:    yarn install-lock       (uses project Conda runtime)
 Dev:        yarn tomori | yarn nijika | yarn konata | yarn gopher | yarn msg-archive
-            (register slash commands: yarn deploy)
+            (register slash commands: yarn register)
 Test:       yarn test               (subsets: test:unit | test:int | test:contract | test:i18n | test:tools)
 Lint:       yarn lint               (format check: yarn format:check)
 Type-check: yarn typecheck          (tsc -p tsconfig.strict.json)
 Build:      yarn typecheck:emit     (declaration build; runtime is ts-node, no bundling step)
+Services:   yarn deploy:prepare | yarn deploy | yarn undeploy
 Codegen:    yarn handlers:gen       (after adding or deleting a handler)
 ```
+
+Runtime and deployment operations: [`docs/contributing/deployment.md`](docs/contributing/deployment.md).
 
 ## Path aliases (`tsconfig.json`)
 

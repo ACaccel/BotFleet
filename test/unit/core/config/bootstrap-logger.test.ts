@@ -4,12 +4,12 @@ import { createBootstrapLogger } from '../../../../src/core/config/bootstrap-log
 
 describe('createBootstrapLogger', () => {
   it('with fileRouter:false yields a console-only logger that needs no `bot` binding', () => {
-    // Regression for the `yarn deploy` crash: the file-router sink throws
-    // on any record missing a `bot` binding. The deploy CLI has none, so
+    // Regression for the `yarn register` crash: the file-router sink throws
+    // on any record missing a `bot` binding. The register CLI has none, so
     // it must opt out of the file router. With fileRouter:false the sink
     // is never attached, so logging a `bot`-less record is safe.
-    const logger = createBootstrapLogger({ component: 'deploy' }, { fileRouter: false });
+    const logger = createBootstrapLogger({ component: 'register' }, { fileRouter: false });
     expect(typeof logger.info).toBe('function');
-    expect(() => logger.info({ component: 'deploy' }, 'no bot binding here')).not.toThrow();
+    expect(() => logger.info({ component: 'register' }, 'no bot binding here')).not.toThrow();
   });
 });

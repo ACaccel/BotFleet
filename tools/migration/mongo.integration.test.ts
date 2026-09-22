@@ -2,6 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import {
   mkdtempSync,
+  cpSync,
   mkdirSync,
   readFileSync,
   rmSync,
@@ -72,9 +73,9 @@ async function stop(child: ChildProcess): Promise<void> {
 }
 
 // Explicit opt-in prevents ordinary unit runs from depending on host database tools.
-it.skipIf(!binDirectory)(
-  'exports all application databases and ignored runtime files, then restores into a fresh clone',
-  async () => {
+it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
+  'exports and restores all application data with %s runtimes',
+  async (layout) => {
     const directory = mkdtempSync(join(tmpdir(), 'botfleet-mongo-drill-'));
     const children: ChildProcess[] = [];
     const password = 'isolated-drill-password';
@@ -83,7 +84,10 @@ it.skipIf(!binDirectory)(
     const repo = join(directory, 'source');
     const target = join(directory, 'target');
     const mongoDir = join(directory, 'target-mongo');
-    const environment = join(directory, 'conda/envs/drill');
+    let environment =
+      layout === 'split' ? join(repo, '.conda') : join(directory, 'conda/envs/drill');
+    const databaseEnvironment = layout === 'split' ? join(mongoDir, '.conda') : environment;
+    const databaseBinaries = join(databaseEnvironment, 'bin');
     const binaries = join(environment, 'bin');
     const backupDir = join(directory, 'backups');
     let sequence = 0;
@@ -134,10 +138,17 @@ it.skipIf(!binDirectory)(
     function cli(cwd: string, command: string, args: string[] = []): ReturnType<typeof spawnSync> {
       return run(
         process.execPath,
-        [join(__dirname, 'cli.mjs'), command, ...args],
+        [
+          join(__dirname, 'cli.mjs'),
+          command,
+          '--config',
+          privateFile({ environment, databaseEnvironment, backupDir }),
+          ...args,
+        ],
         {
           ...testEnvironment,
           CONDA_PREFIX: environment,
+          PATH: '/usr/bin:/bin',
         },
         cwd,
       );
@@ -221,11 +232,16 @@ it.skipIf(!binDirectory)(
       mkdirSync(binaries, { recursive: true });
       mkdirSync(join(environment, 'conda-meta'));
       writeFileSync(join(environment, 'conda-meta/history'), 'isolated integration fixture');
+      if (layout === 'split') {
+        mkdirSync(databaseBinaries, { recursive: true });
+        mkdirSync(join(databaseEnvironment, 'conda-meta'));
+        writeFileSync(join(databaseEnvironment, 'conda-meta/history'), 'isolated split fixture');
+      }
       for (const name of ['mongod', 'mongodump', 'mongorestore'])
-        symlinkSync(join(binDirectory!, name), join(binaries, name));
+        symlinkSync(join(binDirectory!, name), join(databaseBinaries, name));
       symlinkSync(process.execPath, join(binaries, 'node'));
       const shellPath = String(run('which', ['mongosh']).stdout).trim();
-      symlinkSync(shellPath, join(binaries, 'mongosh'));
+      symlinkSync(shellPath, join(databaseBinaries, 'mongosh'));
       // Stub package installation only; all database commands and CLI stages use real executables.
       writeFileSync(
         join(binaries, 'yarn'),
@@ -240,8 +256,7 @@ else if (process.argv.slice(2).join(' ') === 'install --frozen-lockfile') {
 `,
         { mode: 0o700 },
       );
-      const sourceConfig = privateFile({ environment, mongoEnv: 'src/bot/tomori/.env', backupDir });
-      succeed(cli(repo, 'export', ['--config', sourceConfig, '--writers-stopped']));
+      succeed(cli(repo, 'export', ['--writers-stopped']));
       const backups = readdirSync(backupDir);
       expect(backups).toHaveLength(1);
       const backupName = backups[0];
@@ -263,6 +278,11 @@ else if (process.argv.slice(2).join(' ') === 'install --frozen-lockfile') {
       expect(inventoryText).toContain('recent');
       succeed(run('git', ['clone', '--quiet', '--no-local', repo, target]));
       expect(existsSync(join(target, 'src/bot/tomori/.env'))).toBe(false);
+      if (layout === 'split') {
+        const targetEnvironment = join(target, '.conda');
+        cpSync(environment, targetEnvironment, { recursive: true, dereference: false });
+        environment = targetEnvironment;
+      }
       // Reuse the source port only after stopping this test's own database process.
       await stop(sourceProcess);
       succeed(cli(target, 'restore', [backup, '--mongo-dir', mongoDir]));
