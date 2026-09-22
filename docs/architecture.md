@@ -532,7 +532,8 @@ filter, and its polling cursor together. Cursor and subscription share a
 lifetime, so removing a subscription cannot orphan cursor state and
 nothing has to be reconciled at boot. Re-running `/feed_subscribe` on an
 existing triple is an update, not a conflict, and it **replaces the
-filter wholesale**: an omitted `keyword` clears a stored one, while
+filter wholesale**: `media` must be explicitly selected on every invocation,
+and an omitted `keyword` clears a stored one, while
 `created_by` and the cursor are preserved. Because that replacement is
 silent from the member's side, every success line in the reply names the
 filter now in force, in the same words `/feed_list` uses for it.

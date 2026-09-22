@@ -51,7 +51,7 @@ export default class feed_subscribe extends Command {
         string: [
           { name: 'platform', required: true, choices: platformChoices },
           { name: 'account', required: true },
-          { name: 'media', required: false, choices: mediaChoices },
+          { name: 'media', required: true, choices: mediaChoices },
           { name: 'keyword', required: false },
         ],
         channel: [{ name: 'channel', required: false }],
@@ -118,7 +118,7 @@ export default class feed_subscribe extends Command {
       }
 
       const filter = buildSubscriptionFilter(
-        getOptionalString(interaction, 'media'),
+        getRequiredString(interaction, 'media'),
         getOptionalString(interaction, 'keyword'),
       );
       const outcomes = await subscribeAccounts({

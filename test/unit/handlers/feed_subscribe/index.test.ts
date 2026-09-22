@@ -19,6 +19,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { Types } from 'mongoose';
 
+import { localizeCommandConfig } from '../../../../src/handlers/commands/command';
+import { buildCommandJsonBody } from '../../../../src/handlers/commands/command-builder';
 import FeedSubscribe from '../../../../src/handlers/commands/feed_subscribe';
 import { FEED_BATCH_BUDGET_MS } from '../../../../src/handlers/commands/feed_subscribe/batch-policy';
 import { FeedError } from '../../../../src/core/errors';
@@ -82,7 +84,7 @@ interface Fixture {
   readonly created?: boolean;
   /** Subscription the repository already holds for this triple. */
   readonly existing?: FeedSubscriptionDoc;
-  readonly options?: Readonly<Record<string, string>>;
+  readonly options?: Readonly<Record<string, string | null>>;
   readonly channelOption?: string;
   /** Interaction age, which is what the batch budget is measured from. */
   readonly createdTimestamp?: number;
@@ -142,7 +144,7 @@ const build = (fixture: Fixture = {}) => {
     guild,
     userId: USER_ID,
     channel: { id: HOME_CHANNEL },
-    options: { platform: 'fake', account: '@SomeOne', ...fixture.options },
+    options: { platform: 'fake', account: '@SomeOne', media: 'media_only', ...fixture.options },
     ...(fixture.createdTimestamp === undefined
       ? {}
       : { createdTimestamp: fixture.createdTimestamp }),
@@ -164,6 +166,24 @@ const reply = (sink: ReturnType<typeof newInteractionSink>): string =>
   [...sink.editReplies, ...sink.followUps].map((message) => message.content ?? '').join('\n');
 
 describe('/feed_subscribe', () => {
+  it('requires media in the command payload sent to Discord', () => {
+    const body = buildCommandJsonBody(
+      localizeCommandConfig(new FeedSubscribe().config, echoTranslatorWithParams()),
+    ) as { readonly options?: readonly { readonly name: string; readonly required?: boolean }[] };
+
+    expect(body.options).toContainEqual(expect.objectContaining({ name: 'media', required: true }));
+  });
+
+  it('rejects a missing media choice before fetching or storing a subscription', async () => {
+    const { bot, interaction, sink, fetchTimeline, upsert } = build({ options: { media: null } });
+
+    await new FeedSubscribe().execute(interaction, bot);
+
+    expect(fetchTimeline).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(reply(sink)).toContain('replies:feed.failed');
+  });
+
   it('answers ephemerally, so a subscription never leaks into the channel', () => {
     const { bot, interaction, sink } = build();
 
@@ -228,7 +248,7 @@ describe('/feed_subscribe', () => {
     expect(content).toContain('replies:feed.filter_keyword');
   });
 
-  it('re-subscribing without filter options resets the stored filter, and says so', async () => {
+  it('re-subscribing with a media choice and no keyword replaces the stored filter, and says so', async () => {
     // The repository replaces the filter wholesale, and re-running the
     // command is the documented way to change one. Asserted so the
     // reset stays a decision rather than becoming an accident — and so

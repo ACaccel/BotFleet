@@ -178,9 +178,9 @@
         "description": "Channel to forward into (default: this channel)"
       },
       "media": {
-        "description": "Which posts to forward, by attached media (default: photos or videos only)",
+        "description": "Which posts to forward, by attached media",
         "choices": {
-          "media_only": "Only posts with a photo or video, no text-only posts (default)",
+          "media_only": "Only posts with a photo or video, no text-only posts",
           "photo_only": "Only posts with a photo",
           "video_only": "Only posts with a video",
           "any": "Every post: text-only, photo and video"
