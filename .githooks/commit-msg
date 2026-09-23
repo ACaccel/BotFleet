@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+  echo 'Commit message file is missing.' >&2
+  exit 1
+fi
+
+subject=$(sed -n '1p' "$1")
+case "$subject" in
+  'Merge '*|'Revert "'*|fixup\!*|squash\!*)
+    exit 0
+    ;;
+esac
+
+if ! printf '%s\n' "$subject" | grep -Eq '^(feat|fix|refactor|chore|docs|test)\([a-z0-9][a-z0-9._/-]*\): [^[:space:]].*$'; then
+  echo 'Commit subject must use <type>(<scope>): <subject>.' >&2
+  echo 'Allowed types: feat, fix, refactor, chore, docs, test.' >&2
+  exit 1
+fi

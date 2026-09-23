@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+
+check_dev=false
+dev_oid=
+while read -r local_ref local_oid remote_ref remote_oid; do
+  if [ "$remote_ref" = 'refs/heads/dev' ]; then
+    if [ "$local_oid" = '0000000000000000000000000000000000000000' ]; then
+      echo 'Deleting dev is not allowed.' >&2
+      exit 1
+    fi
+    check_dev=true
+    dev_oid=$local_oid
+  fi
+done
+
+if [ "$check_dev" = false ]; then
+  exit 0
+fi
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+if [ "$dev_oid" != "$(git rev-parse HEAD)" ]; then
+  echo 'Push the checked-out HEAD to dev so the local gates verify the pushed commit.' >&2
+  exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo 'Commit or clean local changes before pushing dev so the gates verify the pushed commit.' >&2
+  exit 1
+fi
+
+for check in typecheck typecheck:emit lint format:check handlers:gen:check test:coverage knip security; do
+  echo "Running $check before pushing dev..."
+  npm run "$check"
+done

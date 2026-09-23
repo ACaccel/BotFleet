@@ -26,23 +26,27 @@ architecture overview and why things are arranged the way they are.
 
 ## Quality gates
 
-All gates run in CI; please run them locally before opening a PR.
+Run the mandatory checks locally before committing. CI runs the same checks,
+while the focused test commands below support development. The project hooks
+described in [local setup](docs/contributing/local-setup.md) run the full set
+before a push to `dev`.
 
-| Command                      | What it checks                                                                                                                                 |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run typecheck`          | Strict TypeScript (`tsconfig.strict.json`) over the whole `src/`                                                                               |
-| `npm run typecheck:emit`     | Emit-mode compile (`tsconfig.build.json`); catches broken imports outside the strict include scope. Not a deploy build (runtime is `ts-node`). |
-| `npm run lint`               | ESLint                                                                                                                                         |
-| `npm run format:check`       | Prettier (use `npm run format` to fix)                                                                                                         |
-| `npm run handlers:gen:check` | Codegen registries match the on-disk handler layout                                                                                            |
-| `npm run test:unit`          | Unit tests (Vitest project `unit`)                                                                                                             |
-| `npm run test:int`           | Integration tests: the `integration` project (`mongodb-memory-server`) plus `integration-nodb` (real TCP ports, no database)                   |
-| `npm run test:contract`      | LLM provider contract tests via `nock`                                                                                                         |
-| `npm run test:i18n`          | Catalog parity + CJK-literal scanner                                                                                                           |
-| `npm run test`               | All six Vitest projects                                                                                                                        |
-| `npm run security`           | `audit-ci` against the documented allowlist (HIGH+). The `gitleaks` secret scan and CodeQL run on GitHub only                                  |
-| `npm run knip`               | Unused files, dependencies, unlisted imports, exports and types — all errors                                                                   |
-| `npm run smoke`              | Pre-deploy boundary probe: `.env` load + Mongo `admin.ping` + Discord login until `ready`. Manual; not in the CI matrix.                       |
+| Command                      | What it checks                                                                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck`          | Strict TypeScript (`tsconfig.strict.json`) over the whole `src/`                                                                 |
+| `npm run typecheck:emit`     | Emit-mode compile (`tsconfig.build.json`); checks declaration/output-specific errors. Not a deploy build (runtime is `ts-node`). |
+| `npm run lint`               | ESLint                                                                                                                           |
+| `npm run format:check`       | Prettier (use `npm run format` to fix)                                                                                           |
+| `npm run handlers:gen:check` | Codegen registries match the on-disk handler layout                                                                              |
+| `npm run test:unit`          | Unit tests (Vitest project `unit`)                                                                                               |
+| `npm run test:int`           | Integration tests: the `integration` project (`mongodb-memory-server`) plus `integration-nodb` (real TCP ports, no database)     |
+| `npm run test:contract`      | LLM provider contract tests via `nock`                                                                                           |
+| `npm run test:i18n`          | Catalog parity + CJK-literal scanner                                                                                             |
+| `npm run test`               | All six Vitest projects without coverage; useful during development                                                              |
+| `npm run test:coverage`      | All six Vitest projects with coverage thresholds; the CI and pre-push test gate                                                  |
+| `npm run security`           | `audit-ci` against the documented allowlist (HIGH+). The `gitleaks` secret scan and CodeQL run on GitHub only                    |
+| `npm run knip`               | Unused files, dependencies, unlisted imports, exports and types — all errors                                                     |
+| `npm run smoke`              | Pre-deploy boundary probe: `.env` load + Mongo `admin.ping` + Discord login until `ready`. Manual; not in the CI matrix.         |
 
 ## Architectural rules
 

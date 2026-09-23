@@ -22,6 +22,23 @@ after `--`, for example `npm run register -- -t nijika`.
 Setup refuses changes while managed bot services are deployed. See
 [systemd deployment](deployment.md) for production operations.
 
+## Local Git hooks
+
+Install the versioned hooks once per clone after reviewing any existing
+Git hooks:
+
+```bash
+bash scripts/install-hooks.sh
+```
+
+The installer refuses to replace an existing hook path or custom hooks.
+`pre-commit` checks staged whitespace, and `commit-msg` enforces the
+[commit convention](branching-and-releases.md#commit-conventions).
+`pre-push` runs the full local [quality gates](../../CONTRIBUTING.md#quality-gates)
+when pushing a clean, checked-out commit to `dev`; it does not rerun the
+plain test command because coverage already runs all six projects. GitHub
+CI remains the final signal after the push.
+
 ## Per-personality configuration
 
 Each personality under `src/bot/<name>/` ships a checked-in

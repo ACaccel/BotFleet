@@ -7,7 +7,7 @@ name: CodeQL
 # workflow in the repo and the duplicate was the dominant queue cost.
 on:
   pull_request:
-    branches: [main, dev, 'refactor/**']
+    branches: [main, dev]
   push:
     branches: [main, dev]
   schedule:

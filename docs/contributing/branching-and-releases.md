@@ -18,14 +18,18 @@ This repo follows a **Git Flow** variant with two long-lived branches:
 - **`main`** — always equals the released / production state. Every merge
   into `main` is a release: it is tagged (`vX.Y.Z`) and a GitHub Release
   is cut from it. `main` is the **only** branch that enforces the full
-  required CI gate set, on the `dev` → `main` release PR.
+  required CI gate set (`quality`, `tests`, `security`, `analyze`) on
+  the `dev` → `main` release PR. A PR is required, but no approval is
+  required so the author can merge after the checks pass. The PR branch
+  must include the latest `main` changes.
 - **`dev`** — the integration branch, and the one you **commit to
   directly**. Routine work (features, fixes, docs) lands on `dev` without
   a per-change branch or PR. Before pushing, run the full local gate
   suite (see [Quality gates](../../CONTRIBUTING.md#quality-gates)) —
   that is the discipline that keeps `dev` healthy. A push to `dev` still
-  triggers CI, but as a post-push safety signal, not a merge gate. `dev`
-  branch protection only blocks force-pushes and deletion.
+  runs the local pre-push gates, then triggers CI as a post-push safety
+  signal, not a merge gate. `dev` branch protection blocks force-pushes
+  and deletion, including for administrators.
 - **`feature/*` (optional)** — for large or risky changes, or when you
   want a pre-merge CI gate / review, branch off `dev`, open a PR back
   into `dev`, and delete the branch on merge. Otherwise commit straight
@@ -38,8 +42,9 @@ This repo follows a **Git Flow** variant with two long-lived branches:
   and open a `dev` → `main` PR (optionally via a `release/*`
   stabilisation branch that takes only bug fixes, version bumps, and
   changelog edits). The full required CI gate set must be green. After
-  merging into `main`, tag the release + cut the GitHub Release, then
-  merge `main` back into `dev` so the branches do not drift.
+  merging into `main` with a merge commit, tag the release + cut the
+  GitHub Release, then merge `main` back into `dev` so the branches
+  do not drift.
 - **`hotfix/*`** — for production-urgent fixes, branch off `main`; merge
   back into **both** `main` (tag a patch release) and `dev`.
 
@@ -54,10 +59,13 @@ it directly to `dev`** after the local gate suite passes.
 
 When you do open a PR:
 
-1. Branch off `dev` (large features) or `main` (releases / hotfixes).
+1. Branch off `dev` for large features, or `main` for hotfixes. A
+   regular release PR uses `dev` as its source branch; an optional
+   `release/*` stabilization branch starts from `dev`.
 2. Run the full local gate suite (see
    [Quality gates](../../CONTRIBUTING.md#quality-gates)).
 3. Fill in the PR template — it asks for a summary, gate evidence,
    and a rollback plan.
-4. A maintainer will review. CI must be green before merge; the branch
-   is deleted on merge.
+4. Review the diff and gate evidence. CI must be green before merge;
+   the PR author may merge without another approval. Delete short-lived
+   branches after merging.

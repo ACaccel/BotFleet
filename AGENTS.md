@@ -75,7 +75,7 @@ The full text of each is in `CONTRIBUTING.md`; the recipes under
 
 ## Quality gates (non-negotiable)
 
-This set mirrors the GitHub CI jobs (`.github/workflows/ci.yml`) and is a
+This set mirrors the checks in GitHub CI (`.github/workflows/ci.yml`) and is a
 **hard commit gate: every check must pass locally before you commit** — never
 commit on a red or unrun gate.
 
@@ -85,14 +85,15 @@ npm run typecheck:emit
 npm run lint
 npm run format:check
 npm run handlers:gen:check
-npm run test
 npm run test:coverage
 npm run knip
 npm run security
 ```
 
-Two CI checks cannot run locally — **`gitleaks`** (secret scan) and CodeQL —
-and run only on GitHub. A `dev` commit triggers the full CI on push, so after
+The project hooks run fast staged checks before a commit and these local gates
+before a push to `dev`; see `docs/contributing/local-setup.md`. Two CI checks
+cannot run locally — **`gitleaks`** (secret scan) and CodeQL — and run only on
+GitHub. A `dev` commit triggers the full CI on push, so after
 committing you MUST confirm that CI run is green (`gh run list --branch dev`)
 and fix any red immediately — CI is a gate, not a passive signal.
 
