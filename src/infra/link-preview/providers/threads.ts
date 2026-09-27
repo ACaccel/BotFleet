@@ -42,7 +42,7 @@
 import { ok } from '../../../core/result';
 
 import { createRewriteProvider } from './rewrite-provider';
-import type { OgClient } from '../og-client';
+import type { OgClient, OpenGraphMeta } from '../og-client';
 import type { LinkPreviewBuildContext, LinkPreviewProvider } from '../types';
 
 const PROVIDER_NAME = 'threads';
@@ -96,6 +96,13 @@ const toProxyUrl = (url: URL, host: string): string => `https://${host}${url.pat
  * ordinary image again.
  */
 const LOW_VALUE_IMAGE_PATTERNS: readonly RegExp[] = [/\/t51\.2885-19\//, /\/s150x150\//];
+
+/** Some proxies answer an inaccessible post with only a generic account title. */
+const isPlaceholder = (meta: OpenGraphMeta): boolean =>
+  /^@\S+ on Threads$/i.test(meta.title?.trim() ?? '') &&
+  (meta.description?.trim() ?? '') === '' &&
+  meta.images.length === 0 &&
+  (meta.video?.trim() ?? '') === '';
 
 /**
  * Expand a Threads share short link to its canonical post permalink so the
@@ -159,6 +166,7 @@ export const createThreadsProvider = (opts: {
     ogClient: opts.ogClient,
     toProxyUrl,
     lowValueImagePatterns: LOW_VALUE_IMAGE_PATTERNS,
+    isPlaceholder,
   });
 
   return {

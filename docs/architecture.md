@@ -485,7 +485,9 @@ matches by URL in registration order. The per-source proxy-host lists are
 operator configuration (the bot's `social_link_preview` block), not code
 defaults — embed-proxy domains change availability faster than releases
 ship — and each host is probed and ranked before anything is posted
-(`video > image > weak-image > text`), so a dead or media-less proxy ends
+(`video > image > weak-image > text`). Threads account-title placeholders with
+no description or media are rejected before ranking, so an unavailable post
+does not produce an empty account card. A dead or media-less proxy ends
 in a silent skip rather than a bare link. A host whose probe is finally
 served from the source site itself is skipped before ranking: the proxy has
 redirected back to instagram.com or x.com, so the metadata read there is

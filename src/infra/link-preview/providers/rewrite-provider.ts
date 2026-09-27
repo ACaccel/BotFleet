@@ -195,6 +195,8 @@ interface RewriteSpec {
    * only such images to `weak-image`. Omit where every image is post media.
    */
   readonly lowValueImagePatterns?: readonly RegExp[];
+  /** Reject source-specific placeholders before they can qualify as text-only cards. */
+  readonly isPlaceholder?: (meta: OpenGraphMeta) => boolean;
   /** Shared validation fetcher. */
   readonly ogClient: OgClient;
 }
@@ -228,6 +230,7 @@ const validate = async (
       );
       continue;
     }
+    if (spec.isPlaceholder?.(res.value) === true) continue;
     const quality = scoreMeta(res.value, spec.lowValueImagePatterns);
     if (quality === 'video') {
       // Best possible — playable video. Short-circuit.

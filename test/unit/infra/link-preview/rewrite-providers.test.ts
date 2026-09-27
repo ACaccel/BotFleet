@@ -607,6 +607,33 @@ describe('threads host selection per post type', () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
+  it('skips a Threads account-title placeholder when another host has the post image', async () => {
+    const { provider } = providerWith({
+      [at('viewthreads.com')]: ok(meta({ title: '@ajit86403 on Threads', description: '' })),
+      [at('fzthreads.com')]: ok(
+        meta({ title: '@ajit86403 (@ajit86403)', description: 'Post text', images: [POST_IMAGE] }),
+      ),
+    });
+    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+  });
+
+  it('skips an empty Threads account card when no host resolves the post', async () => {
+    const { provider, fetch } = providerWith({
+      [at('viewthreads.com')]: ok(meta({ title: '@ajit86403 on Threads', description: '' })),
+    });
+    expect(await buildUrl(provider, permalink)).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps a text-only Threads post when its description contains content', async () => {
+    const { provider } = providerWith({
+      [at('viewthreads.com')]: ok(
+        meta({ title: '@ajit86403 on Threads', description: 'Post text' }),
+      ),
+    });
+    expect(await buildUrl(provider, permalink)).toBe(at('viewthreads.com'));
+  });
+
   it('skips a login wall in the image slot and picks the host that resolved the post', async () => {
     const loginWallLogo = 'https://static.cdninstagram.com/rsrc.php/instagram-logo.png';
     const { provider, fetch } = providerWith({
