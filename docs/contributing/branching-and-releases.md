@@ -4,68 +4,59 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 
 ## Commit conventions
 
-The Git history follows a `<type>(<scope>): <subject>` pattern where
-`<type>` is `feat`, `fix`, `refactor`, `chore`, `docs`, or `test`, and
-`<scope>` matches the area being touched (`llm-chat`, `scanner`,
-etc.). Multi-line bodies are encouraged for non-trivial changes —
-describe the _why_, not the _what_.
+Use `<type>(<scope>): <subject>` with an imperative subject and a type of
+`feat`, `fix`, `refactor`, `chore`, `docs`, or `test`. Keep changes focused;
+explain non-obvious reasons in the body. Do not add AI-attribution trailers.
+
+Commit only when explicitly requested; that request includes pushing to
+`dev`. First review staged content for secrets and pass every local
+[quality gate](../../CONTRIBUTING.md#quality-gates), then confirm CI is green
+after the push. Never amend, bypass hooks, or force-push without authorization.
 
 ## Branching model
 
-This repo follows a **Git Flow** variant with two long-lived branches:
-`main` (released) and `dev` (integration).
+| Branch      | Purpose and merge path                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| `dev`       | Routine features, fixes, and documentation are committed directly here; no per-change PR    |
+| `main`      | Released state; every merge is a tagged release with a GitHub Release                       |
+| `feature/*` | Optional isolation for large or risky work; branch from and merge into `dev`                |
+| `release/*` | Optional stabilization from `dev`; only fixes, version bumps, and changelog edits           |
+| `hotfix/*`  | Urgent production fixes from `main`; merge into both `main` and `dev`, with a patch release |
 
-- **`main`** — always equals the released / production state. Every merge
-  into `main` is a release: it is tagged (`vX.Y.Z`) and a GitHub Release
-  is cut from it. `main` is the **only** branch that enforces the full
-  required CI gate set (`quality`, `tests`, `security`, `analyze`) on
-  the `dev` → `main` release PR. A PR is required, but no approval is
-  required so the author can merge after the checks pass. The PR branch
-  must include the latest `main` changes.
-- **`dev`** — the integration branch, and the one you **commit to
-  directly**. Routine work (features, fixes, docs) lands on `dev` without
-  a per-change branch or PR. Before pushing, run the full local gate
-  suite (see [Quality gates](../../CONTRIBUTING.md#quality-gates)) —
-  that is the discipline that keeps `dev` healthy. A push to `dev` still
-  runs the local pre-push gates, then triggers CI as a post-push safety
-  signal, not a merge gate. `dev` branch protection blocks force-pushes
-  and deletion, including for administrators.
-- **`feature/*` (optional)** — for large or risky changes, or when you
-  want a pre-merge CI gate / review, branch off `dev`, open a PR back
-  into `dev`, and delete the branch on merge. Otherwise commit straight
-  to `dev`.
-- **Releasing** — first write the changelog: on `dev`, walk
-  `git log <last tag>..HEAD`, rename `[Unreleased]` to the new version
-  and date, file one entry per notable commit under it (format and
-  content rules in [Architectural rule 4](../../CONTRIBUTING.md#architectural-rules)),
-  and open a fresh empty `[Unreleased]` above it. Then bump the version
-  and open a `dev` → `main` PR (optionally via a `release/*`
-  stabilisation branch that takes only bug fixes, version bumps, and
-  changelog edits). The full required CI gate set must be green. After
-  merging into `main` with a merge commit, tag the release + cut the
-  GitHub Release, then merge `main` back into `dev` so the branches
-  do not drift.
-- **`hotfix/*`** — for production-urgent fixes, branch off `main`; merge
-  back into **both** `main` (tag a patch release) and `dev`.
+`dev` protection blocks deletion and force-pushes. `main` requires a PR that
+includes its latest changes and passes `quality`, `tests`, `security`, and
+`analyze`. The author may merge after checks pass; another approval is not
+required. Optional feature PRs must also pass the full CI gate set.
 
-The `dev` → `main` release PR (and any optional `feature/*` PR) must pass
-the full required CI gate set before it can merge.
+## Releasing
+
+1. On `dev`, review `git log <last-tag>..HEAD`. Rename `[Unreleased]` to the
+   new version and date, record every notable change, and add a fresh empty
+   `[Unreleased]` section above it.
+2. Bump the version and open a `dev` → `main` PR (or use a `release/*`
+   stabilization branch). Follow the PR procedure below.
+3. After CI passes, merge into `main` with a merge commit, tag `vX.Y.Z`, and
+   publish the GitHub Release.
+4. Merge `main` back into `dev` to keep release history synchronized.
+
+Write changelog entries only at release time, one per notable change, with
+an imperative sentence and the commit link:
+
+```markdown
+- <Description> ([<7-char hash>](<commit URL>)).
+```
+
+Entries are public and permanent. Keep each to one sentence (at most two
+rendered lines) describing the user or operator outcome. Omit implementation
+details, rationale, individuals, nicknames, personal services, and guild-specific
+content. Keep breaking changes marked, linking to the relevant operator guide
+through the README: `(**breaking** — see [README.md](README.md))`.
+Shorten or sanitize an entry instead of dropping it; merge entries only when
+they share a commit link.
 
 ## Submitting a PR
 
-PRs are for `dev` → `main` releases, hotfixes, and optional large /
-risky `feature/*` work. **Routine `dev` work does not need a PR — commit
-it directly to `dev`** after the local gate suite passes.
-
-When you do open a PR:
-
-1. Branch off `dev` for large features, or `main` for hotfixes. A
-   regular release PR uses `dev` as its source branch; an optional
-   `release/*` stabilization branch starts from `dev`.
-2. Run the full local gate suite (see
-   [Quality gates](../../CONTRIBUTING.md#quality-gates)).
-3. Fill in the PR template — it asks for a summary, gate evidence,
-   and a rollback plan.
-4. Review the diff and gate evidence. CI must be green before merge;
-   the PR author may merge without another approval. Delete short-lived
-   branches after merging.
+PRs cover releases, hotfixes, and optional large or risky work.
+Run the local gates, fill in the PR template with the behavior change,
+validation evidence, and rollback plan, then review the diff and CI results.
+Merge only after required checks pass and delete short-lived branches afterward.

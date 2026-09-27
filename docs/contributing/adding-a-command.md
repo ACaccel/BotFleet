@@ -2,293 +2,78 @@
 
 Part of the [contributing guide](../../CONTRIBUTING.md).
 
-Pick a snake_case name that matches the Discord command name
-convention (e.g. `add_reply`). The directory name **becomes** the
-command name; do not rename it after handlers are registered with
-Discord.
-
-1. **Create the handler.**
-
-   ```ts
-   // src/handlers/commands/my_command/index.ts
-   import { ChatInputCommandInteraction } from 'discord.js';
-   import { BaseBot } from '@bot';
-   import { Command } from '@cmd';
-   import { logger } from '@utils';
-
-   export default class MyCommand extends Command {
-     constructor() {
-       super();
-       this.setConfig({
-         name: 'my_command',
-         // Groups the command under a `/help` section. Pick the closest
-         // CommandCategory: auto_reply | fun | server_activity | utility |
-         // admin | ai | other. Omitting it defaults to `other`.
-         category: 'utility',
-         // i18n-ignore: command-builder metadata; localised via name_localizations.
-         description: '<short description>',
-         options: {
-           /* … */
-         },
-       });
-     }
-
-     public override async execute(
-       interaction: ChatInputCommandInteraction,
-       bot: BaseBot,
-     ): Promise<void> {
-       await interaction.deferReply();
-       try {
-         // do work, then:
-         await interaction.editReply({
-           content:
-             bot.translator?.t('replies:my_command.success', {
-               /* params */
-             }) ?? '',
-         });
-       } catch (err) {
-         logger.errorLogger(bot.clientId, interaction.guild?.id, err);
-         await interaction.editReply({
-           content: bot.translator?.t('replies:my_command.failed') ?? '',
-         });
-       }
-     }
-   }
-   ```
-
-2. **Add the i18n keys — in every locale.** The catalog is bilingual
-   (`zh-TW` and `en`). Open **both**
-   `src/i18n/locales/zh-TW/replies.json` and
-   `src/i18n/locales/en/replies.json` and add the same namespace
-   to each:
-
-   ```json
-   // zh-TW/replies.json
-   "my_command": {
-     "success": "✅ {{thing}} 已建立",
-     "failed": "唔...執行失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
-   }
-   ```
-
-   ```json
-   // en/replies.json
-   "my_command": {
-     "success": "✅ {{thing}} created",
-     "failed": "Hmm... it failed. Give it another try later! (error code: {{traceId}})"
-   }
-   ```
-
-   Rules the `npm run test:i18n` catalog-completeness gate enforces:
-   - **Every key must exist in both locales.** A key added to one
-     locale only fails the cross-locale parity check.
-   - **`{{placeholder}}` sets must match across locales** for the same key.
-   - The per-command `replies:<feature>.failed` fallback string must
-     carry a `{{traceId}}` interpolation slot — `replyForError` uses it
-     to surface a trace code for non-`DomainError` failures.
-   - Command metadata (description / option descriptions / choices)
-     lives under `commands.json`, again in both locales.
-
-   Reuse `errors.json` keys for cross-cutting failures
-   (`errors:db.not_found`, `errors:permission.denied`, etc.); those
-   strings carry the bot-facing tone for `DomainError.messageKey`.
-
-3. **Regenerate the codegen registry.**
-
-   ```bash
-   npm run handlers:gen
-   ```
-
-   This rewrites `src/handlers/commands/registry.generated.ts`. Commit
-   the regenerated file.
-
-4. **List the command in the bots that should expose it.** Edit each
-   `src/bot/<name>/config.json` `commands` array.
-
-5. **Add a test.** The minimum is a unit test asserting one happy and
-   one failure path. Build the Discord objects with the shared builders
-   in [`test/fixtures/discord/`](../../test/fixtures/discord/README.md) —
-   `buildFakeBot`, `buildGuild`, `buildSendableChannel` and friends —
-   rather than hand-rolling another `as unknown as BaseBot` literal.
-
-   If the command touches MongoDB, add an integration test under
-   `test/integration/` that uses the `withFreshConnection` helper from
-   `test/integration/helpers/mongo.ts` (it reuses the shared
-   `mongodb-memory-server` started in `test/integration/setup.ts`).
-   A suite that binds a real port but needs no database belongs in the
-   `integration-nodb` project instead — add its path to
-   `NO_DB_INTEGRATION` in `vitest.workspace.ts` so a memory-server
-   failure cannot take it down.
-
-6. **Register with Discord.** `npm run register -- -t <bot-name>` after the bot
-   has been started at least once. Default is global; `--dev-guild <id>`
-   is for fast iteration on a single test guild.
+1. Create `src/handlers/commands/<snake_case_name>/index.ts`, extending
+   `Command` from `@cmd`. The directory becomes the Discord command name.
+   Follow an existing command with similar inputs and reply behavior.
+2. Set command metadata with `setConfig`: name, description, options, and
+   category (`auto_reply`, `fun`, `server_activity`, `utility`, `admin`, `ai`,
+   or the default `other`). Keep Discord input, authorization, translation,
+   and replies in the handler; defer replies before slow work.
+3. Add text to **both** `zh-TW` and `en` catalogs. Metadata belongs in
+   `commands.json`, replies in `replies.json`, and shared failures in
+   `errors.json`. Keys and interpolation placeholders must match across
+   locales. Failure fallbacks used by `replyForError` need `{{traceId}}`.
+4. Run `npm run handlers:gen` and include the generated registry in the
+   change. Enable the command in the intended bots' `config.json` commands
+   arrays and update their examples and affected documentation.
+5. Test a happy path and a failure path using the shared
+   [Discord fixtures](../../test/fixtures/discord/README.md). MongoDB behavior
+   needs an integration test with `withFreshConnection` from
+   `test/integration/helpers/mongo.ts`. Tests that bind ports but need no
+   database belong in `integration-nodb`; list them in `NO_DB_INTEGRATION`
+   in `vitest.workspace.ts`.
+6. Follow the [registration procedure](local-setup.md#registering-slash-commands)
+   to publish the command to a test guild, then globally when ready.
 
 ## Option autocomplete
 
-A string option can ask Discord to query the handler as the member
-types, instead of offering a fixed list.
-
-1. **Flag the option.** Set `autocomplete: true` on it in `setConfig`.
-   The flag applies to **string options only** and is **mutually
-   exclusive with `choices`** — Discord rejects an option carrying both.
-   `buildCommandJsonBody` fails with a `TypeError` naming the command
-   and the option on either misuse, so the mistake surfaces in the unit
-   suite rather than as an opaque REST 400 at `npm run register` time.
-
-2. **Implement the hook.**
-
-   ```ts
-   public override autocomplete(
-     interaction: AutocompleteInteraction,
-     bot: BaseBot,
-   ): Promise<CommandSuggestions> {
-     return suggestSomething(interaction, bot);
-   }
-   ```
-
-   Read the option being typed into with
-   `interaction.options.getFocused()` and its siblings with the
-   accessors in `src/infra/discord/options.ts` — on an autocomplete
-   interaction `options.getChannel` and the other entity resolvers do
-   not exist, because Discord resolves entities only once the command is
-   submitted, so a channel option is read as its raw id string. Every
-   sibling option may still be absent.
-
-3. **Return suggestions; never send them.** The hook hands back a list
-   and `executeAutocomplete` answers with it. Discord's limits are
-   applied there — at most 25 choices, 100 characters per name and per
-   value — so no handler can produce a payload the API rejects. A hook
-   that could produce an over-long value should still drop that
-   candidate itself: truncation is a backstop, and half a value is
-   usually worse than no suggestion.
-
-4. **Never reply, never throw.** An autocomplete interaction cannot be
-   replied to and has no way to report a failure to the member. A
-   command with no hook, an unknown command name, a hook that throws,
-   and a `respond` Discord refused all end in an empty list. Return
-   `[]` for every unusable state rather than throwing — the dispatcher
-   would swallow the throw anyway, at the cost of an error-level line
-   per keystroke for something the member cannot act on.
-
-   Log the states an operator could act on yourself, at info level, and
-   include the reason. The dispatcher only logs a hook that threw and a
-   `respond` Discord refused; a hook that quietly returns `[]` after a
-   failed read would otherwise leave a degraded dependency with no
-   trace anywhere, because the member sees the same empty dropdown
-   either way.
-
-5. **Route any fixed wording through the translator.** A suggestion's
-   `name` is user-facing text in Discord's own dropdown, and it is the
-   one handler surface that renders copy with no `t` call in sight — the
-   CJK-literal scanner cannot see an English literal, so nothing else
-   will catch it. Interpolate data freely; take every fixed word from a
-   catalog key. A label assembled purely from stored values and a
-   locale-independent constant needs no key, but if that constant is
-   also spelled in the catalog somewhere (a platform name in an option's
-   `choices`, say), pin the two together with a test — a member reads
-   both lists side by side, and nothing else notices when they drift.
-
-6. **Answer within three seconds.** Discord discards a later response.
-   A hook belongs on a database read or a cache, never on an upstream
-   call. `/feed_unsubscribe` is the worked example: it suggests the
-   accounts the target channel has already subscribed, read from the
-   repository, and applies the same visibility gate the command does so
-   a channel the invoker cannot see yields nothing.
-
-7. **Test it.** Cover the suggestion shape, the refusal paths, and the
-   limits. Build the interaction with `buildAutocompleteInteraction`
-   from [`test/fixtures/discord/`](../../test/fixtures/discord/README.md),
-   whose sink records `respond` calls.
+- Set `autocomplete: true` on a **string** option; it cannot also have
+  `choices`. Override `autocomplete` and return `Promise<CommandSuggestions>`.
+- Read the focused value with `interaction.options.getFocused()` and sibling
+  values with `src/infra/discord/options.ts`. Siblings may be absent; entity
+  values are raw IDs because autocomplete does not resolve Discord objects.
+- Return suggestions; the dispatcher calls `respond`. It enforces 25 choices
+  and 100 characters per name/value. Drop candidates whose values cannot be
+  safely shortened.
+- Return `[]` for unusable states. Autocomplete cannot send an error reply;
+  log actionable dependency failures at info level. Use a database or cache,
+  never an upstream request: Discord requires a response within three seconds.
+- Apply the command's visibility checks and translate fixed wording in labels.
+  Stored values need no translation; test any constants shared with catalogs.
+- Test suggestion shape, refusal paths, and limits with
+  `buildAutocompleteInteraction`. See `feed_unsubscribe` for an example.
 
 ## Handler 150-line cap
 
-Every `src/handlers/<type>/<name>/index.ts` must follow these five
-rules. New handlers apply them from line one — no "future cleanup"
-deferrals.
+Each `src/handlers/<type>/<name>/index.ts` is limited to **150 lines**, including
+imports, comments, and blank lines. ESLint enforces this cap.
 
-1. **`index.ts` is capped at 150 lines** (imports, JSDoc, and blank
-   lines all count). Enforced by the `max-lines` rule in
-   [`eslint.config.mjs`](../../eslint.config.mjs); a violation is an ESLint
-   error, not a warning.
-2. **Overflow goes to sibling files in the same directory.** Pure
-   helpers (anything that does not touch Discord objects) move to
-   kebab-cased files (e.g. `parse-range.ts`, `render-reactions.ts`)
-   with **named** exports. Do not use `export default`. Every export
-   from `src/` names its return type — `explicit-module-boundary-types`
-   is an error, so an omitted annotation fails `npm run lint`. `any` is an
-   error everywhere in `src/`; reach for `unknown` and narrow.
-3. **Do NOT extract Discord I/O, permission checks, or `Translator`
-   calls to compress the line count.** Those four belong in
-   `index.ts`: interaction input extraction; guild / repos / permission
-   checks; `bot.translator.t(...)` calls; assembling the domain result
-   into a Discord reply. They are the handler's job.
-4. **Extracted helpers must have unit tests** under
-   `test/unit/handlers/<name>/<helper>.test.ts`. Test happy path,
-   boundary, and error path for pure functions; inject in-memory fakes
-   for `Translator` / `Repos` consumers.
-5. **Helpers stay in the handler's own directory.** Do not put them in
-   `src/handlers/shared/` or a new common folder; they are
-   implementation details of this handler. Promote only when a second
-   handler legitimately needs the same logic.
+Extract pure logic to sibling kebab-case files with named exports and explicit
+return types. Keep input extraction, Discord I/O, permissions, repository
+availability checks, translator calls, and reply assembly in `index.ts`.
+Use `unknown` and narrowing instead of `any`.
+
+Test extracted helpers under `test/unit/handlers/<name>/`, covering happy,
+boundary, and error paths. Keep helpers local until a second handler needs
+them; then promote shared logic to the appropriate lower layer.
 
 ## Shared handler utilities
 
-These cross-handler modules already exist. Use them rather than
-re-deriving the behaviour:
+| Utility                                 | Use                                                                                                       |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `src/infra/discord/options.ts`          | Typed required/optional option access; match the declared `required` flag instead of casting values       |
+| `src/infra/http/`                       | Bounded HTTP requests; `getJson` / `postJson` validate responses with zod                                 |
+| `src/infra/discord/send-paged-reply.ts` | `sendPagedEphemeralReply` for long listings, with isolated follow-up failures and a partial-result notice |
+| `src/core/regex-capture.ts`             | `requireCapture` to validate capture groups instead of casting potentially missing values                 |
+| `Command.validateBotConfig`             | Validate required per-bot configuration at registration; invalid commands are logged and skipped          |
 
-- **`src/infra/discord/options.ts`** — `getRequiredString` /
-  `getRequiredNumber` / `getOptionalString` / `getOptionalNumber` /
-  `getOptionalChoice`. Never write
-  `interaction.options.get('x')?.value as string`: that cast types a
-  missing option as a present `string`, so the failure surfaces far
-  from the read. Mirror the option's declared `required` flag — a
-  `getRequired*` on an absent option throws a `TypeError`, which the
-  handler's `replyForError` boundary turns into a trace-id-stamped
-  reply and an operator log line.
-- **`src/infra/http/`** — `boundedHttp` (an axios instance carrying a
-  request timeout, a response-size ceiling and a redirect cap) plus
-  `getJson` / `postJson`, which validate the body against a zod schema.
-  Bare `axios` has no default timeout, so an upstream that accepts the
-  connection and stalls leaves the deferred reply hanging for the life
-  of the process — and its `response.data` is `any`, so a changed
-  upstream shape surfaces as a `TypeError` somewhere far from the read.
-  Prefer the JSON helpers; keep the raw instance for non-JSON bodies.
-
-  Both of these live in `infra/`, not `handlers/`, because `handlers`
-  and `plugins` are **sibling** layers: neither may import the other,
-  and both may import `infra`. An ESLint rule enforces the
-  `plugins -> handlers` half.
-
-- **`src/infra/discord/send-paged-reply.ts`** —
-  `sendPagedEphemeralReply(interaction, pages, { logger, partialNotice })`
-  for a listing too long for Discord's 2000-character message limit. It
-  sends page 1 as the `editReply` and the rest as follow-ups, isolating
-  each one: a rejected page is logged and skipped, the remaining pages
-  still go out, and the gap is reported with one extra follow-up. Do not
-  hand-roll the loop — an unguarded `followUp` rejection escapes to the
-  handler's `catch`, where `replyForError` overwrites page 1 with the
-  error line and the user is left with no listing at all.
-
-- **`src/core/regex-capture.ts`** — `requireCapture(match, group)`.
-  Never write `match[1] as string`: under `noUncheckedIndexedAccess` a
-  capture group is `string | undefined`, and the cast turns a pattern
-  that later gains a `?` into an `undefined` flowing silently
-  downstream. It lives in `core/` rather than `infra/` because it
-  touches nothing but the standard library.
-
-- **`Command.validateBotConfig(botConfig)`** — implement it when the
-  handler needs a per-bot `config.json` block, and throw when the block
-  is missing or malformed. `registerCommands` calls it once per enabled
-  command, logs the failure with its cause, and skips just that
-  command, so a misconfiguration shows up in the boot log instead of a
-  puzzling reply. `weather_forecast` and `random_restaurant` are the
-  worked examples; each keeps its zod schema in a sibling `config.ts`.
+Handlers and plugins are sibling layers and must not import each other.
+Shared adapters belong in `infra/`. For command-specific config schemas, see
+`weather_forecast/config.ts` or `random_restaurant/config.ts`.
 
 ## Privacy-aware data commands
 
-A command that surfaces aggregated guild data (message counts,
-rankings, traffic) must not reveal activity from channels the invoker
-cannot see. The full pattern — dual filtering, audience-driven
-ceilings, fail-safe channel sets, neutral copy — is documented in
-[`docs/architecture.md` §Privacy-aware data commands](../architecture.md#privacy-aware-data-commands);
-follow it for any new command of this kind.
+Commands showing guild activity, rankings, or message counts must not reveal
+channels the invoker cannot see. Follow the
+[privacy rules](../architecture.md#privacy-aware-data-commands), including
+filtering both queries and results and respecting the reply audience.

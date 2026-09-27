@@ -14,8 +14,9 @@ in strict mode.
   reference, architectural rules, security reporting; links the
   step-by-step guides under [`docs/contributing/`](docs/contributing/)
   (local setup, command / plugin / model recipes, operations, branching)
-- [`README.md`](README.md) — feature tour and the `.env` / `config.json`
-  field reference
+- [`README.md`](README.md) — feature overview, quick start, and documentation index
+- [`docs/configuration.md`](docs/configuration.md) — `.env` / `config.json` reference
+- [`docs/upgrading.md`](docs/upgrading.md) — retired features and configuration migrations
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog; one entry per notable
   change, each linking its commit, written when a release is cut
 

@@ -1,90 +1,53 @@
 # Operations
 
-Part of the [contributing guide](../../CONTRIBUTING.md). Covers the
-pre-deploy smoke check and the dependency-override policy.
+Part of the [contributing guide](../../CONTRIBUTING.md). For service commands
+and rollback, use [deployment](deployment.md).
 
 ## Host migration
 
-The [migration tool runbook](../../tools/migration/README.md) owns host setup,
-database transfer, runtime validation and cutover instructions.
+The [migration runbook](../../tools/migration/README.md) owns host setup,
+database transfer, runtime validation, and cutover instructions.
 
 ## Recording removal rollout
 
-Recording is no longer supported. When upgrading a deployment that used
-`/record`, remove `record` from each affected bot's `config.json` commands
-list, stop the old process, and start the updated bot. Republish the affected
-bots' Discord command lists using the [command registration procedure](local-setup.md#registering-slash-commands)
-to remove the existing `/record` registration. Review its guild-command
-pruning behavior before deploying; updating source files alone does not
-change Discord registrations.
-
-Existing recordings under `data/voice_record` remain on disk. Bootstrap no
-longer installs FFmpeg; it does not uninstall FFmpeg from an existing host.
-Voice and stage channel text-message backups remain supported.
+Follow the [recording removal checklist](../upgrading.md#recording-removal-rollout)
+when upgrading an older deployment.
 
 ## Pre-deploy smoke
 
-`npm run smoke` is a boundary-only sanity check intended to run against a
-staging or production deployment **before** promoting a release. It
-needs a real bot `.env` (TOKEN + CLIENT_ID, plus MONGO_URI for bots
-that talk to Mongo) and live network access to Discord.
+The live smoke check requires a real bot `.env` and network access:
 
 ```bash
-npm run smoke                 # defaults to --bot nijika
+npm run smoke                     # defaults to nijika
 npm run smoke -- --bot konata
-npm run smoke -- -b msg-archive
 SMOKE_TIMEOUT_MS=60000 npm run smoke -- --bot tomori
 ```
 
-What the script verifies, in order:
+It validates environment values, runs authenticated MongoDB `admin.ping`
+when `MONGO_URI` is set, then logs in to Discord and verifies the ready user
+matches `CLIENT_ID`. Each step defaults to a 30-second timeout. Exit status
+is `0` for success or `1` with the failed step reported.
 
-1. **Env load** — runs the same zod-parsed `loadEnv()` the bot uses at
-   boot, so a missing or malformed value fails fast.
-2. **Mongo `admin.ping`** — only if `MONGO_URI` is present in the
-   loaded env. Confirms authentication and reachability without
-   touching any guild database.
-3. **Discord login + `clientReady`** — logs the bot in with TOKEN,
-   waits for the ready event, and asserts the bot's user id matches
-   `CLIENT_ID`.
-
-Each step is timeboxed (default 30 s, override via `SMOKE_TIMEOUT_MS`).
-The script does NOT register slash commands, start plugins, or open
-HTTP routes — keep it cheap so it can sit in front of every deploy.
-Exit status: `0` on full success, `1` on any failure (the failed step
-is printed to stderr).
+The check does not register commands, start plugins, or open HTTP routes;
+passing it does not establish application-level health. Run it before
+promoting a release, separately from CI.
 
 ## Dependency overrides
 
-`package.json` carries a single `overrides` entry:
-
-- **`undici: ^6.27.0`** — `discord.js` depends on `undici` at an exact
-  pin (`6.24.1`), which sits below the fix for the advisory `npm run security` reports. Because the pin is exact, nothing else in the tree
-  can lift it; the override is required. Re-verify it on every
-  `discord.js` bump: if the new release pins a version at or above the
-  override, drop the entry rather than leaving an override that no
-  longer does anything.
-
-An override that merely restates what the dependency's own range
-already permits is dead weight — it hides which overrides are
-load-bearing. Check with `npm explain <pkg>` before adding one.
+The `undici: ^6.27.0` override fixes the vulnerable exact version pinned by
+`discord.js`. Recheck it on every Discord dependency upgrade and remove it
+when the upstream version includes the fix. Use `npm explain <pkg>` before
+adding overrides; do not restate a version the dependency already permits.
 
 ## Database recovery
 
-After startup or guild onboarding exhausts its connection retries, transient
-network failures and timeouts are retried in the background. Configure
-`MONGO_RECOVERY_INTERVAL_MS` in the bot environment (default `60000`, positive
-integer no greater than `2147483647`). It controls the recovery polling interval
-and the per-guild cooldown after failed attempts. Passes do not overlap.
-Authentication, authorization and other persistent errors remain disabled;
-correct the cause and restart the bot.
+Transient connection failures and timeouts are retried in the background
+after startup/onboarding retries are exhausted. `MONGO_RECOVERY_INTERVAL_MS`
+controls polling and per-guild cooldown; see the
+[configuration reference](../configuration.md). Authentication, authorization,
+and other persistent failures require fixing the cause and restarting.
 
-Recovered repositories are attached before the guild database-ready plugin hook
-runs. Giveaway, activity and temporary-role jobs are rebuilt only for that guild;
-healthy guilds are not replayed. Shutdown cancels recovery and prevents in-flight
-attempts from publishing new repositories. Giveaway failures display the database
-error ID, which can be matched to the connection log.
-
-A refused TCP connection means the configured Mongo endpoint is not accepting
-connections. Restore the database service or network route first; restarting the
-bot alone cannot repair that failure. Deploy this recovery code and restart the
-bot once to activate it; later transient startup failures recover automatically.
+Recovery reattaches repositories and rebuilds guild-scoped jobs only for the
+recovered guild. Match the database error ID in giveaway failures to connection
+logs. A refused TCP connection requires restoring MongoDB or its network route;
+restarting the bot alone cannot fix it.
