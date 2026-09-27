@@ -3,3 +3,4 @@ channels:
   - nodefaults
 dependencies:
   - nodejs=22.13.0
+  - font-ttf-noto-cjk=2.004

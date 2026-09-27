@@ -154,7 +154,7 @@ export function makeRelease(root: string, config: DeploymentConfig, mongodbOnly:
         join(prefix, 'bin/node'),
         [
           '-e',
-          "require('canvas').createCanvas(1,1).toBuffer(); require('ts-node'); require('tsconfig-paths'); require('./src/i18n/locales/en/commands.json')",
+          "require('ts-node/register'); require('./src/infra/graphics/canvas-font').ensureCanvasFont(); require('tsconfig-paths'); require('./src/i18n/locales/en/commands.json')",
         ],
         { cwd: directory },
       );

@@ -9,7 +9,8 @@ CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-env.sh
 export PATH="$PWD/.conda/bin:$PATH"
 ```
 
-The application environment is defined by `environment.yml` (Node 22.13.0).
+The application environment is defined by `environment.yml` (Node 22.13.0
+and Noto Sans CJK TC).
 Setup installs npm 10.9.2 and rebuilds native dependencies with `npm ci` using
 `package-lock.json`. `BOTFLEET_CONDA_PREFIX` selects another absolute Conda prefix;
 otherwise scripts use the checkout's `.conda`. The runtime must have no
@@ -96,8 +97,8 @@ probes provide readiness rather than relying on unit ordering alone.
 Preparation does not start services or log into Discord. It validates the
 runtime and settings, checks types for bot releases, copies source and
 node_modules into `.deploy/releases/<id>`, verifies native canvas loading,
-and runs `systemd-analyze verify`. Review `manifest.json` and the generated
-units there. A normal deploy prepares a fresh release before switching.
+including Chinese glyph rendering, and runs `systemd-analyze verify`. Review
+`manifest.json` and the generated units there. A normal deploy prepares a fresh release before switching.
 
 Source and dependencies are copied, not hard-linked to the checkout. Local
 ignored files under `src` (including `.env` and `config.json`) are linked to

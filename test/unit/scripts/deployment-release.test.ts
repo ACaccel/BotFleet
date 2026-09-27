@@ -45,7 +45,12 @@ beforeEach(() => {
   file('scripts/mongo-ready.ts', 'export {};');
   file('scripts/deployment/mongo-probe.ts', 'export {};');
   file('node_modules/test-package/index.js', 'module.exports = 1;');
-  config = { user: 'operator', bots: ['tomori'], readinessTimeoutSeconds: 120 };
+  config = {
+    user: 'operator',
+    bots: ['tomori'],
+    runtimePrefix: join(root, '.conda'),
+    readinessTimeoutSeconds: 120,
+  };
   commands.run.mockReset();
   commands.run.mockImplementation((program: string, args: string[]) => {
     if (program.endsWith('/node') && args[0] === '--version') return 'v22.13.0';
@@ -74,6 +79,13 @@ describe('release preparation', () => {
       '{"language":"en"}',
     );
     expect(release.units['botfleet@tomori.service']).toContain(join(root, '.conda/bin/node'));
+    expect(
+      commands.run.mock.calls.some(([, args]) =>
+        args.includes(
+          "require('ts-node/register'); require('./src/infra/graphics/canvas-font').ensureCanvasFont(); require('tsconfig-paths'); require('./src/i18n/locales/en/commands.json')",
+        ),
+      ),
+    ).toBe(true);
   });
   it('rejects missing settings and removes the incomplete release', () => {
     rmSync(join(root, 'src/bot/tomori/config.json'));

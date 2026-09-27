@@ -61,6 +61,17 @@ describe('traffic chart renderers', () => {
     expect((att.attachment as Buffer).length).toBeGreaterThan(0);
   });
 
+  it('draws distinct Chinese glyphs in chart titles and labels', () => {
+    const chart = (title: string): Buffer =>
+      renderTimeSeriesChart(title, 'Messages', [{ label: '01', value: 1 }], 'time.png')
+        .attachment as Buffer;
+    const ranking = (label: string): Buffer =>
+      renderRankingBarChart('Channels', [{ label, value: 1 }], 1, 'channels.png')
+        .attachment as Buffer;
+    expect(chart('繁體').equals(chart('測試'))).toBe(false);
+    expect(ranking('繁體').equals(ranking('測試'))).toBe(false);
+  });
+
   it('tolerates empty ranking rows without throwing', () => {
     expect(() =>
       renderRankingBarChart('Top channels', [], 0, 'traffic-channels.png'),

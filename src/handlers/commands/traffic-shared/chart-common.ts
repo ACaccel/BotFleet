@@ -5,6 +5,7 @@
  */
 import { AttachmentBuilder } from 'discord.js';
 import { createCanvas, type Canvas, type CanvasRenderingContext2D } from 'canvas';
+import { canvasFont, ensureCanvasFont } from '../../../infra/graphics/canvas-font';
 
 export const TIME_CHART_FILE = 'traffic-time.png';
 export const CHANNELS_CHART_FILE = 'traffic-channels.png';
@@ -125,7 +126,7 @@ export const paintHeader = (
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = FG;
-  ctx.font = 'bold 18px sans-serif';
+  ctx.font = canvasFont(18, true);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(stripEmoji(title), 16, 30);
@@ -134,6 +135,7 @@ export const paintHeader = (
 export const newCanvas = (
   height: number,
 ): { readonly canvas: Canvas; readonly ctx: CanvasRenderingContext2D } => {
+  ensureCanvasFont();
   const canvas = createCanvas(WIDTH, height);
   return { canvas, ctx: canvas.getContext('2d') };
 };

@@ -4,6 +4,7 @@
  * and sparse x time labels. All axis text is passed in pre-translated.
  */
 import type { AttachmentBuilder } from 'discord.js';
+import { canvasFont } from '../../../infra/graphics/canvas-font';
 
 import {
   ACCENT_EDGE,
@@ -41,7 +42,7 @@ export const renderTimeSeriesChart = (
     points.length <= 1 ? PLOT_LEFT + plotW / 2 : PLOT_LEFT + (plotW * i) / (points.length - 1);
 
   // Dashed y-gridlines + integer tick labels.
-  ctx.font = '12px sans-serif';
+  ctx.font = canvasFont(12);
   ctx.textBaseline = 'middle';
   for (const tick of ticks) {
     const y = yOf(tick);
@@ -100,7 +101,7 @@ export const renderTimeSeriesChart = (
   ctx.lineTo(PLOT_RIGHT, PLOT_BOTTOM);
   ctx.stroke();
   ctx.fillStyle = MUTED;
-  ctx.font = '11px sans-serif';
+  ctx.font = canvasFont(11);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   const step = Math.max(1, Math.ceil(points.length / MAX_X_LABELS));

@@ -4,7 +4,8 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 
 ## Prerequisites
 
-- Conda / Miniforge; `environment.yml` supplies Node 22.13.0 and setup installs npm 10.9.2.
+- Conda / Miniforge; `environment.yml` supplies Node 22.13.0 and Noto Sans CJK TC,
+  and setup installs npm 10.9.2. Setup checks Canvas Chinese glyph rendering.
 - MongoDB for development (a hosted instance works; integration tests use an isolated `mongodb-memory-server`).
 
 ```bash

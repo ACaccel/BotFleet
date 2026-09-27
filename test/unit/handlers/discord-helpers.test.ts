@@ -122,6 +122,18 @@ describe('listInOneImage', () => {
     expect(attachment?.name).toBe('listInOneImage.png');
   });
 
+  it('draws distinct Chinese glyphs in image captions', async () => {
+    axiosGetMock.mockRejectedValue(new Error('404'));
+    const render = async (text: string): Promise<Buffer> => {
+      const attachment = await listInOneImage([{ url: 'https://example.test/missing.png', text }]);
+      return attachment?.attachment as Buffer;
+    };
+
+    const first = await render('繁體');
+    const second = await render('測試');
+    expect(first.equals(second)).toBe(false);
+  });
+
   it('draws a placeholder when an image download fails', async () => {
     axiosGetMock.mockRejectedValue(new Error('404'));
 

@@ -95,21 +95,55 @@ npm run register
 
 Install Conda (for example Miniforge), then run `bash scripts/setup-env.sh`
 with `CONDA_EXE` pointing to its executable. The project environment is
-`.conda/`, defined by [environment.yml](environment.yml), with Node 22 and
-npm 10.9.2. Package scripts select it explicitly; `conda activate` is optional.
+`.conda/`, defined by [environment.yml](environment.yml), with Node 22,
+Noto Sans CJK TC for generated images, and npm 10.9.2. Package scripts
+select it explicitly; `conda activate` is optional.
 Use `npm run install-lock` for dependency installation through that runtime.
 `BOTFLEET_CONDA_PREFIX` can select another absolute prefix with the same
 versions and no unhandled activation hooks. Setup refuses runtime changes
 while a managed bot deployment exists.
 
 For automatic startup after reboot, configure `deployment.json` from
-[deployment.example.json](deployment.example.json), then use
-`npm run deploy:prepare`, `npm run deploy`, and `npm run undeploy`. Each bot has an
-independent systemd service. MongoDB has a separate runtime and service;
-bot deployment never removes its data. See the [deployment guide](docs/contributing/deployment.md)
-for initial cutover, database setup, rollback, and service commands.
+[deployment.example.json](deployment.example.json). Each bot has an independent
+systemd service. MongoDB has a separate runtime and service; bot deployment
+never removes its data.
 
-`npm run register` registers Discord commands; `npm run deploy` now manages
+### Common deployment commands
+
+Run these commands as the configured ordinary service user from the repository
+root. Put the project runtime on `PATH` first:
+
+```bash
+export PATH="$PWD/.conda/bin:$PATH"
+```
+
+For a normal code update, deploy directly. Deployment prepares a fresh
+release and checks service readiness. The status command below uses `tomori`
+as an example; check each bot listed in `deployment.json`:
+
+```bash
+npm run deploy
+systemctl is-active botfleet@tomori.service
+```
+
+Run `npm run deploy:prepare` first when you want to inspect a release without
+switching services.
+
+When `environment.yml` or the Conda runtime changes, remove the managed bot
+services before updating it. This sequence causes bot downtime; the separate
+MongoDB service remains running:
+
+```bash
+npm run undeploy
+CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-env.sh
+npm run deploy
+```
+
+If a deployment was interrupted, run `npm run deploy:recover` before retrying.
+See the [deployment guide](docs/contributing/deployment.md) for initial cutover,
+database setup, rollback, service logs, and recovery details.
+
+`npm run register` registers Discord commands; `npm run deploy` manages
 system services. Pass registration arguments after `--`, for example
 `npm run register -- -t nijika`. Service deployment does not register commands.
 

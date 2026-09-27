@@ -5,6 +5,7 @@
  * pre-translated; percentages are relative to `total` (visible messages).
  */
 import type { AttachmentBuilder } from 'discord.js';
+import { canvasFont } from '../../../infra/graphics/canvas-font';
 
 import {
   ACCENT,
@@ -49,7 +50,7 @@ export const renderRankingBarChart = (
     const midY = barY + barH / 2;
 
     ctx.fillStyle = FG;
-    ctx.font = '14px sans-serif';
+    ctx.font = canvasFont(14);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(truncate(stripEmoji(row.label), MAX_LABEL_CHARS), 16, midY);
@@ -68,7 +69,7 @@ export const renderRankingBarChart = (
 
     const pct = total > 0 ? ((row.value / total) * 100).toFixed(1) : '0.0';
     ctx.fillStyle = MUTED;
-    ctx.font = '13px sans-serif';
+    ctx.font = canvasFont(13);
     ctx.textAlign = 'left';
     ctx.fillText(`${row.value}  (${pct}%)`, barLeft + barMax + 10, midY);
   });

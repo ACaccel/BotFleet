@@ -27,4 +27,4 @@ cd "$project_root"
 "$project_prefix/bin/node" "$project_prefix/lib/node_modules/npm/bin/npm-cli.js" install --global --prefix "$project_prefix" npm@10.9.2 --no-audit --no-fund
 # A clean install rebuilds native dependencies for the selected runtime.
 "$project_prefix/bin/node" scripts/runtime.mjs exec npm ci
-"$project_prefix/bin/node" scripts/runtime.mjs exec node -e 'require("canvas").createCanvas(1, 1).toBuffer()'
+"$project_prefix/bin/node" scripts/runtime.mjs exec node -r ts-node/register -e 'require("./src/infra/graphics/canvas-font").ensureCanvasFont()'

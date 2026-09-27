@@ -5,6 +5,7 @@ import { createCanvas, loadImage } from 'canvas';
 import schedule from 'node-schedule';
 import type { Job } from 'node-schedule';
 import type { Logger } from '@core/logger';
+import { canvasFont, ensureCanvasFont } from '../../infra/graphics/canvas-font';
 
 import { boundedHttp } from '../../infra/http';
 
@@ -118,6 +119,7 @@ export const listInOneImage = async (
   options?: Partial<CanvasOptions>,
 ): Promise<AttachmentBuilder | null> => {
   if (content.length === 0) return null;
+  ensureCanvasFont();
 
   const { itemsPerRow, itemSize, padding, textHeight } = {
     ...DEFAULT_CANVAS_OPTIONS,
@@ -155,7 +157,7 @@ export const listInOneImage = async (
       ctx.fillRect(x, y, itemSize, itemSize);
     }
     ctx.fillStyle = '#ffffff';
-    ctx.font = '16px sans-serif';
+    ctx.font = canvasFont(16);
     ctx.textAlign = 'center';
     ctx.fillText(text, x + itemSize / 2, y + itemSize + 20);
   }

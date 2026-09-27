@@ -384,7 +384,12 @@ not a fourth copy of the filter.
    choices read "Only you" / "Everyone", not "your full clearance
    view"), so a low-clearance user cannot infer higher-clearance
    channels from the wording.
-7. **Split emoji by surface.** The chart font has no emoji glyphs, so
+7. **Use a bundled runtime font for generated images.** The Conda runtime
+   includes Noto Sans CJK TC, registered by `infra/graphics/canvas-font`
+   before Canvas draws traffic charts or sticker captions. Setup and release
+   preparation verify that distinct Chinese glyphs render; a missing font
+   stops preparation with an actionable error.
+8. **Split emoji by surface.** The chart font has no emoji glyphs, so
    `stripEmoji` (`traffic-shared/chart-common`) removes them from every
    canvas label and header, falling back to the original when stripping
    would empty the label. Discord-native **embed** text keeps its
