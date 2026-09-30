@@ -112,6 +112,20 @@ Failures produce an empty response and an operator log. Other handler errors rea
 the router boundary, which maps domain errors into translated ephemeral replies.
 Shared option parsing, error replies and paginated delivery live in `infra/discord`.
 
+## Temporary moderation and automatic replies
+
+When `/ban_user` falls back to deleting messages, its listener runs before
+plugin message dispatch and synchronously marks each matching message to suppress
+automatic replies. The `auto-reply` and `llm-auto-reply` plugins check that shared
+marker before processing triggers or LLM requests. Suppression does
+not wait for deletion to succeed, so a slow or failed Discord deletion cannot
+trigger a reply. The listener checks the expiration time on each message, even
+if timer cleanup is delayed.
+
+The fallback belongs to the invoking bot client and target guild. See
+[temporary moderation](contributing/operations.md#temporary-moderation) for
+operator behavior and restart limitations.
+
 ## Persistence and external services
 
 [Repositories](../src/persistence/repositories/) expose interfaces backed by

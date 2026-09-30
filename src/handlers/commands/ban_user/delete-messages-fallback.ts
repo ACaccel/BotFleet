@@ -12,6 +12,7 @@ import type { Client, Message } from 'discord.js';
 import { Events } from 'discord.js';
 
 import { logError, type Logger } from '@core/logger';
+import { suppressAutoReplies } from '../../../infra/discord/suppressed-auto-replies';
 
 interface MessageDeletionFallbackInput {
   readonly client: Client;
@@ -26,12 +27,15 @@ interface MessageDeletionFallbackInput {
 
 /** Open the deletion window. Returns once the listener is attached. */
 export const startMessageDeletionFallback = (input: MessageDeletionFallbackInput): void => {
+  const expiresAt = Date.now() + input.durationMs;
   const deleteListener = async (msg: Message): Promise<void> => {
     if (
+      Date.now() < expiresAt &&
       !msg.author.bot &&
       msg.author?.id === input.targetMemberId &&
       msg.guild?.id === input.guildId
     ) {
+      suppressAutoReplies(msg);
       try {
         await msg.delete();
       } catch (err) {
@@ -39,7 +43,8 @@ export const startMessageDeletionFallback = (input: MessageDeletionFallbackInput
       }
     }
   };
-  input.client.on(Events.MessageCreate, deleteListener);
+  // Mark before existing plugin listeners, without waiting for Discord deletion.
+  input.client.prependListener(Events.MessageCreate, deleteListener);
 
   const removal = setTimeout(() => {
     input.client.off(Events.MessageCreate, deleteListener);

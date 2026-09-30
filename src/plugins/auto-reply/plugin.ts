@@ -21,6 +21,7 @@
  * subscription closes over it, so a message event costs no container
  * lookup.
  */
+import { areAutoRepliesSuppressed } from '../../infra/discord/suppressed-auto-replies';
 import { TOKENS } from '../../bot/tokens';
 import type { GuildRegistry } from '../../bot/guild-registry';
 import type { Logger } from '../../core/logger';
@@ -116,6 +117,7 @@ export const createAutoReplyPlugin = (rawConfig?: unknown): Plugin => {
 
     events: {
       messageCreate: async (ctx, message): Promise<void> => {
+        if (areAutoRepliesSuppressed(message)) return;
         const registry = registryOf();
         // Logger is already bound to `{ plugin: 'auto-reply' }` by the host.
         const logger = ctx.logger;

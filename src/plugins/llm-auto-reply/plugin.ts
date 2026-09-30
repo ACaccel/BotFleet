@@ -19,6 +19,7 @@
  * tests, and the host's `blockedChannels` list so blocked channels never
  * trigger.
  */
+import { areAutoRepliesSuppressed } from '../../infra/discord/suppressed-auto-replies';
 import { logError } from '../../core/logger';
 import type { Plugin } from '../../core/plugin';
 import { SelfHostedLlmClient } from '../../infra/llm';
@@ -90,6 +91,7 @@ export const createLlmAutoReplyPlugin = (
 
     events: {
       messageCreate: async (ctx, message): Promise<void> => {
+        if (areAutoRepliesSuppressed(message)) return;
         if (!config.enabled) return;
         if (message.author.bot) return; // self-loop + bot-feedback guard
         if (message.guildId === null) return; // guild-only

@@ -12,6 +12,7 @@ Each bot runs independently and selects features from a shared plugin system.
 - Slash commands and interactive components, with English and Traditional Chinese replies.
 - LLM chat through OpenAI, Anthropic, Gemini and xAI, plus self-hosted auto-replies.
 - Message archives, activity reports, giveaways and temporary roles.
+- [Temporary moderation](docs/contributing/operations.md#temporary-moderation) with automatic reply suppression.
 - Social-link previews and channel subscriptions to social feeds.
 - Earthquake notifications and plugin-owned scheduled jobs.
 

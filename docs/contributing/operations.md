@@ -32,6 +32,20 @@ The check does not register commands, start plugins, or open HTTP routes;
 passing it does not establish application-level health. Run it before
 promoting a release, separately from CI.
 
+## Temporary moderation
+
+`/ban_user` attempts a Discord timeout after a successful vote. If Discord rejects
+the timeout, including for an administrator, the bot deletes the target's messages
+for the requested duration and suppresses its automatic replies to those messages.
+This covers both configured auto-replies and self-hosted LLM auto-replies, even
+when deleting a message fails. Replies become eligible again when the duration
+expires.
+
+The fallback applies only to the target user in the command's guild and to the
+bot that handled the command. Other bot processes do not share the restriction.
+Fallback state is held in memory; restarting that bot ends the deletion and
+auto-reply restriction early. Native Discord timeouts remain managed by Discord.
+
 ## Dependency overrides
 
 The `undici: ^6.27.0` override fixes the vulnerable exact version pinned by

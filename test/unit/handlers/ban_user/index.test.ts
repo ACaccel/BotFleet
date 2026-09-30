@@ -53,7 +53,7 @@ const build = (fixture: Fixture) => {
   const clientListeners = new Map<string, unknown>();
   const { bot, logger } = buildFakeBot({
     client: {
-      on: (event: string, fn: unknown) => clientListeners.set(event, fn),
+      prependListener: (event: string, fn: unknown) => clientListeners.set(event, fn),
       off: (event: string) => clientListeners.delete(event),
     },
     getGuildInfo: () => ({ roles: { ban_user: { id: 'role-1' } } }),
