@@ -21,6 +21,11 @@ fi
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
+# Tests create temporary repositories; inherited hook variables must not redirect them here.
+for git_local_var in $(git rev-parse --local-env-vars); do
+  unset "$git_local_var"
+done
+
 if [ "$dev_oid" != "$(git rev-parse HEAD)" ]; then
   echo 'Push the checked-out HEAD to dev so the local gates verify the pushed commit.' >&2
   exit 1

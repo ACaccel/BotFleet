@@ -34,6 +34,9 @@ whitespace, `commit-msg` checks the [commit convention](branching-and-releases.m
 and `pre-push` runs the full [quality gates](../../CONTRIBUTING.md#quality-gates)
 for a clean, checked-out commit pushed to `dev`. Confirm GitHub CI after pushing.
 
+The push hook clears repository-local Git environment variables before running
+gates so tests can create isolated repositories without changing this checkout.
+
 ## Dependency analysis
 
 `npm run knip` uses Knip 6. Its configuration declares `systemd-analyze` and
