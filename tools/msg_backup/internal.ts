@@ -524,7 +524,7 @@ interface ThreadLike {
 }
 
 /** One archived-thread page, mirroring discord.js `FetchedThreadsMore`. */
-export interface ArchivedThreadPage<T> {
+interface ArchivedThreadPage<T> {
   readonly threads: Iterable<T>;
   /** Discord's authoritative "more pages remain" flag. */
   readonly hasMore: boolean;
@@ -690,7 +690,7 @@ export const enumerateChannelThreads = async <T extends ThreadLike>(
 // wiring is unit-testable without a live Discord connection.
 
 /** A discord.js collection-ish page: iterate values via `.values()`. */
-export interface RawThreadCollection<T> {
+interface RawThreadCollection<T> {
   values(): IterableIterator<T>;
 }
 

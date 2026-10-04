@@ -34,6 +34,14 @@ whitespace, `commit-msg` checks the [commit convention](branching-and-releases.m
 and `pre-push` runs the full [quality gates](../../CONTRIBUTING.md#quality-gates)
 for a clean, checked-out commit pushed to `dev`. Confirm GitHub CI after pushing.
 
+## Dependency analysis
+
+`npm run knip` uses Knip 6. Its configuration declares `systemd-analyze` and
+`mkfifo` as host-provided test utilities, not npm dependencies. Keep the schema
+major aligned with the installed tool; Knip 6 no longer supports the
+`classMembers` rule. Helper types used only within their defining module stay
+unexported; exported interfaces still expose their structural member types.
+
 ## Per-personality configuration
 
 ```bash

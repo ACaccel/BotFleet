@@ -1,5 +1,5 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "scripts/*.ts",
     "src/register.ts",
@@ -22,6 +22,7 @@
     "@core/*": ["src/core/*"],
     "@plugins": ["src/plugins/index.ts"]
   },
+  "ignoreBinaries": ["systemd-analyze", "mkfifo"],
   "ignoreDependencies": ["tsconfig-paths", "ts-node", "audit-ci", "prettier"],
   "ignore": [
     "src/persistence/index.ts",
@@ -51,7 +52,6 @@
     "types": "error",
     "nsExports": "error",
     "nsTypes": "error",
-    "enumMembers": "error",
-    "classMembers": "warn"
+    "enumMembers": "error"
   }
 }

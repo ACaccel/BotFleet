@@ -22,5 +22,4 @@ export {
   type ServiceToken,
   type Resolver,
   type ServiceContainer,
-  type ServiceFactory,
 } from './container';

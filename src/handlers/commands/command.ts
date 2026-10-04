@@ -64,7 +64,7 @@ export interface CommandConfig {
   };
 }
 
-export interface CommandOption {
+interface CommandOption {
   name: string;
   /** Resolved from `commands:<cmd>.options.<name>.description`. */
   description?: string;
@@ -122,7 +122,7 @@ export interface LocalizedCommandOption extends CommandOption {
 }
 
 /** A {@link CommandChoice} with its display label resolved. */
-export interface LocalizedCommandChoice extends CommandChoice {
+interface LocalizedCommandChoice extends CommandChoice {
   name: string;
 }
 

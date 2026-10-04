@@ -40,7 +40,7 @@ import { DatabaseError } from '../../core/errors/external-service-error';
 import { databaseErrorFrom, isTransient } from '../../persistence/error-translator';
 
 /** Typed model registry for one guild connection. */
-export type Models = {
+type Models = {
   readonly [K in SchemaName]: Model<DocByName[K]>;
 };
 

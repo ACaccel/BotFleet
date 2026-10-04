@@ -69,7 +69,7 @@ export interface Resolver {
   tryResolve<T>(t: ServiceToken<T>): T | undefined;
 }
 
-export type ServiceFactory<T> = (resolver: Resolver) => T;
+type ServiceFactory<T> = (resolver: Resolver) => T;
 
 /**
  * Register-and-resolve container. Owned by composition roots. The
