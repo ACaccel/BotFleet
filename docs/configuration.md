@@ -80,6 +80,13 @@ Start from the example configuration, then maintain these third-party hosts as
 availability changes. Hosts are tried in order; put responsive hosts first and
 keep lists short. Redirects back to the source site are skipped.
 
+`social_link_preview.allowedBotIds` is an array of Discord bot user ID strings,
+defaulting to `[]`. Add a source bot's user ID to let its links trigger previews;
+for example, put gopher's user ID in nijika's allow list to preview gopher's links.
+Other bot messages are ignored, and the preview bot always ignores its own messages,
+even if its ID is listed. Allowed bot messages still require enabled previews and
+must pass the existing guild, channel privacy and Discord permission checks.
+
 Feed configuration controls platforms and polling, while subscriptions live in
 each guild's database. `/feed_subscribe`, `/feed_unsubscribe` and `/feed_list`
 manage them without a restart:

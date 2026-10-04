@@ -53,11 +53,33 @@ describe('parseSocialLinkPreviewConfig', () => {
     expect(config.maxUrlsPerMessage).toBe(1);
     expect(config.timeoutMs).toBe(4000);
     expect(config.providers).toBeUndefined();
+    expect(config.allowedBotIds).toEqual([]);
     // No host list is invented in code: a disabled feature probes nothing.
     for (const key of PROXY_HOST_KEYS) {
       expect(config[key]).toBeUndefined();
     }
   });
+
+  it.each([false, true])('accepts bot IDs when enabled is %s', (enabled) => {
+    const allowedBotIds = ['111111111111111111', '222222222222222222'];
+    expect(
+      parseSocialLinkPreviewConfig({ enabled, ...proxyHosts(), allowedBotIds }).allowedBotIds,
+    ).toEqual(allowedBotIds);
+  });
+
+  it.each(['gopher', '', '123', '1'.repeat(21), ' 111111111111111111', 123])(
+    'rejects an invalid bot ID: %s',
+    (id) => {
+      expect(issuePaths(parseFailure({ allowedBotIds: [id] }))).toContain('allowedBotIds.0');
+    },
+  );
+
+  it.each([null, '111111111111111111', {}])(
+    'rejects a non-array bot allow-list: %j',
+    (allowedBotIds) => {
+      expect(issuePaths(parseFailure({ allowedBotIds }))).toContain('allowedBotIds');
+    },
+  );
 
   it('accepts an explicitly disabled block with no host lists at all', () => {
     const config = parseSocialLinkPreviewConfig({ enabled: false, maxUrlsPerMessage: 3 });

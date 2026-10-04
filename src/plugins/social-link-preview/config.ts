@@ -42,6 +42,12 @@ const proxyHostList = (key: string): z.ZodArray<z.ZodString, 'atleastone'> =>
 
 /** Fields shared by both branches; all defaulted, none operator-mandatory. */
 const commonShape = {
+  /** Other bots whose messages may trigger previews; self messages are always ignored. */
+  allowedBotIds: z
+    .array(
+      z.string().regex(/^\d{17,20}$/, 'allowedBotIds must contain Discord user IDs (17-20 digits)'),
+    )
+    .default([]),
   /**
    * What to do with the user's original message once a preview is posted:
    *   - `suppress`: hide its auto-generated embed (needs ManageMessages);

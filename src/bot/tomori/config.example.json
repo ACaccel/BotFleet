@@ -20,6 +20,7 @@
   },
   "social_link_preview": {
     "enabled": false,
+    "allowedBotIds": [],
     "originalMessageStrategy": "suppress",
     "providers": ["twitter", "instagram", "threads", "facebook", "reddit", "bahamut", "bilibili"],
     "timeoutMs": 4000,

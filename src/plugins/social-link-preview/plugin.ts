@@ -50,6 +50,7 @@ export const createSocialLinkPreviewPlugin = (
   deps: CreateSocialLinkPreviewDeps = {},
 ): Plugin => {
   const config = parseSocialLinkPreviewConfig(rawConfig);
+  const allowedBotIds = new Set(config.allowedBotIds);
   const registry =
     deps.registry ??
     (config.enabled
@@ -91,7 +92,9 @@ export const createSocialLinkPreviewPlugin = (
         // both halves are checked because nothing ties them together at
         // this point beyond how the factory built them.
         if (!config.enabled || registry === undefined) return;
-        if (message.author.bot) return; // self-loop + bot-feedback guard
+        // Never preview our own output, even if this bot is accidentally allow-listed.
+        if (message.author.id === message.client.user.id) return;
+        if (message.author.bot && !allowedBotIds.has(message.author.id)) return;
         if (message.guildId === null) return; // guild-only
         // Channels above the social_preview rank ceiling are suppressed.
         // Default ceiling is unbounded, so this is a no-op unless an operator

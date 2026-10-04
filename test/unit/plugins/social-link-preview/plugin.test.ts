@@ -103,6 +103,7 @@ const makeRegistry = (): {
 interface MsgOpts {
   readonly content?: string;
   readonly bot?: boolean;
+  readonly authorId?: string;
   readonly guildId?: string | null;
   readonly channelId?: string;
   readonly sendable?: boolean;
@@ -114,7 +115,8 @@ interface MsgOpts {
 const makeMessage = (opts: MsgOpts = {}): Message =>
   ({
     content: opts.content ?? 'see https://x.com/a/status/1',
-    author: { bot: opts.bot ?? false },
+    author: { bot: opts.bot ?? false, id: opts.authorId ?? '111111111111111111' },
+    client: { user: { id: '222222222222222222' } },
     guildId: opts.guildId === undefined ? 'g1' : opts.guildId,
     channelId: opts.channelId ?? 'c1',
     channel: { isSendable: () => opts.sendable ?? true, parentId: opts.parentId ?? null },
@@ -221,6 +223,75 @@ describe('createSocialLinkPreviewPlugin guards', () => {
     await fire(enabledConfig(), makeMessage({ bot: true }), { registry });
     expect(findProvider).not.toHaveBeenCalled();
   });
+
+  it('posts a preview for an allow-listed bot', async () => {
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const build = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { kind: 'rewritten-url', url: 'https://proxy.example/a/status/1' },
+    });
+    const registry = {
+      findProvider: vi.fn(() => ({ build })),
+    } as unknown as LinkPreviewProviderRegistry;
+    const message = { ...makeMessage({ bot: true }), reply } as unknown as Message;
+
+    await fire(
+      enabledConfig({ allowedBotIds: ['111111111111111111'], originalMessageStrategy: 'leave' }),
+      message,
+      { registry },
+    );
+
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(reply).toHaveBeenCalledWith({
+      content: 'https://proxy.example/a/status/1',
+      allowedMentions: { parse: [] },
+    });
+  });
+
+  it('skips a bot absent from a nonempty allow-list', async () => {
+    const { registry, findProvider } = makeRegistry();
+    await fire(
+      enabledConfig({ allowedBotIds: ['333333333333333333'] }),
+      makeMessage({ bot: true }),
+      { registry },
+    );
+    expect(findProvider).not.toHaveBeenCalled();
+  });
+
+  it('skips its own messages even when allow-listed', async () => {
+    const { registry, findProvider } = makeRegistry();
+    await fire(
+      enabledConfig({ allowedBotIds: ['222222222222222222'] }),
+      makeMessage({ bot: true, authorId: '222222222222222222' }),
+      { registry },
+    );
+    expect(findProvider).not.toHaveBeenCalled();
+  });
+
+  it('continues to preview human messages with a nonempty bot allow-list', async () => {
+    const { registry, findProvider } = makeRegistry();
+    await fire(enabledConfig({ allowedBotIds: ['333333333333333333'] }), makeMessage(), {
+      registry,
+    });
+    expect(findProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([{ guildId: null }, { channelId: 'c-secret' }, { sendable: false }])(
+    'retains other guards for allow-listed bots: %j',
+    async (opts) => {
+      const { registry, findProvider } = makeRegistry();
+      const policy = createPermissionRankPolicy({
+        g1: { channels: { 'c-secret': 1 }, features: { social_preview: { maxChannelRank: 0 } } },
+      });
+      await fire(
+        enabledConfig({ allowedBotIds: ['111111111111111111'] }),
+        makeMessage({ ...opts, bot: true }),
+        { registry },
+        policy,
+      );
+      expect(findProvider).not.toHaveBeenCalled();
+    },
+  );
 
   it('skips direct messages (no guild)', async () => {
     const { registry, findProvider } = makeRegistry();
