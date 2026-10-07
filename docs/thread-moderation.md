@@ -5,9 +5,9 @@ posts. In the current thread, its creator (`ownerId`), an approved delegated
 manager, or a user listed in Nijika's `config.admin` can run:
 
 ```text
-/thread_ban users:@Alice @Bob
-/thread_allow users:@Alice @Bob
-/thread_list
+/thread ban users:@Alice @Bob
+/thread allow users:@Alice @Bob
+/thread list
 ```
 
 `users` accepts user mentions or Discord user IDs separated by whitespace or
@@ -18,7 +18,7 @@ members; allow also works after a member leaves. Owners, delegated managers, con
 bots cannot be banned. Discord's Administrator permission alone does not grant
 access to these commands. Responses are private and do not ping targets.
 
-`/thread_list` shows the current bot's saved ban list for this thread, including
+`/thread list` shows the current bot's saved ban list for this thread, including
 members who have left the guild. It uses the same owner/admin/delegate authorization and
 does not require message-deletion permissions. Results include user mentions and
 IDs, ordered by ID, with 20 users per page. Use **Previous**, **Next** and
@@ -61,7 +61,7 @@ responses before deletion. Responses without reliable origin information remain.
 A replacement account can request management from any accessible guild channel:
 
 ```text
-/thread_claim thread:<thread> reason:<explanation>
+/thread claim thread:<thread> reason:<explanation>
 ```
 
 The applicant must still be a guild member and able to view the target thread;
@@ -94,10 +94,10 @@ thread is allowed; submissions for that thread are at least one minute apart.
 An admin can manage delegates directly:
 
 ```text
-/thread_manager add thread:<thread> user:@Replacement
-/thread_manager remove thread:<thread> user:@Replacement
-/thread_manager list thread:<thread>
-/thread_manager list thread:<thread> page:2
+/thread manager add thread:<thread> user:@Replacement
+/thread manager remove thread:<thread> user:@Replacement
+/thread manager list thread:<thread>
+/thread manager list thread:<thread> page:2
 ```
 
 These commands are admin-only; owners and delegates cannot delegate further.
@@ -114,7 +114,7 @@ Nijika's configuration example enables the feature:
 ```json
 {
   "thread_moderation": { "enabled": true },
-  "commands": ["thread_ban", "thread_allow", "thread_list", "thread_claim", "thread_manager"]
+  "commands": ["thread"]
 }
 ```
 

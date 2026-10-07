@@ -102,15 +102,8 @@ describe('MongoConnectionManager (integration)', () => {
   });
 
   it('tolerates model.init() rejection and still returns a usable connection', async () => {
-    // Trigger a real `model.init()` failure by pre-seeding two docs
-    // that violate `Message.messageId`'s unique index. When the
-    // manager later opens this guild's database, its `m.init()` call
-    // for the `Message` model will fail building the unique index.
-    //
-    // The phase-7 contract: the manager logs the rejection to stderr
-    // but still returns the (cached) `GuildConnection` so DB commands
-    // for that guild keep working — operators fix the data / index
-    // issue out-of-band; the bot does not block on it.
+    // Non-archive models retain best-effort initialization. Archive readers
+    // must not attempt to repair legacy duplicates or create archive indexes.
     const baseUri = requireMongoUri().replace(/[^/]*$/, '');
     const tolerateGuildId = asGuildId('333333333333333333');
     const seedUri = buildGuildMongoUri(baseUri, tolerateGuildId);
@@ -121,6 +114,7 @@ describe('MongoConnectionManager (integration)', () => {
         { messageId: 'collide', timestamp: 1 },
         { messageId: 'collide', timestamp: 2 },
       ]);
+      await seed.collection('userapisettings').insertMany([{ userId: 'same' }, { userId: 'same' }]);
     } finally {
       await seed.close();
     }
@@ -154,7 +148,13 @@ describe('MongoConnectionManager (integration)', () => {
       // hotfix bakes the model name into the line.
       const failureLine = captured.find((line) => line.includes('model.init() failed'));
       expect(failureLine).toBeDefined();
-      expect(failureLine).toMatch(/model\.init\(\) failed for Message on guild /);
+      expect(failureLine).toMatch(/model\.init\(\) failed for UserApiSetting on guild /);
+      expect(captured.some((line) => line.includes('failed for Message'))).toBe(false);
+      expect(await guildConn.models.Message.collection.countDocuments()).toBe(2);
+      expect(
+        (await guildConn.models.Message.collection.indexes()).map((index) => index.name),
+      ).toEqual(['_id_']);
+      expect(guildConn.archiveOwner).toBeUndefined();
     } finally {
       process.stderr.write = stderrWrite;
       await mgr.closeAll();

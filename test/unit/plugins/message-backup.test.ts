@@ -1,233 +1,208 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { createLogger } from '../../../src/core/logger';
-import { TOKENS } from '../../../src/bot/tokens';
-import type { PluginRuntimeContext } from '../../../src/core/plugin';
+import type { PluginInitContext, PluginRuntimeContext } from '../../../src/core/plugin';
 import { createMessageBackupPlugin } from '../../../src/plugins/message-backup';
-import { performBackup } from '../../../src/plugins/message-backup/internal';
+import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
+import { createLogger } from '../../../src/core/logger';
 
-// Replace the heavy internal backup implementation with a controllable
-// spy so the loop-resilience tests can force a pass to throw without
-// touching Discord or Mongo. `vi.mock` is hoisted above the imports by
-// vitest, so the spy is registered before the plugin module loads.
-vi.mock('../../../src/plugins/message-backup/internal', () => ({
-  performBackup: vi.fn(),
+const fake = vi.hoisted(() => ({
+  pollJobs: vi.fn(),
+  scheduledPeriodic: vi.fn(),
+  capture: vi.fn(),
+  markGap: vi.fn(),
+  cancel: vi.fn(),
+  stop: vi.fn(),
 }));
+vi.mock('../../../src/plugins/message-backup/runtime/worker', () => ({
+  ArchiveWorker: vi.fn(function () {
+    return fake;
+  }),
+}));
+const context = () =>
+  ({
+    resolve: () => ({}),
+    logger: createLogger({ level: 'silent', pretty: false }),
+    translator: { t: (key: string) => key },
+  }) as unknown as PluginInitContext;
 
-describe('createMessageBackupPlugin', () => {
-  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648])(
-    'rejects a non-positive, non-finite, or over-ceiling `backupIntervalMs` (%s)',
-    (bad) => {
-      expect(() =>
-        createMessageBackupPlugin({ backupServers: ['1'], backupIntervalMs: bad }),
-      ).toThrow(TypeError);
-    },
-  );
-
-  it('accepts `backupIntervalMs` exactly at Node’s timer ceiling', () => {
-    const p = createMessageBackupPlugin({ backupServers: ['1'], backupIntervalMs: 2_147_483_647 });
-    expect(p.id).toBe('message-backup');
-  });
-});
-
-describe('createMessageBackupPlugin onReady loop resilience', () => {
-  const mockedPerformBackup = vi.mocked(performBackup);
-
-  const buildCtx = (): PluginRuntimeContext =>
-    ({
-      logger: createLogger({ level: 'silent', pretty: false }),
-      // onReady resolves only the registry + client; both are unused
-      // because performBackup is mocked, so a stub satisfies the seam.
-      resolve: (token: unknown) => (token === TOKENS.GuildRegistry ? {} : {}),
-    }) as unknown as PluginRuntimeContext;
-
+describe('message archive lifecycle', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    mockedPerformBackup.mockReset();
+    for (const value of Object.values(fake)) value.mockReset().mockResolvedValue(undefined);
   });
-
   afterEach(() => {
     vi.useRealTimers();
   });
-
-  it('reports ready during the first pass and schedules repeats only after it completes', async () => {
-    let finish: () => void = () => {};
-    mockedPerformBackup
-      .mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            finish = resolve;
-          }),
-      )
-      .mockResolvedValue(undefined);
-    const plugin = createMessageBackupPlugin({ backupServers: ['g1'], backupIntervalMs: 1000 });
-    const ctx = buildCtx();
-
-    await plugin.onReady!(ctx);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
-
-    finish();
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(999);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(2);
-    await plugin.onShutdown!(ctx);
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(2);
+  it.each([0, -1, NaN, Infinity, 2_147_483_648])('rejects invalid interval %s', (interval) => {
+    expect(() =>
+      createMessageBackupPlugin({ backupServers: ['1'], backupIntervalMs: interval }),
+    ).toThrow();
   });
-
-  it('does not start another guild or repeat after shutdown during the initial pass', async () => {
-    let finish: () => void = () => {};
-    mockedPerformBackup.mockImplementationOnce(
+  it('rejects invalid policy/runtime instead of silently ignoring it', () => {
+    expect(() =>
+      createMessageBackupPlugin({ backupServers: ['1'], runtime: { concurrency: 0 } }),
+    ).toThrow();
+    expect(() =>
+      createMessageBackupPlugin({ backupServers: ['1'], policy: { bots: [{ sourceId: 'bad' }] } }),
+    ).toThrow();
+  });
+  it('keeps polling control jobs during a long scan without starting duplicate periodic work', async () => {
+    let finish!: () => void;
+    fake.scheduledPeriodic.mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
           finish = resolve;
         }),
     );
     const plugin = createMessageBackupPlugin({
-      backupServers: ['g1', 'g2'],
+      backupServers: ['1'],
       backupIntervalMs: 1000,
+      runtime: { job_poll_seconds: 1 },
     });
-    const ctx = buildCtx();
-
+    const ctx = context();
+    await plugin.init!(ctx);
     await plugin.onReady!(ctx);
-    await plugin.onShutdown!(ctx);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(fake.scheduledPeriodic).toHaveBeenCalledTimes(1);
+    expect(fake.pollJobs).toHaveBeenCalledTimes(11);
     finish();
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(mockedPerformBackup.mock.calls.map((call) => call[0])).toEqual(['g1']);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fake.scheduledPeriodic).toHaveBeenCalledTimes(2);
+    await plugin.onShutdown!(ctx);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(fake.scheduledPeriodic).toHaveBeenCalledTimes(2);
+    expect(fake.stop).toHaveBeenCalledTimes(1);
+  });
+  it('does not duplicate guild loops on repeated ready events or duplicate guild configuration', async () => {
+    const plugin = createMessageBackupPlugin({
+      backupServers: ['1', '1'],
+      runtime: { job_poll_seconds: 1 },
+    });
+    const ctx = context();
+    await plugin.init!(ctx);
+    await plugin.onReady!(ctx);
+    await plugin.onReady!(ctx);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.pollJobs).toHaveBeenCalledTimes(1);
+    expect(fake.scheduledPeriodic).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fake.pollJobs).toHaveBeenCalledTimes(2);
+    await plugin.onShutdown!(ctx);
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('backs up only the guilds present at construction, ignoring a later push into the caller array', async () => {
-    mockedPerformBackup.mockResolvedValue(undefined);
-    const servers = ['g1', 'g2'];
-    const plugin = createMessageBackupPlugin({ backupServers: servers, backupIntervalMs: 1000 });
-    // The caller keeps its array; the plugin must have taken a copy.
-    servers.push('g3');
-    const { onReady, onShutdown } = plugin;
-    if (onReady === undefined || onShutdown === undefined) {
-      throw new Error('message-backup plugin must expose onReady/onShutdown');
-    }
-    const ctx = buildCtx();
-
-    await onReady(ctx);
-
-    expect(mockedPerformBackup.mock.calls.map((call) => call[0])).toEqual(['g1', 'g2']);
-
-    await onShutdown(ctx);
-  });
-
-  it('runs the next pass one default hour later when `backupIntervalMs` is omitted', async () => {
-    mockedPerformBackup.mockResolvedValue(undefined);
-    const plugin = createMessageBackupPlugin({ backupServers: ['g1'] });
-    const { onReady, onShutdown } = plugin;
-    if (onReady === undefined || onShutdown === undefined) {
-      throw new Error('message-backup plugin must expose onReady/onShutdown');
-    }
-    const ctx = buildCtx();
-
-    await onReady(ctx);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
-
-    // Just short of the hour: the loop must not have fired again.
-    await vi.advanceTimersByTimeAsync(60 * 60 * 1000 - 1);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(1);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(2);
-
-    await onShutdown(ctx);
-  });
-
-  it('keeps the repeat loop alive after a failing backup pass', async () => {
-    mockedPerformBackup
-      .mockRejectedValueOnce(new Error('socket hang up'))
-      .mockResolvedValue(undefined);
-    const plugin = createMessageBackupPlugin({ backupServers: ['g1'], backupIntervalMs: 1000 });
-    const { onReady, onShutdown } = plugin;
-    if (onReady === undefined || onShutdown === undefined) {
-      throw new Error('message-backup plugin must expose onReady/onShutdown');
-    }
-    const ctx = buildCtx();
-
-    // The immediate pass fails internally but must not reject onReady.
-    await expect(onReady(ctx)).resolves.toBeUndefined();
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
-
-    // The loop must reschedule and run the next pass despite the failure.
+  it('allows the next control poll to signal preemption before a blocked periodic pass finishes', async () => {
+    let finish!: () => void;
+    let scanFinished = false;
+    fake.scheduledPeriodic.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      scanFinished = true;
+    });
+    fake.pollJobs.mockImplementation(async () => {
+      if (fake.pollJobs.mock.calls.length === 2) {
+        expect(scanFinished).toBe(false);
+        finish();
+      }
+    });
+    const plugin = createMessageBackupPlugin({
+      backupServers: ['1'],
+      runtime: { job_poll_seconds: 1 },
+    });
+    const ctx = context();
+    await plugin.init!(ctx);
+    await plugin.onReady!(ctx);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(scanFinished).toBe(false);
     await vi.advanceTimersByTimeAsync(1000);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(2);
-
-    await onShutdown(ctx);
+    expect(scanFinished).toBe(true);
+    expect(fake.pollJobs).toHaveBeenCalledTimes(2);
+    await plugin.onShutdown!(ctx);
   });
 
-  it('isolates a per-guild failure so later guilds in the same pass still run', async () => {
-    mockedPerformBackup.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(undefined);
-    const plugin = createMessageBackupPlugin({
-      backupServers: ['g1', 'g2'],
-      backupIntervalMs: 1000,
-    });
-    const { onReady, onShutdown } = plugin;
-    if (onReady === undefined || onShutdown === undefined) {
-      throw new Error('message-backup plugin must expose onReady/onShutdown');
-    }
-    const ctx = buildCtx();
-
-    await expect(onReady(ctx)).resolves.toBeUndefined();
-    // g1's throw did not abort the pass — g2 was still attempted.
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(2);
-
-    await onShutdown(ctx);
-  });
-
-  it('threads transcript logging off by default (writeTranscript=false)', async () => {
-    mockedPerformBackup.mockResolvedValue(undefined);
-    // `backupLogEnabled` omitted → defaults to false; the backup still runs.
-    const plugin = createMessageBackupPlugin({ backupServers: ['g1'], backupIntervalMs: 1000 });
-    const { onReady, onShutdown } = plugin;
-    if (onReady === undefined || onShutdown === undefined) {
-      throw new Error('message-backup plugin must expose onReady/onShutdown');
-    }
-    const ctx = buildCtx();
-
-    await onReady(ctx);
-    expect(mockedPerformBackup).toHaveBeenCalledTimes(1);
-    expect(mockedPerformBackup).toHaveBeenCalledWith(
-      'g1',
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      false,
+  it('drains simultaneous control polling and periodic work before releasing ownership', async () => {
+    let finishScan!: () => void;
+    let finishControl!: () => void;
+    fake.scheduledPeriodic.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishScan = resolve;
+        }),
     );
-
-    await onShutdown(ctx);
-  });
-
-  it('threads transcript logging on when backupLogEnabled is set (writeTranscript=true)', async () => {
-    mockedPerformBackup.mockResolvedValue(undefined);
+    fake.pollJobs
+      .mockImplementationOnce(async () => undefined)
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishControl = resolve;
+          }),
+      );
     const plugin = createMessageBackupPlugin({
-      backupServers: ['g1'],
-      backupIntervalMs: 1000,
-      backupLogEnabled: true,
+      backupServers: ['1'],
+      runtime: { job_poll_seconds: 1 },
     });
-    const { onReady, onShutdown } = plugin;
-    if (onReady === undefined || onShutdown === undefined) {
-      throw new Error('message-backup plugin must expose onReady/onShutdown');
-    }
-    const ctx = buildCtx();
-
-    await onReady(ctx);
-    expect(mockedPerformBackup).toHaveBeenCalledWith(
-      'g1',
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      true,
+    const ctx = context();
+    await plugin.init!(ctx);
+    await plugin.onReady!(ctx);
+    await vi.advanceTimersByTimeAsync(1000);
+    const stopped = plugin.onShutdown!(ctx);
+    finishScan();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.stop).not.toHaveBeenCalled();
+    finishControl();
+    await stopped;
+    expect(fake.stop).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('isolates guild failure and keeps polling', async () => {
+    fake.pollJobs.mockRejectedValueOnce(new Error('unavailable'));
+    const plugin = createMessageBackupPlugin({
+      backupServers: ['1', '2'],
+      runtime: { job_poll_seconds: 1 },
+    });
+    const ctx = context();
+    await plugin.init!(ctx);
+    await plugin.onReady!(ctx);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.scheduledPeriodic).toHaveBeenCalledWith('2', 3_600_000);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fake.scheduledPeriodic).toHaveBeenCalledWith('1', 3_600_000);
+    await plugin.onShutdown!(ctx);
+  });
+  it('waits for active work before releasing the owner', async () => {
+    let finish!: () => void;
+    fake.scheduledPeriodic.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
     );
+    const plugin = createMessageBackupPlugin({ backupServers: ['1'] });
+    const ctx = context();
+    await plugin.init!(ctx);
+    await plugin.onReady!(ctx);
+    await vi.advanceTimersByTimeAsync(0);
+    const stopped = plugin.onShutdown!(ctx as PluginRuntimeContext);
+    expect(fake.cancel).toHaveBeenCalled();
+    expect(fake.stop).not.toHaveBeenCalled();
+    finish();
+    await stopped;
+    expect(fake.stop).toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
-    await onShutdown(ctx);
+describe('archive progress notification interval', () => {
+  it.each([10])('accepts %s seconds', (seconds) => {
+    expect(
+      archiveRuntimeSchema.parse({ progress_interval_seconds: seconds }).progress_interval_seconds,
+    ).toBe(seconds);
+  });
+  it.each([4, 5, 15, 30, 31, 10.5, NaN, Infinity])('rejects invalid interval %s', (seconds) => {
+    expect(() => archiveRuntimeSchema.parse({ progress_interval_seconds: seconds })).toThrow();
+  });
+  it('defaults to a ten-second public heartbeat', () => {
+    expect(archiveRuntimeSchema.parse({}).progress_interval_seconds).toBe(10);
   });
 });

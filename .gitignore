@@ -28,9 +28,6 @@ docs/proposal.md
 # Ops tools — operator-supplied configs and per-run log output.
 # `config.json` is already matched by the global rule above; the
 # explicit entries below keep the tool-specific layout self-documenting.
-tools/msg_backup/config.json
-tools/msg_backup/logs/
-tools/msg_backup/tmp/
 tools/db/config.json
 tools/db/backups/
 tools/migration/config.*.json

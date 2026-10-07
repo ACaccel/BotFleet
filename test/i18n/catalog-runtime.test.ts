@@ -45,10 +45,12 @@ describe('catalog runtime behaviour', () => {
     const translator = await I18NextTranslator.create(
       loadCatalogResources({ localesDir: LOCALES_DIR }),
     );
-    expect(translator.t('commands:add_reply.description', undefined, 'en')).toBe(
+    expect(translator.t('commands:reply.subcommands.add.description', undefined, 'en')).toBe(
       'Add an auto-reply',
     );
-    expect(translator.t('commands:add_reply.description', undefined, 'zh-TW')).toBe('新增自動回覆');
+    expect(translator.t('commands:reply.subcommands.add.description', undefined, 'zh-TW')).toBe(
+      '新增自動回覆',
+    );
   });
 
   it('falls back to zh-TW when a key is absent in the requested locale', async () => {
@@ -232,11 +234,11 @@ describe('catalog runtime behaviour', () => {
     );
     const derived = [
       ...SUPPORTED_FEED_PLATFORMS.flatMap((id) => [
-        `commands:feed_subscribe.options.platform.choices.${id}`,
-        `commands:feed_unsubscribe.options.platform.choices.${id}`,
+        `commands:feed.subcommands.subscribe.options.platform.choices.${id}`,
+        `commands:feed.subcommands.unsubscribe.options.platform.choices.${id}`,
       ]),
       ...FEED_MEDIA_FILTERS.flatMap((value) => [
-        `commands:feed_subscribe.options.media.choices.${value}`,
+        `commands:feed.subcommands.subscribe.options.media.choices.${value}`,
         `replies:feed.filter_media.${value}`,
       ]),
       ...FEED_PERMISSION_LABEL_SUFFIXES.map((suffix) => `replies:feed.permission.${suffix}`),
@@ -316,8 +318,11 @@ describe('catalog runtime behaviour', () => {
     // changed one of them.
     const resources = loadCatalogResources({ localesDir: LOCALES_DIR });
     for (const locale of ['zh-TW', 'en'] as const) {
-      const commands = resources[locale].commands as Record<string, unknown>;
-      for (const command of ['feed_subscribe', 'feed_unsubscribe'] as const) {
+      const catalog = resources[locale].commands as {
+        feed: { subcommands: Record<string, unknown> };
+      };
+      const commands = catalog.feed.subcommands;
+      for (const command of ['subscribe', 'unsubscribe'] as const) {
         const choices = ((
           (commands[command] as { options?: Record<string, unknown> } | undefined)?.options?.[
             'platform'
@@ -326,7 +331,7 @@ describe('catalog runtime behaviour', () => {
         for (const id of SUPPORTED_FEED_PLATFORMS) {
           expect(
             choices[id],
-            `commands:${command}.options.platform.choices.${id} (${locale}) must match ` +
+            `commands:feed.subcommands.${command}.options.platform.choices.${id} (${locale}) must match ` +
               'FEED_PLATFORM_DISPLAY_NAMES, which names the same platform elsewhere',
           ).toBe(FEED_PLATFORM_DISPLAY_NAMES[id]);
         }

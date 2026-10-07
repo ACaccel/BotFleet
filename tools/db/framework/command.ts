@@ -54,7 +54,7 @@ export interface DbCommandResult {
  * schema (which validates an `unknown` input) is assignable here.
  */
 interface DbCommandSpec<TOptions> {
-  /** Subcommand token, e.g. `verify`. Must be unique in the registry. */
+  /** Subcommand token, e.g. `drop-todo`. Must be unique in the registry. */
   readonly name: string;
   /** One-line help text, surfaced by `db` with no/unknown subcommand. */
   readonly description: string;

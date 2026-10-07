@@ -71,9 +71,17 @@ export const buildHelpEmbed = (
     if (cmd.config.name.length === 0) continue;
     const category = cmd.config.category ?? 'other';
     const localized = localizeCommandConfig(cmd.config, translator);
-    // Context-menu commands are not slash commands, so they carry no `/`.
+    const paths = [
+      ...(localized.subcommands ?? []).map((entry) => `/${localized.name} ${entry.name}`),
+      ...(localized.subcommandGroups ?? []).flatMap((group) =>
+        group.subcommands.map((entry) => `/${localized.name} ${group.name} ${entry.name}`),
+      ),
+    ];
+    // Show executable paths while retaining one entry per registered command.
     const label =
-      cmd.config.type !== undefined ? `\`${localized.name}\`` : `\`/${localized.name}\``;
+      localized.type !== undefined
+        ? `\`${localized.name}\``
+        : (paths.length ? paths : [`/${localized.name}`]).map((name) => `\`${name}\``).join(', ');
     const line = `${label} ${localized.description}`.trimEnd();
     const bucket = grouped.get(category);
     if (bucket !== undefined) bucket.push(line);

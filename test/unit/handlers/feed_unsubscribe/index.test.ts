@@ -16,7 +16,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ButtonStyle, ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { Types } from 'mongoose';
 
-import FeedUnsubscribe from '../../../../src/handlers/commands/feed_unsubscribe';
+import FeedUnsubscribe from '../../../../src/handlers/commands/feed_unsubscribe/action';
 import { localizeCommandConfig } from '../../../../src/handlers/commands/command';
 import { buildCommandJsonBody } from '../../../../src/handlers/commands/command-builder';
 import type { Translator } from '../../../../src/core/i18n';

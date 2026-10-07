@@ -17,8 +17,8 @@ import nijikaExample from '../../../../src/bot/nijika/config.example.json';
 import { parseSocialFeedConfig } from '../../../../src/plugins/social-feed/config';
 import { parseFeedPlatformsConfig } from '../../../../src/infra/social-feed';
 
-/** The `/feed_*` commands do not reach Discord unless they are deployed. */
-const FEED_COMMANDS = ['feed_subscribe', 'feed_unsubscribe', 'feed_list'];
+/** The `/feed` commands do not reach Discord unless they are deployed. */
+const FEED_COMMANDS = ['feed'];
 
 const examples: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
   ['nijika', nijikaExample as Record<string, unknown>],
@@ -53,9 +53,9 @@ describe.each(examples)('%s config.example.json — social_feed block', (_name, 
   });
 
   it('lists the feed commands, so the example deploys a usable feature', () => {
-    // The plugin polls, but nothing can be subscribed until the three
-    // commands are registered — an example that ships the block without
-    // them documents a feed no one can fill.
+    // The plugin polls, but nothing can be subscribed until the command
+    // group is registered — an example that ships the block without
+    // it documents a feed no one can fill.
     expect(example['commands']).toEqual(expect.arrayContaining(FEED_COMMANDS));
   });
 });

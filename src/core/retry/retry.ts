@@ -50,7 +50,7 @@ const RETRYABLE_TRANSPORT_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /** Tunables for {@link retryFetch}. Every field has a production default. */
-export interface RetryOptions {
+interface RetryOptions {
   /** Total attempts, including the first. Values below 1 disable retrying. */
   readonly maxAttempts?: number;
   /** Backoff wait before the second attempt, in milliseconds. */

@@ -1,12 +1,10 @@
 # Operations
 
-Part of the [contributing guide](../../CONTRIBUTING.md). For service commands
-and rollback, use [deployment](deployment.md).
+For service commands and rollback, see [deployment](deployment.md).
 
 ## Host migration
 
-The [migration runbook](../../tools/migration/README.md) owns host setup,
-database transfer, runtime validation, and cutover instructions.
+Follow the [migration runbook](../../tools/migration/README.md) for host transfer and cutover.
 
 ## Recording removal rollout
 
@@ -15,7 +13,7 @@ when upgrading an older deployment.
 
 ## Pre-deploy smoke
 
-The live smoke check requires a real bot `.env` and network access:
+Before release promotion, run with a real bot `.env` and network access:
 
 ```bash
 npm run smoke                     # defaults to nijika
@@ -23,44 +21,29 @@ npm run smoke -- --bot konata
 SMOKE_TIMEOUT_MS=60000 npm run smoke -- --bot tomori
 ```
 
-It validates environment values, runs authenticated MongoDB `admin.ping`
-when `MONGO_URI` is set, then logs in to Discord and verifies the ready user
-matches `CLIENT_ID`. Each step defaults to a 30-second timeout. Exit status
-is `0` for success or `1` with the failed step reported.
-
-The check does not register commands, start plugins, or open HTTP routes;
-passing it does not establish application-level health. Run it before
-promoting a release, separately from CI.
+The check validates environment values, authenticated MongoDB `admin.ping` (when
+configured), and Discord login against `CLIENT_ID`. Steps time out after 30 seconds;
+failure reports the step and exits with status `1`. It runs separately from CI and
+does not exercise commands, plugins, or HTTP routes.
 
 ## Temporary moderation
 
-`/ban_user` attempts a Discord timeout after a successful vote. If Discord rejects
-the timeout, including for an administrator, the bot deletes the target's messages
-for the requested duration and suppresses its automatic replies to those messages.
-This covers both configured auto-replies and self-hosted LLM auto-replies, even
-when deleting a message fails. Replies become eligible again when the duration
-expires.
+For persistent thread-owner controls on Nijika, use
+[`/thread ban`, `/thread allow`, and `/thread list`](../thread-moderation.md).
+Replacement accounts can use `/thread claim`; configured admins approve through
+DM or use `/thread manager` for direct grants and revocation. See
+[DM review](../thread-moderation.md#delegated-management-and-dm-review) for delivery failures.
 
-The fallback applies only to the target user in the command's guild and to the
-bot that handled the command. Other bot processes do not share the restriction.
-Fallback state is held in memory; restarting that bot ends the deletion and
-auto-reply restriction early. Native Discord timeouts remain managed by Discord.
-
-## Thread moderation
-
-Nijika supports persistent thread bans and delegated management, including
-replacement-account claims reviewed through configured admins' DMs. Follow the
-[thread moderation guide](../thread-moderation.md) for commands, button pagination,
-required permissions, delivery failures and database recovery behavior. Other
-bots' public replies are deleted only when a banned origin can be verified;
-this does not prevent their command execution.
+After a successful `/ban_user` vote, a rejected Discord timeout activates message
+deletion and suppresses configured/self-hosted LLM auto-replies, even if deletion
+fails. This fallback lasts for the requested duration, applies only to that guild
+and bot process, and ends early on restart. Native timeouts remain managed by Discord.
 
 ## Dependency overrides
 
-The `undici: ^6.27.0` override fixes the vulnerable exact version pinned by
-`discord.js`. Recheck it on every Discord dependency upgrade and remove it
-when the upstream version includes the fix. Use `npm explain <pkg>` before
-adding overrides; do not restate a version the dependency already permits.
+Recheck the `undici: ^6.27.0` security override on each Discord dependency upgrade;
+remove it when the upstream pin includes the fix. Run `npm explain <pkg>` before
+adding overrides.
 
 The `vitest`-scoped `tinypool: 2.1.2` override fixes prototype-pollution and
 code-execution advisories in the test worker pool. Keep it scoped to Vitest and
@@ -70,13 +53,44 @@ within their existing dependency ranges.
 
 ## Database recovery
 
-Transient connection failures and timeouts are retried in the background
-after startup/onboarding retries are exhausted. `MONGO_RECOVERY_INTERVAL_MS`
-controls polling and per-guild cooldown; see the
-[configuration reference](../configuration.md). Authentication, authorization,
-and other persistent failures require fixing the cause and restarting.
+Transient failures retry in the background using
+[`MONGO_RECOVERY_INTERVAL_MS`](../configuration.md); recovered guilds regain their
+repositories and jobs. Match giveaway error IDs to connection logs. Restore MongoDB
+or its network route for refused connections; fix authentication/authorization or
+other persistent failures, then restart the bot.
 
-Recovery reattaches repositories and rebuilds guild-scoped jobs only for the
-recovered guild. Match the database error ID in giveaway failures to connection
-logs. A refused TCP connection requires restoring MongoDB or its network route;
-restarting the bot alone cannot fix it.
+## Message archive maintenance
+
+Use [archive operations](../message-archive.md) for health, capacity, owner recovery,
+jobs, reviewed repair and conditional rollback through `/archive` in the configured
+guild debug channel. Local tests do not authorize production repair. Unrelated
+collection cleanup remains in the [database CLI](../../tools/db/README.md);
+whole-database transfer remains in the [migration runbook](../../tools/migration/README.md).
+
+For normal one-shot work, use the [guided backup flow](../message-archive.md#one-shot-repair).
+Its public status card updates every ten seconds and offers **View details** and
+cooperative stopping. The changes view shows small plans directly and groups
+larger plans with source examples. Pages use buttons only, with at most five
+controls. `/archive jobs` and `/archive plans` show two items per page; select an
+item button or use refresh/next-page navigation. **Delete all jobs** and
+**Delete all plans** open an all-pages review before confirmation. Item panels offer eligible delete
+and rollback buttons directly. Stop a running job before deleting its record.
+Apply, resume and acceptance open confirmation on the selected item's panel.
+Use the same panel's item, refresh and list buttons to navigate without comparing
+separate messages. Other panels retain their current view. The original job card
+shows actual current activity every ten seconds; a running job opened in a list
+panel uses **Refresh** to retrieve a new snapshot.
+There are no active-only filters, technical pages or nested change drilldowns.
+Unused plans can be deleted before application or after a complete rollback when
+no conflicts, recovery journals or active work remain. Single and bulk deletion
+use the same checks and preserve archived messages.
+See the [deletion rules](../message-archive.md#discord-controls) for protected
+recovery data and [bulk deletion](../message-archive.md#bulk-deletion) for snapshot
+review, cooperative job stopping and durable result/resume controls.
+
+Periodic scans are disabled until explicitly enabled per guild. Use
+[`/archive schedule enable minutes:60`](../message-archive.md#periodic-schedule)
+after the one-shot repair is accepted to save an interval and enable scanning in
+one command. Repeating saved settings preserves the next due time. Disabling it
+leaves live capture and control jobs available and pauses history or reaction
+pagination at a safe boundary.

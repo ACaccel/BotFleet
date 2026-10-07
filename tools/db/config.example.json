@@ -3,9 +3,11 @@
   "guilds": ["<guild id>"],
   "output_path": null,
   "operations": {
-    "verify": { "sample_limit": 50 },
-    "migrate-timestamp": { "mode": "audit", "dry_run": false, "sample_limit": 20 },
-    "drop-todo": { "dry_run": true },
-    "drop-xfeed": { "dry_run": true }
+    "drop-todo": {
+      "dry_run": true
+    },
+    "drop-xfeed": {
+      "dry_run": true
+    }
   }
 }

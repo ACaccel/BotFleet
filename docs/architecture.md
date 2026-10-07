@@ -1,225 +1,303 @@
 # Architecture
 
-BotFleet runs each personality as a separate process. A composition root selects
-plugins, supplies configuration and connects a shared core to Discord, MongoDB
-and external providers. See [Contributing](../CONTRIBUTING.md) for implementation
-recipes and [Configuration](configuration.md) for operator settings.
+Each personality runs in its own process. Its composition root selects plugins and
+connects shared services to Discord, MongoDB and external providers. See
+[Contributing](../CONTRIBUTING.md) and [Configuration](configuration.md).
 
 ## Layers and boundaries
 
-```text
-             bot/                 composition and lifecycle
-               |
-      handlers/   plugins/        interactions and features
-               |
-    persistence/   infra/         storage and external adapters
-               |
-             core/                contracts and shared mechanisms
-```
+| Layer                              | Responsibility                                             |
+| ---------------------------------- | ---------------------------------------------------------- |
+| [core](../src/core/)               | Contracts, errors, Result, i18n, IoC, logging and policies |
+| [persistence](../src/persistence/) | Repository contracts and Mongoose storage                  |
+| [infra](../src/infra/)             | Discord, MongoDB, HTTP and provider adapters               |
+| [handlers](../src/handlers/)       | Commands and interaction entry points                      |
+| [plugins](../src/plugins/)         | Features, subscriptions and scheduled jobs                 |
+| [bot](../src/bot/)                 | Composition roots, service tokens and lifecycle            |
 
-| Layer                              | Responsibility                                                    |
-| ---------------------------------- | ----------------------------------------------------------------- |
-| [core](../src/core/)               | Errors, Result, i18n, IoC, plugin contracts, logging and policies |
-| [persistence](../src/persistence/) | Mongoose schemas and repository interfaces/implementations        |
-| [infra](../src/infra/)             | Discord helpers, MongoDB connections, HTTP and provider adapters  |
-| [handlers](../src/handlers/)       | Commands, buttons, modals, select menus and reactions             |
-| [plugins](../src/plugins/)         | Feature logic, subscriptions and scheduled jobs                   |
-| [bot](../src/bot/)                 | BaseBot, personality composition roots and service tokens         |
-
-ESLint enforces dependency boundaries. Core cannot depend on application layers;
-handlers and plugins are siblings and cannot import each other. Shared Discord
-helpers belong in `infra`. Plugins cannot import `@core/ioc` or personality roots.
-They use the plugin context to resolve services.
-
-The [token catalog](../src/bot/tokens.ts) and
-[guild lookup port](../src/bot/guild-registry.ts) are deliberate exceptions:
-plugins may import these composition contracts because their types reference
-infrastructure and repositories that cannot live in core.
-
-`scripts/` owns build and deployment tooling and cannot be imported by `src/`.
-`tools/` owns operator workflows, including database maintenance and host migration.
+ESLint enforces boundaries: core cannot depend on application layers; handlers
+and plugins cannot import each other. Plugins use context instead of importing IoC
+or personality roots; [tokens](../src/bot/tokens.ts) and
+[guild lookup](../src/bot/guild-registry.ts) are explicit contract exceptions.
+Shared Discord helpers belong in infra. `src/` cannot import `scripts/`; `tools/` owns operator workflows.
 
 ## Startup and shutdown
 
-[BaseBot](../src/bot/index.ts) owns the lifecycle; personality subclasses select
-plugins with `this.use(...)`.
+Bootstrap validates configuration; [BaseBot](../src/bot/index.ts) builds services
+and initializes plugins before login. Listeners attach before guild registration,
+repository connection and ready hooks. Guild database failures are isolated and can recover.
 
-1. Bootstrap loads and validates the personality's environment and creates its client.
-2. BaseBot builds the container, logger, translator, router and process safety handlers.
-3. Plugin `init` hooks run before Discord login.
-4. After login, plugin `start` hooks and the event bridge are attached before
-   the deferred Discord-ready work is released.
-5. Ready processing registers guilds, connects repositories, registers handlers
-   and runs plugin `onReady` hooks.
+Startup rejection exits with failure. Shutdown cleans up resources within a deadline;
+a second signal exits immediately. Discord handles reconnection. Uncaught exceptions
+use a narrow transient-network whitelist, separate from ordinary retry policy.
 
-Guild assembly, event routing and database connection work are delegated to
-`GuildRegistrar`, `ClientEventBridge` and `GuildDbConnector`. Guild connection
-failures are isolated; transient failures can recover in the background and
-notify plugins through `onGuildDatabaseReady`.
-
-A rejected startup exits with failure. Signals trigger bounded graceful shutdown;
-a second signal exits immediately. Shutdown runs plugin cleanup, detaches event
-subscriptions and closes resources. Client connection errors are logged while
-discord.js reconnects. Only a narrow class of transient network errors is tolerated
-at the uncaught-exception boundary; it must not be widened to the general retry policy.
-
-When deployment supplies `BOTFLEET_READY_FILE`, BaseBot publishes an atomic
-startup marker after Discord, guild repositories and plugins are ready. Disabled
-plugins prevent readiness. This attests startup, not continuous health; database
-recovery and reconnection can retry publication. See [deployment](contributing/deployment.md).
+`BOTFLEET_READY_FILE` attests startup readiness of Discord, repositories and plugins;
+disabled plugins prevent publication. See [deployment](contributing/deployment.md)
+for this startup marker, which does not indicate continuous health.
 
 ## Plugins and dependency injection
 
-The manual typed [ServiceContainer](../src/core/ioc/) uses `ServiceToken<T>` and
-singleton bindings. Per-guild state is accessed through explicit factories and
-registries rather than container scopes. Handlers use BaseBot's typed accessors;
-plugins resolve the same instances through their context.
+The typed [ServiceContainer](../src/core/ioc/) binds singleton services with
+`ServiceToken<T>`. Factories and registries hold per-guild state. Handlers use BaseBot
+accessors; plugins resolve the same instances through context.
 
-| Hook                   | Purpose                                                                    |
-| ---------------------- | -------------------------------------------------------------------------- |
-| `init`                 | Initialize services; the only phase allowed to call `ctx.registerInstance` |
-| `start`                | Attach listeners and start background work                                 |
-| `onReady`              | Work requiring registered guilds and a ready Discord client                |
-| `onGuildDatabaseReady` | Restore only the recovered guild's database-dependent jobs                 |
-| `onShutdown`           | Release resources, in reverse registration order                           |
+| Hook                   | Responsibility                                                    |
+| ---------------------- | ----------------------------------------------------------------- |
+| `init`                 | Initialize services; only phase permitting `ctx.registerInstance` |
+| `start`                | Attach listeners and start background work                        |
+| `onReady`              | Work requiring registered guilds and Discord readiness            |
+| `onGuildDatabaseReady` | Restore the recovered guild's database-dependent jobs             |
+| `onShutdown`           | Release resources in reverse registration order                   |
 
-Plugin factories validate and capture their own configuration. Hook failures
-disable the affected plugin while the host continues. Shutdown still cleans up
-disabled plugins and removes their subscriptions. HTTP-owning plugins use bounded
-server shutdown so idle connections cannot block process termination.
-
-Plugins do not register handlers. Generated registries are the single registration
-mechanism; features with both event and command entry points adapt the same services
-through typed dependencies. See [Adding a plugin](contributing/adding-a-plugin.md).
+Factories validate plugin configuration. Hook failures disable that plugin while
+the host continues; shutdown also cleans up disabled plugins. Generated registries
+own handler registration. See [Adding a plugin](contributing/adding-a-plugin.md).
 
 ## Interaction request flow
 
 ```text
-discord.js event
-  -> ClientEventBridge
-  -> InteractionRouter and middleware
-  -> generated handler registry
-  -> handler index.ts
-  -> service / repository / external adapter
+Discord event -> ClientEventBridge -> InteractionRouter + middleware
+              -> generated registry -> handler -> service / repository / adapter
 ```
 
-The router dispatches commands and components; component routing uses the leading
-custom-ID segment. Reaction handlers inspect each reaction themselves.
-`npm run handlers:gen` updates registries; CI checks for drift.
-
-Autocomplete uses the command's optional hook and returns bounded suggestions.
-Failures produce an empty response and an operator log. Other handler errors reach
-the router boundary, which maps domain errors into translated ephemeral replies.
-Shared option parsing, error replies and paginated delivery live in `infra/discord`.
+Components route by the leading custom-ID segment; reaction handlers inspect
+reactions themselves. `npm run handlers:gen` maintains registries, checked by CI.
+The router translates domain failures into ephemeral replies; failed autocomplete
+returns no suggestions. Shared Discord utilities live in `infra/discord`.
 
 ## Temporary moderation and automatic replies
 
-When `/ban_user` falls back to deleting messages, its listener runs before
-plugin message dispatch and synchronously marks each matching message to suppress
-automatic replies. The `auto-reply` and `llm-auto-reply` plugins check that shared
-marker before processing triggers or LLM requests. Suppression does
-not wait for deletion to succeed, so a slow or failed Discord deletion cannot
-trigger a reply. The listener checks the expiration time on each message, even
-if timer cleanup is delayed.
+Persistent [thread moderation](thread-moderation.md#implementation-contract) runs
+in `ClientEventBridge` before concurrent plugin dispatch, interaction routing and
+reaction handlers. It is opt-in per bot and enabled in Nijika's configuration.
+Its repository isolates restrictions by guild, bot and thread.
+Delegated authority and recipient-bound DM review decisions share the thread
+document for atomic approval. Source-ID records with a seven-day TTL support
+deletion of attributable public replies from external bots; unknown origins are
+retained. See the same contract for private pagination and authority rechecks.
 
-The fallback belongs to the invoking bot client and target guild. See
-[temporary moderation](contributing/operations.md#temporary-moderation) for
-operator behavior and restart limitations.
-
-## Thread moderation
-
-`ClientEventBridge` awaits `ThreadModeration` before message dispatch, interaction
-routing and reaction handlers. Keeping this guard outside parallel plugin dispatch
-prevents blocked messages from triggering replies. It also deletes attributable
-public bot responses using interaction metadata or bounded same-thread reply
-references; unverifiable origins remain untouched.
-
-Guild repositories scope bans, delegated managers, claims and message-source IDs
-by bot and thread. Claim approval and the corresponding grant share an atomic
-conditional update; DM review buttons bind to their recipient and message. See
-the [thread moderation contract](thread-moderation.md#implementation-contract)
-for consistency, retention and failure behavior.
+The `/ban_user` deletion fallback marks matching messages before plugin dispatch.
+Both automatic-reply plugins honor that marker even if deletion is slow or fails.
+The listener checks expiration on each message and belongs to the invoking bot
+client and guild. See [temporary moderation](contributing/operations.md#temporary-moderation).
 
 ## Persistence and external services
 
-[Repositories](../src/persistence/repositories/) expose interfaces backed by
-Mongoose; `buildRepos(connection)` creates the bundle for one guild. Tests can
-inject fakes. Operational failures return `Result<T, DatabaseError>`; a missing
-record is a successful empty result, while invalid programmer arguments throw.
+[Repositories](../src/persistence/repositories/) form a per-guild bundle and can be
+replaced with test fakes. Operational failures return `Result<T, DatabaseError>`;
+missing records succeed with an empty result; invalid programmer arguments throw.
+[MongoConnectionManager](../src/infra/mongo/connection-manager.ts) owns pooled
+connections and bounded retries. See [database recovery](contributing/operations.md#database-recovery)
+and [persisted models](contributing/persisted-models.md).
 
-[MongoConnectionManager](../src/infra/mongo/connection-manager.ts) manages pooled
-connections, bounded retries and disabled guilds. Shutdown drains in-flight opens
-so late connections cannot escape cleanup. See [database recovery](contributing/operations.md#database-recovery)
-and the [persisted-model recipe](contributing/persisted-models.md).
-
-External adapters translate SDK failures into domain errors. Provider strategies
-keep platform-specific behavior outside feature logic:
-
-| Adapter                                    | Selection and responsibility                                                                      |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| [LLM](../src/infra/llm/)                   | Select OpenAI, Anthropic, Gemini or xAI per request; a separate client serves self-hosted replies |
-| [Link preview](../src/infra/link-preview/) | Select providers for supported URLs and resolve preview media                                     |
-| [Social feed](../src/infra/social-feed/)   | Resolve a configured platform by ID; normalize accounts, order post IDs and fetch timelines       |
-
-Feed subscriptions store their filter and cursor together per platform/account/channel.
-The poller groups subscriptions across guilds to read each account once per pass,
-using the oldest applicable cursor, while delivery and cursor advancement remain
-per subscription. Cursors advance only after successful Discord delivery.
-Post IDs remain strings to avoid loss of precision.
+LLM, link-preview and social-feed strategies isolate provider behavior and errors.
+Feed polling shares account reads; delivery and cursors remain per subscription.
+Cursors advance after successful delivery; post IDs stay strings.
 
 ## Errors, logs and localization
 
-`DomainError` subclasses carry an error code, translation key, parameters and
-original cause. Use cases return `Result` for expected failures; boundary adapters
-translate external errors. Bounded retry classification is broader than the
-process-level whitelist for tolerating uncaught network errors.
+`DomainError` carries a code, translation key, parameters and cause. Expected
+failures use `Result`; adapters translate external errors. Pino logs include bot
+and optional guild context; file output is JSON Lines under `logs/`.
 
-Pino logs carry a bot binding and optional guild context. The file sink routes
-JSON Lines to `logs/<bot>[/<guildId>]/<localDate>.log`; plain test loggers do not
-write files. High-volume message-create and reaction events are not audit-logged.
-
-User-facing strings use the `commands`, `errors` and `replies` catalogs in
-[src/i18n/locales](../src/i18n/locales/). English and Traditional Chinese keys must
-stay aligned. CI scans handlers, plugins, bot and infra for CJK literals. The
-guild-event mirror is an English operator audit surface rather than translated
-user copy. See [Adding a command](contributing/adding-a-command.md) for i18n usage.
+User-facing strings use aligned English and Traditional Chinese
+[catalogs](../src/i18n/locales/). CI scans application layers for CJK literals; the
+guild-event mirror is an English operator audit surface. See
+[Adding a command](contributing/adding-a-command.md).
 
 ## Privacy-aware data commands
 
 [PermissionRankPolicy](../src/core/plugin/permission-rank-policy.ts) supplements
-Discord permissions with operator-defined channel ranks and member clearance.
-Effective channel rank includes full ancestry. Invalid configuration fails startup;
-unknown ancestry must not widen access. The policy is built once from static config.
+Discord permissions with static channel ranks and member clearance. Channel rank
+includes ancestry; invalid configuration fails startup and unknown ancestry must
+not widen access. Aggregate commands such as `/traffic overview*` must:
 
-Commands exposing aggregate guild data must preserve these rules:
+1. Include only channels passing the invoker's Discord `ViewChannel` check and rank
+   ceiling, resolving the invoker's roles and permissions.
+2. Cap public replies at `min(userRank, commandChannelRank)` and ephemeral replies
+   at `userRank`; gate the invoker, not the report subject.
+3. Exclude unknown/deleted channels and filter before aggregation. Use the same
+   permitted channel set for all statistics and comparisons; keep empty results
+   neutral so hidden channels are not revealed.
 
-1. Include only channels passing **both** the invoker's Discord `ViewChannel`
-   check and the rank ceiling. Resolve the invoking member's roles and permissions.
-2. Public replies cap visibility at `min(userRank, commandChannelRank)`;
-   ephemeral replies cap at `userRank`.
-3. Gate the invoker, not the report's subject. Unknown/deleted channels are excluded.
-4. Filter before aggregation, using the same channel set for every statistic,
-   including comparisons with earlier periods.
-5. Keep empty results and labels neutral; do not reveal that hidden channels exist.
+Feed commands use Discord visibility without rank gating and fail closed when
+visibility cannot be resolved. Threads use parent checks; removal rechecks access
+at confirmation and subscription checks the bot's ability to post.
 
-The `/traffic*` commands implement this pattern. Chart rendering uses the bundled
-CJK font and strips unsupported emoji from canvas labels; Discord embeds retain them.
-
-Feed commands use Discord visibility checks without rank gating. Subscription
-changes and listings must fail closed when channel/member visibility cannot be
-resolved; thread checks use the parent. Whole-channel removal rechecks access at
-confirmation, and subscribing also checks the bot's ability to post.
-
-Rank gates control Discord disclosure, not host storage. Event logs and deleted
-attachments may contain private-channel data, and the attachment cache includes
-recent undeleted files. Storage behavior and retention settings are documented in
-[Configuration](configuration.md#attachment-storage).
+Rank gates govern Discord disclosure, not host storage: logs and attachment caches
+may contain private-channel data. See [attachment storage](configuration.md#attachment-storage).
 
 ## Deployment boundary
 
-The runtime launcher selects the project Conda environment. Deployment creates
-independent systemd units and snapshots source/dependencies into releases while
-configuration, logs and data remain shared. A transaction journal supports rollback
-and recovery; MongoDB has a separate runtime and data lifecycle. See the
-[deployment guide](contributing/deployment.md) for commands and rollback limits,
-and the [migration runbook](../tools/migration/README.md) for host transfers.
+The launcher selects the project Conda runtime. Independent systemd units use release
+snapshots with shared configuration, logs and data. A transaction journal supports
+rollback; MongoDB has a separate lifecycle. See [deployment](contributing/deployment.md)
+and the [migration runbook](../tools/migration/README.md).
+
+## Message archive ownership
+
+Only msg-archive receives the archive writer capability. Reader/writer connection
+pools are separate; shared startup suppresses automatic archive collection/index
+creation. Other bots expose archive reads while unrelated repositories retain writes.
+
+The archive plugin owns the durable Gateway inbox, serialized mutations,
+reconciliation and repair execution. Normalization and admission are shared domain
+contracts. Repairs journal relationship mutations before applying them; structural
+maintenance stays with the owner. Discord archive commands submit durable jobs
+through an infra control service; handlers never become archive writers. Mutating
+run controls require durable actor-bound confirmations. Results and journals
+survive Discord interaction expiry and process restarts.
+Repair cancellation state is scoped to one execution, with coalesced bounded-age
+reads and a local shutdown signal. Job results are persisted before terminal
+notifications; best-effort progress publication cannot replace the durable outcome.
+The repair-to-history transition preserves committed phase totals in the shared
+tracker. Terminal notices distinguish completed repair operations from scanned
+messages and make stopped one-shot work explicit; recovery uses the existing run.
+New enrichment records place `_id` first before their recovery images are hashed,
+matching MongoDB's stored BSON field order without weakening hash verification.
+
+The guided backup entry point reuses plan/apply/accept jobs. Apply already includes
+post-backfill verification; acceptance retains fresh verification and a separate
+confirmation before the recovery-retention clock begins. Public status messages
+reconstruct their state from durable jobs/runs instead of relying on interaction
+tokens. Runtime and handler edits share a serialized message coordinator: the
+first embed is the live summary, and subsequent detail/confirmation state survives
+ten-second heartbeat edits and restarts.
+Successor jobs reuse the run's public message and mark predecessor notification
+ownership as superseded, preventing delayed replay from replacing newer status.
+Legacy runs without job records keep a `publicMessage` reference on the run;
+this display metadata does not alter repair images or confirmation semantics.
+Whole-manifest impact summaries use bounded server-side aggregation and safe
+metadata projections; unavailable or unknown classifications remain explicit.
+Target-aware inspection projects only allowlisted identity and difference fields
+from journal images. One changes view shows at most ten concrete rows, up to five
+per page, or grouped impacts with source examples for larger plans. Grouped
+results distinguish record types, impacts and states; source counts cover the
+complete selected scope, not the visible page. Category, source and individual
+operation drilldowns, technical pages and downloads are not UI entry points.
+Legacy detail controls redirect to the compact changes view. Routine views omit
+internal IDs and hashes while retaining meaningful source identities. Cached
+Discord metadata can enrich historical identities without a REST call per record.
+Shared public navigation edits its originating message, keeping notification volume
+independent of the number of changes. Canonical worker notifications and browsing
+panels have separate references: opening another item removes an unrelated status
+card, and its former publisher skips the repurposed panel. Explicit navigation to
+the canonical item can restore its status. Approval records bind their displayed
+panel without moving the successor job's canonical notification. Source labels require public readability
+evidence; cached historical names do not bypass it. Raw recovery images never
+reach presenters.
+Read-only navigation rechecks guild permissions, and mutating buttons retain the
+existing single-use, actor/channel-bound confirmation protocol.
+Archive management exposes four entry points with button-only pages. Lists fetch
+two entries and expose matching item buttons, refresh, next-page controls and
+whole-list deletion, for at most five buttons. Longer legacy pages continue after the last displayed
+entry so compact pagination cannot skip records. Item deletion and eligible rollback
+use direct buttons; active-only filters and combined single-item stop-and-delete
+buttons are omitted. Whole-list delete buttons open an all-pages review before
+confirmation. Legacy select handlers and accepted cleanup batches
+retain their existing authorization/recovery contracts without emitting new menus.
+Eligible apply, resume and acceptance open scoped actor-bound confirmation
+directly on the item panel. Public progress offers details and cooperative stopping
+and retains the ten-second message cadence. Audit, standalone verification and
+attachment-refresh entry points have been removed; legacy backend compatibility,
+automatic apply verification and fresh acceptance validation remain intact.
+Single-item deletion approvals are additionally message-bound, disposable five-minute tokens.
+Accepted job deletion intents persist in `archive_control_deletions`; worker claim
+and submission reject tombstoned identities. Cleanup waits for drained terminal
+work, records the run identity before removing the job, releases consumer
+reservations and retries final public notification after restart. These receipts
+remain to fence stale confirmation replay. Run-consumer reservations retain hashed
+request-to-process ownership; startup releases an absent-job reservation only
+after proving the prior same-host process has stopped and its database operations
+have drained. Unknown or live owners remain protected. Plan deletion reserves the
+run against new consumers, checks operation/journal state and active jobs, then
+removes only plan and operation/control metadata. Eligibility includes
+never-applied plans and fully `rolled-back` plans whose operations are all
+`rolled-back` or never-mutated `planned`, with no conflict records, journal, active
+consumer or active job. The complete [eligibility rules](message-archive.md#discord-controls)
+also protect incomplete rollback and remaining applied changes.
+`archive_plan_deletions` fences retry/replay; archived messages are preserved.
+Superseded publishers cannot revive deleted cards.
+Final plan deletion notices re-read their message under the shared edit lock and
+replace only a recognizable status card, preserving unrelated navigation and bulk
+cleanup panels. Unmarked legacy standalone notices are left unchanged.
+Bulk deletion stores bounded per-item snapshots in `archive_bulk_deletions` and
+`archive_bulk_deletion_items`. An actor/channel/message-bound review becomes a
+claimed execution; per-item outcomes survive interruption, and exact identities
+exclude later arrivals. Reviews show eligible/protected counts and active jobs;
+confirmation expires after five minutes. Existing single-item lifecycle checks
+remain authoritative: job cleanup requests cooperative stopping before deletion,
+and plan cleanup shares single-plan eligibility, including fully rolled-back plans
+without conflicts or retained journals. Remaining applied changes and in-use plans
+are protected.
+A prior executor must be proven stopped before takeover. The whole-card bulk
+presenter and ten-second heartbeat retain result/resume markers; ordinary job
+notifications respect these markers even when cleanup deletes the card's source job.
+Failed or incomplete reviews cannot execute. Snapshot cleanup atomically revokes
+expired consent before removing items and preserves accepted running batches.
+
+History pages preload archive snapshots in bounded batches; conditional mutations
+still compare the complete observed image so a live edit cannot be overwritten by
+a stale preload. Exact snapshot replays avoid replacement writes. Repair planning
+reserves sequence ranges before majority/journaled manifest batches, reconciles
+durable prefixes after partial failures, and keeps deterministic operation IDs.
+Excluded sources are queued within the document/byte batch bounds. Related
+revision and reaction records are streamed using batched identity queries, with
+per-message dependency chains retaining related-before-source deletion order.
+Apply batches contain only independent scopes with satisfied dependencies. Their
+before-images become durable before target writes, and readback precedes verified
+acknowledgement. Standalone MongoDB remains supported without transactions.
+Rollback retains reverse journal order and combines an indexable native `_id`
+equality predicate with the complete current-image comparison for conditional
+delete/replace. The ID index bounds candidate reads without weakening protection
+against racing edits. Recovery does not parallelize arbitrary dependent operations.
+
+The shared SDK REST manager owns transport retries and quotas. The owner scheduler
+adds bounded, fair admission across guilds and reserves live capacity; announced
+local waits can release admission capacity for other resources, while global waits
+pause new requests. Each channel retains its ordered cursor with at most one
+speculative next page. Checkpoints advance only after message writes and complete
+reaction generations. History and reaction queues share a 64 MiB logical staging
+budget with a reserved reaction lane; this is not a hard limit on V8/SDK transient
+allocations or process RSS. Oversized pages produce partial coverage instead of
+silently advancing a checkpoint.
+Requests initially reserve their maximum allowed payload. Validated history pages
+shrink that reservation to twice their encoded size; reaction pages discard user
+profiles and retain only bounded ID arrays before storage. This releases unused
+logical capacity without changing checkpoint or complete-generation requirements.
+Channel discovery uses one fresh SDK inventory, with a raw fallback only for SDK
+failure or unsupported channel types, and propagates scan cancellation and concurrency.
+Activity snapshots select recent non-waiting work while detailed source pagination
+retains stable ordering. Each real activity update advances its timestamp; bounded
+reaction page and membership counters are provisional until generation publication.
+The existing ten-second notifier samples these counters without extra Discord
+requests per reaction page or invented movement during slow requests.
+Per-guild `archive_schedule` state defaults to disabled and is controlled by
+msg-archive's restricted slash command in the configured guild debug channel. Control jobs precede periodic scans;
+disabling scans preserves live ingestion and resumable checkpoints.
+Schedule updates are atomic and idempotent: repeating saved settings does not move
+the due time or supersede the completion timer of an active pass. Stop/pause checks
+also run between history write batches and reaction membership pages.
+A due schedule that loses worker admission to a control job releases its claim
+without advancing its due time; the next poll retries after that job drains.
+
+See [archive operations](message-archive.md) for data contracts, repair controls and
+[progress access](message-archive.md#progress-and-access).
+
+The [developer archive benchmarks](../tools/archive-benchmark/README.md) exercise
+the repair service and repository against disposable synthetic databases, and
+history scheduling against a shared mock REST transport. Node and disposable
+mongod process metrics are reported separately, excluding other services. CPU
+worker offloading remains disabled following the measured adoption gate; see the
+[performance evidence](contributing/archive-performance-results.md).
+
+### Grouped command dispatch
+
+Related slash commands share root handlers (`feed`, `reply`, `activity`,
+`giveaway`, `ai`, `thread`, and `traffic`). `GroupedCommand` composes action
+metadata into subcommands/groups and routes execution and autocomplete by the
+exact group/subcommand pair. Each action retains its authorization and business
+logic; internal `action.ts` modules are excluded from generated registration.
+Localization follows the public root/subcommand path. Help displays executable
+paths, and each root is enabled once in the bot's command configuration.
+See the [migration table](upgrading.md#grouped-slash-commands).

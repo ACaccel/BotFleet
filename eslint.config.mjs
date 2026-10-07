@@ -27,8 +27,8 @@ export default tseslint.config(
       'coverage/**',
       '**/*.generated.ts',
       'src/bot/**/config.json',
-      // Gitignored scratch space for one-off backup investigations.
-      'tools/msg_backup/tmp/**',
+      // Private operational backups may contain retired source files.
+      'tools/db/backups/**',
     ],
   },
   js.configs.recommended,

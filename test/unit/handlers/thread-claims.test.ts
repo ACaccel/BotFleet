@@ -5,7 +5,7 @@ import {
   type ButtonInteraction,
   type ChatInputCommandInteraction,
 } from 'discord.js';
-import ClaimCommand from '../../../src/handlers/commands/thread_claim';
+import ClaimCommand from '../../../src/handlers/commands/thread_claim/action';
 import ClaimButton from '../../../src/handlers/buttons/thread_claim';
 import { buildThreadClaimCard } from '../../../src/handlers/thread-claim-view';
 import type { ThreadClaim } from '../../../src/persistence/repositories/thread-moderation.repo';

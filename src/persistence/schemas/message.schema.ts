@@ -1,8 +1,8 @@
 /**
  * Discord message snapshot persisted by the msg-archive bot.
  *
- * `messageId` is unique — the backup job uses `insertMany({ ordered: false })`
- * and lets duplicate-key errors filter dupes without aborting the batch.
+ * `messageId` is unique. The archive worker applies ordered snapshots with
+ * durable observation identities, field-presence merging and revision recovery.
  */
 import { Schema, type InferSchemaType, type Types } from 'mongoose';
 
@@ -39,6 +39,39 @@ export const messageSchema = new Schema({
   timestamp: { type: Number, required: true },
 });
 
+// Additive fields preserve the legacy query contract; raw archive writes apply presence semantics.
+messageSchema.add({
+  guildId: String,
+  schemaVersion: Number,
+  observedAt: Number,
+  firstObservedAt: Number,
+  source: String,
+  contentVersionAt: Number,
+  contentHash: String,
+  observationId: String,
+  versionObservationId: String,
+  gatewayObservation: Schema.Types.Mixed,
+  authorKind: String,
+  webhookId: String,
+  applicationId: String,
+  editedTimestamp: Number,
+  type: Number,
+  flags: Number,
+  parentId: String,
+  presence: Schema.Types.Mixed,
+  embeds: Schema.Types.Mixed,
+  mentions: Schema.Types.Mixed,
+  reference: Schema.Types.Mixed,
+  thread: Schema.Types.Mixed,
+  poll: Schema.Types.Mixed,
+  components: Schema.Types.Mixed,
+  snapshots: Schema.Types.Mixed,
+  deletion: Schema.Types.Mixed,
+  policy: Schema.Types.Mixed,
+  archiveSourceDecision: Schema.Types.Mixed,
+  reactionGenerations: Schema.Types.Mixed,
+});
+
 // Range-read indexes for the timestamp query paths (traffic stats,
 // `db_list_message`). `{ timestamp: 1 }` serves the cross-channel range
 // query; the compound `{ channelId: 1, timestamp: 1 }` serves the
@@ -46,7 +79,7 @@ export const messageSchema = new Schema({
 // `findRecentByChannel`'s reverse sort). These only become sargable once
 // stored timestamps are uniformly numeric — the `MessageRepo` predicates
 // were `$toLong`-wrapped for legacy String rows until the one-time
-// `db migrate-timestamp` backfill made every timestamp numeric.
+// msg-archive timestamp repair backfill made every timestamp numeric.
 messageSchema.index({ timestamp: 1 });
 messageSchema.index({ channelId: 1, timestamp: 1 });
 

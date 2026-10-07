@@ -2,27 +2,24 @@
 
 Part of the [contributing guide](../../CONTRIBUTING.md).
 
-`Models` is derived from `SchemaName`, so a model is not a single
-file — adding or removing one touches three places together, and
-missing any of them breaks the build or leaves a dangling registration:
+`Models` derives from `SchemaName`. Update these together when adding or removing a model:
 
-1. the schema registry in `src/persistence/schemas/`,
-2. the repository bundle (`buildRepos` / `Repos` in
-   `src/persistence/repositories/index.ts`),
-3. the connection manager's model registration in
-   `src/infra/mongo/`.
+1. [Schema registry](../../src/persistence/schemas/index.ts).
+2. [`buildRepos` / `Repos`](../../src/persistence/repositories/index.ts).
+3. Role-aware initialization in [`src/infra/mongo/`](../../src/infra/mongo/);
+   model registration derives from the schema registry.
 
-Removing a model does **not** delete the data. A collection left behind
-in every guild's database is an operator action — ship a dry-run-first
-subcommand under `tools/db/` (see
-[`tools/db/README.md`](../../tools/db/README.md)) rather than a startup
-migration inside the long-lived runtime.
-
-## Thread moderation records
+Removing a model leaves its data intact. Collection cleanup is an operator action:
+provide a dry-run-first [database tool](../../tools/db/README.md), never a startup migration.
 
 `ThreadModeration` stores bot/thread-scoped restrictions, delegated managers,
-claims and management audits in each guild database. `ThreadMessageSource` stores
-verified message-origin IDs with a seven-day TTL. The
-[implementation contract](../thread-moderation.md#implementation-contract) owns
-the index, atomic-update, expiry and retention rules. Preserve these guarantees
-when changing schemas or repository methods; cover races with integration tests.
+requests and audit entries in each guild database. `ThreadMessageSource` stores
+seven-day source-ID records with TTL cleanup;
+see its [storage contract](../thread-moderation.md#implementation-contract).
+
+Only msg-archive initializes archive collections/indexes after acquiring ownership.
+Keep new archive schemas within that boundary and other bots' repositories read-only;
+see [archive contracts](../message-archive.md#scope-and-retention).
+Archive jobs, repair manifests and confirmation tokens persist across restarts;
+their operator controls live in [Discord](../message-archive.md#discord-controls).
+Keep sensitive recovery payloads out of reports and autocomplete results.

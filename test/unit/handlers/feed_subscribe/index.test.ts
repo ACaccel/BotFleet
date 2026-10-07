@@ -21,7 +21,7 @@ import { Types } from 'mongoose';
 
 import { localizeCommandConfig } from '../../../../src/handlers/commands/command';
 import { buildCommandJsonBody } from '../../../../src/handlers/commands/command-builder';
-import FeedSubscribe from '../../../../src/handlers/commands/feed_subscribe';
+import FeedSubscribe from '../../../../src/handlers/commands/feed_subscribe/action';
 import { FEED_BATCH_BUDGET_MS } from '../../../../src/handlers/commands/feed_subscribe/batch-policy';
 import { FeedError } from '../../../../src/core/errors';
 import { err, ok } from '../../../../src/core/result';

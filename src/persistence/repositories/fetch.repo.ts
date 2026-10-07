@@ -14,7 +14,9 @@ import type { GuildConnection } from '../../infra/mongo/connection-manager';
 import { databaseErrorFrom } from '../error-translator';
 import type { FetchDoc } from '../schemas/fetch.schema';
 
-export interface FetchRepo {
+export type FetchReader = Pick<FetchRepo, 'listChannelIds' | 'findByChannelId'>;
+
+interface FetchRepo {
   /** All progress markers in this guild, projected to `channelID`. */
   listChannelIds(): Promise<Result<readonly string[], DatabaseError>>;
   /** Look up a marker by channel id. `ok(undefined)` when absent. */
@@ -84,6 +86,8 @@ export class MongoFetchRepo implements FetchRepo {
     channelID: string,
     lastMessageID: string,
   ): Promise<Result<FetchDoc, DatabaseError>> {
+    if (this.conn.archiveOwner !== 'msg-archive')
+      throw new Error('Archive checkpoints require msg-archive ownership');
     try {
       const created = await this.conn.models.Fetch.create({ channel, channelID, lastMessageID });
       return ok(created.toObject<FetchDoc>());
@@ -101,6 +105,8 @@ export class MongoFetchRepo implements FetchRepo {
     channelID: string,
     lastMessageID: string,
   ): Promise<Result<boolean, DatabaseError>> {
+    if (this.conn.archiveOwner !== 'msg-archive')
+      throw new Error('Archive checkpoints require msg-archive ownership');
     try {
       // updateOne avoids the doc-fetch round-trip that findOneAndUpdate
       // pays for; we only care whether a doc was matched. Mirrors
@@ -121,6 +127,8 @@ export class MongoFetchRepo implements FetchRepo {
   }
 
   public async deleteByChannelId(channelID: string): Promise<Result<boolean, DatabaseError>> {
+    if (this.conn.archiveOwner !== 'msg-archive')
+      throw new Error('Archive checkpoints require msg-archive ownership');
     try {
       const res = await this.conn.models.Fetch.deleteOne({ channelID }).exec();
       return ok(res.deletedCount > 0);
@@ -139,6 +147,8 @@ export class MongoFetchRepo implements FetchRepo {
     channelID: string,
     lastMessageID: string,
   ): Promise<Result<void, DatabaseError>> {
+    if (this.conn.archiveOwner !== 'msg-archive')
+      throw new Error('Archive checkpoints require msg-archive ownership');
     try {
       await this.conn.models.Fetch.updateOne(
         { channelID },

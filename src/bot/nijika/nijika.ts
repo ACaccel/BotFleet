@@ -99,11 +99,11 @@ export class Nijika extends BaseBot<NijikaConfig> {
     if (RETIRED_FEED_CONFIG_KEY in config) {
       throw new Error(
         `nijika config.json still declares "${RETIRED_FEED_CONFIG_KEY}"; it is now "social_feed", ` +
-          'and the accounts it listed must be re-added per channel with /feed_subscribe',
+          'and the accounts it listed must be re-added per channel with /feed subscribe',
       );
     }
     // Feed platforms are built once from config and shared: the poller
-    // reads timelines through the registry and the `/feed_*` commands
+    // reads timelines through the registry and the `/feed` commands
     // validate an account against the same instances.
     const feedPlatforms = createDefaultFeedPlatformRegistry(
       parseFeedPlatformsConfig(this.config.social_feed),

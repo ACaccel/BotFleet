@@ -5,7 +5,12 @@
     "src/register.ts",
     "src/bot/*/index.ts",
     "tools/db/db.ts",
-    "tools/msg_backup/msg_backup.ts"
+    "tools/archive-benchmark/run.ts",
+    "tools/archive-benchmark/cpu.ts",
+    "tools/archive-benchmark/cpu-persistence.ts",
+    "tools/archive-benchmark/rest.ts",
+    "tools/archive-benchmark/notifications.ts",
+    "tools/archive-benchmark/pipeline.ts"
   ],
   "project": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "tools/**/*.ts"],
   "vitest": {
@@ -23,7 +28,7 @@
     "@plugins": ["src/plugins/index.ts"]
   },
   "ignoreBinaries": ["systemd-analyze", "mkfifo"],
-  "ignoreDependencies": ["tsconfig-paths", "ts-node", "audit-ci", "prettier"],
+  "ignoreDependencies": ["tsconfig-paths", "audit-ci", "prettier"],
   "ignore": [
     "src/persistence/index.ts",
     "src/persistence/repositories/index.ts",

@@ -2,7 +2,7 @@ import type { BaseBot } from '@bot';
 import type { ChatInputCommandInteraction, ModalBuilder } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
-import GiveawayCreate from '../../../../src/handlers/commands/giveaway_create';
+import GiveawayCreate from '../../../../src/handlers/commands/giveaway_create/action';
 
 const bot = {
   translator: { t: (key: string) => key.split('.').pop() ?? key },

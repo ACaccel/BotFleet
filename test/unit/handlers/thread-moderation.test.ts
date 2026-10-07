@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MessageFlags, PermissionFlagsBits, type ChatInputCommandInteraction } from 'discord.js';
-import ThreadBan from '../../../src/handlers/commands/thread_ban';
-import ThreadAllow from '../../../src/handlers/commands/thread_allow';
-import ThreadList from '../../../src/handlers/commands/thread_list';
+import ThreadBan from '../../../src/handlers/commands/thread_ban/action';
+import ThreadAllow from '../../../src/handlers/commands/thread_allow/action';
+import ThreadList from '../../../src/handlers/commands/thread_list/action';
 import { buildFakeBot, echoTranslatorWithParams } from '../../fixtures/discord/bot-fake';
 
 const OWNER = '100000000000000001';

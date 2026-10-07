@@ -119,6 +119,25 @@ describe('buildHelpEmbed', () => {
     expect(utility?.value).not.toContain('`/name-menu_get_avatar`');
   });
 
+  it('shows complete direct and grouped paths while counting registered roots', () => {
+    const command = fakeCommand('ai', 'ai');
+    command.config.subcommands = [{ name: 'status' }];
+    command.config.subcommandGroups = [
+      { name: 'whitelist', subcommands: [{ name: 'add' }, { name: 'list' }] },
+    ];
+    const data = dataOf(
+      buildHelpEmbed(new Map([['ai', command]]), stubTranslator(), {
+        botName: 'Konata',
+        intro: '',
+      }),
+    );
+    expect(data.fields?.[0]?.value).toContain('`/ai status`');
+    expect(data.fields?.[0]?.value).toContain('`/ai whitelist add`');
+    expect(data.fields?.[0]?.value).toContain('`/ai whitelist list`');
+    expect(data.fields?.[0]?.value).not.toContain('`/ai`');
+    expect(data.footer?.text).toBe('count:1|cats:1');
+  });
+
   it('sets the author icon only when an avatar url is supplied', () => {
     const withAvatar = dataOf(
       buildHelpEmbed(commandMap(), stubTranslator(), {

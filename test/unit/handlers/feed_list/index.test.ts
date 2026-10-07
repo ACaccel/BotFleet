@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { Types } from 'mongoose';
 
-import FeedList from '../../../../src/handlers/commands/feed_list';
+import FeedList from '../../../../src/handlers/commands/feed_list/action';
 import { formatSubscriptionPages } from '../../../../src/handlers/commands/feed_list/format-subscriptions';
 import { err, ok } from '../../../../src/core/result';
 import { databaseErrorFrom } from '../../../../src/persistence/error-translator';

@@ -3,6 +3,7 @@ import { MessageFlags } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
 
+import { canReadArchiveSource } from '../../../infra/discord/archive-access';
 import { asChannelId } from '../../../core/ids';
 
 import { replyForError } from '../../../infra/discord/reply-for-error';
@@ -34,7 +35,7 @@ export default class db_list_message extends Command {
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const t = (key: string, params?: Record<string, string | number>): string =>
       bot.translator?.t(key, params) ?? '';
     try {
@@ -51,6 +52,10 @@ export default class db_list_message extends Command {
       const channel = interaction.options.getChannel('channel', true);
       if (!ARCHIVABLE_CHANNEL_TYPES.has(channel.type)) {
         await interaction.editReply({ content: t('replies:db_list_message.not_text_channel') });
+        return;
+      }
+      if (!(await canReadArchiveSource(guild, channel.id, interaction.user.id))) {
+        await interaction.editReply({ content: t('replies:db_list_message.source_unavailable') });
         return;
       }
       const date = interaction.options.getString('date', true);
@@ -81,12 +86,17 @@ export default class db_list_message extends Command {
       }
       const lines = await formatMessageLines(messages, {
         resolveDisplayName: makeDisplayNameResolver(guild),
+        t,
       });
       const rangeText =
         hour === null || hour === undefined
           ? t('replies:db_list_message.range_full_day', { date })
           : `${date} ${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`;
       if (print === 'yes') {
+        if (interaction.channelId !== channel.id) {
+          await interaction.editReply({ content: t('replies:db_list_message.same_channel_only') });
+          return;
+        }
         const outChannel = interaction.channel;
         if (!outChannel || !outChannel.isSendable()) {
           await interaction.editReply({

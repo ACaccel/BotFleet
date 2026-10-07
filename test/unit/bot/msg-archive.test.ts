@@ -1,0 +1,66 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { Client } from 'discord.js';
+
+import { MsgArchive } from '../../../src/bot/msg-archive/msg-archive';
+
+const wiring = vi.hoisted(() => ({
+  use: vi.fn(),
+  createPlugin: vi.fn(() => ({ name: 'archive' })),
+}));
+vi.mock('../../../src/bot/index', () => ({
+  BaseBot: class {
+    config: unknown;
+    use = wiring.use;
+    constructor(
+      _client: unknown,
+      _token: string,
+      _mongoURI: string,
+      _clientId: string,
+      config: unknown,
+    ) {
+      this.config = config;
+    }
+  },
+}));
+vi.mock('../../../src/plugins', () => ({ createMessageBackupPlugin: wiring.createPlugin }));
+
+class InspectableMsgArchive extends MsgArchive {
+  public suppression() {
+    return this.eventBridgeSuppression();
+  }
+}
+
+beforeEach(() => vi.clearAllMocks());
+
+describe('MsgArchive command wiring', () => {
+  it('exposes only archive administration and enables interactions', () => {
+    const config = { backup_server: ['guild'], commands: ['talk'] };
+    const bot = new InspectableMsgArchive(
+      new Client({ intents: [] }),
+      'token',
+      'mongo',
+      'client',
+      config,
+    );
+    expect(bot.config.commands).toEqual(['archive']);
+    expect(config.commands).toEqual(['talk']);
+    expect(bot.suppression()).toEqual({ reaction: true, guildCreate: true });
+    expect(wiring.use).toHaveBeenCalledOnce();
+    expect(wiring.createPlugin).toHaveBeenCalledWith({
+      backupServers: ['guild'],
+      backupLogEnabled: false,
+      policy: undefined,
+      runtime: undefined,
+    });
+  });
+
+  it('passes the initial schedule interval to the plugin', () => {
+    new InspectableMsgArchive(new Client({ intents: [] }), 'token', 'mongo', 'client', {
+      backup_server: [],
+      backup_interval_minutes: 90,
+    });
+    expect(wiring.createPlugin).toHaveBeenCalledWith(
+      expect.objectContaining({ backupIntervalMs: 5_400_000 }),
+    );
+  });
+});

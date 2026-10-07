@@ -34,6 +34,7 @@
  *   same failure.
  */
 import mongoose, { type Connection, type Model } from 'mongoose';
+import { ARCHIVE_PROCESS_ID } from '../archive/owner';
 import type { GuildId } from '../../core/ids';
 import { SCHEMAS, type DocByName, type SchemaName } from '../../persistence/schemas';
 import { DatabaseError } from '../../core/errors/external-service-error';
@@ -48,6 +49,7 @@ export interface GuildConnection {
   readonly guildId: GuildId;
   readonly connection: Connection;
   readonly models: Models;
+  readonly archiveOwner?: 'msg-archive';
 }
 
 /**
@@ -133,30 +135,23 @@ export const buildGuildMongoUri = (baseUri: string, guildId: string): string => 
   return `${baseUri}${guildId}?authSource=admin`;
 };
 
-const buildModels = (connection: Connection): Models => ({
-  Fetch: connection.model<DocByName['Fetch']>('Fetch', SCHEMAS.Fetch),
-  Message: connection.model<DocByName['Message']>('Message', SCHEMAS.Message),
-  Reply: connection.model<DocByName['Reply']>('Reply', SCHEMAS.Reply),
-  Giveaway: connection.model<DocByName['Giveaway']>('Giveaway', SCHEMAS.Giveaway),
-  Activity: connection.model<DocByName['Activity']>('Activity', SCHEMAS.Activity),
-  TempRole: connection.model<DocByName['TempRole']>('TempRole', SCHEMAS.TempRole),
-  ThreadModeration: connection.model<DocByName['ThreadModeration']>(
-    'ThreadModeration',
-    SCHEMAS.ThreadModeration,
-  ),
-  ThreadMessageSource: connection.model<DocByName['ThreadMessageSource']>(
-    'ThreadMessageSource',
-    SCHEMAS.ThreadMessageSource,
-  ),
-  UserApiSetting: connection.model<DocByName['UserApiSetting']>(
-    'UserApiSetting',
-    SCHEMAS.UserApiSetting,
-  ),
-  FeedSubscription: connection.model<DocByName['FeedSubscription']>(
-    'FeedSubscription',
-    SCHEMAS.FeedSubscription,
-  ),
-});
+const isArchiveModel = (name: string): boolean =>
+  name === 'Message' || name === 'Fetch' || name.startsWith('Archive');
+
+const buildModels = (connection: Connection): Models => {
+  const models = {} as Record<SchemaName, Model<unknown>>;
+  for (const name of Object.keys(SCHEMAS) as SchemaName[]) {
+    const schema = SCHEMAS[name].clone();
+    // Archive schema maintenance belongs to the worker after ownership and
+    // structural checks. Merely opening a reader must never mutate indexes.
+    if (isArchiveModel(name)) {
+      schema.set('autoCreate', false);
+      schema.set('autoIndex', false);
+    }
+    models[name] = connection.model(name, schema) as Model<unknown>;
+  }
+  return models as Models;
+};
 
 /**
  * Run every model's index build, tolerating per-model rejections.
@@ -175,18 +170,20 @@ const buildModels = (connection: Connection): Models => ({
  */
 const initModelsBestEffort = async (models: Models, guildId: GuildId): Promise<void> => {
   await Promise.allSettled(
-    Object.entries(models).map(async ([name, model]) => {
-      try {
-        await model.init();
-      } catch (err: unknown) {
-        const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-        process.stderr.write(
-          `[mongo] model.init() failed for ${name} on guild ${guildId}: ${reason}. ` +
-            `Connection kept open; indexes may be missing.\n`,
-        );
-        throw err;
-      }
-    }),
+    Object.entries(models)
+      .filter(([name]) => !isArchiveModel(name))
+      .map(async ([name, model]) => {
+        try {
+          await model.init();
+        } catch (err: unknown) {
+          const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+          process.stderr.write(
+            `[mongo] model.init() failed for ${name} on guild ${guildId}: ${reason}. ` +
+              `Connection kept open; indexes may be missing.\n`,
+          );
+          throw err;
+        }
+      }),
   );
 };
 
@@ -382,6 +379,7 @@ export class MongoConnectionManager implements ConnectionManager {
     retryPolicy: RetryPolicy = DEFAULT_RETRY_POLICY,
     sleep: SleepFn = realSleep,
     private readonly recoveryIntervalMs: number = DEFAULT_RECOVERY_INTERVAL_MS,
+    private readonly archiveOwner?: 'msg-archive',
   ) {
     validateRecoveryInterval(recoveryIntervalMs);
     this.retryPolicy = retryPolicy;
@@ -499,7 +497,14 @@ export class MongoConnectionManager implements ConnectionManager {
   private async open(guildId: GuildId): Promise<GuildConnection> {
     const generation = this.generation;
     const uri = buildGuildMongoUri(this.baseUri, guildId);
-    const connection = await mongoose.createConnection(uri).asPromise();
+    const connection = await mongoose
+      .createConnection(
+        uri,
+        this.archiveOwner === 'msg-archive'
+          ? { appName: ARCHIVE_PROCESS_ID, writeConcern: { w: 'majority', j: true } }
+          : {},
+      )
+      .asPromise();
     try {
       const models = buildModels(connection);
       // Best-effort index initialization — see initModelsBestEffort.
@@ -508,7 +513,12 @@ export class MongoConnectionManager implements ConnectionManager {
       // "MongoDB for guild ... connected".
       await initModelsBestEffort(models, guildId);
       assertSameGeneration(generation, this.generation, guildId);
-      const entry: GuildConnection = { guildId, connection, models };
+      const entry: GuildConnection = {
+        guildId,
+        connection,
+        models,
+        ...(this.archiveOwner === undefined ? {} : { archiveOwner: this.archiveOwner }),
+      };
       this.cache.set(guildId, entry);
       return entry;
     } catch (err: unknown) {
@@ -676,10 +686,17 @@ export class StaticConnectionManager implements ConnectionManager {
       return overridden;
     }
     const models = buildModels(this.underlying);
-    await Promise.all(Object.values(models).map((m) => m.init()));
+    await Promise.all(
+      Object.values(models).map(async (m) => {
+        await m.createCollection();
+        await m.createIndexes();
+      }),
+    );
     assertSameGeneration(generation, this.generation, guildId);
     const entry: GuildConnection = {
       guildId,
+      // This adapter is exclusively for isolated integration databases.
+      archiveOwner: 'msg-archive',
       connection: this.underlying,
       models,
     };

@@ -2,45 +2,31 @@
 
 Part of the [contributing guide](../../CONTRIBUTING.md).
 
-Use plugins for bot-scoped behavior such as scheduled jobs, event subscriptions,
-and message listeners. Interaction handlers remain under `src/handlers/` and
-use the generated registries.
+Use plugins for bot-scoped jobs and listeners; interactions belong in `src/handlers/`.
 
-1. Create `src/plugins/<name>/plugin.ts` with a private zod config schema,
-   its inferred config type, and a factory returning `Plugin`. Parse the raw
-   config in the factory and capture the result; malformed config must fail
-   at composition time.
-2. Give the plugin a unique `id` and a `version`. Implement only the lifecycle
-   hooks and Discord event subscriptions it needs. The authoritative contract
-   is [`src/core/plugin/types.ts`](../../src/core/plugin/types.ts).
-3. Export the factory and config type through the plugin's `index.ts` and
-   [`src/plugins/index.ts`](../../src/plugins/index.ts).
-4. Register it in the personality constructor with `this.use(createXxxPlugin(config))`.
-   Keep user-facing text in both locale catalogs, and update configuration
-   examples and affected documentation.
-5. Test pure logic and lifecycle/event wiring under `test/unit/plugins/`,
-   including error paths and cleanup.
+1. Create `src/plugins/<name>/plugin.ts`: a private zod schema, inferred config
+   type, and factory returning [`Plugin`](../../src/core/plugin/types.ts).
+   Parse and capture config in the factory so invalid values fail at composition.
+2. Set a unique `id` and `version`; implement the required hooks and subscriptions.
+   Export the factory and config type through both plugin and
+   [shared indexes](../../src/plugins/index.ts).
+3. Register with `this.use(createXxxPlugin(config))` in the personality constructor.
+   Add user-facing text to both locale catalogs; update config examples and docs.
+4. Test pure logic, lifecycle/event wiring, failures, and cleanup under
+   `test/unit/plugins/`. Run the [quality gates](../../CONTRIBUTING.md#quality-gates).
 
-Lifecycle order is `init` → `start` → `onReady`; shutdown runs in reverse
-registration order. A failed startup hook disables that plugin while the bot
-continues. `onShutdown` must tolerate partially initialized state because it
-also runs for disabled plugins. Use `onGuildDatabaseReady` when guild-scoped
-jobs need rebuilding after database recovery.
+Lifecycle order is `init` → `start` → `onReady`; shutdown reverses registration
+order. Startup failure disables the plugin; `onShutdown` must handle partial
+initialization. Use `onGuildDatabaseReady` to rebuild jobs after database recovery.
 
-Resolve dependencies in `init` and let event closures reuse them. The host
-attaches subscriptions only after successful initialization. Gate applicable
-channel behavior through `PermissionRankPolicy`; do not add per-plugin
-`blockedChannels` lists. Add new feature keys to `RankedFeature` as needed.
+Resolve dependencies in `init`; subscriptions attach after it succeeds.
+Gate channel behavior with `PermissionRankPolicy` and add feature keys to
+`RankedFeature` as needed. Do not add per-plugin `blockedChannels` lists.
 
 ## Plugin ↔ IoC contract
 
-Import `TOKENS` from `src/bot/tokens.ts`, the shared token catalog:
-
-- Read dependencies with `ctx.resolve(token)`.
-- Publish built instances with `ctx.registerInstance(token, instance)` **only
-  inside `init`**. Later calls and duplicate registrations fail.
-
-Plugins cannot import `@core/ioc` or personality composition roots
-(`src/bot/<name>/**`); ESLint enforces these boundaries. Do not cast a context
-to access the container. New tokens belong in the existing catalog, outside
-`core`, because their types may reference outer layers.
+Use [`TOKENS`](../../src/bot/tokens.ts) with `ctx.resolve(token)` and publish
+instances with `ctx.registerInstance(token, instance)` **only inside `init`**;
+duplicate registrations fail. Add new tokens to that catalog.
+ESLint forbids imports from `@core/ioc` and `src/bot/<name>/**`.
+Do not cast the context to access the container.

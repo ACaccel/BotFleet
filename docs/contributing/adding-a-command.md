@@ -2,93 +2,93 @@
 
 Part of the [contributing guide](../../CONTRIBUTING.md).
 
-1. Create `src/handlers/commands/<snake_case_name>/index.ts`, extending
-   `Command` from `@cmd`. The directory becomes the Discord command name.
-   Follow an existing command with similar inputs and reply behavior.
-2. Set command metadata with `setConfig`: name, description, options, and
-   category (`auto_reply`, `fun`, `server_activity`, `utility`, `admin`, `ai`,
-   or the default `other`). Keep Discord input, authorization, translation,
-   and replies in the handler; defer replies before slow work.
-3. Add text to **both** `zh-TW` and `en` catalogs. Metadata belongs in
-   `commands.json`, replies in `replies.json`, and shared failures in
-   `errors.json`. Keys and interpolation placeholders must match across
-   locales. Failure fallbacks used by `replyForError` need `{{traceId}}`.
-4. Run `npm run handlers:gen` and include the generated registry in the
-   change. Enable the command in the intended bots' `config.json` commands
-   arrays and update their examples and affected documentation.
-5. Test a happy path and a failure path using the shared
-   [Discord fixtures](../../test/fixtures/discord/README.md). MongoDB behavior
-   needs an integration test with `withFreshConnection` from
-   `test/integration/helpers/mongo.ts`. Tests that bind ports but need no
-   database belong in `integration-nodb`; list them in `NO_DB_INTEGRATION`
-   in `vitest.workspace.ts`.
-6. Follow the [registration procedure](local-setup.md#registering-slash-commands)
-   to publish the command to a test guild, then globally when ready.
+1. Create `src/handlers/commands/<snake_case_name>/index.ts`, extending `Command`
+   from `@cmd`. The directory names the command; follow a similar existing handler.
+   Use `setConfig` for metadata and a category from the
+   [command contract](../../src/handlers/commands/command.ts).
+2. Keep Discord input, authorization, translation, and replies in the handler;
+   defer before slow work. Add matching keys and placeholders to both `zh-TW`
+   and `en` catalogs: metadata in `commands.json`, replies in `replies.json`,
+   failures in `errors.json`. `replyForError` fallbacks need `{{traceId}}`.
+3. Run `npm run handlers:gen`, include its output, and enable the command in the
+   intended bots' `config.json` commands arrays. Update examples and affected docs.
+4. Test happy and failure paths with [Discord fixtures](../../test/fixtures/discord/README.md).
+   For MongoDB, use [`withFreshConnection`](../../test/integration/helpers/mongo.ts).
+   Port-binding tests without MongoDB belong in `integration-nodb` and
+   `NO_DB_INTEGRATION` in [`vitest.workspace.ts`](../../vitest.workspace.ts).
+5. [Register](local-setup.md#registering-slash-commands) in a test guild, then
+   globally when ready. Run the [quality gates](../../CONTRIBUTING.md#quality-gates).
 
-## Guild commands and subcommands
+## Subcommand groups
 
-Set `guildOnly: true` for commands that require guild state. Optional
-`defaultMemberPermissions` controls Discord registration defaults; handlers must
-still check runtime authority. Define `subcommands` or `subcommandGroups` in
-command metadata, with options on each subcommand. Root value options cannot be
-combined with subcommands. Descriptions and choices use the corresponding nested
-`commands:<name>.subcommands.<subcommand>` or
-`commands:<name>.groups.<group>.subcommands.<subcommand>` catalog keys.
-See `thread_manager` for guild-only subcommands with runtime admin checks.
+Use `subcommands` for `/command subcommand` and `subcommandGroups` for
+`/command group subcommand`; both can appear on one command, but neither can
+coexist with root `options`. Localize root subcommand descriptions/options under
+`commands:<command>.subcommands.<subcommand>`, group descriptions under
+`commands:<command>.groups.<group>.description` and subcommand descriptions/options
+under `.groups.<group>.subcommands.<subcommand>`. See the [archive handler](../../src/handlers/commands/archive/index.ts).
+`guildOnly` and `defaultMemberPermissions` constrain registration; handlers must
+still validate guild scope and permissions at execution time.
 
-Thread moderation handlers and buttons also follow the
-[authorization contract](../thread-moderation.md#delegated-management-and-dm-review),
-including fresh authority checks and recipient-bound review controls.
+For durable operational actions, delegate persistence and bounded inspection to
+an infra service. Confirmation buttons must recheck permissions and bind the
+action to the original operator, guild, channel and reviewed state; use durable
+tokens rather than in-memory collectors when restart recovery is required. See
+the [archive control contract](../message-archive.md#access-and-confirmations).
 
 ## Option autocomplete
 
-- Set `autocomplete: true` on a **string** option; it cannot also have
-  `choices`. Override `autocomplete` and return `Promise<CommandSuggestions>`.
-- Read the focused value with `interaction.options.getFocused()` and sibling
-  values with `src/infra/discord/options.ts`. Siblings may be absent; entity
-  values are raw IDs because autocomplete does not resolve Discord objects.
-- Return suggestions; the dispatcher calls `respond`. It enforces 25 choices
-  and 100 characters per name/value. Drop candidates whose values cannot be
-  safely shortened.
-- Return `[]` for unusable states. Autocomplete cannot send an error reply;
-  log actionable dependency failures at info level. Use a database or cache,
-  never an upstream request: Discord requires a response within three seconds.
-- Apply the command's visibility checks and translate fixed wording in labels.
-  Stored values need no translation; test any constants shared with catalogs.
-- Test suggestion shape, refusal paths, and limits with
-  `buildAutocompleteInteraction`. See `feed_unsubscribe` for an example.
+- Set `autocomplete: true` on a string option without `choices`; return
+  `Promise<CommandSuggestions>`. The dispatcher calls `respond` and enforces
+  25 choices and 100 characters per name/value; discard unsafe truncations.
+- Read focus with `interaction.options.getFocused()` and siblings with
+  [option helpers](../../src/infra/discord/options.ts). Siblings may be absent;
+  entity values are raw IDs.
+- Use a database or cache, never an upstream request: responses have a three-second
+  deadline. Return `[]` for unusable states and log actionable failures at info level.
+- Apply visibility checks, translate fixed labels, and test shape, refusals, limits,
+  and catalog constants with `buildAutocompleteInteraction`. Follow
+  [`/feed unsubscribe`](../../src/handlers/commands/feed_unsubscribe/action.ts).
 
 ## Handler 150-line cap
 
-Each `src/handlers/<type>/<name>/index.ts` is limited to **150 lines**, including
-imports, comments, and blank lines. ESLint enforces this cap.
-
-Extract pure logic to sibling kebab-case files with named exports and explicit
-return types. Keep input extraction, Discord I/O, permissions, repository
-availability checks, translator calls, and reply assembly in `index.ts`.
-Use `unknown` and narrowing instead of `any`.
-
-Test extracted helpers under `test/unit/handlers/<name>/`, covering happy,
-boundary, and error paths. Keep helpers local until a second handler needs
-them; then promote shared logic to the appropriate lower layer.
+ESLint limits `src/handlers/<type>/<name>/index.ts` to **150 lines**, including
+blank lines. Extract pure logic into sibling kebab-case files with named exports
+and explicit return types; use `unknown` and narrowing instead of `any`.
+Keep Discord I/O, permissions, repository checks, translation, and reply assembly
+in the root handler or its internal `action.ts`. Test helpers under `test/unit/handlers/<name>/` for happy, boundary,
+and error paths; promote them to a lower layer only when another handler needs them.
 
 ## Shared handler utilities
 
-| Utility                                 | Use                                                                                                       |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `src/infra/discord/options.ts`          | Typed required/optional option access; match the declared `required` flag instead of casting values       |
-| `src/infra/http/`                       | Bounded HTTP requests; `getJson` / `postJson` validate responses with zod                                 |
-| `src/infra/discord/send-paged-reply.ts` | `sendPagedEphemeralReply` for long listings, with isolated follow-up failures and a partial-result notice |
-| `src/core/regex-capture.ts`             | `requireCapture` to validate capture groups instead of casting potentially missing values                 |
-| `Command.validateBotConfig`             | Validate required per-bot configuration at registration; invalid commands are logged and skipped          |
-
-Handlers and plugins are sibling layers and must not import each other.
-Shared adapters belong in `infra/`. For command-specific config schemas, see
-`weather_forecast/config.ts` or `random_restaurant/config.ts`.
+Use [typed options](../../src/infra/discord/options.ts) matching each declared
+`required` flag, [bounded HTTP](../../src/infra/http/index.ts) with zod validation,
+[paged replies](../../src/infra/discord/send-paged-reply.ts), and
+[`requireCapture`](../../src/core/regex-capture.ts) for regex captures.
+Validate per-bot configuration with `Command.validateBotConfig`; see
+[`weather_forecast/config.ts`](../../src/handlers/commands/weather_forecast/config.ts).
+Handlers and plugins cannot import each other; shared adapters belong in `infra/`.
 
 ## Privacy-aware data commands
 
-Commands showing guild activity, rankings, or message counts must not reveal
-channels the invoker cannot see. Follow the
-[privacy rules](../architecture.md#privacy-aware-data-commands), including
-filtering both queries and results and respecting the reply audience.
+Activity, ranking, and message-count commands must follow the
+[privacy rules](../architecture.md#privacy-aware-data-commands): filter queries
+and results by channel visibility and respect the reply audience.
+
+## Grouping related actions
+
+Use `GroupedCommand` for related slash actions. Its root declares a category and
+routes shaped as `{ name, command }` or `{ group, name, command }`; it derives
+subcommand options from the action metadata and delegates both execution and
+autocomplete. An action that already declares subcommands supplies the matching
+child options, as in `thread manager`. Preserve authorization inside each action;
+never apply an administrator-only root gate to a mixed-access family.
+
+Only root handlers have an `index.ts` entry in their immediate command directory.
+Internal action implementations use `action.ts` and are not registered directly.
+Descriptions/options live under `commands:<root>.subcommands.<action>` or
+`commands:<root>.groups.<group>.subcommands.<action>`. Keep button and modal IDs
+independent of slash command names. Test grouped dispatch, unknown routes,
+autocomplete routing, localized registration, and the existing action behavior.
+Regenerate handlers and update configuration and the
+[migration guide](../upgrading.md#grouped-slash-commands) when replacing public entries.

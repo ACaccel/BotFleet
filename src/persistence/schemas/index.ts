@@ -1,3 +1,21 @@
+import {
+  archiveInboxSchema,
+  archiveJobSchema,
+  archiveJournalSchema,
+  archiveRevisionSchema,
+  archiveReactionSchema,
+  archiveChannelSchema,
+  archiveLeaseSchema,
+  type ArchiveRevisionDoc,
+  type ArchiveReactionDoc,
+  type ArchiveLeaseDoc,
+} from './archive.schema';
+import type {
+  ArchiveInboxEntry,
+  ArchiveJob,
+  ArchiveJournal,
+  ArchiveChannel,
+} from '../../core/archive/types';
 /**
  * Schema registry — single source of truth for "which models exist".
  *
@@ -17,6 +35,7 @@ import {
 } from './thread-message-source.schema';
 import { threadModerationSchema, type ThreadModerationDoc } from './thread-moderation.schema';
 import { userApiSettingSchema, type UserApiSettingDoc } from './user-api-setting.schema';
+export * from './archive.schema';
 
 export { activitySchema, type ActivityDoc } from './activity.schema';
 export {
@@ -41,6 +60,13 @@ export { threadModerationSchema, type ThreadModerationDoc } from './thread-moder
 export { userApiSettingSchema, type UserApiSettingDoc } from './user-api-setting.schema';
 
 export const SCHEMAS = {
+  ArchiveInbox: archiveInboxSchema,
+  ArchiveJob: archiveJobSchema,
+  ArchiveJournal: archiveJournalSchema,
+  ArchiveRevision: archiveRevisionSchema,
+  ArchiveReaction: archiveReactionSchema,
+  ArchiveChannel: archiveChannelSchema,
+  ArchiveLease: archiveLeaseSchema,
   Fetch: fetchSchema,
   Message: messageSchema,
   Reply: replySchema,
@@ -60,6 +86,13 @@ export type SchemaName = keyof typeof SCHEMAS;
  * `infra/mongo/connection-manager` to derive the typed Models map.
  */
 export interface DocByName {
+  ArchiveInbox: ArchiveInboxEntry;
+  ArchiveJob: ArchiveJob;
+  ArchiveJournal: ArchiveJournal;
+  ArchiveRevision: ArchiveRevisionDoc;
+  ArchiveReaction: ArchiveReactionDoc;
+  ArchiveChannel: ArchiveChannel;
+  ArchiveLease: ArchiveLeaseDoc;
   Fetch: FetchDoc;
   Message: MessageDoc;
   Reply: ReplyDoc;

@@ -5,7 +5,7 @@ import {
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from 'discord.js';
-import ThreadManager from '../../../src/handlers/commands/thread_manager';
+import Thread from '../../../src/handlers/commands/thread';
 import { buildFakeBot, echoTranslatorWithParams } from '../../fixtures/discord/bot-fake';
 
 const ADMIN = '100000000000000001';
@@ -48,6 +48,7 @@ const build = (action = 'add') => {
     guild: { id: GUILD, channels: { fetch: fetchThread } },
     guildId: GUILD,
     options: {
+      getSubcommandGroup: vi.fn().mockReturnValue('manager'),
       getSubcommand: vi.fn().mockReturnValue(action),
       getChannel: vi.fn().mockReturnValue({ id: THREAD }),
       getUser: vi.fn().mockReturnValue({ id: TARGET }),
@@ -76,7 +77,7 @@ const build = (action = 'add') => {
 };
 
 const run = async (f: ReturnType<typeof build>): Promise<void> => {
-  await new ThreadManager().execute(f.interaction, f.bot);
+  await new Thread().execute(f.interaction, f.bot);
 };
 
 const expectReply = (f: ReturnType<typeof build>, key: string): void => {
@@ -86,7 +87,7 @@ const expectReply = (f: ReturnType<typeof build>, key: string): void => {
   });
 };
 
-describe('thread_manager', () => {
+describe('/thread manager', () => {
   it('lets a configured admin grant an accessible member management of only the selected bot and thread', async () => {
     const f = build();
     await run(f);

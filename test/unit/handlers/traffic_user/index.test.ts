@@ -1,5 +1,5 @@
 /**
- * Privacy-invariant coverage for the `/traffic_user` handler. The visible
+ * Privacy-invariant coverage for the `/traffic user` handler. The visible
  * channel set is gated by the INVOKER (clearance + native ViewChannel)
  * while the stats focus the TARGET:
  *   - a target active only in an invoker-hidden channel yields the neutral
@@ -15,7 +15,7 @@ import type { BaseBot } from '@bot';
 
 import { createPermissionRankPolicy } from '../../../../src/core/plugin';
 import { ok } from '../../../../src/core/result';
-import TrafficUser from '../../../../src/handlers/commands/traffic_user';
+import TrafficUser from '../../../../src/handlers/commands/traffic';
 import type { Repos } from '../../../../src/persistence/repositories';
 import type { MessageDoc } from '../../../../src/persistence/schemas/message.schema';
 import { buildTextChannel } from '../../../fixtures/discord/channel-builder';
@@ -88,6 +88,8 @@ const runHandler = async (docs: readonly MessageDoc[]): Promise<ReplyPayload[]> 
     channelId: 'pub',
     user: { id: INVOKER },
     options: {
+      getSubcommand: () => 'user',
+      getSubcommandGroup: () => null,
       get: () => null,
       getUser: () => ({ id: TARGET, username: 'target-name' }),
       getMember: () => null,
@@ -102,7 +104,7 @@ const runHandler = async (docs: readonly MessageDoc[]): Promise<ReplyPayload[]> 
   return edits;
 };
 
-describe('/traffic_user privacy invariant', () => {
+describe('/traffic user privacy invariant', () => {
   it('excludes the target activity in channels the invoker cannot see', async () => {
     // Target is busy only in `secret`, which the unranked invoker cannot see.
     const edits = await runHandler([doc('secret', TARGET), doc('secret', TARGET)]);

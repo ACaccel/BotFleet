@@ -56,11 +56,11 @@ describe('db / loadConfig', () => {
       writeConfig({
         mongo_uri: 'mongodb://h/',
         guilds: ['1'],
-        operations: { verify: { sample_limit: 10 }, 'drop-todo': { dry_run: false } },
+        operations: { 'drop-xfeed': { dry_run: true }, 'drop-todo': { dry_run: false } },
       }),
     );
     expect(cfg.operations).toEqual({
-      verify: { sample_limit: 10 },
+      'drop-xfeed': { dry_run: true },
       'drop-todo': { dry_run: false },
     });
   });

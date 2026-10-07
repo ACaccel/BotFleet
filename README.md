@@ -13,7 +13,7 @@ Each bot runs independently and selects features from a shared plugin system.
 - LLM chat through OpenAI, Anthropic, Gemini and xAI, plus self-hosted auto-replies.
 - Message archives, activity reports, giveaways and temporary roles.
 - [Temporary moderation](docs/contributing/operations.md#temporary-moderation) with automatic reply suppression.
-- [Thread moderation](docs/thread-moderation.md) with persistent bans, delegated management and admin DM review in Nijika.
+- [Thread moderation](docs/thread-moderation.md) on Nijika, with paginated ban lists, delegated management approved by DM, and deletion of attributable public bot replies.
 - Social-link previews and channel subscriptions to social feeds.
 - Earthquake notifications and plugin-owned scheduled jobs.
 
@@ -66,6 +66,8 @@ retired features and configuration migrations.
 
 ## Documentation
 
+See the [documentation index](docs/README.md) for all guides.
+
 | Task                                            | Guide                                          |
 | ----------------------------------------------- | ---------------------------------------------- |
 | Deploy or update systemd services               | [Deployment](docs/contributing/deployment.md)  |
@@ -81,3 +83,49 @@ services. Deployment does not register commands.
 ## License
 
 [MIT](LICENSE).
+
+### Message archival
+
+[msg-archive](docs/message-archive.md) exclusively captures and reconciles guild
+messages, observed edits/deletions and complete normal/burst reaction memberships.
+New archive records store attachment metadata without downloading files; existing
+event-deletion attachment archives remain unchanged. Bot/webhook source allowlists
+default to empty. The worker supports bounded scans, progress/ETA and reviewed,
+resumable database repair through [Discord archive controls](docs/message-archive.md#discord-controls). Periodic
+scans default to disabled; enable them per guild with
+[`/archive schedule enable minutes:60`](docs/message-archive.md#periodic-schedule)
+after initial repair to set the interval and enable backup together.
+
+Start a [one-shot backup](docs/message-archive.md#one-shot-repair) with
+`/archive backup`: review the change summary, confirm the backup, then accept its
+verified result. A public status card refreshes every ten seconds and offers
+**View details** and cooperative stopping. Pages use at most five buttons and no
+select menus. Lists show two entries per page with item buttons, refresh,
+next-page controls and **Delete all jobs** or **Delete all plans**. List, item and confirmation navigation stays in the clicked
+message, so separate panels do not overwrite each other. Small plans show concrete changes; larger plans show grouped
+impacts with source examples. Eligible deletion and rollback appear directly on
+the item panel; running jobs must stop before deletion. Apply, resume and acceptance
+open their confirmation directly. Whole-list deletion opens an
+[all-pages review](docs/message-archive.md#bulk-deletion) before confirmation;
+running jobs stop cooperatively. Unused, never-applied or fully rolled-back plans
+without conflicts or recovery journals can be deleted; plans with remaining
+applied changes or active work remain protected.
+Active-only filters are omitted.
+`/archive schedule` manages automatic scans. Deleting control records preserves
+archived messages.
+
+Archive work uses bounded batches and history prefetch with durable checkpoints.
+Shared [progress reports](docs/message-archive.md#progress-and-access) distinguish
+confirmed writes, reaction completion and coverage gaps. Partial one-shot results
+identify stopped work and direct users to review the existing run before resuming.
+Routine cards include one current-activity line with the source, processing step
+and available page or reaction membership counts, refreshed every ten seconds.
+They show the next action without duplicate counters. Repeating saved schedule settings does not restart
+or postpone backup.
+Developer performance
+measurements and their limits are recorded in the
+[benchmark report](docs/contributing/archive-performance-results.md).
+
+Related slash commands are grouped under `/feed`, `/reply`, `/activity`,
+`/giveaway`, `/ai`, `/thread`, and `/traffic`. Use `/help` for executable paths;
+see the [command migration table](docs/upgrading.md#grouped-slash-commands) when upgrading.

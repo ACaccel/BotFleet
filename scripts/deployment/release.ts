@@ -24,6 +24,7 @@ import {
 } from './config';
 import { botUnit, mongoUnit } from './units';
 import { run, atomic } from './host';
+import { validateBotSettings } from './bot-settings';
 
 export function readConfig(root: string): DeploymentConfig {
   const configFile = join(root, 'deployment.json');
@@ -130,6 +131,7 @@ export function makeRelease(root: string, config: DeploymentConfig, mongodbOnly:
         });
         if (!existsSync(join(root, 'src/bot', bot, 'config.json')))
           throw new Error(`Missing config.json for ${bot}`);
+        validateBotSettings(bot, readFileSync(join(root, 'src/bot', bot, 'config.json'), 'utf8'));
       }
       cpSync(join(root, 'src'), join(directory, 'src'), { recursive: true, dereference: false });
       for (const name of ['package.json', 'package-lock.json', 'tsconfig.json'])

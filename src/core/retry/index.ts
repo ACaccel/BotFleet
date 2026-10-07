@@ -1,1 +1,1 @@
-export { retryFetch, isRetryableError, type RetryOptions } from './retry';
+export { retryFetch, isRetryableError } from './retry';

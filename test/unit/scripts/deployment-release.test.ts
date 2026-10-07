@@ -98,6 +98,25 @@ describe('release preparation', () => {
     expect(() => makeRelease(root, config, false)).toThrow('activation hooks');
     expect(existsSync(join(root, '.deploy/releases'))).toBe(false);
   });
+  it('rejects invalid local archive configuration before copying dependencies or stopping services', () => {
+    config.bots = ['msg-archive'];
+    file(
+      'src/bot/msg-archive/.env',
+      'TOKEN=valid-token\nCLIENT_ID=123456\nMONGO_URI=mongodb://localhost/test\n',
+    );
+    file(
+      'src/bot/msg-archive/config.json',
+      JSON.stringify({
+        backup_server: ['1'],
+        archive_runtime: { progress_interval_seconds: 4 },
+      }),
+    );
+    expect(() => makeRelease(root, config, false)).toThrow('Invalid config.json for msg-archive');
+    expect(readdirSync(join(root, '.deploy/releases'))).toEqual([]);
+    expect(
+      commands.run.mock.calls.some(([program]) => ['cp', 'sudo', 'systemctl'].includes(program)),
+    ).toBe(false);
+  });
   it('removes the incomplete release when systemd validation fails', () => {
     commands.run.mockImplementation((program: string, args: string[]) => {
       if (program.endsWith('/node') && args[0] === '--version') return 'v22.13.0';

@@ -1,67 +1,4 @@
 {
-  "activity_create": {
-    "description": "建立活動",
-    "options": {
-      "title": {
-        "description": "活動標題"
-      },
-      "duration": {
-        "description": "活動時限 (1s, 1m, 1h, 1d, 1w)"
-      },
-      "description": {
-        "description": "活動描述 (optional)"
-      }
-    }
-  },
-  "activity_delete": {
-    "description": "刪除活動",
-    "options": {
-      "activity_id": {
-        "description": "活動ID"
-      }
-    }
-  },
-  "add_reply": {
-    "description": "新增自動回覆",
-    "options": {
-      "keyword": {
-        "description": "關鍵字"
-      },
-      "reply": {
-        "description": "回覆"
-      }
-    }
-  },
-  "ai_settings": {
-    "description": "一次性編輯你的 AI 設定（model / temperature / web search / system prompt）",
-    "options": {
-      "provider": {
-        "description": "選擇 AI provider，後續 model 候選將依此 provider 動態載入"
-      }
-    }
-  },
-  "ai_status": {
-    "description": "顯示你目前的 AI 設定"
-  },
-  "ai_whitelist_add": {
-    "description": "[管理員] 將用戶加入 AI 白名單",
-    "options": {
-      "user": {
-        "description": "要加入白名單的用戶"
-      }
-    }
-  },
-  "ai_whitelist_list": {
-    "description": "列出目前 AI 白名單的所有用戶"
-  },
-  "ai_whitelist_remove": {
-    "description": "[管理員] 將用戶從 AI 白名單移除",
-    "options": {
-      "user": {
-        "description": "要移除的用戶"
-      }
-    }
-  },
   "ban_user": {
     "description": "暫時禁言使用者(ban_threshold: 5 votes, judge_time: 1 min)",
     "options": {
@@ -126,14 +63,6 @@
       }
     }
   },
-  "delete_reply": {
-    "description": "刪除自動回覆",
-    "options": {
-      "keyword": {
-        "description": "關鍵字"
-      }
-    }
-  },
   "emoji_frequency": {
     "description": "統計表情符號使用頻率",
     "options": {
@@ -159,55 +88,6 @@
       }
     }
   },
-  "feed_list": {
-    "description": "列出本伺服器的社群動態訂閱"
-  },
-  "feed_subscribe": {
-    "description": "把某個社群帳號的新貼文轉發到頻道",
-    "options": {
-      "platform": {
-        "description": "帳號所在的社群平台",
-        "choices": {
-          "x": "X (Twitter)"
-        }
-      },
-      "account": {
-        "description": "帳號名稱,多個帳號用逗號分隔,前面加不加 @ 都可以"
-      },
-      "channel": {
-        "description": "要轉發到的頻道 (預設為目前頻道)"
-      },
-      "media": {
-        "description": "依貼文附加的媒體決定轉發範圍",
-        "choices": {
-          "media_only": "只轉發含圖片或影片的貼文,不含純文字",
-          "photo_only": "只轉發含圖片的貼文",
-          "video_only": "只轉發含影片的貼文",
-          "any": "轉發所有貼文:純文字、圖片、影片都包含"
-        }
-      },
-      "keyword": {
-        "description": "只轉發內文包含這段文字的貼文 (最多 100 字)"
-      }
-    }
-  },
-  "feed_unsubscribe": {
-    "description": "停止把社群貼文轉發到某個頻道",
-    "options": {
-      "channel": {
-        "description": "要退訂的頻道 (預設為目前頻道)"
-      },
-      "platform": {
-        "description": "只移除這個平台的訂閱",
-        "choices": {
-          "x": "X (Twitter)"
-        }
-      },
-      "account": {
-        "description": "只移除這些帳號的訂閱,多個帳號用逗號分隔"
-      }
-    }
-  },
   "gay": {
     "description": "是不是給",
     "options": {
@@ -223,21 +103,6 @@
         "description": "選擇對象"
       }
     }
-  },
-  "giveaway_create": {
-    "description": "建立抽獎",
-    "options": {
-      "destination": {
-        "description": "抽獎發布頻道（預設為當前頻道）",
-        "choices": {
-          "current": "當前頻道",
-          "configured": "預設抽獎頻道"
-        }
-      }
-    }
-  },
-  "giveaway_delete": {
-    "description": "刪除抽獎"
   },
   "give_score": {
     "description": "給分"
@@ -258,14 +123,6 @@
   },
   "list_guild_members": {
     "description": "列出目前伺服器所有成員（含機器人）"
-  },
-  "list_reply": {
-    "description": "列出自動回覆",
-    "options": {
-      "keyword": {
-        "description": "關鍵字"
-      }
-    }
   },
   "menu_get_avatar": {
     "name": "取得用戶頭像連結"
@@ -374,147 +231,636 @@
       }
     }
   },
-  "traffic": {
-    "description": "顯示伺服器訊息流量圖表與統計",
-    "options": {
-      "visibility": {
-        "description": "誰能看到回覆 (optional,預設:ephemeral)",
-        "choices": {
-          "ephemeral": "僅你自己",
-          "public": "所有人"
-        }
-      },
-      "range": {
-        "description": "回顧的時間範圍 (optional,預設:7d)",
-        "choices": {
-          "24h": "最近 24 小時",
-          "7d": "最近 7 天",
-          "30d": "最近 30 天"
-        }
-      },
-      "top_n": {
-        "description": "排行要顯示幾個頻道／用戶 (optional,1-25,預設:10)"
-      }
-    }
-  },
-  "traffic_me": {
-    "description": "顯示你自己的訊息活動統計",
-    "options": {
-      "visibility": {
-        "description": "誰能看到回覆 (optional,預設:ephemeral)",
-        "choices": {
-          "ephemeral": "僅你自己",
-          "public": "所有人"
-        }
-      },
-      "range": {
-        "description": "回顧的時間範圍 (optional,預設:7d)",
-        "choices": {
-          "24h": "最近 24 小時",
-          "7d": "最近 7 天",
-          "30d": "最近 30 天"
-        }
-      },
-      "top_n": {
-        "description": "排行要顯示幾個頻道 (optional,1-25,預設:10)"
-      }
-    }
-  },
-  "traffic_user": {
-    "description": "顯示指定用戶的訊息活動統計",
-    "options": {
-      "user": {
-        "description": "要查詢的用戶"
-      },
-      "visibility": {
-        "description": "誰能看到回覆 (optional,預設:ephemeral)",
-        "choices": {
-          "ephemeral": "僅你自己",
-          "public": "所有人"
-        }
-      },
-      "range": {
-        "description": "回顧的時間範圍 (optional,預設:7d)",
-        "choices": {
-          "24h": "最近 24 小時",
-          "7d": "最近 7 天",
-          "30d": "最近 30 天"
-        }
-      },
-      "top_n": {
-        "description": "排行要顯示幾個頻道 (optional,1-25,預設:10)"
-      }
-    }
-  },
   "update_role": {
     "description": "更新Mee6等級身分組"
   },
   "weather_forecast": {
     "description": "天氣預報(台北)"
   },
-  "thread_ban": {
-    "description": "透過此 bot 禁止指定使用者在此討論串發言、使用指令及觸發 bot",
-    "options": {
-      "users": {
-        "description": "1–20 位使用者的提及或 ID，以空白或逗號分隔"
-      }
-    }
-  },
-  "thread_allow": {
-    "description": "透過此 bot 恢復指定使用者在此討論串發言、使用指令及觸發 bot 的權利",
-    "options": {
-      "users": {
-        "description": "1–20 位使用者的提及或 ID，以空白或逗號分隔"
-      }
-    }
-  },
-  "thread_list": {
-    "description": "列出此 bot 在目前討論串禁止的使用者"
-  },
-  "thread_claim": {
-    "description": "申請成為討論串代理管理者",
-    "options": {
-      "thread": {
-        "description": "要申請管理的討論串"
-      },
-      "reason": {
-        "description": "申請原因（1–1000 字）"
-      }
-    }
-  },
-  "thread_manager": {
-    "description": "管理討論串代理管理者（僅 bot 管理員）",
-    "subcommands": {
-      "add": {
-        "description": "授予討論串代理管理權",
-        "options": {
-          "thread": {
-            "description": "目標討論串"
+  "archive": {
+    "description": "管理訊息封存工作與背景排程",
+    "groups": {
+      "schedule": {
+        "description": "控制這個伺服器的歷史訊息掃描排程",
+        "subcommands": {
+          "status": {
+            "description": "查看定時備份設定與目前或上次掃描結果",
+            "options": {
+              "page": {
+                "description": "來源與問題明細頁（1–100000，每頁 3 筆）"
+              }
+            }
           },
-          "user": {
-            "description": "指定使用者"
+          "enable": {
+            "description": "啟用定時備份，可同時設定備份間隔",
+            "options": {
+              "minutes": {
+                "description": "備份間隔分鐘數（選填，1–10080；未填則沿用目前間隔）"
+              }
+            }
+          },
+          "disable": {
+            "description": "暫停背景歷史掃描，持續即時擷取"
+          },
+          "interval": {
+            "description": "設定掃描間隔，保留目前啟用狀態",
+            "options": {
+              "minutes": {
+                "description": "掃描間隔分鐘數（1–10080）"
+              }
+            }
+          }
+        }
+      }
+    },
+    "subcommands": {
+      "jobs": {
+        "description": "列出執行中或近期的封存工作",
+        "options": {
+          "scope": {
+            "description": "顯示執行中工作或所有近期工作",
+            "choices": {
+              "active": "執行中的工作",
+              "all": "所有近期工作"
+            }
+          },
+          "before": {
+            "description": "上一頁工作清單提供的分頁游標"
           }
         }
       },
-      "remove": {
-        "description": "撤銷討論串代理管理權",
+      "audit": {
+        "description": "稽核封存資料，不修改訊息"
+      },
+      "plan": {
+        "description": "建立可檢視的修復計畫"
+      },
+      "inspect": {
+        "description": "查看備份計畫摘要、變更明細或技術詳情",
         "options": {
-          "thread": {
-            "description": "目標討論串"
+          "run_id": {
+            "description": "修復計畫或工作的 ID"
           },
-          "user": {
-            "description": "指定使用者"
+          "after_sequence": {
+            "description": "接續此操作序號，預設切換變更明細"
+          },
+          "limit": {
+            "description": "每頁操作筆數（1–5，預設 5；內容較長時會減少）"
+          },
+          "view": {
+            "description": "摘要、易讀變更明細或共用技術資訊",
+            "choices": {
+              "summary": "摘要",
+              "changes": "變更明細",
+              "technical": "技術詳情"
+            }
+          },
+          "category": {
+            "description": "依操作類別篩選變更",
+            "choices": {
+              "reset-progress": "重設備份進度",
+              "remove-duplicate-progress": "移除重複進度",
+              "repair-message-time": "修正訊息時間",
+              "merge-duplicate-messages": "合併重複訊息",
+              "exclude-by-policy": "政策排除",
+              "quarantine-data": "隔離待處理資料",
+              "unknown": "未知類型"
+            }
+          }
+        }
+      },
+      "apply": {
+        "description": "確認並套用修復計畫",
+        "options": {
+          "run_id": {
+            "description": "修復計畫或工作的 ID"
+          }
+        }
+      },
+      "status": {
+        "description": "定位或更新共用的備份狀態",
+        "options": {
+          "job_id": {
+            "description": "封存工作的 ID"
+          },
+          "page": {
+            "description": "來源與問題明細頁（1–100000，每頁 3 筆）"
+          }
+        }
+      },
+      "cancel": {
+        "description": "要求取消封存工作",
+        "options": {
+          "job_id": {
+            "description": "封存工作的 ID"
+          }
+        }
+      },
+      "resume": {
+        "description": "確認並繼續修復工作",
+        "options": {
+          "run_id": {
+            "description": "修復計畫或工作的 ID"
+          }
+        }
+      },
+      "verify": {
+        "description": "驗證修復結果",
+        "options": {
+          "run_id": {
+            "description": "修復計畫或工作的 ID"
+          }
+        }
+      },
+      "accept": {
+        "description": "確認接受結果；復原資料於接受後保留 72 小時",
+        "options": {
+          "run_id": {
+            "description": "修復計畫或工作的 ID"
+          }
+        }
+      },
+      "rollback": {
+        "description": "確認回復修復前的資料",
+        "options": {
+          "run_id": {
+            "description": "修復計畫或工作的 ID"
+          }
+        }
+      },
+      "refresh-attachment": {
+        "description": "檢查原始訊息存取權限並更新附件中繼資料",
+        "options": {
+          "channel": {
+            "description": "原始訊息所在的頻道"
+          },
+          "message_id": {
+            "description": "原始訊息的 ID"
+          },
+          "attachment_id": {
+            "description": "附件的 ID"
+          }
+        }
+      },
+      "purge-jobs": {
+        "description": "刪除排隊及已結束的工作紀錄，保留執行中的工作",
+        "options": {
+          "confirm": {
+            "description": "確認刪除此伺服器排隊及已結束的工作紀錄",
+            "choices": {
+              "delete": "刪除紀錄與排隊工作"
+            }
+          }
+        }
+      },
+      "backup": {
+        "description": "建立一次性備份計畫；檢視並確認後才開始備份"
+      },
+      "plans": {
+        "description": "瀏覽備份計畫，查看變更、執行或刪除"
+      }
+    }
+  },
+  "archive_ui": {
+    "filter": "依變更類型篩選",
+    "unavailable": "未知",
+    "plan_not_applied": "計畫狀態：{{state}}；這份計畫尚未修改封存資料。",
+    "scope": "範圍：伺服器 {{guild}}；歷史補抓截止 {{cutoff}}",
+    "policy_unavailable": "來源政策：未取得計畫儲存的規則，範圍仍需確認。",
+    "history_scope_pending": "預計補抓來源：尚待探索確認。",
+    "history_scope_complete": "歷史來源探索已完成；實際涵蓋來源請查看執行結果。",
+    "history_scope_unknown": "預計補抓來源：無法取得確切涵蓋範圍。",
+    "timestamps_only": "這份計畫只修正已儲存訊息的時間。",
+    "existing_scope": "需要調整的既有來源：{{sources}} 個；{{operations}} 筆操作",
+    "identity_unavailable": "{{count}} 筆操作的來源無法辨識。",
+    "summary_category": "{{category}}：{{operations}} 筆{{effects}}",
+    "mutation_insert": "新增 {{count}}",
+    "mutation_update": "更新 {{count}}",
+    "mutation_delete": "刪除 {{count}}",
+    "mutation_unknown": "未知影響 {{count}}",
+    "effect_reset-progress": "重設進度會清除續抓位置，供後續重新檢查歷史紀錄。",
+    "effect_remove-duplicate-progress": "移除重複進度時，保留各來源的主要進度紀錄。",
+    "effect_merge-duplicate-messages": "合併訊息可能更新保留紀錄並移除重複的備份訊息。",
+    "effect_exclude-by-policy": "政策排除會移除受影響的備份資料，也可能包含編輯及反應紀錄。",
+    "effect_quarantine-data": "隔離會保留證據，也可能將紀錄移出原資料集合。",
+    "effect_unknown": "部分影響無法確認；請先查看變更再確認。",
+    "progress_only": "這份修復計畫沒有刪除已備份訊息的操作。",
+    "plan_issues": "計畫檢查：{{unresolved}} 筆未解決資料；{{issues}} 項問題。備份完整性尚未驗證。",
+    "historical_issues": "歷史計畫檢查：{{unresolved}} 筆未解決資料；{{issues}} 項問題。請查看目前驗證結果。",
+    "start_expiry": "計畫可開始期限：{{date}}（{{relative}}）。",
+    "groups_heading": "變更分組總覽｜{{category}}",
+    "group_title": "{{action}}｜{{target}}",
+    "group_counts": "{{operations}} 筆操作；{{sources}} 個不同來源",
+    "states": "狀態統計：{{states}}",
+    "impact": "影響：{{effect}}",
+    "examples": "來源範例：{{sources}}",
+    "more_sources": "另有 {{count}} 個來源；可開啟完整來源清單。",
+    "group_open": "查看分組 {{index}} 全部來源",
+    "source_open": "查看來源 {{index}} 的變更",
+    "sources_heading": "這個分組的全部來源",
+    "source_operations": "這個來源有 {{count}} 筆操作",
+    "filtered_total": "完整計畫中共有 {{operations}} 筆符合目前篩選的操作。",
+    "statistics_unavailable": "暫時無法取得完整範圍的統計；請重新開啟面板再試。",
+    "back": "返回上一層",
+    "operation_heading": "變更 {{index}}｜{{source}}",
+    "action_target": "動作：{{action}}；對象：{{target}}",
+    "state": "狀態：{{state}}",
+    "operation_range": "目前顯示變更編號：{{first}}–{{last}}",
+    "operation_open": "查看變更 {{index}}",
+    "collection_fetches": "來源備份進度紀錄",
+    "collection_messages": "已備份訊息",
+    "collection_archive_revisions": "訊息編輯紀錄",
+    "collection_archive_reactions": "反應紀錄",
+    "collection_archive_quarantine": "隔離證據紀錄",
+    "collection_unknown": "無法辨識的備份資料",
+    "effect_progress_insert": "新增備份進度紀錄，不刪除已備份訊息。",
+    "effect_progress_update": "修改備份進度資料，不刪除已備份訊息。",
+    "effect_progress_delete": "移除備份進度紀錄，不刪除已備份訊息。",
+    "effect_record_insert": "新增{{target}}。",
+    "effect_record_update": "更新{{target}}。",
+    "effect_record_delete": "刪除{{target}}。",
+    "effect_quarantine_move": "保留隔離證據後，將這筆訊息移出原資料集合。",
+    "effect_quarantine_evidence": "新增隔離證據；本項不移除原紀錄。",
+    "record": "紀錄代號：{{record}}",
+    "field_lastMessageId": "續抓訊息位置",
+    "field_timestamp": "訊息時間",
+    "field_editedTimestamp": "編輯時間",
+    "value_unset": "未設定",
+    "value_unknown": "未取得",
+    "diff": "{{field}}：{{before}} → {{after}}",
+    "reason": "原因：{{reason}}",
+    "message_link": "訊息：{{url}}",
+    "message_id": "訊息 ID：{{id}}",
+    "policy_rule": "不符合的政策規則：{{rule}}",
+    "quarantine_reason": "隔離原因：{{reason}}",
+    "storage_number": "數字",
+    "storage_string": "文字",
+    "diff_unavailable": "這份舊計畫未提供原值。",
+    "survivor": "保留的紀錄：{{record}}",
+    "survivor_unknown": "未能確認被移除紀錄與保留紀錄的關係。",
+    "dependency": "等待變更 {{index}} 完成；目前{{state}}",
+    "dependency_unknown": "未能辨識依賴的變更；請查看技術詳情。",
+    "technical_run": "伺服器 {{guild}}；建立 {{created}}；截止 {{cutoff}}",
+    "technical_version": "復原紀錄版本 {{version}}；大小 {{size}} bytes",
+    "technical_operation": "變更 {{index}}；內部操作 ID {{id}}",
+    "download_scope": "安全 JSON 只涵蓋本頁 {{count}} 筆操作；選擇下載後會提供私人檔案。",
+    "download": "下載安全 JSON",
+    "download_ready": "提供 {{count}} 筆操作的安全資訊；未包含復原影像或訊息本文。",
+    "record_type_impact": "{{target}}：{{effects}}",
+    "record_types_unavailable": "未取得確切受影響資料種類；刪除及隔離影響仍需確認。",
+    "detail_section": "單項詳情第 {{page}}／{{total}} 頁",
+    "download_permission": "下載安全 JSON 需要機器人在這個頻道具有「附加檔案」權限；請調整權限後重新開啟面板。",
+    "dependencies_unavailable": "部分依賴關係未能取得；目前清單並不完整。",
+    "quarantine_invalid-channel-cursor": "來源進度紀錄的來源識別資料無效。",
+    "quarantine_unknown": "未取得確切診斷原因；請查看技術詳情。",
+    "rollback_title": "確認復原這個流程",
+    "rollback_original": "原修復計畫共有 {{count}} 筆操作；以下是歷史候選範圍。",
+    "rollback_type": "{{target}}：{{effects}}",
+    "rollback_remove": "移除原本新增的 {{count}} 筆",
+    "rollback_restore_update": "還原原本更新的 {{count}} 筆",
+    "rollback_restore_delete": "還原原本刪除的 {{count}} 筆",
+    "rollback_eligible_unknown": "尚未取得目前可復原筆數及較新變更的衝突筆數；流程之後被修改的紀錄可能保留為衝突。",
+    "effect_progress_combined": "重設進度會清除續抓位置；移除重複進度會保留各來源的主要紀錄。",
+    "quarantine_invalid-identity-or-timestamp": "訊息識別資料或時間無效。",
+    "quarantine_large-duplicate-group": "重複資料群組過大，無法安全合併。",
+    "quarantine_conflicting-channel-id": "重複紀錄的來源識別資料不一致。",
+    "quarantine_conflicting-user-id": "重複紀錄的作者識別資料不一致。",
+    "quarantine_conflicting-timestamp": "重複紀錄的訊息時間不一致。",
+    "policy_exclusion_reason": "不符合的政策條件：{{reason}}",
+    "policy_bot-not-allowlisted": "來源機器人不在儲存的允許名單中。",
+    "policy_webhook-not-allowlisted": "來源 webhook 不在儲存的允許名單中。",
+    "policy_rule-exclude": "儲存的來源規則排除這筆資料。",
+    "policy_guild-out-of-scope": "伺服器不在儲存的封存政策範圍中。",
+    "policy_unknown": "未取得確切不符合的政策條件。",
+    "quarantine_conflicting-message-data": "重複紀錄的訊息資料不一致。",
+    "name_coverage_unavailable": "目前來源名稱的解析範圍：未統計。",
+    "rollback_retain_revisions": "保留 {{count}} 筆已觀察到的編輯版本",
+    "effect_progress_reset": "清除續抓位置，供後續重新檢查歷史紀錄；本項只修改進度紀錄，不刪除已備份訊息。",
+    "confirm_actor": "限 {{actor}} 確認。",
+    "plan_not_verified": "備份完整性會在執行完成後驗證。"
+  },
+  "feed": {
+    "description": "管理社群訂閱",
+    "subcommands": {
+      "subscribe": {
+        "description": "把某個社群帳號的新貼文轉發到頻道",
+        "options": {
+          "platform": {
+            "description": "帳號所在的社群平台",
+            "choices": {
+              "x": "X (Twitter)"
+            }
+          },
+          "account": {
+            "description": "帳號名稱,多個帳號用逗號分隔,前面加不加 @ 都可以"
+          },
+          "channel": {
+            "description": "要轉發到的頻道 (預設為目前頻道)"
+          },
+          "media": {
+            "description": "依貼文附加的媒體決定轉發範圍",
+            "choices": {
+              "media_only": "只轉發含圖片或影片的貼文,不含純文字",
+              "photo_only": "只轉發含圖片的貼文",
+              "video_only": "只轉發含影片的貼文",
+              "any": "轉發所有貼文:純文字、圖片、影片都包含"
+            }
+          },
+          "keyword": {
+            "description": "只轉發內文包含這段文字的貼文 (最多 100 字)"
+          }
+        }
+      },
+      "unsubscribe": {
+        "description": "停止把社群貼文轉發到某個頻道",
+        "options": {
+          "channel": {
+            "description": "要退訂的頻道 (預設為目前頻道)"
+          },
+          "platform": {
+            "description": "只移除這個平台的訂閱",
+            "choices": {
+              "x": "X (Twitter)"
+            }
+          },
+          "account": {
+            "description": "只移除這些帳號的訂閱,多個帳號用逗號分隔"
           }
         }
       },
       "list": {
-        "description": "查看討論串代理管理者",
+        "description": "列出本伺服器的社群動態訂閱"
+      }
+    }
+  },
+  "reply": {
+    "description": "管理自動回覆",
+    "subcommands": {
+      "add": {
+        "description": "新增自動回覆",
+        "options": {
+          "keyword": {
+            "description": "關鍵字"
+          },
+          "reply": {
+            "description": "回覆"
+          }
+        }
+      },
+      "delete": {
+        "description": "刪除自動回覆",
+        "options": {
+          "keyword": {
+            "description": "關鍵字"
+          }
+        }
+      },
+      "list": {
+        "description": "列出自動回覆",
+        "options": {
+          "keyword": {
+            "description": "關鍵字"
+          }
+        }
+      }
+    }
+  },
+  "activity": {
+    "description": "管理活動",
+    "subcommands": {
+      "create": {
+        "description": "建立活動",
+        "options": {
+          "title": {
+            "description": "活動標題"
+          },
+          "duration": {
+            "description": "活動時限 (1s, 1m, 1h, 1d, 1w)"
+          },
+          "description": {
+            "description": "活動描述 (optional)"
+          }
+        }
+      },
+      "delete": {
+        "description": "刪除活動",
+        "options": {
+          "activity_id": {
+            "description": "活動ID"
+          }
+        }
+      }
+    }
+  },
+  "giveaway": {
+    "description": "管理抽獎",
+    "subcommands": {
+      "create": {
+        "description": "建立抽獎",
+        "options": {
+          "destination": {
+            "description": "抽獎發布頻道（預設為當前頻道）",
+            "choices": {
+              "current": "當前頻道",
+              "configured": "預設抽獎頻道"
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "刪除抽獎"
+      }
+    }
+  },
+  "ai": {
+    "description": "管理 AI 設定與存取權限",
+    "subcommands": {
+      "settings": {
+        "description": "一次性編輯你的 AI 設定（model / temperature / web search / system prompt）",
+        "options": {
+          "provider": {
+            "description": "選擇 AI provider，後續 model 候選將依此 provider 動態載入"
+          }
+        }
+      },
+      "status": {
+        "description": "顯示你目前的 AI 設定"
+      }
+    },
+    "groups": {
+      "whitelist": {
+        "subcommands": {
+          "add": {
+            "description": "[管理員] 將用戶加入 AI 白名單",
+            "options": {
+              "user": {
+                "description": "要加入白名單的用戶"
+              }
+            }
+          },
+          "remove": {
+            "description": "[管理員] 將用戶從 AI 白名單移除",
+            "options": {
+              "user": {
+                "description": "要移除的用戶"
+              }
+            }
+          },
+          "list": {
+            "description": "列出目前 AI 白名單的所有用戶"
+          }
+        },
+        "description": "管理 AI 白名單"
+      }
+    }
+  },
+  "thread": {
+    "description": "管理討論串",
+    "subcommands": {
+      "ban": {
+        "description": "透過此 bot 禁止指定使用者在此討論串發言、使用指令及觸發 bot",
+        "options": {
+          "users": {
+            "description": "1–20 位使用者的提及或 ID，以空白或逗號分隔"
+          }
+        }
+      },
+      "allow": {
+        "description": "透過此 bot 恢復指定使用者在此討論串發言、使用指令及觸發 bot 的權利",
+        "options": {
+          "users": {
+            "description": "1–20 位使用者的提及或 ID，以空白或逗號分隔"
+          }
+        }
+      },
+      "list": {
+        "description": "列出此 bot 在目前討論串禁止的使用者"
+      },
+      "claim": {
+        "description": "申請成為討論串代理管理者",
         "options": {
           "thread": {
-            "description": "目標討論串"
+            "description": "要申請管理的討論串"
           },
-          "page": {
-            "description": "頁碼（每頁 20 位）"
+          "reason": {
+            "description": "申請原因（1–1000 字）"
+          }
+        }
+      }
+    },
+    "groups": {
+      "manager": {
+        "description": "管理討論串代理管理者（僅 bot 管理員）",
+        "subcommands": {
+          "add": {
+            "description": "授予討論串代理管理權",
+            "options": {
+              "thread": {
+                "description": "目標討論串"
+              },
+              "user": {
+                "description": "指定使用者"
+              }
+            }
+          },
+          "remove": {
+            "description": "撤銷討論串代理管理權",
+            "options": {
+              "thread": {
+                "description": "目標討論串"
+              },
+              "user": {
+                "description": "指定使用者"
+              }
+            }
+          },
+          "list": {
+            "description": "查看討論串代理管理者",
+            "options": {
+              "thread": {
+                "description": "目標討論串"
+              },
+              "page": {
+                "description": "頁碼（每頁 20 位）"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "traffic": {
+    "description": "查看訊息流量統計",
+    "subcommands": {
+      "me": {
+        "description": "顯示你自己的訊息活動統計",
+        "options": {
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          },
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:7d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天"
+            }
+          },
+          "top_n": {
+            "description": "排行要顯示幾個頻道 (optional,1-25,預設:10)"
+          }
+        }
+      },
+      "user": {
+        "description": "顯示指定用戶的訊息活動統計",
+        "options": {
+          "user": {
+            "description": "要查詢的用戶"
+          },
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          },
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:7d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天"
+            }
+          },
+          "top_n": {
+            "description": "排行要顯示幾個頻道 (optional,1-25,預設:10)"
+          }
+        }
+      },
+      "overview": {
+        "description": "顯示伺服器訊息流量圖表與統計",
+        "options": {
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          },
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:7d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天"
+            }
+          },
+          "top_n": {
+            "description": "排行要顯示幾個頻道／用戶 (optional,1-25,預設:10)"
           }
         }
       }

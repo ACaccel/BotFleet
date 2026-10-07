@@ -80,11 +80,19 @@ const sharedConnectionManagers = new Map<string, MongoConnectionManager>();
 const sharedConnectionManagerForUri = (
   uri: string,
   recoveryIntervalMs?: number,
+  archiveOwner?: 'msg-archive',
 ): MongoConnectionManager => {
-  const existing = sharedConnectionManagers.get(uri);
+  const poolKey = `${archiveOwner ?? 'reader'}:${uri}`;
+  const existing = sharedConnectionManagers.get(poolKey);
   if (existing !== undefined) return existing;
-  const created = new MongoConnectionManager(uri, undefined, undefined, recoveryIntervalMs);
-  sharedConnectionManagers.set(uri, created);
+  const created = new MongoConnectionManager(
+    uri,
+    undefined,
+    undefined,
+    recoveryIntervalMs,
+    archiveOwner,
+  );
+  sharedConnectionManagers.set(poolKey, created);
   return created;
 };
 
@@ -316,6 +324,11 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   protected helpMessageKey?: string;
 
+  /** Archive mutation authority is granted only by the worker composition root. */
+  protected archiveOwner(): 'msg-archive' | undefined {
+    return undefined;
+  }
+
   /** Built inside {@link run}; consumed by the {@link ClientEventBridge}. */
   protected interactionRouter: InteractionRouter | undefined;
 
@@ -381,13 +394,17 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     const uri = this.mongoURI;
     if (uri !== undefined && uri.length > 0) {
       this.container.registerSingleton(TOKENS.ConnectionManager, () =>
-        sharedConnectionManagerForUri(uri, this.env?.MONGO_RECOVERY_INTERVAL_MS),
+        sharedConnectionManagerForUri(
+          uri,
+          this.env?.MONGO_RECOVERY_INTERVAL_MS,
+          this.archiveOwner(),
+        ),
       );
     }
     const reposFactory: ReposFactory = async (guildId: ReturnType<typeof asGuildId>) => {
       const cm = this.container.resolve<ConnectionManager>(TOKENS.ConnectionManager);
       const guildConn = await cm.getConnection(guildId);
-      return buildRepos(guildConn);
+      return buildRepos(guildConn, this.archiveOwner());
     };
     this.container.registerSingleton(TOKENS.ReposFactory, () => reposFactory);
     this.container.registerSingleton(TOKENS.Clock, () => systemClock);

@@ -31,14 +31,16 @@ import type { GuildConnection } from '../../infra/mongo/connection-manager';
 import { databaseErrorFrom } from '../error-translator';
 import type { MessageDoc, NewMessageDoc } from '../schemas/message.schema';
 
-export interface InsertResult {
+interface InsertResult {
   /** How many of the requested docs were actually written. */
   readonly inserted: number;
   /** How many were skipped due to a duplicate `messageId`. */
   readonly duplicates: number;
 }
 
-export interface MessageRepo {
+export type MessageReader = Omit<MessageRepo, 'insertManyIgnoringDuplicates'>;
+
+interface MessageRepo {
   /** Total document count for this guild. Used by msg-archive metrics. */
   countAll(): Promise<Result<number, DatabaseError>>;
 
@@ -167,6 +169,8 @@ export class MongoMessageRepo implements MessageRepo {
   public async insertManyIgnoringDuplicates(
     docs: readonly NewMessageDoc[],
   ): Promise<Result<InsertResult, DatabaseError>> {
+    if (this.conn.archiveOwner !== 'msg-archive')
+      throw new Error('Message writes require msg-archive ownership');
     if (docs.length === 0) {
       return ok({ inserted: 0, duplicates: 0 });
     }
@@ -185,7 +189,24 @@ export class MongoMessageRepo implements MessageRepo {
         typeof rawErr === 'object' &&
         rawErr !== null &&
         'insertedDocs' in rawErr &&
-        Array.isArray((rawErr as { insertedDocs: unknown }).insertedDocs)
+        Array.isArray((rawErr as { insertedDocs: unknown }).insertedDocs) &&
+        'code' in rawErr &&
+        rawErr.code === 11000 &&
+        (!('writeErrors' in rawErr) ||
+          (Array.isArray(rawErr.writeErrors) &&
+            rawErr.writeErrors.every((entry: unknown) => {
+              if (typeof entry !== 'object' || entry === null) return false;
+              if ('code' in entry) return entry.code === 11000;
+              return (
+                'err' in entry &&
+                typeof entry.err === 'object' &&
+                entry.err !== null &&
+                'code' in entry.err &&
+                entry.err.code === 11000
+              );
+            }))) &&
+        (!('writeConcernErrors' in rawErr) ||
+          (Array.isArray(rawErr.writeConcernErrors) && rawErr.writeConcernErrors.length === 0))
       ) {
         const insertedDocs = (rawErr as { insertedDocs: readonly unknown[] }).insertedDocs;
         return ok({
@@ -212,7 +233,7 @@ export class MongoMessageRepo implements MessageRepo {
       );
     }
     try {
-      // `timestamp` is a numeric epoch (the one-time `db migrate-timestamp`
+      // `timestamp` is a numeric epoch (the one-time msg-archive timestamp repair
       // backfill removed the legacy String rows that once required a
       // `$toLong` projection), so this plain half-open range is sargable
       // and served by the `{ timestamp: 1 }` index instead of a collection scan.

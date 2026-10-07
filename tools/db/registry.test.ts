@@ -8,8 +8,6 @@ import { commandNames, describeCommands, findCommand } from './registry';
 
 describe('db / registry', () => {
   it('finds each registered command by name', () => {
-    expect(findCommand('verify')?.name).toBe('verify');
-    expect(findCommand('migrate-timestamp')?.name).toBe('migrate-timestamp');
     expect(findCommand('drop-todo')?.name).toBe('drop-todo');
     expect(findCommand('drop-xfeed')?.name).toBe('drop-xfeed');
   });
@@ -20,8 +18,15 @@ describe('db / registry', () => {
 
   it('lists every command exactly once', () => {
     const names = commandNames();
-    expect(names).toEqual(['verify', 'migrate-timestamp', 'drop-todo', 'drop-xfeed']);
+    expect(names).toEqual(['drop-todo', 'drop-xfeed']);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('rejects retired message archive CLI commands', () => {
+    for (const name of ['verify', 'migrate-timestamp', 'repair-messages']) {
+      expect(findCommand(name)).toBeUndefined();
+      expect(describeCommands()).not.toContain(name);
+    }
   });
 
   it('mentions every command in the help listing', () => {

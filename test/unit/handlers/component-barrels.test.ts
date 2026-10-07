@@ -51,7 +51,11 @@ describe('modal barrel', () => {
 
     await registerModals(bot);
 
-    expect([...bot.modalHandlers.keys()].sort()).toEqual(['ai_settings', 'giveaway_create']);
+    expect([...bot.modalHandlers.keys()].sort()).toEqual([
+      'ai_settings',
+      'archive_attachment',
+      'giveaway_create',
+    ]);
   });
 
   it('routes a customId to the handler its leading segment names', async () => {
@@ -78,7 +82,13 @@ describe('select-menu barrel', () => {
 
     await registerSSMs(bot);
 
-    expect([...bot.ssmHandlers.keys()].sort()).toEqual(['delete_reply', 'giveaway_delete']);
+    expect([...bot.ssmHandlers.keys()].sort()).toEqual([
+      'archive_actions',
+      'archive_category',
+      'archive_pick',
+      'delete_reply',
+      'giveaway_delete',
+    ]);
   });
 
   it('routes a customId to the handler its leading segment names', async () => {

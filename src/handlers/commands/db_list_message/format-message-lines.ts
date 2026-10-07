@@ -1,3 +1,4 @@
+import { structuredContentLines } from './structured-content';
 import { buildReactionText, type ReactionLike } from './render-reactions';
 
 /**
@@ -6,10 +7,18 @@ import { buildReactionText, type ReactionLike } from './render-reactions';
  * type keeps the helper easy to unit-test with plain literals.
  */
 export interface MessageLike {
-  readonly userId: string;
+  readonly userId?: string;
   readonly userName?: string | null;
   readonly content?: string | null;
-  readonly timestamp: number | string;
+  readonly timestamp?: number | string;
+  readonly embeds?: unknown;
+  readonly components?: unknown;
+  readonly poll?: unknown;
+  readonly snapshots?: unknown;
+  readonly reference?: unknown;
+  readonly deletion?: unknown;
+  readonly presence?: Record<string, unknown>;
+  readonly reactionsStaleAt?: number;
   readonly attachments?: ReadonlyArray<{
     readonly id?: string | null;
     readonly name?: string | null;
@@ -42,6 +51,7 @@ const truncateDisplayName = (name: string, maxLength: number): string => {
 interface FormatMessageLinesOptions {
   readonly resolveDisplayName: (userId: string, fallback: string) => Promise<string>;
   readonly truncateAt?: number;
+  readonly t?: (key: string) => string;
 }
 
 export const formatMessageLines = async (
@@ -53,14 +63,17 @@ export const formatMessageLines = async (
 
   for (const msg of messages) {
     const userName = msg.userName || 'unknown';
-    const rawDisplayName = await opts.resolveDisplayName(msg.userId, userName);
+    const rawDisplayName = msg.userId
+      ? await opts.resolveDisplayName(msg.userId, userName)
+      : userName;
     const shortDisplayName = truncateDisplayName(rawDisplayName, truncateAt);
 
     const tsNum = typeof msg.timestamp === 'string' ? Number(msg.timestamp) : msg.timestamp;
     const dateObj = new Date(tsNum || 0);
     const hh = dateObj.getHours().toString().padStart(2, '0');
     const mm = dateObj.getMinutes().toString().padStart(2, '0');
-    const prefix = `*${hh}:${mm}* **${shortDisplayName} (${userName})**: `;
+    const time = tsNum === undefined || !Number.isFinite(tsNum) ? '--:--' : `${hh}:${mm}`;
+    const prefix = `*${time}* **${shortDisplayName} (${userName})**: `;
 
     const lineStartIndex = lines.length;
 
@@ -72,6 +85,18 @@ export const formatMessageLines = async (
         lines.push(extra);
       }
     }
+
+    const structured = structuredContentLines(msg);
+    for (const text of structured) lines.push(`${prefix}${text}`);
+    if (msg.deletion) lines.push(`${prefix}${opts.t?.('replies:archive.deleted') ?? '[deleted]'}`);
+    if (msg.presence?.content === 'unknown')
+      lines.push(
+        `${prefix}${opts.t?.('replies:archive.content_unknown') ?? '[content not observed]'}`,
+      );
+    if (msg.reactionsStaleAt !== undefined)
+      lines.push(
+        `${prefix}${opts.t?.('replies:archive.reactions_stale') ?? '[reaction membership incomplete or stale]'}`,
+      );
 
     const attachments = msg.attachments || [];
     for (const a of attachments) {
@@ -92,7 +117,14 @@ export const formatMessageLines = async (
       reactionParts.push(`${buildReactionText(r)} x${count}`);
     }
 
-    if (content.length === 0 && attachments.length === 0 && stickers.length === 0) {
+    if (
+      content.length === 0 &&
+      attachments.length === 0 &&
+      stickers.length === 0 &&
+      structured.length === 0 &&
+      !msg.deletion &&
+      msg.presence?.content !== 'unknown'
+    ) {
       lines.push(`${prefix}[empty]`);
     }
 

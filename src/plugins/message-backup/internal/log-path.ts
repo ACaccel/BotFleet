@@ -5,8 +5,6 @@
  * so a fixed filename would let each backup pass overwrite the prior
  * run's artifact. Embedding a local-time `YYYY-MM-DD_HH-MM-SS` stamp in
  * the filename keeps every run's transcript on disk for later auditing.
- * The format mirrors the standalone `tools/msg_backup` ops tool so an
- * operator sees one consistent naming scheme across both.
  */
 import * as path from 'node:path';
 
