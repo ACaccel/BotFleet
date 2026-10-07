@@ -68,6 +68,7 @@ import { resolveLocalesDir } from './locales-dir';
 import { createChannelLoggingMiddleware, createDispatchMiddleware } from './middlewares';
 import { TOKENS, type ReposFactory } from './tokens';
 import { ServiceReadiness } from './service-readiness';
+import { parseThreadModerationConfig, ThreadModeration } from './thread-moderation';
 
 /**
  * Process-wide pool of {@link MongoConnectionManager}s keyed by base
@@ -88,6 +89,8 @@ const sharedConnectionManagerForUri = (
 };
 
 export interface Config {
+  /** Optional bot-scoped thread moderation, validated during construction. */
+  thread_moderation?: unknown;
   /** Discord user ids granted bot-admin privileges (e.g. `/ai_whitelist_*`). */
   admin?: string[];
   guilds?: Record<string, GuildConfig>;
@@ -158,6 +161,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   public clientId: string;
   /** Discord user ids granted bot-admin privileges; resolved from `config.admin`. */
   public adminIds: string[] = [];
+  public readonly threadModerationEnabled: boolean;
   public config: TConfig;
 
   /**
@@ -347,6 +351,10 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     this.clientId = clientId;
     this.config = config;
     this.adminIds = config.admin ?? [];
+    this.threadModerationEnabled = parseThreadModerationConfig(config.thread_moderation);
+    if (this.threadModerationEnabled && !mongoURI) {
+      throw new Error('thread_moderation.enabled requires MONGO_URI');
+    }
     // The composition root injects the locales path; `core/i18n`
     // does not resolve it from `__dirname`. Subclasses get the
     // canonical monorepo layout for free via the default and can
@@ -526,6 +534,17 @@ export abstract class BaseBot<TConfig extends Config = Config> {
         reactionPort: this.buildReactionPort(),
         guildInfo: () => this.#guildInfo,
         suppression: this.eventBridgeSuppression(),
+        ...(this.threadModerationEnabled && this.translator
+          ? {
+              moderation: new ThreadModeration({
+                botId: this.clientId,
+                logger: rootLogger,
+                translator: this.translator,
+                getRepo: (guildId) => this.getRepos(guildId)?.threadModeration,
+                isAdmin: (userId) => this.isAdmin(userId),
+              }),
+            }
+          : {}),
       });
       startupSucceeded = true;
     } finally {

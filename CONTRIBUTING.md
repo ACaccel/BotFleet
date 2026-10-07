@@ -12,6 +12,10 @@ Start with [local setup](docs/contributing/local-setup.md) and the
 | Operate bots       | [Smoke checks, database recovery, and migration](docs/contributing/operations.md)     |
 | Commit or release  | [Branching and changelog rules](docs/contributing/branching-and-releases.md)          |
 
+Thread moderation spans event guards, commands, review components and persistence.
+Use its [implementation contract](docs/thread-moderation.md#implementation-contract)
+when changing these paths; authorization must be rechecked on each interaction.
+
 ## Quality gates
 
 Every check below must pass locally before committing. Do not bypass hooks,

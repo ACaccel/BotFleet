@@ -42,11 +42,16 @@ import { default as Handler_34 } from './sticker_frequency';
 import { default as Handler_35 } from './talk';
 import { default as Handler_36 } from './talk_signed';
 import { default as Handler_37 } from './temp_role';
-import { default as Handler_38 } from './traffic';
-import { default as Handler_39 } from './traffic_me';
-import { default as Handler_40 } from './traffic_user';
-import { default as Handler_41 } from './update_role';
-import { default as Handler_42 } from './weather_forecast';
+import { default as Handler_38 } from './thread_allow';
+import { default as Handler_39 } from './thread_ban';
+import { default as Handler_40 } from './thread_claim';
+import { default as Handler_41 } from './thread_list';
+import { default as Handler_42 } from './thread_manager';
+import { default as Handler_43 } from './traffic';
+import { default as Handler_44 } from './traffic_me';
+import { default as Handler_45 } from './traffic_user';
+import { default as Handler_46 } from './update_role';
+import { default as Handler_47 } from './weather_forecast';
 export const COMMAND_REGISTRY = {
   activity_create: Handler_0,
   activity_delete: Handler_1,
@@ -86,9 +91,14 @@ export const COMMAND_REGISTRY = {
   talk: Handler_35,
   talk_signed: Handler_36,
   temp_role: Handler_37,
-  traffic: Handler_38,
-  traffic_me: Handler_39,
-  traffic_user: Handler_40,
-  update_role: Handler_41,
-  weather_forecast: Handler_42,
+  thread_allow: Handler_38,
+  thread_ban: Handler_39,
+  thread_claim: Handler_40,
+  thread_list: Handler_41,
+  thread_manager: Handler_42,
+  traffic: Handler_43,
+  traffic_me: Handler_44,
+  traffic_user: Handler_45,
+  update_role: Handler_46,
+  weather_forecast: Handler_47,
 } as const satisfies Readonly<Record<string, new () => Command>>;

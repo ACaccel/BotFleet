@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ApplicationCommandType } from 'discord.js';
+import { ApplicationCommandType, PermissionFlagsBits } from 'discord.js';
 
 import type { Translator } from '../../../src/core/i18n';
 import { localizeCommandConfig, type CommandConfig } from '../../../src/handlers/commands/command';
@@ -20,6 +20,57 @@ const echoTranslator = (): Translator =>
   }) as unknown as Translator;
 
 describe('localizeCommandConfig', () => {
+  it('localizes groups, nested subcommands, options, and choices without mutation', () => {
+    const config: CommandConfig = {
+      name: 'archive',
+      guildOnly: true,
+      defaultMemberPermissions: PermissionFlagsBits.ManageGuild,
+      subcommandGroups: [
+        {
+          name: 'schedule',
+          subcommands: [
+            {
+              name: 'interval',
+              options: {
+                string: [{ name: 'preset', required: true, choices: [{ value: 'hourly' }] }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const snapshot = structuredClone(config);
+    const localized = localizeCommandConfig(config, echoTranslator());
+    expect(localized.guildOnly).toBe(true);
+    expect(localized.defaultMemberPermissions).toBe(PermissionFlagsBits.ManageGuild);
+    expect(localized.subcommandGroups?.[0]).toEqual({
+      name: 'schedule',
+      description: '[commands:archive.groups.schedule.description]',
+      subcommands: [
+        {
+          name: 'interval',
+          description: '[commands:archive.groups.schedule.subcommands.interval.description]',
+          options: {
+            string: [
+              {
+                name: 'preset',
+                required: true,
+                description:
+                  '[commands:archive.groups.schedule.subcommands.interval.options.preset.description]',
+                choices: [
+                  {
+                    value: 'hourly',
+                    name: '[commands:archive.groups.schedule.subcommands.interval.options.preset.choices.hourly]',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(config).toEqual(snapshot);
+  });
   it('resolves a chat-input command description from commands:<name>.description', () => {
     const config: CommandConfig = { name: 'add_reply' };
     const localized = localizeCommandConfig(config, echoTranslator());

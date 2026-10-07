@@ -1,6 +1,7 @@
 {
   "admin": ["YOUR_ADMIN_USER_ID"],
   "language": "zh-TW",
+  "thread_moderation": { "enabled": true },
   "guilds": {
     "YOUR_GUILD_ID": {
       "channels": { "debug": "YOUR_DEBUG_CHANNEL_ID", "giveaway": "YOUR_GIVEAWAY_CHANNEL_ID" },
@@ -24,6 +25,11 @@
     "feed_subscribe",
     "feed_unsubscribe",
     "feed_list",
+    "thread_ban",
+    "thread_allow",
+    "thread_list",
+    "thread_manager",
+    "thread_claim",
     "COMMAND_NAME"
   ],
   "level_roles": { "level_1": "YOUR_LEVEL_1_ROLE_NAME" },

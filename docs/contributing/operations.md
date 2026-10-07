@@ -46,12 +46,27 @@ bot that handled the command. Other bot processes do not share the restriction.
 Fallback state is held in memory; restarting that bot ends the deletion and
 auto-reply restriction early. Native Discord timeouts remain managed by Discord.
 
+## Thread moderation
+
+Nijika supports persistent thread bans and delegated management, including
+replacement-account claims reviewed through configured admins' DMs. Follow the
+[thread moderation guide](../thread-moderation.md) for commands, button pagination,
+required permissions, delivery failures and database recovery behavior. Other
+bots' public replies are deleted only when a banned origin can be verified;
+this does not prevent their command execution.
+
 ## Dependency overrides
 
 The `undici: ^6.27.0` override fixes the vulnerable exact version pinned by
 `discord.js`. Recheck it on every Discord dependency upgrade and remove it
 when the upstream version includes the fix. Use `npm explain <pkg>` before
 adding overrides; do not restate a version the dependency already permits.
+
+The `vitest`-scoped `tinypool: 2.1.2` override fixes prototype-pollution and
+code-execution advisories in the test worker pool. Keep it scoped to Vitest and
+remove it when a Vitest upgrade permits a patched version without an override.
+The lockfile also updates `proxy-addr` and `source-map-js` to patched releases
+within their existing dependency ranges.
 
 ## Database recovery
 

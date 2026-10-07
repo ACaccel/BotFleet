@@ -29,10 +29,18 @@ import { buildCommandJsonBody } from '../../../src/handlers/commands/command-bui
 const echoTranslator = { t: (key: string) => key } as unknown as Translator;
 
 /** True when any option asks Discord to query the handler as the member types. */
-const declaresAutocompleteOption = (config: CommandConfig): boolean =>
-  Object.values(config.options ?? {}).some((options) =>
-    options.some((option) => option.autocomplete === true),
+const declaresAutocompleteOption = (config: CommandConfig): boolean => {
+  const scopes = [
+    config,
+    ...(config.subcommands ?? []),
+    ...(config.subcommandGroups ?? []).flatMap((group) => group.subcommands),
+  ];
+  return scopes.some((scope) =>
+    Object.values(scope.options ?? {}).some((options) =>
+      options.some((option) => option.autocomplete === true),
+    ),
   );
+};
 
 const registered = [...createAllSlashCommands().entries()];
 

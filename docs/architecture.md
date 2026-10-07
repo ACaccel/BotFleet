@@ -126,6 +126,20 @@ The fallback belongs to the invoking bot client and target guild. See
 [temporary moderation](contributing/operations.md#temporary-moderation) for
 operator behavior and restart limitations.
 
+## Thread moderation
+
+`ClientEventBridge` awaits `ThreadModeration` before message dispatch, interaction
+routing and reaction handlers. Keeping this guard outside parallel plugin dispatch
+prevents blocked messages from triggering replies. It also deletes attributable
+public bot responses using interaction metadata or bounded same-thread reply
+references; unverifiable origins remain untouched.
+
+Guild repositories scope bans, delegated managers, claims and message-source IDs
+by bot and thread. Claim approval and the corresponding grant share an atomic
+conditional update; DM review buttons bind to their recipient and message. See
+the [thread moderation contract](thread-moderation.md#implementation-contract)
+for consistency, retention and failure behavior.
+
 ## Persistence and external services
 
 [Repositories](../src/persistence/repositories/) expose interfaces backed by

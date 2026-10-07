@@ -451,5 +451,73 @@
   },
   "weather_forecast": {
     "description": "天氣預報(台北)"
+  },
+  "thread_ban": {
+    "description": "透過此 bot 禁止指定使用者在此討論串發言、使用指令及觸發 bot",
+    "options": {
+      "users": {
+        "description": "1–20 位使用者的提及或 ID，以空白或逗號分隔"
+      }
+    }
+  },
+  "thread_allow": {
+    "description": "透過此 bot 恢復指定使用者在此討論串發言、使用指令及觸發 bot 的權利",
+    "options": {
+      "users": {
+        "description": "1–20 位使用者的提及或 ID，以空白或逗號分隔"
+      }
+    }
+  },
+  "thread_list": {
+    "description": "列出此 bot 在目前討論串禁止的使用者"
+  },
+  "thread_claim": {
+    "description": "申請成為討論串代理管理者",
+    "options": {
+      "thread": {
+        "description": "要申請管理的討論串"
+      },
+      "reason": {
+        "description": "申請原因（1–1000 字）"
+      }
+    }
+  },
+  "thread_manager": {
+    "description": "管理討論串代理管理者（僅 bot 管理員）",
+    "subcommands": {
+      "add": {
+        "description": "授予討論串代理管理權",
+        "options": {
+          "thread": {
+            "description": "目標討論串"
+          },
+          "user": {
+            "description": "指定使用者"
+          }
+        }
+      },
+      "remove": {
+        "description": "撤銷討論串代理管理權",
+        "options": {
+          "thread": {
+            "description": "目標討論串"
+          },
+          "user": {
+            "description": "指定使用者"
+          }
+        }
+      },
+      "list": {
+        "description": "查看討論串代理管理者",
+        "options": {
+          "thread": {
+            "description": "目標討論串"
+          },
+          "page": {
+            "description": "頁碼（每頁 20 位）"
+          }
+        }
+      }
+    }
   }
 }

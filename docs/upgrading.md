@@ -4,6 +4,15 @@ Use these notes when upgrading an installation that still uses the retired
 features below. For routine code updates, see [deployment](contributing/deployment.md).
 Current settings are documented in [Configuration](configuration.md).
 
+## Enabling thread moderation
+
+Existing bot configurations remain disabled unless `thread_moderation.enabled`
+is set to `true`. Follow the [enablement guide](thread-moderation.md#enable-and-operate)
+to add Nijika's five commands, check permissions and register them when ready to
+roll out. `/thread_list` uses buttons instead of a `page` option; re-register
+commands when upgrading an earlier thread-moderation installation. Saved bans
+remain scoped to the bot that created them.
+
 ## Migrating from `x_media_feed` to `social_feed`
 
 A remaining `x_media_feed` block prevents startup. Subscriptions now live in each

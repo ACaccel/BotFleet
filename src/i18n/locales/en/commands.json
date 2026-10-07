@@ -451,5 +451,73 @@
   },
   "weather_forecast": {
     "description": "Weather forecast (Taipei)"
+  },
+  "thread_ban": {
+    "description": "Restrict users in this thread for this bot",
+    "options": {
+      "users": {
+        "description": "1–20 user mentions or IDs, separated by spaces or commas"
+      }
+    }
+  },
+  "thread_allow": {
+    "description": "Restore users’ rights in this thread for this bot",
+    "options": {
+      "users": {
+        "description": "1–20 user mentions or IDs, separated by spaces or commas"
+      }
+    }
+  },
+  "thread_list": {
+    "description": "List users banned by this bot in the current thread"
+  },
+  "thread_claim": {
+    "description": "Request delegated management of a thread",
+    "options": {
+      "thread": {
+        "description": "Thread to manage"
+      },
+      "reason": {
+        "description": "Reason for the request (1–1000 characters)"
+      }
+    }
+  },
+  "thread_manager": {
+    "description": "Manage delegated thread managers (bot admins only)",
+    "subcommands": {
+      "add": {
+        "description": "Grant thread management",
+        "options": {
+          "thread": {
+            "description": "Target thread"
+          },
+          "user": {
+            "description": "Target user"
+          }
+        }
+      },
+      "remove": {
+        "description": "Revoke thread management",
+        "options": {
+          "thread": {
+            "description": "Target thread"
+          },
+          "user": {
+            "description": "Target user"
+          }
+        }
+      },
+      "list": {
+        "description": "List delegated thread managers",
+        "options": {
+          "thread": {
+            "description": "Target thread"
+          },
+          "page": {
+            "description": "Page number (20 users per page)"
+          }
+        }
+      }
+    }
   }
 }

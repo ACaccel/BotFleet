@@ -25,6 +25,21 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 6. Follow the [registration procedure](local-setup.md#registering-slash-commands)
    to publish the command to a test guild, then globally when ready.
 
+## Guild commands and subcommands
+
+Set `guildOnly: true` for commands that require guild state. Optional
+`defaultMemberPermissions` controls Discord registration defaults; handlers must
+still check runtime authority. Define `subcommands` or `subcommandGroups` in
+command metadata, with options on each subcommand. Root value options cannot be
+combined with subcommands. Descriptions and choices use the corresponding nested
+`commands:<name>.subcommands.<subcommand>` or
+`commands:<name>.groups.<group>.subcommands.<subcommand>` catalog keys.
+See `thread_manager` for guild-only subcommands with runtime admin checks.
+
+Thread moderation handlers and buttons also follow the
+[authorization contract](../thread-moderation.md#delegated-management-and-dm-review),
+including fresh authority checks and recipient-bound review controls.
+
 ## Option autocomplete
 
 - Set `autocomplete: true` on a **string** option; it cannot also have

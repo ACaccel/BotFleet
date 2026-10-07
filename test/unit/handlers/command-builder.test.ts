@@ -1,10 +1,156 @@
 import { describe, expect, it } from 'vitest';
-import { ApplicationCommandType } from 'discord.js';
+import {
+  ApplicationCommandOptionType,
+  ApplicationCommandType,
+  PermissionFlagsBits,
+} from 'discord.js';
 
 import { buildCommandJsonBody } from '../../../src/handlers/commands/command-builder';
 import type { LocalizedCommandConfig } from '../../../src/handlers/commands/command';
 
 describe('buildCommandJsonBody', () => {
+  it('combines root subcommands with a group and preserves autocomplete', () => {
+    const json = buildCommandJsonBody({
+      name: 'archive',
+      description: 'Archive controls',
+      subcommandGroups: [
+        {
+          name: 'schedule',
+          description: 'Schedule',
+          subcommands: [{ name: 'status', description: 'Status' }],
+        },
+      ],
+      subcommands: [
+        {
+          name: 'apply',
+          description: 'Apply plan',
+          options: {
+            string: [{ name: 'run_id', description: 'Run ID', required: true, autocomplete: true }],
+          },
+        },
+      ],
+    });
+    expect(json.options).toMatchObject([
+      { name: 'schedule', type: ApplicationCommandOptionType.SubcommandGroup },
+      {
+        name: 'apply',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [{ name: 'run_id', autocomplete: true }],
+      },
+    ]);
+  });
+  it('rejects root value options beside root subcommands', () => {
+    expect(() =>
+      buildCommandJsonBody({
+        name: 'archive',
+        description: 'Archive controls',
+        options: { string: [{ name: 'note', description: 'Note', required: false }] },
+        subcommands: [{ name: 'audit', description: 'Audit' }],
+      }),
+    ).toThrow(/subcommands cannot be combined/);
+  });
+
+  it('builds guild-only nested subcommands with permissions and numeric bounds', () => {
+    const json = buildCommandJsonBody({
+      name: 'archive',
+      description: 'Manage archive schedules',
+      guildOnly: true,
+      defaultMemberPermissions: PermissionFlagsBits.ManageGuild,
+      subcommandGroups: [
+        {
+          name: 'schedule',
+          description: 'Schedule settings',
+          subcommands: [
+            { name: 'status', description: 'Show status' },
+            {
+              name: 'interval',
+              description: 'Set interval',
+              options: {
+                number: [
+                  {
+                    name: 'minutes',
+                    description: 'Interval in minutes',
+                    required: true,
+                    min: 1,
+                    max: 10_080,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(json).toMatchObject({
+      dm_permission: false,
+      default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
+      options: [
+        {
+          type: ApplicationCommandOptionType.SubcommandGroup,
+          name: 'schedule',
+          options: [
+            { type: ApplicationCommandOptionType.Subcommand, name: 'status' },
+            {
+              type: ApplicationCommandOptionType.Subcommand,
+              name: 'interval',
+              options: [
+                {
+                  type: ApplicationCommandOptionType.Integer,
+                  name: 'minutes',
+                  required: true,
+                  min_value: 1,
+                  max_value: 10_080,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('rejects combining root options with a subcommand group', () => {
+    expect(() =>
+      buildCommandJsonBody({
+        name: 'archive',
+        description: 'Manage archive schedules',
+        options: { string: [{ name: 'note', description: 'A note', required: false }] },
+        subcommandGroups: [
+          {
+            name: 'schedule',
+            description: 'Settings',
+            subcommands: [{ name: 'status', description: 'Show status' }],
+          },
+        ],
+      }),
+    ).toThrow(/subcommands cannot be combined/);
+  });
+
+  it('validates autocomplete within nested subcommands', () => {
+    expect(() =>
+      buildCommandJsonBody({
+        name: 'archive',
+        description: 'Manage archive schedules',
+        subcommandGroups: [
+          {
+            name: 'schedule',
+            description: 'Settings',
+            subcommands: [
+              {
+                name: 'interval',
+                description: 'Set interval',
+                options: {
+                  number: [
+                    { name: 'minutes', description: 'Minutes', required: true, autocomplete: true },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/string options only/);
+  });
   it('builds a bare chat-input command with name and description', () => {
     const config: LocalizedCommandConfig = {
       name: 'ping',

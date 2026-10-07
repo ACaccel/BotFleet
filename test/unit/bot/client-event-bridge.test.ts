@@ -27,11 +27,13 @@ import type {
 import { describe, expect, it, vi } from 'vitest';
 
 import { ClientEventBridge, type ReactionHandlerPort } from '../../../src/bot/client-event-bridge';
+import { ThreadModeration } from '../../../src/bot/thread-moderation';
 import type { GuildInfo } from '../../../src/bot/index';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS } from '../../../src/bot/tokens';
 import { createLogger } from '../../../src/core/logger';
 import { systemClock } from '../../../src/core/time';
+import { ok } from '../../../src/core/result';
 import type {
   GuildOnboardingPort,
   InteractionContext,
@@ -367,4 +369,183 @@ describe('ClientEventBridge.sendRebootMessages', () => {
     expect(sends.length).toBe(1);
     expect(sends[0]).toContain('replies:base_bot.reboot_notice');
   });
+});
+
+describe('ClientEventBridge thread moderation', () => {
+  const moderatedMessage = () => ({
+    id: 'message',
+    guildId: 'guild',
+    channel: { id: 'thread', ownerId: 'owner', isThread: () => true },
+    author: { id: 'blocked-user', bot: false },
+    partial: false,
+    delete: vi.fn(async () => {}),
+  });
+
+  const moderation = () =>
+    new ThreadModeration({
+      botId: 'bot',
+      logger: silent,
+      translator: identityTranslator,
+      isAdmin: () => false,
+      getRepo: () => ({
+        recordMessageSource: async () => ok(undefined),
+        findMessageSource: async () => ok(undefined),
+        listBlocked: async () => ok([]),
+        isBlocked: async () => ok(true),
+        setBlocked: async () => ok(undefined),
+      }),
+    });
+
+  const observedHost = (subscribed: readonly (keyof ClientEvents)[]) => {
+    const emit = vi.fn(async () => {});
+    const host = {
+      getEventDispatcher: () => ({ subscribedEvents: () => subscribed, emit }),
+    } as unknown as PluginHost;
+    return { host, emit };
+  };
+
+  it('deletes blocked messages even when no plugin subscribes to messages', async () => {
+    const fake = buildFakeClient();
+    const bridge = new ClientEventBridge(fake.client, silent);
+    bridge.attach({ ...baseConfig({}), moderation: moderation() });
+    const target = moderatedMessage();
+    await fake.fire(Events.MessageCreate, target);
+    expect(target.delete).toHaveBeenCalledOnce();
+    bridge.detach();
+    expect(fake.listeners.get(Events.MessageCreate)).toHaveLength(0);
+    expect(fake.listeners.get(Events.MessageUpdate)).toHaveLength(0);
+  });
+
+  it.each([false, true])(
+    'blocks message plugin fan-out, including when deletion fails (%s)',
+    async (deleteFails) => {
+      const fake = buildFakeClient();
+      const { host, emit } = observedHost([Events.MessageCreate]);
+      const bridge = new ClientEventBridge(fake.client, silent);
+      bridge.attach({ ...baseConfig({ host }), moderation: moderation() });
+      const target = moderatedMessage();
+      if (deleteFails) target.delete.mockRejectedValue(new Error('Missing Permissions'));
+      await fake.fire(Events.MessageCreate, target);
+      expect(target.delete).toHaveBeenCalledOnce();
+      expect(emit).not.toHaveBeenCalled();
+      expect(fake.listeners.get(Events.MessageCreate)).toHaveLength(1);
+    },
+  );
+
+  it.each([Events.MessageCreate, Events.MessageUpdate] as const)(
+    'deletes attributed external bot responses before %s plugin dispatch',
+    async (event) => {
+      const fake = buildFakeClient();
+      const { host, emit } = observedHost([event]);
+      const bridge = new ClientEventBridge(fake.client, silent);
+      bridge.attach({ ...baseConfig({ host }), moderation: moderation() });
+      const target = {
+        ...moderatedMessage(),
+        author: { id: 'external-bot', bot: true },
+        interactionMetadata: { user: { id: 'blocked-user' } },
+      };
+      if (event === Events.MessageCreate) await fake.fire(event, target);
+      else await fake.fire(event, target, target);
+      expect(target.delete).toHaveBeenCalledOnce();
+      expect(emit).not.toHaveBeenCalled();
+    },
+  );
+
+  it('forwards bot responses without a reliable source', async () => {
+    const fake = buildFakeClient();
+    const { host, emit } = observedHost([Events.MessageCreate]);
+    const bridge = new ClientEventBridge(fake.client, silent);
+    bridge.attach({ ...baseConfig({ host }), moderation: moderation() });
+    const target = { ...moderatedMessage(), author: { id: 'external-bot', bot: true } };
+    await fake.fire(Events.MessageCreate, target);
+    expect(target.delete).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith(Events.MessageCreate, target);
+  });
+
+  it('blocks message updates without deleting messages that predate the ban', async () => {
+    const fake = buildFakeClient();
+    const { host, emit } = observedHost([Events.MessageUpdate]);
+    const bridge = new ClientEventBridge(fake.client, silent);
+    bridge.attach({ ...baseConfig({ host }), moderation: moderation() });
+    const before = moderatedMessage();
+    const after = moderatedMessage();
+    await fake.fire(Events.MessageUpdate, before, after);
+    expect(emit).not.toHaveBeenCalled();
+    expect(before.delete).not.toHaveBeenCalled();
+    expect(after.delete).not.toHaveBeenCalled();
+  });
+
+  it('forwards allowed message creates and updates once', async () => {
+    const fake = buildFakeClient();
+    const { host, emit } = observedHost([Events.MessageCreate, Events.MessageUpdate]);
+    const bridge = new ClientEventBridge(fake.client, silent);
+    bridge.attach({ ...baseConfig({ host }), moderation: moderation() });
+    const target = { ...moderatedMessage(), author: { id: 'owner', bot: false } };
+    await fake.fire(Events.MessageCreate, target);
+    await fake.fire(Events.MessageUpdate, target, target);
+    expect(emit.mock.calls).toEqual([
+      [Events.MessageCreate, target],
+      [Events.MessageUpdate, target, target],
+    ]);
+    expect(target.delete).not.toHaveBeenCalled();
+  });
+
+  it('preserves unmoderated message forwarding when disabled', async () => {
+    const fake = buildFakeClient();
+    const { host, emit } = observedHost([Events.MessageCreate]);
+    const bridge = new ClientEventBridge(fake.client, silent);
+    bridge.attach(baseConfig({ host }));
+    const target = moderatedMessage();
+    await fake.fire(Events.MessageCreate, target);
+    expect(emit).toHaveBeenCalledWith(Events.MessageCreate, target);
+    expect(target.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects blocked interactions before router dispatch', async () => {
+    const fake = buildFakeClient();
+    const dispatch = vi.fn(async () => {});
+    const bridge = new ClientEventBridge(fake.client, silent);
+    bridge.attach({ ...baseConfig({ router: fakeRouter(dispatch) }), moderation: moderation() });
+    const target = {
+      guildId: 'guild',
+      channelId: 'thread',
+      channel: moderatedMessage().channel,
+      user: { id: 'blocked-user' },
+      isAutocomplete: () => false,
+      isRepliable: () => true,
+      reply: vi.fn(async () => {}),
+    };
+    await fake.fire(Events.InteractionCreate, target);
+    expect(target.reply).toHaveBeenCalledOnce();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it.each([Events.MessageReactionAdd, Events.MessageReactionRemove] as const)(
+    'hydrates partial %s and users before preventing reaction handler dispatch',
+    async (event) => {
+      const fake = buildFakeClient();
+      const reactionPort = {
+        handleAdded: vi.fn(async () => {}),
+        handleRemoved: vi.fn(async () => {}),
+      };
+      const bridge = new ClientEventBridge(fake.client, silent);
+      bridge.attach({ ...baseConfig({ reactionPort }), moderation: moderation() });
+      const reaction = { partial: false, message: moderatedMessage() };
+      const partial = {
+        partial: true,
+        message: reaction.message,
+        fetch: vi.fn(async () => reaction),
+      };
+      const user = {
+        partial: true,
+        bot: false,
+        fetch: vi.fn(async () => ({ partial: false, bot: false, id: 'blocked-user' })),
+      };
+      await fake.fire(event, partial, user);
+      expect(partial.fetch).toHaveBeenCalledOnce();
+      expect(user.fetch).toHaveBeenCalledOnce();
+      expect(reactionPort.handleAdded).not.toHaveBeenCalled();
+      expect(reactionPort.handleRemoved).not.toHaveBeenCalled();
+    },
+  );
 });

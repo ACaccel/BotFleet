@@ -98,6 +98,9 @@
   },
   "packageManager": "npm@10.9.2",
   "overrides": {
-    "undici": "^6.27.0"
+    "undici": "^6.27.0",
+    "vitest": {
+      "tinypool": "2.1.2"
+    }
   }
 }

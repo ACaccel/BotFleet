@@ -32,7 +32,7 @@ Discord snowflake IDs must be JSON **strings**, not numbers.
 
 | Field                         | Meaning                                                                                                                                        |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                       | Bot-admin user IDs; default `[]`. Controls `/ai_whitelist_*` and receives `/bug_report` DMs                                                    |
+| `admin`                       | Bot-admin user IDs; default `[]`. Controls `/ai_whitelist_*`, thread management and DM claim review; receives `/bug_report` DMs                |
 | `language`                    | `zh-TW` (default) or `en`; also sets registered command text. Unsupported values warn and fall back                                            |
 | `commands`                    | Command names to register. After changing the list, [register again](contributing/local-setup.md#registering-slash-commands) to update Discord |
 | `guilds.<id>.channels`        | Symbolic channel names such as `debug`, `event` and `giveaway`, mapped to IDs                                                                  |
@@ -71,6 +71,19 @@ Plugin configuration is validated at startup; strict schemas reject unknown keys
 Invalid or missing weather/restaurant settings disable the affected command while
 leaving the rest available. The archive worker's first pass runs in the background;
 service readiness does not wait for it to finish.
+
+### Thread moderation
+
+`thread_moderation: { "enabled": true }` enables persistent thread restrictions
+for that bot and requires `MONGO_URI`. The block defaults to disabled when omitted;
+invalid settings fail startup. Nijika enables it in its example configuration.
+Add `thread_ban`, `thread_allow`, `thread_list`, `thread_claim` and `thread_manager`
+to its `commands` list. The bot needs **View Channel** and **Manage Messages** in
+the moderated threads.
+
+Claims are reviewed by DM to users in `admin`; no review channel is required.
+See [thread moderation](thread-moderation.md) for command permissions, delegation,
+message deletion and other-bot response limits.
 
 ### Social previews and feeds
 

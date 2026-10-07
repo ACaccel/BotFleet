@@ -52,6 +52,7 @@ import type { Clock } from '../core/time';
 
 import type { GuildInfo } from './index';
 import { TOKENS } from './tokens';
+import type { ThreadModeration } from './thread-moderation';
 
 /**
  * Port the bridge delegates reaction processing to. Lives on the bridge
@@ -82,6 +83,7 @@ export interface ClientEventBridgeSuppression {
  * bridge resolves every other dependency it needs through `container`.
  */
 interface ClientEventBridgeConfig {
+  readonly moderation?: ThreadModeration;
   readonly container: ServiceContainer;
   readonly host: PluginHost;
   readonly router: InteractionRouter | undefined;
@@ -238,7 +240,32 @@ export class ClientEventBridge {
    */
   private installDispatcherForwarders(host: PluginHost): void {
     const dispatcher = host.getEventDispatcher();
-    for (const event of dispatcher.subscribedEvents()) {
+    const moderation = this.config?.moderation;
+    const events = dispatcher.subscribedEvents();
+    if (moderation) {
+      // Moderation must also run on bots with no message-producing plugins.
+      this.on(Events.MessageCreate, async (message) => {
+        try {
+          if (await moderation.allowMessage(message, true)) {
+            await dispatcher.emit(Events.MessageCreate, message);
+          }
+        } catch (err) {
+          logError(this.logger, message.guildId, err);
+        }
+      });
+      this.on(Events.MessageUpdate, async (before, after) => {
+        try {
+          if (await moderation.allowMessage(after, false)) {
+            await dispatcher.emit(Events.MessageUpdate, before, after);
+          }
+        } catch (err) {
+          logError(this.logger, after.guildId, err);
+        }
+      });
+    }
+    for (const event of events) {
+      if (moderation && (event === Events.MessageCreate || event === Events.MessageUpdate))
+        continue;
       this.on(event, (...args: ClientEvents[typeof event]) => {
         void dispatcher.emit(event, ...args);
       });
@@ -270,6 +297,7 @@ export class ClientEventBridge {
   private async onInteraction(interaction: Interaction): Promise<void> {
     const config = this.config;
     if (config === undefined) return;
+    if (config.moderation && !(await config.moderation.allowInteraction(interaction))) return;
     // Pre-router defensive path: BaseBot calls `attach` only after
     // the router is built; the branch here keeps the bridge
     // robust under unit-test setups that drive it directly.
@@ -335,6 +363,11 @@ export class ClientEventBridge {
     if (user.bot) return;
     const fetchedReaction = reaction.partial ? await reaction.fetch() : reaction;
     const fetchedUser = user.partial ? await user.fetch() : user;
+    if (
+      this.config?.moderation &&
+      !(await this.config.moderation.allowReaction(fetchedReaction.message, fetchedUser.id))
+    )
+      return;
     const port = this.config?.reactionPort;
     if (port === undefined) return;
     // Intentionally no audit log — see header comment.
@@ -348,6 +381,11 @@ export class ClientEventBridge {
     if (user.bot) return;
     const fetchedReaction = reaction.partial ? await reaction.fetch() : reaction;
     const fetchedUser = user.partial ? await user.fetch() : user;
+    if (
+      this.config?.moderation &&
+      !(await this.config.moderation.allowReaction(fetchedReaction.message, fetchedUser.id))
+    )
+      return;
     const port = this.config?.reactionPort;
     if (port === undefined) return;
     // Intentionally no audit log — see header comment.

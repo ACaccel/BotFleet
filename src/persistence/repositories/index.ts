@@ -17,6 +17,7 @@ import { MongoGiveawayRepo, type GiveawayRepo } from './giveaway.repo';
 import { MongoMessageRepo, type MessageRepo } from './message.repo';
 import { MongoReplyRepo, type ReplyRepo } from './reply.repo';
 import { MongoTempRoleRepo, type TempRoleRepo } from './temp-role.repo';
+import { MongoThreadModerationRepo, type ThreadModerationRepo } from './thread-moderation.repo';
 import { MongoUserApiSettingRepo, type UserApiSettingRepo } from './user-api-setting.repo';
 
 export { MongoActivityRepo, type ActivityRepo, type ActivityInput } from './activity.repo';
@@ -33,6 +34,7 @@ export { MongoGiveawayRepo, type GiveawayRepo, type GiveawayInput } from './give
 export { MongoMessageRepo, type MessageRepo, type InsertResult } from './message.repo';
 export { MongoReplyRepo, type ReplyRepo } from './reply.repo';
 export { MongoTempRoleRepo, type TempRoleRepo, type TempRoleInput } from './temp-role.repo';
+export { MongoThreadModerationRepo, type ThreadModerationRepo } from './thread-moderation.repo';
 export {
   MongoUserApiSettingRepo,
   type UserApiSettingRepo,
@@ -52,6 +54,7 @@ export interface Repos {
   readonly message: MessageRepo;
   readonly reply: ReplyRepo;
   readonly tempRole: TempRoleRepo;
+  readonly threadModeration: ThreadModerationRepo;
   readonly userApiSetting: UserApiSettingRepo;
   readonly feedSubscription: FeedSubscriptionRepo;
 }
@@ -69,6 +72,7 @@ export const buildRepos = (conn: GuildConnection): Repos => ({
   message: new MongoMessageRepo(conn),
   reply: new MongoReplyRepo(conn),
   tempRole: new MongoTempRoleRepo(conn),
+  threadModeration: new MongoThreadModerationRepo(conn),
   userApiSetting: new MongoUserApiSettingRepo(conn),
   feedSubscription: new MongoFeedSubscriptionRepo(conn),
 });

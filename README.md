@@ -13,6 +13,7 @@ Each bot runs independently and selects features from a shared plugin system.
 - LLM chat through OpenAI, Anthropic, Gemini and xAI, plus self-hosted auto-replies.
 - Message archives, activity reports, giveaways and temporary roles.
 - [Temporary moderation](docs/contributing/operations.md#temporary-moderation) with automatic reply suppression.
+- [Thread moderation](docs/thread-moderation.md) with persistent bans, delegated management and admin DM review in Nijika.
 - Social-link previews and channel subscriptions to social feeds.
 - Earthquake notifications and plugin-owned scheduled jobs.
 

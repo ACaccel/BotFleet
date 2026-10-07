@@ -54,6 +54,12 @@ export interface CommandConfig {
   type?: ContextMenuCommandType; // for context menu commands, default is Chat Input
   /** `/help` grouping key; defaults to `'other'` when a handler omits it. */
   category?: CommandCategory;
+  /** Discord permission defaults; handlers must also check runtime authority. */
+  defaultMemberPermissions?: bigint;
+  /** Prevent invocation in direct messages when the command needs guild state. */
+  guildOnly?: boolean;
+  subcommands?: CommandSubcommand[];
+  subcommandGroups?: CommandSubcommandGroup[];
   options?: {
     string?: CommandOption[];
     number?: CommandOption[];
@@ -62,6 +68,18 @@ export interface CommandConfig {
     channel?: CommandOption[];
     attachment?: CommandOption[];
   };
+}
+
+interface CommandSubcommand {
+  name: string;
+  description?: string;
+  options?: CommandConfig['options'];
+}
+
+interface CommandSubcommandGroup {
+  name: string;
+  description?: string;
+  subcommands: CommandSubcommand[];
 }
 
 interface CommandOption {
@@ -105,6 +123,8 @@ interface CommandChoice {
  */
 export interface LocalizedCommandConfig extends CommandConfig {
   description: string;
+  subcommands?: LocalizedCommandSubcommand[];
+  subcommandGroups?: LocalizedCommandSubcommandGroup[];
   options?: {
     string?: LocalizedCommandOption[];
     number?: LocalizedCommandOption[];
@@ -113,6 +133,16 @@ export interface LocalizedCommandConfig extends CommandConfig {
     channel?: LocalizedCommandOption[];
     attachment?: LocalizedCommandOption[];
   };
+}
+
+interface LocalizedCommandSubcommand extends CommandSubcommand {
+  description: string;
+  options?: LocalizedCommandConfig['options'];
+}
+
+interface LocalizedCommandSubcommandGroup extends CommandSubcommandGroup {
+  description: string;
+  subcommands: LocalizedCommandSubcommand[];
 }
 
 /** A {@link CommandOption} with its description and choices resolved. */
@@ -230,32 +260,58 @@ export const localizeCommandConfig = (
 ): LocalizedCommandConfig => {
   const t = (key: string): string => translator?.t(key) ?? '';
   const isContextMenu = config.type !== undefined;
-  const localizeOption = (opt: CommandOption): LocalizedCommandOption => {
+  const localizeOption = (opt: CommandOption, prefix: string): LocalizedCommandOption => {
     const { choices, ...rest } = opt;
     const localizedChoices = choices?.map(
       (choice): LocalizedCommandChoice => ({
         value: choice.value,
         // A choice that already carries a `name` (data-file sourced)
         // keeps it; otherwise the label is resolved by stable `value`.
-        name:
-          choice.name ?? t(`commands:${config.name}.options.${opt.name}.choices.${choice.value}`),
+        name: choice.name ?? t(`${prefix}.options.${opt.name}.choices.${choice.value}`),
       }),
     );
     return {
       ...rest,
-      description: t(`commands:${config.name}.options.${opt.name}.description`),
+      description: t(`${prefix}.options.${opt.name}.description`),
       ...(localizedChoices ? { choices: localizedChoices } : {}),
     };
   };
 
-  const localizedOptions: LocalizedCommandConfig['options'] | undefined = config.options
-    ? Object.fromEntries(
-        Object.entries(config.options).map(([optType, opts]) => [
-          optType,
-          (opts as CommandOption[]).map((opt) => localizeOption(opt)),
-        ]),
-      )
+  const localizeOptions = (
+    options: CommandConfig['options'],
+    prefix: string,
+  ): LocalizedCommandConfig['options'] =>
+    options
+      ? Object.fromEntries(
+          Object.entries(options).map(([optType, opts]) => [
+            optType,
+            (opts as CommandOption[]).map((opt) => localizeOption(opt, prefix)),
+          ]),
+        )
+      : undefined;
+  const prefix = `commands:${config.name}`;
+  const localizedOptions = localizeOptions(config.options, prefix);
+  const localizeSubcommands = (subcommands: CommandSubcommand[], parent: string) =>
+    subcommands.map((subcommand) => {
+      const subcommandPrefix = `${parent}.subcommands.${subcommand.name}`;
+      const options = localizeOptions(subcommand.options, subcommandPrefix);
+      return {
+        name: subcommand.name,
+        description: t(`${subcommandPrefix}.description`),
+        ...(options ? { options } : {}),
+      };
+    });
+  const localizedSubcommands = config.subcommands
+    ? localizeSubcommands(config.subcommands, prefix)
     : undefined;
+  const localizedGroups = config.subcommandGroups?.map((group) => {
+    const groupPrefix = `${prefix}.groups.${group.name}`;
+    return {
+      name: group.name,
+      description: t(`${groupPrefix}.description`),
+      subcommands: localizeSubcommands(group.subcommands, groupPrefix),
+    };
+  });
 
   return {
     // A context-menu command's `config.name` is a stable ASCII id
@@ -265,8 +321,14 @@ export const localizeCommandConfig = (
     // which the id already is).
     name: isContextMenu ? t(`commands:${config.name}.name`) : config.name,
     ...(config.type !== undefined ? { type: config.type } : {}),
+    ...(config.defaultMemberPermissions !== undefined
+      ? { defaultMemberPermissions: config.defaultMemberPermissions }
+      : {}),
+    ...(config.guildOnly !== undefined ? { guildOnly: config.guildOnly } : {}),
     // Context-menu commands carry no description; chat-input commands do.
     description: isContextMenu ? '' : t(`commands:${config.name}.description`),
     ...(localizedOptions ? { options: localizedOptions } : {}),
+    ...(localizedGroups ? { subcommandGroups: localizedGroups } : {}),
+    ...(localizedSubcommands ? { subcommands: localizedSubcommands } : {}),
   };
 };

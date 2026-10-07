@@ -140,6 +140,14 @@ const buildModels = (connection: Connection): Models => ({
   Giveaway: connection.model<DocByName['Giveaway']>('Giveaway', SCHEMAS.Giveaway),
   Activity: connection.model<DocByName['Activity']>('Activity', SCHEMAS.Activity),
   TempRole: connection.model<DocByName['TempRole']>('TempRole', SCHEMAS.TempRole),
+  ThreadModeration: connection.model<DocByName['ThreadModeration']>(
+    'ThreadModeration',
+    SCHEMAS.ThreadModeration,
+  ),
+  ThreadMessageSource: connection.model<DocByName['ThreadMessageSource']>(
+    'ThreadMessageSource',
+    SCHEMAS.ThreadMessageSource,
+  ),
   UserApiSetting: connection.model<DocByName['UserApiSetting']>(
     'UserApiSetting',
     SCHEMAS.UserApiSetting,

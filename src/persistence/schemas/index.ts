@@ -11,6 +11,11 @@ import { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
 import { messageSchema, type MessageDoc } from './message.schema';
 import { replySchema, type ReplyDoc } from './reply.schema';
 import { tempRoleSchema, type TempRoleDoc } from './temp-role.schema';
+import {
+  threadMessageSourceSchema,
+  type ThreadMessageSourceDoc,
+} from './thread-message-source.schema';
+import { threadModerationSchema, type ThreadModerationDoc } from './thread-moderation.schema';
 import { userApiSettingSchema, type UserApiSettingDoc } from './user-api-setting.schema';
 
 export { activitySchema, type ActivityDoc } from './activity.schema';
@@ -28,6 +33,11 @@ export { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
 export { messageSchema, type MessageDoc } from './message.schema';
 export { replySchema, type ReplyDoc } from './reply.schema';
 export { tempRoleSchema, type TempRoleDoc } from './temp-role.schema';
+export {
+  threadMessageSourceSchema,
+  type ThreadMessageSourceDoc,
+} from './thread-message-source.schema';
+export { threadModerationSchema, type ThreadModerationDoc } from './thread-moderation.schema';
 export { userApiSettingSchema, type UserApiSettingDoc } from './user-api-setting.schema';
 
 export const SCHEMAS = {
@@ -37,6 +47,8 @@ export const SCHEMAS = {
   Giveaway: giveawaySchema,
   Activity: activitySchema,
   TempRole: tempRoleSchema,
+  ThreadModeration: threadModerationSchema,
+  ThreadMessageSource: threadMessageSourceSchema,
   UserApiSetting: userApiSettingSchema,
   FeedSubscription: feedSubscriptionSchema,
 } as const;
@@ -54,6 +66,8 @@ export interface DocByName {
   Giveaway: GiveawayDoc;
   Activity: ActivityDoc;
   TempRole: TempRoleDoc;
+  ThreadModeration: ThreadModerationDoc;
+  ThreadMessageSource: ThreadMessageSourceDoc;
   UserApiSetting: UserApiSettingDoc;
   FeedSubscription: FeedSubscriptionDoc;
 }
