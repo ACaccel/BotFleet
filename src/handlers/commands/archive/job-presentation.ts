@@ -8,6 +8,7 @@ import { renderArchiveStatus } from './progress';
 import { archiveGuildLabel, archiveSourceLabel } from './source-presentation';
 import { archiveJobControls } from './job-controls';
 import { manageBack, manageButton } from './manage-common';
+import { markArchiveQueuedReply } from '../../../infra/archive/public-message';
 
 const jobNavigation = (job: Job, bot: BaseBot) => {
   const t = bindTranslator(bot.translator);
@@ -47,7 +48,7 @@ const attachmentContext = (job: Job, bot: BaseBot, maxNameLength = 70): string[]
 
 export const archiveQueuedReply = (job: Job, bot: BaseBot): InteractionReplyOptions => {
   const t = bindTranslator(bot.translator);
-  return {
+  return markArchiveQueuedReply({
     content:
       t('replies:archive.job_queued', {
         command: t(`replies:archive.view_work_${job.command}`),
@@ -62,7 +63,7 @@ export const archiveQueuedReply = (job: Job, bot: BaseBot): InteractionReplyOpti
         .map((line) => `\n${line}`)
         .join(''),
     components: rows([...archiveJobControls(job, t), ...jobNavigation(job, bot)]),
-  };
+  });
 };
 
 export const archiveJobReply = async (

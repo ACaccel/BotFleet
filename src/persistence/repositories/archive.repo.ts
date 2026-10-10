@@ -24,12 +24,27 @@ export type ArchiveMutationInterceptor = (
   after: Record<string, unknown> | null,
   reason: string,
 ) => Promise<void>;
-export type ArchiveSnapshotOutcome = 'inserted' | 'updated' | 'unchanged' | 'stale';
+export type ArchiveSnapshotOutcome = 'inserted' | 'updated' | 'upgraded' | 'unchanged' | 'stale';
 export interface ArchiveMutationContext {
   readonly interceptor?: ArchiveMutationInterceptor;
 }
 export interface ArchiveSnapshotContext extends ArchiveMutationContext {
   readonly observed?: Record<string, unknown> | null;
+  readonly emptyReactions?: { readonly observedAt: number; readonly assertCurrent: () => void };
+}
+export interface ArchivePreparedMutation {
+  readonly collection: string;
+  readonly before: (Record<string, unknown> & { _id: unknown }) | null;
+  readonly after: (Record<string, unknown> & { _id: unknown }) | null;
+  readonly reason: string;
+}
+export interface ArchiveSnapshotBatchContext extends ArchiveMutationContext {
+  readonly beforeWrite?: () => void;
+  readonly batchInterceptor?: (
+    mutations: readonly ArchivePreparedMutation[],
+    beforeWrite?: () => void,
+  ) => Promise<void>;
+  readonly snapshotContexts?: readonly ArchiveSnapshotContext[];
 }
 export interface ArchiveRepo {
   persistSnapshot(
@@ -41,7 +56,7 @@ export interface ArchiveRepo {
   ): Promise<ReadonlyMap<string, Record<string, unknown>>>;
   persistSnapshotsBatch(
     snapshots: readonly ArchiveSnapshot[],
-    context?: ArchiveMutationContext,
+    context?: ArchiveSnapshotBatchContext,
   ): Promise<readonly ArchiveSnapshotOutcome[]>;
   recordSourceEvidence(
     messageId: string,
@@ -170,31 +185,174 @@ export class MongoArchiveRepo implements ArchiveRepo {
   }
   public async persistSnapshotsBatch(
     snapshots: readonly ArchiveSnapshot[],
-    context?: ArchiveMutationContext,
+    context?: ArchiveSnapshotBatchContext,
   ): Promise<readonly ArchiveSnapshotOutcome[]> {
     const bytes = snapshots.reduce(
       (sum, snapshot) => sum + mongo.BSON.calculateObjectSize(snapshot),
       0,
     );
-    if (snapshots.length > ARCHIVE_LIMITS.batchDocuments || bytes > ARCHIVE_LIMITS.batchBytes)
+    if (
+      snapshots.length > ARCHIVE_LIMITS.batchDocuments ||
+      (bytes > ARCHIVE_LIMITS.batchBytes && !context?.snapshotContexts)
+    )
       throw new RangeError('Archive snapshot batch exceeds admission limits');
-    const observed = await this.loadSnapshotBatch(snapshots.map((snapshot) => snapshot.messageId));
+    if (context?.snapshotContexts && context.snapshotContexts.length !== snapshots.length)
+      throw new RangeError('Snapshot contexts must match snapshots');
+    const observed = context?.snapshotContexts?.every((entry) => entry.observed !== undefined)
+      ? new Map<string, Record<string, unknown>>()
+      : await this.loadSnapshotBatch(snapshots.map((snapshot) => snapshot.messageId));
     const seen = new Set<string>();
     const outcomes: ArchiveSnapshotOutcome[] = [];
-    for (const snapshot of snapshots) {
-      // A repeated identity observes the preceding commit, including its Gateway watermark.
-      outcomes.push(
-        await this.persistSnapshot(snapshot, {
-          ...context,
-          ...(seen.has(snapshot.messageId)
-            ? {}
-            : { observed: observed.get(snapshot.messageId) ?? null }),
-        }),
+    let pending: ArchivePreparedMutation[] = [];
+    let pendingBytes = 0;
+    let fences: (() => void)[] = [];
+    const guard = (): void => {
+      context?.beforeWrite?.();
+      for (const fence of fences) fence();
+    };
+    const flush = async (): Promise<void> => {
+      guard();
+      if (pending.length) {
+        if (context?.batchInterceptor) await context.batchInterceptor(pending, guard);
+        else if (context?.interceptor ?? this.interceptor) {
+          for (const mutation of pending) {
+            guard();
+            await this.mutate(
+              mutation.collection,
+              mutation.before,
+              mutation.after,
+              mutation.reason,
+              context,
+            );
+          }
+        } else await this.applySnapshotMutations(pending, guard);
+      }
+      for (const fence of fences) fence();
+      pending = [];
+      pendingBytes = 0;
+      fences = [];
+    };
+    for (const [index, snapshot] of snapshots.entries()) {
+      const duplicate = seen.has(snapshot.messageId);
+      if (duplicate) await flush();
+      const itemContext = context?.snapshotContexts?.[index];
+      const prepared: ArchivePreparedMutation[] = [];
+      // Preparation is restricted to one snapshot. Its revision lookup precedes its only
+      // message mutation; repeated identities must first observe the preceding commit.
+      const outcome = await this.writeSnapshot(snapshot, {
+        ...itemContext,
+        ...(duplicate
+          ? { observed: undefined }
+          : {
+              observed:
+                itemContext?.observed !== undefined
+                  ? itemContext.observed
+                  : (observed.get(snapshot.messageId) ?? null),
+            }),
+        interceptor: async (collection, before, after, reason) => {
+          prepared.push({
+            collection,
+            before: before as ArchivePreparedMutation['before'],
+            after: after as ArchivePreparedMutation['after'],
+            reason,
+          });
+        },
+      });
+      const preparedBytes = prepared.reduce(
+        (sum, mutation) => sum + mongo.BSON.calculateObjectSize(mutation),
+        0,
       );
+      if (
+        preparedBytes > ARCHIVE_LIMITS.batchBytes &&
+        context?.batchInterceptor &&
+        !(context.interceptor ?? this.interceptor)
+      )
+        throw new RangeError('Oversized archive mutation requires a single-mutation interceptor');
+      if (
+        pending.length + prepared.length > ARCHIVE_LIMITS.batchDocuments ||
+        pendingBytes + preparedBytes > ARCHIVE_LIMITS.batchBytes
+      )
+        await flush();
+      if (preparedBytes > ARCHIVE_LIMITS.batchBytes) {
+        context?.beforeWrite?.();
+        itemContext?.emptyReactions?.assertCurrent();
+        for (const mutation of prepared) {
+          context?.beforeWrite?.();
+          itemContext?.emptyReactions?.assertCurrent();
+          await this.mutate(
+            mutation.collection,
+            mutation.before,
+            mutation.after,
+            mutation.reason,
+            context,
+          );
+        }
+        itemContext?.emptyReactions?.assertCurrent();
+      } else {
+        pending.push(...prepared);
+        pendingBytes += preparedBytes;
+        if (itemContext?.emptyReactions) fences.push(itemContext.emptyReactions.assertCurrent);
+      }
+      outcomes.push(outcome);
       seen.add(snapshot.messageId);
     }
+    await flush();
     return outcomes;
   }
+  private async applySnapshotMutations(
+    mutations: readonly ArchivePreparedMutation[],
+    beforeWrite?: () => void,
+  ): Promise<void> {
+    // Snapshot preparation emits revision inserts before message writes. Complete and
+    // verify the revision wave before publishing any corresponding message image.
+    for (const collection of ['archive_revisions', 'messages']) {
+      const wave = mutations.filter((mutation) => mutation.collection === collection);
+      if (!wave.length) continue;
+      const target = this.conn.connection.collection<Record<string, unknown>>(collection);
+      const writes: mongo.AnyBulkWriteOperation<Record<string, unknown>>[] = wave.map(
+        ({ before, after }) => {
+          if (!after) throw new Error('Snapshot preparation cannot delete documents');
+          return before
+            ? {
+                replaceOne: {
+                  filter: {
+                    _id: { $eq: before._id as mongo.ObjectId },
+                    $expr: { $eq: ['$$ROOT', { $literal: before }] },
+                  },
+                  replacement: after,
+                },
+              }
+            : {
+                insertOne: { document: after as Record<string, unknown> & { _id: mongo.ObjectId } },
+              };
+        },
+      );
+      beforeWrite?.();
+      const result = await target.bulkWrite(writes, {
+        ordered: true,
+        writeConcern: { w: 1, j: true },
+      });
+      if (result.matchedCount + result.insertedCount !== wave.length)
+        throw new Error('Archive write conflict');
+      const images = await target
+        .find({ _id: { $in: wave.map(({ after }) => after!._id as mongo.ObjectId) } })
+        .toArray();
+      const identity = (_id: unknown): string =>
+        Buffer.from(mongo.BSON.serialize({ _id })).toString('hex');
+      const byId = new Map(images.map((document) => [identity(document._id), document]));
+      for (const { after } of wave) {
+        const actual = byId.get(identity(after!._id));
+        if (
+          !actual ||
+          !Buffer.from(mongo.BSON.serialize(actual)).equals(
+            Buffer.from(mongo.BSON.serialize(after!)),
+          )
+        )
+          throw new Error('Archive batch verification failed');
+      }
+    }
+  }
+
   public async recordSourceEvidence(
     messageId: string,
     snapshot: ArchiveSnapshot,
@@ -818,13 +976,24 @@ export class MongoArchiveRepo implements ArchiveRepo {
             before.versionObservationId ??
               `${String(before.source ?? 'legacy')}:${String(before.contentVersionAt ?? before.timestamp ?? 0)}:${merged.contentHash}`,
           );
-    const after = {
+    const after: Record<string, unknown> = {
       ...before,
       ...merged,
       ...(gateway.next ? { gatewayObservation: gateway.next } : {}),
       firstObservedAt: before?.firstObservedAt ?? snapshot.observedAt,
     };
     delete after.archiveSourceDecision;
+    if (context?.emptyReactions) {
+      context.emptyReactions.assertCurrent();
+      if (
+        before?.deletion ||
+        Number(before?.reactionsStaleAt ?? 0) > context.emptyReactions.observedAt
+      )
+        throw new Error('Reaction changed during refresh');
+      after.reactionGenerations = {};
+      after.reactionsFreshAt = context.emptyReactions.observedAt;
+      delete after.reactionsStaleAt;
+    }
     if (
       before &&
       Buffer.compare(
@@ -844,9 +1013,11 @@ export class MongoArchiveRepo implements ArchiveRepo {
     await this.mutate('messages', before, after, 'message-snapshot', context);
     return !before
       ? 'inserted'
-      : before.contentHash === merged.contentHash
-        ? 'unchanged'
-        : 'updated';
+      : before.schemaVersion !== 2
+        ? 'upgraded'
+        : changed
+          ? 'updated'
+          : 'unchanged';
   }
   private gatewayTransition(
     before: Partial<ArchiveSnapshot> | null,

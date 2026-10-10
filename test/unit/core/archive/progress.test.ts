@@ -25,6 +25,64 @@ const tracker = () =>
   });
 
 describe('truthful bounded archive progress', () => {
+  it('measures only fresh checkpoints and keeps restored totals independent of this job time', () => {
+    let now = 100000;
+    const progress = new ProgressTracker({
+      cutoff: new Date(now),
+      startedAt: now,
+      clock: () => now,
+    });
+    progress.commit('history', 500000, 'source', 9, true, 50000);
+    progress.messageCounts({ scanned: 500000, updated: 200000 });
+    progress.markLegacyClassifications();
+    expect(progress.snapshot()).toMatchObject({ lastCheckpointAt: 50000, elapsedMs: 0 });
+    expect(progress.snapshot().recentThroughput).toBeUndefined();
+    expect(progress.snapshot().messageClassificationVersion).toBeUndefined();
+    now += 1000;
+    progress.commit('history', 100, 'source', 10);
+    expect(progress.snapshot().recentThroughput).toBeUndefined();
+    now += 2000;
+    progress.commit('history', 100, 'source', 11);
+    expect(progress.snapshot().recentThroughput).toEqual({
+      messages: 100,
+      windowMs: 2000,
+      observedAt: now,
+    });
+    expect(progress.snapshot().phases.history.committed).toBe(500200);
+    expect(progress.snapshot().elapsedMs).toBe(3000);
+    expect(progress.commit('history', 100, 'source', 11)).toBe(false);
+    expect(progress.snapshot().recentThroughput?.messages).toBe(100);
+    now += 30001;
+    expect(progress.snapshot().recentThroughput).toBeUndefined();
+    progress.pause('maintenance');
+    progress.resume();
+    now += 1000;
+    progress.commit('history', 100, 'source', 12);
+    expect(progress.snapshot().recentThroughput).toBeUndefined();
+  });
+  it('preserves absent legacy upgrade classification and rejects invalid recent speed evidence', () => {
+    const legacy = sanitizeArchiveProgress({
+      phase: 'history',
+      state: 'running',
+      messages: { updated: 10 },
+    })!;
+    expect(legacy.messages.upgraded).toBeUndefined();
+    expect(legacy.messageClassificationVersion).toBeUndefined();
+    for (const windowMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(
+        sanitizeArchiveProgress({
+          phase: 'history',
+          state: 'running',
+          recentThroughput: { messages: 10, windowMs, observedAt: 1000 },
+        })?.recentThroughput,
+      ).toBeUndefined();
+    const fresh = tracker();
+    fresh.messageCounts({ upgraded: 7 });
+    expect(fresh.snapshot()).toMatchObject({
+      messageClassificationVersion: 2,
+      messages: { upgraded: 7 },
+    });
+  });
   it('selects recent active work without changing stable source pagination', () => {
     let now = 1000;
     const progress = new ProgressTracker({
@@ -306,7 +364,12 @@ describe('truthful bounded archive progress', () => {
         6000,
       );
       expect(complete).toContain(
-        t.t('replies:archive.view_writes', { inserted: 7, updated: 2, unchanged: 1 }),
+        t.t('replies:archive.view_classified_writes', {
+          inserted: 7,
+          updated: 2,
+          upgraded: 0,
+          unchanged: 1,
+        }),
       );
       expect(complete).toContain(t.t('replies:archive.view_periodic_scope'));
       expect(complete).toContain('<t:12:f>');

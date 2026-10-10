@@ -9,10 +9,39 @@ import {
   type APIComponentInMessageActionRow,
   type Client,
   type MessageEditOptions,
+  type InteractionReplyOptions,
 } from 'discord.js';
 import { safeArchiveName } from '../../core/archive/progress';
 
 const edits = new Map<string, Promise<unknown>>();
+const queuedDetails = new WeakSet<InteractionReplyOptions>();
+
+/** Submission receipts are transient; inspection and approval details are never marked. */
+export const markArchiveQueuedReply = (
+  payload: InteractionReplyOptions,
+): InteractionReplyOptions => {
+  queuedDetails.add(payload);
+  return payload;
+};
+export const isArchiveQueuedReply = (payload: InteractionReplyOptions): boolean =>
+  queuedDetails.has(payload);
+export const archiveDetailFingerprint = (embed: APIEmbed): string =>
+  createHash('sha256')
+    .update(
+      JSON.stringify({
+        title: embed.title,
+        description: embed.description,
+        fields: embed.fields,
+        footer: embed.footer,
+        color: embed.color,
+        timestamp: embed.timestamp,
+        url: embed.url,
+        author: embed.author,
+        image: embed.image,
+        thumbnail: embed.thumbnail,
+      }),
+    )
+    .digest('hex');
 
 /** Discord deduplicates an ambiguous creation retry using the durable notification identity. */
 export const archivePublicMessageNonce = (

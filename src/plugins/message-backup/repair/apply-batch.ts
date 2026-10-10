@@ -55,6 +55,7 @@ export const applyRepairBatch = async (
   batch: readonly RepairOperation[],
   dependencies: RepairDependencies,
   cancellation: ArchiveRepairCancellation,
+  beforeWrite?: () => void,
 ): Promise<RepairBatchResult> => {
   const journal = database.collection<RepairOperation>('archive_repair_operations');
   const dependencyIds = [...new Set(batch.flatMap((operation) => operation.dependencies))];
@@ -139,7 +140,7 @@ export const applyRepairBatch = async (
                 };
               }
               const filter = {
-                _id: operation.documentId,
+                _id: { $eq: operation.documentId },
                 $expr: { $eq: ['$$ROOT', { $literal: operation.before }] },
               } as mongo.Filter<RepairDocument>;
               return operation.after === null
@@ -148,11 +149,13 @@ export const applyRepairBatch = async (
             },
           );
           try {
-            if (writes.length > 0)
+            if (writes.length > 0) {
+              beforeWrite?.();
               await database.collection<RepairDocument>(name).bulkWrite(writes, {
                 ordered: true,
                 writeConcern: { w: 'majority', j: true },
               });
+            }
           } catch (error) {
             failure = error;
             if (

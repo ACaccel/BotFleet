@@ -55,6 +55,83 @@ const message = (patch: Record<string, unknown> = {}): Record<string, unknown> =
 });
 
 describe('msg-archive repair state machine', () => {
+  it.each([
+    ['replace', 'object-id'],
+    ['replace', 'string'],
+    ['replace', 'document'],
+    ['delete', 'object-id'],
+    ['delete', 'string'],
+    ['delete', 'document'],
+  ] as const)('uses the ID index for enrichment %s with a %s ID', async (mutation, idKind) => {
+    await withFreshConnection(async (connection) => {
+      const documentId =
+        idKind === 'object-id'
+          ? new mongo.ObjectId()
+          : idKind === 'string'
+            ? '$synthetic-id'
+            : { key: 'synthetic-id' };
+      await seed(connection, [
+        ...Array.from({ length: 64 }, (_, index) => message({ messageId: String(1000 + index) })),
+        message({ _id: documentId }),
+      ]);
+      let observed = false;
+      const service = new ArchiveRepairService(
+        connection,
+        dependencies({
+          backfill: async (context) => {
+            const db = connection.db!;
+            const collection = db.collection.bind(db);
+            const messages = db.collection('messages');
+            const before = await messages.findOne({ _id: { $eq: documentId } } as never);
+            expect(before).not.toBeNull();
+            const after = mutation === 'delete' ? null : { ...before!, content: 'updated content' };
+            const originalMutation = messages[mutation === 'replace' ? 'replaceOne' : 'deleteOne'];
+            const mutationSpy = vi
+              .spyOn(messages, mutation === 'replace' ? 'replaceOne' : 'deleteOne')
+              .mockImplementation(async (...args: unknown[]) => {
+                const filter = args[0] as mongo.Filter<mongo.Document>;
+                expect(filter).toEqual({
+                  _id: { $eq: documentId },
+                  $expr: { $eq: ['$$ROOT', { $literal: before }] },
+                });
+                const explanation = await messages.find(filter).explain('executionStats');
+                expect(explanation['executionStats']['nReturned']).toBe(1);
+                expect(explanation['executionStats']['totalDocsExamined']).toBe(1);
+                expect(explanation['executionStats']['totalKeysExamined']).toBe(1);
+                // The index anchor must not weaken the complete before-image guard.
+                const staleFilter = {
+                  ...filter,
+                  $expr: { $eq: ['$$ROOT', { $literal: { ...before, content: 'stale content' } }] },
+                };
+                expect(await messages.findOne(staleFilter)).toBeNull();
+                observed = true;
+                return Reflect.apply(originalMutation, messages, args);
+              });
+            const collectionSpy = vi
+              .spyOn(db, 'collection')
+              .mockImplementation(((name: string, options?: mongo.CollectionOptions) =>
+                name === 'messages'
+                  ? messages
+                  : collection(name, options)) as typeof db.collection);
+            try {
+              await context.applyMutation('messages', before, after, 'synthetic-enrichment');
+              expect(mutationSpy).toHaveBeenCalledTimes(1);
+              const saved = await messages.findOne({ _id: { $eq: documentId } } as never);
+              expect(saved).toEqual(after);
+            } finally {
+              collectionSpy.mockRestore();
+              mutationSpy.mockRestore();
+            }
+            return { status: 'complete', counts: {}, issues: [] };
+          },
+        }),
+      );
+      const plan = await service.execute(request('plan'));
+      expect((await service.execute(request('apply', plan.runId))).status).toBe('complete');
+      expect(observed).toBe(true);
+    });
+  });
+
   it.each(['image', 'dependency', 'counter'] as const)(
     'refuses acceptance when a fresh manifest check detects corrupted %s evidence',
     async (corruption) => {

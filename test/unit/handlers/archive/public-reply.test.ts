@@ -1,6 +1,11 @@
 import { archiveBulkPublicReply } from '../../../../src/handlers/commands/archive/bulk-public-reply';
+import { archiveQueuedReply } from '../../../../src/handlers/commands/archive/job-presentation';
+import { archiveDetailFingerprint } from '../../../../src/infra/archive/public-message';
+import { archivePlanProgressEmbed } from '../../../../src/handlers/commands/archive/plan-progress';
 import { publishArchiveReply } from '../../../../src/handlers/commands/archive/replies';
 import path from 'node:path';
+import type { ArchiveJob } from '../../../../src/core/archive/types';
+import { sanitizeArchiveProgress } from '../../../../src/core/archive/progress';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createDefaultTranslator, type Translator } from '../../../../src/core/i18n';
 import type { ArchiveAccess } from '../../../../src/handlers/commands/archive/access';
@@ -106,6 +111,178 @@ const fixture = () => {
 };
 
 describe('standalone public archive run notices', () => {
+  it('durably marks only the queued submission detail before publishing it', async () => {
+    const f = fixture();
+    const updateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
+    const original = f.collection.getMockImplementation()!;
+    f.collection.mockImplementation(
+      (name: string) =>
+        (name === 'archive_jobs'
+          ? { findOne: vi.fn().mockResolvedValue(null), updateOne }
+          : original(name)) as never,
+    );
+    const payload = archiveQueuedReply(
+      {
+        jobId: 'queued-job',
+        guildId,
+        status: 'queued',
+        command: 'backfill',
+        cancelRequested: false,
+      } as never,
+      f.bot,
+    );
+    await publishArchiveReply(
+      { user: { id: 'owner' }, message: { id: 'queued-panel' }, channelId } as never,
+      archivePublicReply(payload, { jobId: 'queued-job' }),
+      f.bot,
+      f.access,
+    );
+    expect(updateOne).toHaveBeenCalledWith(
+      { guildId, jobId: 'queued-job' },
+      {
+        $set: {
+          'notification.transientDetailHash': archiveDetailFingerprint({
+            description: String(payload.content),
+          }),
+        },
+      },
+    );
+    updateOne.mockClear();
+    await publishArchiveReply(
+      { user: { id: 'owner' }, message: { id: 'queued-panel' }, channelId } as never,
+      archivePublicReply({ content: 'Inspection details' }, { jobId: 'queued-job' }),
+      f.bot,
+      f.access,
+    );
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+  it('adds fresh associated progress above a selected plan without exposing retained source names', async () => {
+    const f = fixture();
+    const job: ArchiveJob = {
+      jobId: 'associated-job',
+      requestId: 'request',
+      guildId,
+      runId,
+      command: 'apply',
+      status: 'running',
+      cancelRequested: false,
+      options: {},
+      createdAt: Date.now() - 60000,
+      notification: { channelId, messageId: f.message.id, deliveredAt: Date.now() - 10000 },
+      result: {
+        progress: sanitizeArchiveProgress({
+          work: 'apply',
+          state: 'running',
+          phase: 'history',
+          startedAt: Date.now() - 60000,
+          activities: [
+            {
+              sourceId: '987654321',
+              name: 'Private retained source',
+              step: 'processing',
+              pageProcessed: 42,
+              pageTotal: 100,
+            },
+          ],
+          activityCount: 1,
+          messages: { fetched: 1234, scanned: 1234, inserted: 10, updated: 20, durable: 30 },
+          sources: { total: 100, completed: 2, quality: 'exact' },
+        })!,
+      },
+    };
+    const findJob = vi
+      .fn()
+      .mockImplementation(async (filter) =>
+        filter.guildId === guildId && filter.runId === runId ? job : null,
+      );
+    const original = f.collection.getMockImplementation()!;
+    f.collection.mockImplementation(
+      (name: string) => (name === 'archive_jobs' ? { findOne: findJob } : original(name)) as never,
+    );
+    const publish = () =>
+      publishArchiveReply(
+        { user: { id: 'owner' }, message: { id: 'list-panel' }, channelId } as never,
+        archivePublicReply({ content: 'Selected plan summary', components: [] }, { runId }),
+        f.bot,
+        f.access,
+      );
+    await publish();
+    const first = f.rest.patch.mock.calls.at(-1)![1].body;
+    expect(first.embeds).toHaveLength(2);
+    expect(first.embeds[0].title).toContain('Running');
+    expect(first.embeds[0].description).toContain('42 / 100');
+    expect(JSON.stringify(first.embeds[0])).toContain('1,234');
+    expect(JSON.stringify(first.embeds[0])).not.toContain('Private retained source');
+    expect(first.embeds[0].description).toContain('987654321');
+    expect(first.embeds[0].footer.text).toBeTruthy();
+    expect(first.embeds[1]).toEqual({ description: 'Selected plan summary' });
+    expect(findJob).toHaveBeenCalledWith(
+      { guildId, runId, 'notification.supersededAt': { $exists: false } },
+      { sort: { createdAt: -1 } },
+    );
+    job.result = {
+      progress: sanitizeArchiveProgress({
+        ...(job.result?.['progress'] as object),
+        activities: [
+          { sourceId: '987654321', step: 'processing', pageProcessed: 99, pageTotal: 100 },
+        ],
+      })!,
+    };
+    await publish();
+    expect(f.rest.patch.mock.calls.at(-1)![1].body.embeds[0].description).toContain('99 / 100');
+    expect(f.rest.patch.mock.calls.every(([route]) => route.endsWith('/list-panel'))).toBe(true);
+  });
+  it.each(['planning', 'foreign-guild', 'superseded', 'different-run'] as const)(
+    'resolves the originating planning job safely (%s)',
+    async (scenario) => {
+      const f = fixture();
+      const job: ArchiveJob = {
+        jobId: 'originating-job',
+        requestId: 'request',
+        guildId,
+        command: 'backfill',
+        status: 'running',
+        cancelRequested: false,
+        options: {},
+        createdAt: Date.now() - 60000,
+        result: {
+          progress: sanitizeArchiveProgress({
+            work: 'backfill',
+            state: 'running',
+            phase: 'repair',
+            elapsedMs: 60000,
+          })!,
+        },
+      };
+      if (scenario === 'foreign-guild') job.guildId = 'other-guild';
+      if (scenario === 'superseded') job.notification = { channelId, supersededAt: Date.now() };
+      if (scenario === 'different-run') job.runId = 'other-run';
+      const findJob = vi.fn().mockImplementation(async (filter) => {
+        if (filter.jobId !== job.jobId) return null;
+        expect(filter).toEqual({
+          guildId,
+          jobId: job.jobId,
+          'notification.supersededAt': { $exists: false },
+          $or: [{ runId: { $exists: false } }, { runId }],
+        });
+        return scenario === 'planning' ? job : null;
+      });
+      const findRun = vi.fn().mockResolvedValue({ _id: runId, originatingJobId: job.jobId });
+      f.collection.mockImplementation(
+        (name: string) => ({ findOne: name === 'archive_jobs' ? findJob : findRun }) as never,
+      );
+      const embed = await archivePlanProgressEmbed(f.bot, f.access, runId);
+      expect(findRun).toHaveBeenCalledWith(
+        { _id: runId, guildId },
+        { projection: { originatingJobId: 1 } },
+      );
+      if (scenario === 'planning') {
+        expect(embed?.title).toContain('Running');
+        expect(embed?.footer?.text).toContain('1m');
+      } else expect(embed).toBeUndefined();
+    },
+  );
+
   it('keeps two independent list/detail panels on their originating messages', async () => {
     const f = fixture();
     f.state.publicMessage = { channelId, messageId: f.message.id };

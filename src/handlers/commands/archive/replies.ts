@@ -9,7 +9,11 @@ import { MessageFlags } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { ArchiveAccessError } from './access';
 import type { ArchiveAccess } from './access';
-import { patchArchivePublicDetails } from '../../../infra/archive/public-message';
+import {
+  patchArchivePublicDetails,
+  isArchiveQueuedReply,
+  archiveDetailFingerprint,
+} from '../../../infra/archive/public-message';
 import { bindArchiveNavigationMessage } from './navigation';
 import {
   archivePublicReference,
@@ -17,6 +21,7 @@ import {
   ensureArchivePublicReference,
 } from './public-reply';
 import { bindArchiveConfirmationMessage } from './public-reference';
+import { archivePlanProgressEmbed } from './plan-progress';
 import { isArchiveBulkReply, publishArchiveBulkReply } from './bulk-public-reply';
 
 /** Navigation owns its originating panel; commands can open a durable worker notice. */
@@ -84,11 +89,38 @@ export const publishArchiveReply = async (
                 await bindArchiveConfirmationMessage(access, token, interaction.user.id, reference);
             }
       }
+      if (target !== undefined && 'jobId' in target && isArchiveQueuedReply(payload))
+        await access.connection.collection('archive_jobs').updateOne(
+          { guildId: access.guildId, jobId: target.jobId },
+          {
+            $set: {
+              'notification.transientDetailHash': archiveDetailFingerprint({
+                description: content,
+              }),
+            },
+          },
+        );
+      const planProgress =
+        target !== undefined && 'runId' in target && canonical?.messageId !== reference.messageId
+          ? await archivePlanProgressEmbed(bot, access, target.runId)
+          : undefined;
       await patchArchivePublicDetails(
         bot.client,
         reference.channelId,
         reference.messageId,
-        { ...editPayload, content, components: payload.components ?? [] },
+        {
+          ...editPayload,
+          content,
+          ...(planProgress === undefined
+            ? {}
+            : {
+                embeds: [
+                  planProgress,
+                  ...(editPayload.embeds ?? (content.length > 0 ? [{ description: content }] : [])),
+                ],
+              }),
+          components: payload.components ?? [],
+        },
         { retainStatus: canonical?.messageId === reference.messageId },
       );
       if (

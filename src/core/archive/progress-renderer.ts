@@ -103,9 +103,10 @@ export function renderArchiveProgress(
       );
       if (terminal)
         lines.push(
-          t('writes', {
+          t(snapshot.messageClassificationVersion === 2 ? 'classified_writes' : 'writes', {
             inserted: number(snapshot.messages.inserted),
             updated: number(snapshot.messages.updated),
+            upgraded: number(snapshot.messages.upgraded ?? 0),
             unchanged: number(snapshot.messages.unchanged),
           }),
         );
@@ -121,6 +122,8 @@ export function renderArchiveProgress(
           unit: t('unit_operations'),
         }),
       );
+    if (snapshot.messageClassificationVersion !== 2 && (snapshot.messages.upgraded ?? 0) > 0)
+      lines.push(t('known_upgrades', { count: number(snapshot.messages.upgraded!) }));
     if (snapshot.reactions.required > 0)
       lines.push(
         t('reaction_summary', {
@@ -272,9 +275,10 @@ export function renderArchiveProgress(
         lines.push(t('excluded', { count: number(snapshot.messages.excluded) }));
       if (terminal || options.details)
         lines.push(
-          t('writes', {
+          t(snapshot.messageClassificationVersion === 2 ? 'classified_writes' : 'writes', {
             inserted: number(snapshot.messages.inserted),
             updated: number(snapshot.messages.updated),
+            upgraded: number(snapshot.messages.upgraded ?? 0),
             unchanged: number(snapshot.messages.unchanged),
           }),
         );
@@ -321,6 +325,8 @@ export function renderArchiveProgress(
           skipped: number(snapshot.outcomes.skipped),
         }),
       );
+    if (snapshot.messageClassificationVersion !== 2 && (snapshot.messages.upgraded ?? 0) > 0)
+      lines.push(t('known_upgrades', { count: number(snapshot.messages.upgraded!) }));
     if (snapshot.reactions.required > 0)
       lines.push(
         t('reaction_progress', {
@@ -457,9 +463,10 @@ export function renderArchiveProgress(
     snapshot.cutoffKnown === false
       ? t('cutoff_unknown')
       : t('cutoff', { time: discordTime(Date.parse(snapshot.cutoff)) }),
-    t('writes', {
+    t(snapshot.messageClassificationVersion === 2 ? 'classified_writes' : 'writes', {
       inserted: number(snapshot.messages.inserted),
       updated: number(snapshot.messages.updated),
+      upgraded: number(snapshot.messages.upgraded ?? 0),
       unchanged: number(snapshot.messages.unchanged),
     }),
     t('source_progress', {

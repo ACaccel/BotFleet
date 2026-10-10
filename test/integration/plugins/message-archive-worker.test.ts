@@ -246,7 +246,7 @@ describe('msg-archive worker integration', () => {
           cutoff: interrupted?.['cutoff'],
           status: 'complete',
           progress: {
-            messageCountQuality: 'exact',
+            messageCountQuality: 'lower-bound',
             messages: { scanned: 1, admitted: 1, durable: 1, inserted: 1 },
           },
         });
@@ -257,7 +257,7 @@ describe('msg-archive worker integration', () => {
           checkpoint: {
             version: 2,
             statistics: {
-              countQuality: 'exact',
+              countQuality: 'lower-bound',
               messages: { scanned: 1, admitted: 1, durable: 1, inserted: 1 },
             },
           },

@@ -1,6 +1,14 @@
 import { ARCHIVE_LIMITS } from '../../../core/archive/limits';
 
-type PipelineStage = 'fetch' | 'normalize' | 'write' | 'reactions' | 'checkpoint' | 'process';
+type PipelineStage =
+  | 'fetch'
+  | 'normalize'
+  | 'write'
+  | 'reactions'
+  | 'checkpoint'
+  | 'process'
+  | 'journal'
+  | 'writeVerify';
 interface PipelineReservation {
   (): void;
   shrink(bytes: number): void;
@@ -49,6 +57,8 @@ export class ArchivePipelineBudget {
     reactions: { count: 0, durationMs: 0, bytes: 0 },
     checkpoint: { count: 0, durationMs: 0, bytes: 0 },
     process: { count: 0, durationMs: 0, bytes: 0 },
+    journal: { count: 0, durationMs: 0, bytes: 0 },
+    writeVerify: { count: 0, durationMs: 0, bytes: 0 },
   };
 
   constructor(private readonly capacityBytes: number = ARCHIVE_LIMITS.pipelineBytes) {

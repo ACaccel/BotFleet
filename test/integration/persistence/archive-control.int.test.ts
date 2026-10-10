@@ -453,6 +453,106 @@ describe('archive Discord control persistence', () => {
       });
     }));
 
+  it.each([1, 2])(
+    'streams journal v%i confirmation digests with the correct ordering',
+    async (journalVersion) =>
+      withFreshConnection(async (connection) => {
+        await connection.collection('archive_repair_runs').insertOne(
+          manifest({
+            journalVersion,
+            schemaHash: journalVersion === 2 ? 'archive-v2:journal-v2' : 'archive-v2',
+            operations: 128,
+          }) as never,
+        );
+        const operations = connection.collection('archive_repair_operations');
+        await operations.createIndex({ runId: 1, sequence: 1 }, { unique: journalVersion === 2 });
+        await operations.insertMany(
+          Array.from({ length: 128 }, (_, index) => ({
+            _id: `operation-${127 - index}`,
+            runId: 'synthetic-run',
+            sequence: journalVersion === 2 ? index : Math.floor(index / 2),
+            collection: 'messages',
+            reason: 'rescue-timestamp',
+            state: 'planned',
+            before: { timestamp: '123' },
+            after: { timestamp: 123 },
+            beforeHash: 'a'.repeat(64),
+            afterHash: 'b'.repeat(64),
+          })) as never,
+        );
+        const find = operations.find.bind(operations);
+        const digestCursors: mongo.FindCursor[] = [];
+        vi.spyOn(operations, 'find').mockImplementation((...args) => {
+          const cursor = find(...args);
+          if (args[1]?.projection?.['dependencies'] === 1) digestCursors.push(cursor);
+          return cursor;
+        });
+        const sort = vi.spyOn(mongo.FindCursor.prototype, 'sort');
+        const control = new ArchiveControlService(connection, '123');
+        const confirmation = await control.requestConfirmation('apply', 'synthetic-run', actor);
+        expect(digestCursors).toHaveLength(2);
+        expect(sort).toHaveBeenCalledWith(
+          journalVersion === 2 ? { sequence: 1 } : { sequence: 1, _id: 1 },
+        );
+        if (journalVersion === 2) {
+          for (const cursor of digestCursors) {
+            const explanation = await cursor.clone().explain('queryPlanner');
+            const plan = JSON.stringify(explanation['queryPlanner']);
+            expect(plan).toContain('IXSCAN');
+            expect(plan).not.toMatch(/"stage":"SORT"/);
+          }
+        }
+        await operations.updateOne({ _id: 'operation-0' } as never, {
+          $set: { afterHash: 'c'.repeat(64) },
+        });
+        await expect(control.confirm(confirmation.token, actor)).rejects.toThrow(
+          'manifest changed',
+        );
+        expect(await connection.collection('archive_jobs').countDocuments()).toBe(0);
+      }),
+  );
+
+  it.each([undefined, 300_000])(
+    'scopes the operator query timeout %s to its control service instance',
+    async (manifestQueryTimeoutMs) =>
+      withFreshConnection(async (connection) => {
+        await connection.collection('archive_repair_runs').insertOne(manifest() as never);
+        const operations = connection.collection('archive_repair_operations');
+        const aggregate = vi.spyOn(operations, 'aggregate');
+        const timeout = vi.spyOn(mongo.FindCursor.prototype, 'maxTimeMS');
+        const control = new ArchiveControlService(connection, '123', {
+          manifestQueryTimeoutMs,
+        });
+        await control.requestConfirmation('apply', 'synthetic-run', actor);
+        expect(timeout).toHaveBeenCalledWith(manifestQueryTimeoutMs ?? 30_000);
+        expect(aggregate).toHaveBeenCalled();
+        for (const [, options] of aggregate.mock.calls)
+          expect(options).toMatchObject({ maxTimeMS: manifestQueryTimeoutMs ?? 5_000 });
+
+        timeout.mockClear();
+        aggregate.mockClear();
+        await new ArchiveControlService(connection, '123').requestConfirmation(
+          'apply',
+          'synthetic-run',
+          actor,
+        );
+        expect(timeout).toHaveBeenCalledWith(30_000);
+        expect(timeout).not.toHaveBeenCalledWith(300_000);
+        for (const [, options] of aggregate.mock.calls)
+          expect(options).toMatchObject({ maxTimeMS: 5_000 });
+      }),
+  );
+
+  it('rejects invalid operator query timeouts before issuing database queries', async () =>
+    withFreshConnection(async (connection) => {
+      const find = vi.spyOn(connection.collection('archive_repair_runs'), 'findOne');
+      for (const manifestQueryTimeoutMs of [0, -1, 1.5, 300_001, Infinity, NaN])
+        expect(
+          () => new ArchiveControlService(connection, '123', { manifestQueryTimeoutMs }),
+        ).toThrow();
+      expect(find).not.toHaveBeenCalled();
+    }));
+
   it('paginates every flattened source gap without mixing guilds or exceeding summary bounds', async () =>
     withFreshConnection(async (connection) => {
       const rows = connection.collection('archive_progress_details');
@@ -657,6 +757,171 @@ describe('archive Discord control persistence', () => {
       await expect(other.manifest('synthetic-run')).rejects.toThrow('Unknown');
       expect((await service.status(job.jobId)).cancelRequested).toBe(false);
       expect((await service.cancel(job.jobId)).cancelRequested).toBe(true);
+    }));
+
+  it('pauses the exact plan job without deleting recovery data and resumes only after it drains', async () =>
+    withFreshConnection(async (connection) => {
+      const service = new ArchiveControlService(connection, '123');
+      const runs = connection.collection('archive_repair_runs');
+      await runs.insertOne(manifest({ status: 'enriching' }) as never);
+      const jobs = connection.collection('archive_jobs');
+      await jobs.insertOne({
+        jobId: 'running-apply',
+        requestId: 'apply-request',
+        guildId: '123',
+        runId: 'synthetic-run',
+        command: 'apply',
+        status: 'running',
+        cancelRequested: false,
+        createdAt: 1000,
+      });
+      await connection.collection('archive_repair_operations').insertOne({
+        runId: 'synthetic-run',
+        sequence: 0,
+        collection: 'messages',
+        documentId: '111',
+        before: { messageId: '111', channelId: '222', content: 'recovery' },
+        after: { messageId: '111', channelId: '222', content: 'updated' },
+        beforeHash: 'a'.repeat(64),
+        afterHash: 'b'.repeat(64),
+        reason: 'message-snapshot',
+        dependencies: [],
+        state: 'verified',
+      });
+      // A temporarily inconsistent manifest must still expose its active job for pausing.
+      const report = await service.manifest('synthetic-run', { limit: 1 });
+      expect(report.summary.status).toBe('unavailable');
+      expect(report.run.activeJob).toEqual({
+        jobId: 'running-apply',
+        status: 'running',
+        cancelRequested: false,
+      });
+      expect(await service.pauseRun('synthetic-run', 'running-apply')).toMatchObject({
+        jobId: 'running-apply',
+        status: 'running',
+        cancelRequested: true,
+      });
+      expect((await service.manifest('synthetic-run', { limit: 1 })).run.actions).not.toContain(
+        'resume',
+      );
+      expect(await runs.findOne({ _id: 'synthetic-run' } as never)).not.toHaveProperty(
+        'deleteRequestedAt',
+      );
+      expect(await connection.collection('archive_repair_operations').countDocuments()).toBe(1);
+      await jobs.updateOne(
+        { jobId: 'running-apply' },
+        { $set: { status: 'cancelled', finishedAt: 2000 } },
+      );
+      await runs.updateOne({ _id: 'synthetic-run' } as never, {
+        $set: { status: 'partial', operations: 1 },
+      });
+      const stopped = await service.manifest('synthetic-run', { limit: 1 });
+      expect(stopped.run.activeJob).toBeUndefined();
+      expect(stopped.run.actions).toContain('resume');
+      const confirmation = await service.requestConfirmation('resume', 'synthetic-run', actor);
+      const resumed = await service.confirm(confirmation.token, actor);
+      expect(resumed).toMatchObject({
+        command: 'resume',
+        status: 'queued',
+        cancelRequested: false,
+        runId: 'synthetic-run',
+      });
+      await service.pauseRun('synthetic-run', 'running-apply');
+      expect((await service.status(resumed.jobId)).cancelRequested).toBe(false);
+    }));
+
+  it('exposes and pauses an originating planning job before its run result is published', async () =>
+    withFreshConnection(async (connection) => {
+      const service = new ArchiveControlService(connection, '123');
+      await connection.collection('archive_repair_runs').insertOne(
+        manifest({
+          status: 'planning',
+          originatingJobId: 'initial-backfill',
+        }) as never,
+      );
+      await connection.collection('archive_jobs').insertMany([
+        {
+          jobId: 'initial-backfill',
+          requestId: 'initial',
+          guildId: '123',
+          command: 'backfill',
+          status: 'running',
+          cancelRequested: false,
+          createdAt: 1000,
+        },
+        {
+          jobId: 'unrelated-planning',
+          requestId: 'unrelated',
+          guildId: '123',
+          command: 'backfill',
+          status: 'running',
+          cancelRequested: false,
+          createdAt: 2000,
+        },
+        {
+          jobId: 'initial-backfill',
+          requestId: 'other-guild',
+          guildId: '999',
+          command: 'backfill',
+          status: 'running',
+          cancelRequested: false,
+          createdAt: 1000,
+        },
+      ]);
+      const report = await service.manifest('synthetic-run', { limit: 1 });
+      expect(report.run.activeJob).toEqual({
+        jobId: 'initial-backfill',
+        status: 'running',
+        cancelRequested: false,
+      });
+      expect(report.run.actions).toEqual([]);
+      await expect(service.pauseRun('synthetic-run', 'unrelated-planning')).rejects.toThrow(
+        'Unknown',
+      );
+      expect(await service.pauseRun('synthetic-run', 'initial-backfill')).toMatchObject({
+        status: 'running',
+        cancelRequested: true,
+      });
+      expect(
+        await connection.collection('archive_jobs').countDocuments({ cancelRequested: true }),
+      ).toBe(1);
+      expect(await connection.collection('archive_jobs').findOne({ guildId: '999' })).toMatchObject(
+        { cancelRequested: false },
+      );
+      expect(
+        await connection
+          .collection('archive_repair_runs')
+          .findOne({ _id: 'synthetic-run' } as never),
+      ).not.toHaveProperty('deleteRequestedAt');
+    }));
+
+  it('rejects plan pause references outside the selected run or guild', async () =>
+    withFreshConnection(async (connection) => {
+      const service = new ArchiveControlService(connection, '123');
+      await connection
+        .collection('archive_repair_runs')
+        .insertOne(manifest({ status: 'enriching' }) as never);
+      await connection.collection('archive_jobs').insertMany([
+        {
+          jobId: 'other-run',
+          guildId: '123',
+          runId: 'other-run',
+          status: 'running',
+          cancelRequested: false,
+        },
+        {
+          jobId: 'other-guild',
+          guildId: '999',
+          runId: 'synthetic-run',
+          status: 'running',
+          cancelRequested: false,
+        },
+      ]);
+      await expect(service.pauseRun('synthetic-run', 'other-run')).rejects.toThrow('Unknown');
+      await expect(service.pauseRun('synthetic-run', 'other-guild')).rejects.toThrow('Unknown');
+      expect(
+        await connection.collection('archive_jobs').countDocuments({ cancelRequested: true }),
+      ).toBe(0);
     }));
 
   it('finishes queued cancellation immediately without an archive worker', async () =>

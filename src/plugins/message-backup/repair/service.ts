@@ -1,8 +1,16 @@
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 
 import { mongo, type Connection } from 'mongoose';
 
-import type { RepairDependencies, RepairDocument, RepairRequest, RepairResult } from './contracts';
+import type {
+  RepairDependencies,
+  RepairEnrichmentBatchMetric,
+  RepairDocument,
+  RepairMutation,
+  RepairRequest,
+  RepairResult,
+} from './contracts';
 import { ArchiveRepairCancellation, ArchiveRepairCancelledError } from './cancellation';
 import { ArchiveRepairPlanningJournal } from './planning-journal';
 import { ARCHIVE_LIMITS } from '../../../core/archive/limits';
@@ -844,6 +852,7 @@ export class ArchiveRepairService {
   private async applyOperation(
     operation: RepairOperation,
     cancellation: ArchiveRepairCancellation,
+    beforeWrite?: () => void,
   ): Promise<void> {
     await cancellation.checkpoint();
     await this.dependencies.assertOwner();
@@ -873,11 +882,15 @@ export class ArchiveRepairService {
       if (hash !== operation.afterHash) {
         if (hash !== operation.beforeHash)
           throw new Error(`Stale operation ${operation._id}; replan required`);
+        beforeWrite?.();
         if (operation.before === null) {
           if (operation.after === null) throw new Error('Empty repair operation');
           await collection.insertOne(operation.after);
         } else {
-          const filter = { $expr: { $eq: ['$$ROOT', { $literal: operation.before }] } };
+          const filter = {
+            _id: { $eq: operation.documentId },
+            $expr: { $eq: ['$$ROOT', { $literal: operation.before }] },
+          } as mongo.Filter<RepairDocument>;
           const result =
             operation.after === null
               ? await collection.deleteOne(filter)
@@ -925,6 +938,7 @@ export class ArchiveRepairService {
       const journal = this.planningJournals.get(runId);
       if (journal === undefined && run.journalVersion === 2)
         throw new Error('Repair enrichment sequencing authority is unavailable');
+      const journalStarted = performance.now();
       const id = await this.addOperation(
         cancellation,
         journal?.run ?? run,
@@ -946,7 +960,118 @@ export class ArchiveRepairService {
         .collection<RepairOperation>(REPAIR_OPERATIONS)
         .findOne({ _id: id });
       if (operation === null) throw new Error('Repair journal persistence failed');
-      await this.applyOperation(operation, cancellation);
+      const journalMs = performance.now() - journalStarted;
+      const writingStarted = performance.now();
+      let verified = 0;
+      try {
+        await this.applyOperation(operation, cancellation);
+        verified = 1;
+      } finally {
+        this.reportEnrichmentBatch({
+          operations: 1,
+          verified,
+          journalMs,
+          writeVerifyMs: performance.now() - writingStarted,
+        });
+      }
+    });
+    this.mutationTail = mutation.catch(() => undefined);
+    await mutation;
+  }
+
+  private reportEnrichmentBatch(metric: RepairEnrichmentBatchMetric): void {
+    try {
+      this.dependencies.onEnrichmentBatch?.(metric);
+    } catch {
+      // Observability must not change an acknowledged archive mutation.
+    }
+  }
+
+  /** Prepared mutations retain message-local ordering while independent documents share a durable batch. */
+  async captureMutations(
+    runId: string,
+    mutations: readonly RepairMutation[],
+    cancellation: ArchiveRepairCancellation,
+    beforeWrite?: () => void,
+  ): Promise<void> {
+    if (mutations.length > ARCHIVE_LIMITS.batchDocuments)
+      throw new RangeError('Repair enrichment batch exceeds document limit');
+    let bytes = 0;
+    const prepared = mutations.map((mutation) => {
+      bytes += mongo.BSON.calculateObjectSize(mutation);
+      if (bytes > ARCHIVE_LIMITS.batchBytes)
+        throw new RangeError('Repair enrichment batch exceeds byte limit');
+      return clone({ ...mutation });
+    });
+    if (prepared.length === 0) return;
+    const mutation = this.mutationTail.then(async () => {
+      await cancellation.checkpoint();
+      const run = await this.db()
+        .collection<RepairRun>(REPAIR_RUNS)
+        .findOne({ _id: runId, deleteRequestedAt: { $exists: false } });
+      if (run === null || run.status !== 'enriching')
+        throw new Error('Repair run is not accepting enrichment writes');
+      const journal = this.planningJournals.get(runId);
+      if (journal === undefined && run.journalVersion === 2)
+        throw new Error('Repair enrichment sequencing authority is unavailable');
+      const operations = this.db().collection<RepairOperation>(REPAIR_OPERATIONS);
+      const journalStarted = performance.now();
+      const ids: string[] = [];
+      const previousByScope = new Map<string, string>();
+      for (const entry of prepared) {
+        const messageId = entry.after?.['messageId'] ?? entry.before?.['messageId'];
+        const scope =
+          typeof messageId === 'string' && messageId.length > 0
+            ? `message:${messageId}`
+            : `${entry.collection}:${repairHash({ documentId: (entry.before ?? entry.after)?._id })}`;
+        const previous = previousByScope.get(scope);
+        const id = await this.addOperation(
+          cancellation,
+          journal?.run ?? run,
+          entry.collection,
+          entry.before,
+          entry.after,
+          entry.reason,
+          previous === undefined ? [] : [previous],
+        );
+        if (!ids.includes(id)) ids.push(id);
+        previousByScope.set(scope, id);
+        if (journal === undefined) {
+          await this.db()
+            .collection<RepairRun>(REPAIR_RUNS)
+            .updateOne(
+              { _id: runId },
+              { $set: { operations: run.operations, journalBytes: run.journalBytes } },
+            );
+          const operation = await operations.findOne({ _id: id });
+          if (operation === null) throw new Error('Repair journal persistence failed');
+          await this.applyOperation(operation, cancellation, beforeWrite);
+        }
+      }
+      if (journal === undefined) return;
+      await journal.flush();
+      const persisted = await operations
+        .find({ _id: { $in: ids }, runId })
+        .sort({ sequence: 1 })
+        .toArray();
+      if (persisted.length !== ids.length) throw new Error('Repair journal persistence failed');
+      const pending = persisted.filter((operation) => operation.state !== 'verified');
+      const journalMs = performance.now() - journalStarted;
+      const writingStarted = performance.now();
+      const result = await applyRepairBatch(
+        this.db(),
+        pending,
+        this.dependencies,
+        cancellation,
+        beforeWrite,
+      );
+      this.reportEnrichmentBatch({
+        operations: pending.length,
+        verified: result.verified,
+        journalMs,
+        writeVerifyMs: performance.now() - writingStarted,
+      });
+      if (result.failure !== undefined) throw result.failure;
     });
     this.mutationTail = mutation.catch(() => undefined);
     await mutation;
@@ -1052,6 +1177,8 @@ export class ArchiveRepairService {
               jobId: request.jobId,
               applyMutation: (collection, before, after, reason) =>
                 this.captureMutation(run._id, collection, before, after, reason, cancellation),
+              applyMutations: (mutations, beforeWrite) =>
+                this.captureMutations(run._id, mutations, cancellation, beforeWrite),
             });
       await runs.updateOne(
         { _id: run._id },

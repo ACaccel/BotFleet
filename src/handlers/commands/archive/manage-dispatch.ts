@@ -43,6 +43,26 @@ export const dispatchArchiveManagement = async (
     );
   if (action === 'job') return archiveManageJob(id, bot, access, actor);
   if (action === 'plan') return archiveManagePlan(id, bot, access, actor);
+  if (action === 'pause-plan') {
+    let target: unknown;
+    try {
+      target = JSON.parse(id);
+    } catch {
+      throw new ArchiveAccessError('replies:archive.navigation_stale');
+    }
+    if (
+      typeof target !== 'object' ||
+      target === null ||
+      !('runId' in target) ||
+      typeof target.runId !== 'string' ||
+      !('jobId' in target) ||
+      typeof target.jobId !== 'string'
+    )
+      throw new ArchiveAccessError('replies:archive.navigation_stale');
+    await access.control.pauseRun(target.runId, target.jobId);
+    await ensureArchivePublicReference(bot, access, { runId: target.runId });
+    return archiveManagePlan(target.runId, bot, access, actor);
+  }
   if (action === 'stop') {
     await access.control.stop(id);
     await ensureArchivePublicReference(bot, access, { jobId: id });

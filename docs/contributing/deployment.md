@@ -72,6 +72,13 @@ Readiness checks MongoDB and the active process after Discord, repositories and
 plugins initialize; enabled archive history scans continue in the background. It verifies
 startup only. Systemd restarts crashed processes.
 
+For msg-archive, resuming a paused repair is a separate control operation after
+readiness. A continuation timeout does not undo a successful deployment. Inspect
+whether the original plan already has an active job before retrying only the
+continuation. Large-journal operator verification budgets are described in
+[archive controls](../message-archive.md#discord-controls); they do not bypass
+manifest or confirmation checks.
+
 ## Initial cutover
 
 1. Verify a recoverable database backup; retain the old runtime/configuration.

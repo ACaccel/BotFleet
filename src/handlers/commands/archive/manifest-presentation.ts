@@ -3,7 +3,8 @@ import type { BaseBot } from '@bot';
 import { bindTranslator } from '../../../core/i18n';
 import type { ArchiveControlService } from '../../../infra/archive/control';
 import { browseViews, date, rows } from './presentation-common';
-import { manageBack } from './manage-common';
+import { manageBack, manageButton } from './manage-common';
+import { shortArchiveReference } from './manage-references';
 import type { ArchiveBrowsePage } from './navigation';
 import { summaryLines } from './plan-summary';
 import { archiveConfirmationReply, archivePlanActions } from './confirmation-presentation';
@@ -57,7 +58,21 @@ export const archiveManifestReply = async (
                   ].includes(report.run.status)
                 ? t('replies:archive.plan_next_wait')
                 : t('replies:archive.plan_next_replan');
+    const activeJob = report.run.activeJob;
     const controls = [
+      manageButton('plan', runId, t('replies:archive.plan_refresh')),
+      ...(activeJob === undefined || activeJob.cancelRequested
+        ? []
+        : [
+            manageButton(
+              'ref',
+              shortArchiveReference(
+                'pause-plan',
+                JSON.stringify({ runId, jobId: activeJob.jobId }),
+              ),
+              t('replies:archive.plan_pause'),
+            ),
+          ]),
       ...browseViews(runId, { ...actor, guildId: report.run.guildId }, t, 'summary').flatMap(
         (row) => row.components,
       ),
@@ -77,7 +92,7 @@ export const archiveManifestReply = async (
             40,
           ),
         ),
-        next,
+        activeJob?.cancelRequested ? t('replies:archive.plan_pausing') : next,
       ].join('\n'),
       components: rows(controls),
     };

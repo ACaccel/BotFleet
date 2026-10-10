@@ -171,9 +171,27 @@ export function renderArchivePublicStatus(
             count: number(snapshot.messages.scanned),
           },
         ),
-        t(snapshot.messageCountQuality === 'exact' ? 'public_writes' : 'public_writes_partial', {
-          inserted: number(snapshot.messages.inserted),
-          updated: number(snapshot.messages.updated),
+        t(
+          snapshot.messageClassificationVersion === 2
+            ? snapshot.messageCountQuality === 'exact'
+              ? 'public_classified_writes'
+              : 'public_classified_writes_partial'
+            : snapshot.messageCountQuality === 'exact'
+              ? 'public_writes'
+              : 'public_writes_partial',
+          {
+            inserted: number(snapshot.messages.inserted),
+            updated: number(snapshot.messages.updated),
+            upgraded: number(snapshot.messages.upgraded ?? 0),
+          },
+        ),
+      );
+      if (snapshot.messageClassificationVersion !== 2 && (snapshot.messages.upgraded ?? 0) > 0)
+        counters.push(t('public_known_upgrades', { count: number(snapshot.messages.upgraded!) }));
+      counters.push(
+        t('public_unchanged_excluded', {
+          unchanged: number(snapshot.messages.unchanged),
+          excluded: number(snapshot.messages.excluded),
         }),
       );
       if (
@@ -316,6 +334,27 @@ export function renderArchivePublicStatus(
   }
   if (guidance.length > 0) fields.push({ name: t('public_guidance'), value: guidance.join('\n') });
   if (result.length > 0) fields.push({ name: t('public_result'), value: result.join('\n') });
+
+  if (snapshot.lastCheckpointAt !== undefined && snapshot.lastCheckpointAt > 0)
+    description.push(
+      t('public_checkpoint', { time: `<t:${Math.floor(snapshot.lastCheckpointAt / 1000)}:R>` }),
+    );
+  if (snapshot.messageCountQuality === 'lower-bound' && hasMessageWork && hasProgress)
+    description.push(view('counts_lower_bound'));
+  const recent = snapshot.recentThroughput;
+  if (
+    !terminal &&
+    snapshot.state === 'running' &&
+    recent !== undefined &&
+    now >= recent.observedAt &&
+    now - recent.observedAt <= 30_000
+  )
+    description.push(
+      t('public_recent_throughput', {
+        rate: number((recent.messages * 1000) / recent.windowMs),
+        seconds: number(recent.windowMs / 1000),
+      }),
+    );
 
   const update = options.lastSuccessfulUpdateAtMs ?? now;
   const embed: APIEmbed = {

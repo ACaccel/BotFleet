@@ -33,13 +33,25 @@ export const archiveProgressPageCounters = (
   const lines = [
     unavailable
       ? t('counts_unavailable')
-      : t('detail_counts', {
-          sources: number(snapshot.sources.completed),
-          messages: number(snapshot.messages.scanned),
-          inserted: number(snapshot.messages.inserted),
-          updated: number(snapshot.messages.updated),
-        }),
+      : t(
+          snapshot.messageClassificationVersion === 2
+            ? 'classified_detail_counts'
+            : 'detail_counts',
+          {
+            sources: number(snapshot.sources.completed),
+            messages: number(snapshot.messages.scanned),
+            inserted: number(snapshot.messages.inserted),
+            updated: number(snapshot.messages.updated),
+            upgraded: number(snapshot.messages.upgraded ?? 0),
+          },
+        ),
   ];
+  if (
+    !unavailable &&
+    snapshot.messageClassificationVersion !== 2 &&
+    (snapshot.messages.upgraded ?? 0) > 0
+  )
+    lines.push(t('known_upgrades', { count: number(snapshot.messages.upgraded!) }));
   if (!unavailable) {
     if (snapshot.messageCountQuality === 'lower-bound') lines.push(t('counts_lower_bound'));
   }

@@ -57,6 +57,92 @@ const validation = {
 
 describe('compact shared archive status', () => {
   it.each(['en', 'zh-TW'] as const)(
+    'marks restored partial classification counts in %s',
+    async (locale) => {
+      const t = await translator(locale);
+      const card = renderArchivePublicStatus(
+        snapshot({
+          messageClassificationVersion: 2,
+          messageCountQuality: 'lower-bound',
+          messages: { scanned: 200, inserted: 5, updated: 10, upgraded: 20 },
+        }),
+        t,
+      );
+      expect(card.description).toContain(t.t('replies:archive.view_counts_lower_bound'));
+      expect(text(card)).toContain(
+        t.t('replies:archive.public_classified_writes_partial', {
+          inserted: 5,
+          updated: 10,
+          upgraded: 20,
+        }),
+      );
+      expect(text(card)).not.toContain(
+        t.t('replies:archive.public_classified_writes', { inserted: 5, updated: 10, upgraded: 20 }),
+      );
+    },
+  );
+  it.each(['en', 'zh-TW'] as const)(
+    'separates fresh outcomes, checkpoint time and delivery time in %s',
+    async (locale) => {
+      const t = await translator(locale);
+      const fresh = snapshot({
+        messageClassificationVersion: 2,
+        messages: {
+          fetched: 200,
+          scanned: 200,
+          admitted: 190,
+          excluded: 10,
+          inserted: 5,
+          updated: 15,
+          upgraded: 100,
+          unchanged: 70,
+          durable: 190,
+        },
+        lastCheckpointAt: 4000,
+        recentThroughput: { messages: 100, windowMs: 2000, observedAt: 4000 },
+        reactions: { required: 20, completed: 12 },
+      });
+      const card = renderArchivePublicStatus(fresh, t, {
+        nowMs: 6000,
+        lastSuccessfulUpdateAtMs: 5500,
+      });
+      expect(text(card)).toContain(
+        t.t('replies:archive.public_classified_writes', {
+          inserted: 5,
+          updated: 15,
+          upgraded: 100,
+        }),
+      );
+      expect(text(card)).toContain(t.t('replies:archive.public_reactions', { count: 12 }));
+      expect(text(card)).not.toContain('12 / 20');
+      expect(card.description).toContain(
+        t.t('replies:archive.public_checkpoint', { time: '<t:4:R>' }),
+      );
+      expect(card.description).toContain(
+        t.t('replies:archive.public_recent_throughput', { rate: 50, seconds: 2 }),
+      );
+      expect(card.timestamp).toBe(new Date(5500).toISOString());
+      const expired = renderArchivePublicStatus(fresh, t, { nowMs: 35000 });
+      expect(expired.description).not.toContain(
+        t.t('replies:archive.public_recent_throughput', { rate: 50, seconds: 2 }),
+      );
+      const legacy = renderArchivePublicStatus(
+        { ...fresh, messageClassificationVersion: undefined },
+        t,
+      );
+      expect(text(legacy)).toContain(
+        t.t('replies:archive.public_writes', { inserted: 5, updated: 15 }),
+      );
+      expect(text(legacy)).not.toContain(
+        t.t('replies:archive.public_classified_writes', {
+          inserted: 5,
+          updated: 15,
+          upgraded: 100,
+        }),
+      );
+    },
+  );
+  it.each(['en', 'zh-TW'] as const)(
     'renders all %s work, state and phase labels within the combined detail budget',
     async (locale) => {
       const t = await translator(locale);
@@ -537,7 +623,7 @@ describe('compact shared archive status', () => {
     const counters = embed.fields!.find(
       (field) => field.name === t.t('replies:archive.public_progress'),
     )!;
-    expect(counters.value.split('\n')).toHaveLength(5);
+    expect(counters.value.split('\n')).toHaveLength(6);
     expect(text(embed)).toContain('9,007,199,254,740,991');
     expect(text(embed)).toContain(t.t('replies:archive.view_coverage_timestamps-only'));
     assertBudget(embed);

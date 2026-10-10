@@ -13,7 +13,10 @@ import { createLogger } from '../../../src/core/logger';
 import type { ArchiveJob } from '../../../src/core/archive/types';
 import { sanitizeArchiveProgress } from '../../../src/core/archive/progress';
 import { renderArchivePublicStatus } from '../../../src/core/archive/public-status-renderer';
-import { patchArchivePublicDetails } from '../../../src/infra/archive/public-message';
+import {
+  patchArchivePublicDetails,
+  archiveDetailFingerprint,
+} from '../../../src/infra/archive/public-message';
 import { ArchiveJobNotifier } from '../../../src/plugins/message-backup/runtime/job-notification';
 import { withFreshConnection } from '../helpers/mongo';
 
@@ -64,6 +67,59 @@ const discord = () => {
 };
 
 describe('shared archive status card integration', () => {
+  it('removes only a durably marked queued receipt when the job starts, including after restart', async () =>
+    withFreshConnection(async (connection) => {
+      const translator = await createDefaultTranslator({
+        localesDir: path.resolve(__dirname, '../../../src/i18n/locales'),
+        fallbackLocale: 'en',
+      });
+      const transport = discord();
+      const options = {
+        ...transport,
+        connection,
+        guildId,
+        translator,
+        logger: createLogger({ level: 'silent', pretty: false }),
+      };
+      const job: ArchiveJob = {
+        jobId: `${guildId}:queued-receipt`,
+        requestId: 'queued-receipt',
+        guildId,
+        command: 'apply',
+        options: {},
+        status: 'queued',
+        cancelRequested: false,
+        createdAt: Date.now(),
+      };
+      const jobs = connection.collection<ArchiveJob>('archive_jobs');
+      await jobs.insertOne({ ...job });
+      const notifier = new ArchiveJobNotifier(options);
+      await notifier.publish(job, undefined, true);
+      const receipt = { description: 'Synthetic queued submission receipt' };
+      const inspection = { description: 'Synthetic inspection or approval detail' };
+      await jobs.updateOne(
+        { jobId: job.jobId },
+        { $set: { 'notification.transientDetailHash': archiveDetailFingerprint(receipt) } },
+      );
+      await patchArchivePublicDetails(transport.client, channelId, messageId, {
+        embeds: [receipt, inspection],
+      });
+      await notifier.publish(job, undefined, true);
+      expect(transport.current().embeds.slice(1)).toEqual([receipt, inspection]);
+      await jobs.updateOne(
+        { jobId: job.jobId },
+        { $set: { status: 'running', startedAt: Date.now() } },
+      );
+      await new ArchiveJobNotifier(options).publish(job, undefined, true);
+      expect(transport.current().embeds.slice(1)).toEqual([inspection]);
+      expect(transport.current().embeds[0]?.title).toContain('Running');
+      const unmarked = { description: 'Unmarked queued text is never guessed at' };
+      await patchArchivePublicDetails(transport.client, channelId, messageId, {
+        embeds: [unmarked, inspection],
+      });
+      await notifier.publish(job, undefined, true);
+      expect(transport.current().embeds.slice(1)).toEqual([unmarked, inspection]);
+    }));
   it.each(['en', 'zh-TW'] as const)(
     'preserves public details across concurrent heartbeats, restart and job handoff in %s',
     async (locale) =>

@@ -6,6 +6,7 @@
     "src/bot/*/index.ts",
     "tools/db/db.ts",
     "tools/archive-benchmark/run.ts",
+    "tools/archive-benchmark/enrichment.ts",
     "tools/archive-benchmark/cpu.ts",
     "tools/archive-benchmark/cpu-persistence.ts",
     "tools/archive-benchmark/rest.ts",

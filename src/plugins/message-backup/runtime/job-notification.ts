@@ -14,6 +14,7 @@ import {
   readArchivePublicMessage,
   withArchivePublicMessageLock,
   isArchivePublicStatusEmbed,
+  archiveDetailFingerprint,
 } from '../../../infra/archive/public-message';
 
 interface Options {
@@ -327,7 +328,17 @@ export class ArchiveJobNotifier {
             await client.rest.patch(Routes.channelMessage(channel.id, messageId!), {
               body: {
                 content: '',
-                embeds: [embed, ...message.embeds.slice(hasStatus ? 1 : 0)],
+                embeds: [
+                  embed,
+                  ...message.embeds
+                    .slice(hasStatus ? 1 : 0)
+                    .filter(
+                      (detail) =>
+                        scope.status === 'queued' ||
+                        scope.notification?.transientDetailHash === undefined ||
+                        archiveDetailFingerprint(detail) !== scope.notification.transientDetailHash,
+                    ),
+                ],
                 allowed_mentions: { parse: [] },
                 components:
                   scope.deleteRequestedAt !== undefined

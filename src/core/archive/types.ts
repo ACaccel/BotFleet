@@ -113,6 +113,7 @@ export interface ArchiveJob {
     attempts?: number;
     deliveredAt?: number;
     supersededAt?: number;
+    transientDetailHash?: string;
   };
 }
 export interface ArchivePeriodicRun {

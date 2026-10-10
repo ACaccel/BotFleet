@@ -165,6 +165,15 @@ first embed is the live summary, and subsequent detail/confirmation state surviv
 ten-second heartbeat edits and restarts.
 Successor jobs reuse the run's public message and mark predecessor notification
 ownership as superseded, preventing delayed replay from replacing newer status.
+Selected-plan panels render a fresh snapshot of the associated job above the
+manifest summary without taking over its canonical notification. Refresh reads
+latest durable progress; only the canonical notification has a heartbeat.
+Planning jobs can be resolved through the guild-scoped `originatingJobId` until
+`runId` is attached. Pause controls bind both run and exact job identities, expose
+active work even when manifest aggregation is unavailable, and use cooperative
+cancellation without changing recovery semantics. Resume remains unavailable
+until the active job drains and existing eligibility checks pass.
+
 Legacy runs without job records keep a `publicMessage` reference on the run;
 this display metadata does not alter repair images or confirmation semantics.
 Whole-manifest impact summaries use bounded server-side aggregation and safe
@@ -247,10 +256,23 @@ per-message dependency chains retaining related-before-source deletion order.
 Apply batches contain only independent scopes with satisfied dependencies. Their
 before-images become durable before target writes, and readback precedes verified
 acknowledgement. Standalone MongoDB remains supported without transactions.
-Rollback retains reverse journal order and combines an indexable native `_id`
+Enrichment, batched apply and rollback all combine an indexable native `_id`
 equality predicate with the complete current-image comparison for conditional
-delete/replace. The ID index bounds candidate reads without weakening protection
+delete/replace. Rollback retains reverse journal order. The ID index bounds candidate reads without weakening protection
 against racing edits. Recovery does not parallelize arbitrary dependent operations.
+History snapshot preparation is restricted to independent message identities and
+flushes before repeated identities. Up to 25 messages share bounded journal and
+verified bulk writes; revision waves precede message waves. Large images fall back
+to single writes. Fresh REST observations with no reactions publish empty membership
+references in the snapshot mutation, removing old references without a second write.
+Cancellation, message observation watermarks and Gateway gap versions are checked
+again inside the writer and before each dependent write wave; untrusted or nonempty
+observations retain full enrichment. Checkpoints acknowledge only completed pages.
+Versioned outcome counters distinguish legacy upgrades from content updates while
+preserving older mixed totals. Fresh throughput samples exclude restored counters;
+queued receipt hashes let notifications remove only obsolete submission details.
+Unknown optional discovery fields are omitted so target records and durable
+recovery images retain the same BSON representation.
 
 The shared SDK REST manager owns transport retries and quotas. The owner scheduler
 adds bounded, fair admission across guilds and reserves live capacity; announced

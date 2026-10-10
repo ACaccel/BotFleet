@@ -1,6 +1,7 @@
 import { mongo } from 'mongoose';
 import { describe, expect, it, vi } from 'vitest';
 import { asGuildId } from '../../../src/core/ids';
+import { ARCHIVE_LIMITS } from '../../../src/core/archive/limits';
 import { normalizeMessage } from '../../../src/core/archive/normalize';
 import { StaticConnectionManager } from '../../../src/infra/mongo/connection-manager';
 import {
@@ -25,6 +26,239 @@ const snapshot = (content: string, edited = 1700000000000) =>
     { guildId: '1', channelName: 'general', source: 'history', observedAt: edited },
   );
 describe('Mongo archive durability', () => {
+  it('bulk-writes independent snapshots and verifies images after the write', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const collection = connection.collection('messages');
+      const bulk = vi.spyOn(collection, 'bulkWrite');
+      const originalCollection = connection.collection.bind(connection);
+      vi.spyOn(connection, 'collection').mockImplementation((name, options) =>
+        name === 'messages' ? collection : originalCollection(name, options),
+      );
+      expect(
+        await repo.persistSnapshotsBatch([snapshot('A'), { ...snapshot('B'), messageId: '5' }]),
+      ).toEqual(['inserted', 'inserted']);
+      expect(bulk).toHaveBeenCalledTimes(1);
+      expect(bulk.mock.calls[0]?.[0]).toHaveLength(2);
+      expect(await collection.countDocuments()).toBe(2);
+    });
+  });
+
+  it('keeps embedded legacy identities distinct during bulk verification', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const messages = connection.collection<{
+        _id: { legacy: string };
+        messageId: string;
+        content?: string;
+      }>('messages');
+      await messages.insertMany([
+        { _id: { legacy: 'first' }, ...snapshot('A') },
+        { _id: { legacy: 'second' }, ...snapshot('A'), messageId: '5' },
+      ]);
+      expect(
+        await repo.persistSnapshotsBatch([
+          snapshot('B', 1700000001000),
+          { ...snapshot('C', 1700000001000), messageId: '5' },
+        ]),
+      ).toEqual(['updated', 'updated']);
+      expect((await messages.findOne({ messageId: '3' }))?._id).toEqual({ legacy: 'first' });
+      expect((await messages.findOne({ messageId: '5' }))?._id).toEqual({ legacy: 'second' });
+      expect((await messages.findOne({ messageId: '3' }))?.content).toBe('B');
+      expect((await messages.findOne({ messageId: '5' }))?.content).toBe('C');
+    });
+  });
+
+  it('rejects an after-image changed between bulk persistence and verification', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const collection = connection.collection('messages');
+      const originalBulk = collection.bulkWrite.bind(collection);
+      vi.spyOn(collection, 'bulkWrite').mockImplementation(async (operations, options) => {
+        const result = await originalBulk(operations, options);
+        await collection.updateOne({ messageId: '3' }, { $set: { content: 'external' } });
+        return result;
+      });
+      const originalCollection = connection.collection.bind(connection);
+      vi.spyOn(connection, 'collection').mockImplementation((name, options) =>
+        name === 'messages' ? collection : originalCollection(name, options),
+      );
+      await expect(repo.persistSnapshotsBatch([snapshot('A')])).rejects.toThrow(
+        'Archive batch verification failed',
+      );
+    });
+  });
+
+  it('counts mutation envelopes when splitting batches at the byte boundary', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      let imageBytes = 0;
+      await repo.persistSnapshot(snapshot('A'), {
+        observed: null,
+        interceptor: async (_collection, _before, after) => {
+          imageBytes = mongo.BSON.calculateObjectSize(after!);
+        },
+      });
+      const content = 'A'.repeat(Math.floor((ARCHIVE_LIMITS.batchBytes - 10) / 2) - imageBytes + 1);
+      const batchSizes: number[] = [];
+      await repo.persistSnapshotsBatch(
+        [
+          { ...snapshot('A'), content },
+          { ...snapshot('A'), messageId: '5', content },
+        ],
+        {
+          snapshotContexts: [{ observed: null }, { observed: null }],
+          batchInterceptor: async (mutations) => {
+            const bytes = mutations.reduce(
+              (sum, mutation) => sum + mongo.BSON.calculateObjectSize(mutation),
+              0,
+            );
+            expect(bytes).toBeLessThanOrEqual(ARCHIVE_LIMITS.batchBytes);
+            batchSizes.push(mutations.length);
+          },
+        },
+      );
+      expect(batchSizes).toEqual([1, 1]);
+    });
+  });
+
+  it('never bypasses a batch journal for an oversized single mutation', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const batchInterceptor = vi.fn(async () => undefined);
+      await expect(
+        repo.persistSnapshotsBatch(
+          [{ ...snapshot('A'), content: 'A'.repeat(ARCHIVE_LIMITS.batchBytes) }],
+          {
+            snapshotContexts: [{ observed: null }],
+            batchInterceptor,
+          },
+        ),
+      ).rejects.toThrow('requires a single-mutation interceptor');
+      expect(batchInterceptor).not.toHaveBeenCalled();
+      expect(await conn.models.Message.countDocuments()).toBe(0);
+    });
+  });
+
+  it('rejects stale bulk before-images without replacing external changes', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      await repo.persistSnapshot(snapshot('A'));
+      const observed = (await repo.loadSnapshotBatch(['3'])).get('3')!;
+      await conn.models.Message.collection.updateOne(
+        { messageId: '3' },
+        { $set: { content: 'external' } },
+      );
+      await expect(
+        repo.persistSnapshotsBatch([snapshot('B', 1700000001000)], {
+          snapshotContexts: [{ observed }],
+        }),
+      ).rejects.toThrow('Archive write conflict');
+      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.content).toBe(
+        'external',
+      );
+    });
+  });
+
+  it('rechecks reaction evidence after revision persistence and before publishing the message', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      await repo.persistSnapshot(snapshot('A'));
+      let checks = 0;
+      await expect(
+        repo.persistSnapshotsBatch([snapshot('B', 1700000001000)], {
+          snapshotContexts: [
+            {
+              emptyReactions: {
+                observedAt: 1700000001000,
+                assertCurrent: () => {
+                  if (++checks === 4) throw new Error('Reaction changed during refresh');
+                },
+              },
+            },
+          ],
+        }),
+      ).rejects.toThrow('Reaction changed during refresh');
+      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(1);
+      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.content).toBe('A');
+    });
+  });
+
+  it('distinguishes first schema upgrades from later content changes', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const first = snapshot('A');
+      await conn.models.Message.collection.insertOne({
+        messageId: '3',
+        content: 'A',
+        timestamp: first.timestamp,
+      });
+      expect(await repo.persistSnapshot(first)).toBe('upgraded');
+      expect(await repo.persistSnapshot({ ...first, observedAt: first.observedAt + 1 })).toBe(
+        'unchanged',
+      );
+      expect(await repo.persistSnapshot(snapshot('B', 1700000001000))).toBe('updated');
+    });
+  });
+
+  it('merges proven empty reactions into the snapshot and removes stale generation pointers', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const first = snapshot('A');
+      await repo.persistSnapshot(first);
+      await conn.models.Message.collection.updateOne(
+        { messageId: '3' },
+        {
+          $set: {
+            reactionGenerations: { old: { generation: 'old' } },
+            reactionsStaleAt: first.observedAt,
+          },
+        },
+      );
+      const assertCurrent = vi.fn();
+      await repo.persistSnapshotsBatch([{ ...first, observedAt: first.observedAt + 10 }], {
+        snapshotContexts: [
+          { emptyReactions: { observedAt: first.observedAt + 10, assertCurrent } },
+        ],
+      });
+      const after = await conn.models.Message.collection.findOne({ messageId: '3' });
+      expect(after?.reactionGenerations).toEqual({});
+      expect(after?.reactionsFreshAt).toBe(first.observedAt + 10);
+      expect(after).not.toHaveProperty('reactionsStaleAt');
+      expect(assertCurrent).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  it('fences cancellation and invalid empty evidence before any snapshot batch is issued', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const cancelled = () => {
+        throw new Error('cancelled');
+      };
+      await expect(
+        repo.persistSnapshotsBatch([snapshot('A')], { beforeWrite: cancelled }),
+      ).rejects.toThrow('cancelled');
+      await expect(
+        repo.persistSnapshotsBatch([snapshot('A')], {
+          snapshotContexts: [
+            { emptyReactions: { observedAt: 1700000000000, assertCurrent: cancelled } },
+          ],
+        }),
+      ).rejects.toThrow('cancelled');
+      expect(await conn.models.Message.countDocuments()).toBe(0);
+    });
+  });
+
   it('preserves intercepted insert image bytes when MongoDB places the identity first', async () => {
     await withFreshConnection(async (connection) => {
       const conn = await new StaticConnectionManager(connection).getConnection(guildId);

@@ -17,6 +17,10 @@ source privacy](docs/message-archive.md), including the separation between
 [periodic scheduling](docs/message-archive.md#periodic-schedule), live capture and repair jobs.
 Archive operator workflows belong to the [Discord control plane](docs/message-archive.md#discord-controls);
 keep host migration and unrelated collection cleanup in their existing tools.
+Plan progress and pause controls must remain usable when manifest totals are
+unavailable. Use the standard public progress renderer with current source access
+checks; secondary panels must not take ownership of the original notification.
+Bind pause to the displayed run and exact job so stale controls cannot stop a successor.
 Archive summaries must describe actual impacts across the whole manifest and retain
 destructive changes, unknown targets and mixed states. Follow the
 [compact inspection contract](docs/message-archive.md#review-and-recovery): at most
@@ -40,8 +44,16 @@ retain an exact all-pages snapshot, actor/channel/message-bound consent and
 per-item eligibility checks; later arrivals are excluded.
 Bulk deletion must bind consent to an exact guild-scoped snapshot, recheck each
 item, preserve protected plans and keep shared result/resume controls intact.
-Rollback conditional writes must retain an indexable native ID predicate and the
-complete-image comparison; preserve recovery order and later-write protection.
+Enrichment, apply and rollback conditional writes must retain an indexable native
+ID predicate and the complete-image comparison; preserve recovery order and
+later-write protection. Verify candidate selection with MongoDB execution stats,
+not only small-fixture correctness. Empty reaction optimizations must retain
+observation fencing before every write wave and remove old membership references.
+Snapshot batching must flush repeated identities, preserve revision-before-message
+order, verify target images before checkpointing, and pass partial-write/resume and
+rollback tests. Progress migrations must preserve mixed historical counters and
+exclude restored work from recent throughput; transient receipt removal must match
+its stored detail hash rather than deleting arbitrary secondary embeds.
 Use the [isolated archive benchmarks](tools/archive-benchmark/README.md) for repair,
 pipeline, CPU-worker and notification comparisons; never use production messages
 as benchmark fixtures. Keep resource limits, durability, dataset identity and

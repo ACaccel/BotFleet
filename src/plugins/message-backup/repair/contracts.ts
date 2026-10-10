@@ -35,16 +35,34 @@ interface RepairProgressMetadata {
   readonly outcomes?: Readonly<{ restored: number; conflicts: number; skipped: number }>;
 }
 
+export interface RepairMutation {
+  readonly collection: string;
+  readonly before: RepairDocument | null;
+  readonly after: RepairDocument | null;
+  readonly reason: string;
+}
+
 export interface RepairBackfillContext {
   readonly runId: string;
   readonly cutoff: number;
   readonly jobId: string;
+  readonly applyMutations?: (
+    mutations: readonly RepairMutation[],
+    beforeWrite?: () => void,
+  ) => Promise<void>;
   readonly applyMutation: (
     collection: string,
     before: RepairDocument | null,
     after: RepairDocument | null,
     reason: string,
   ) => Promise<void>;
+}
+
+export interface RepairEnrichmentBatchMetric {
+  readonly operations: number;
+  readonly verified: number;
+  readonly journalMs: number;
+  readonly writeVerifyMs: number;
 }
 
 /** All collaborators are supplied exclusively by the msg-archive composition root. */
@@ -58,6 +76,7 @@ export interface RepairDependencies {
   readonly withMaintenance: <T>(operation: () => Promise<T>) => Promise<T>;
   readonly isCancelled: (jobId: string) => Promise<boolean>;
   readonly signal?: AbortSignal;
+  readonly onEnrichmentBatch?: (metric: RepairEnrichmentBatchMetric) => void;
   readonly planningBatchDocuments?: number;
   readonly planningBatchBytes?: number;
   readonly backfill: (context: RepairBackfillContext) => Promise<RepairResult>;

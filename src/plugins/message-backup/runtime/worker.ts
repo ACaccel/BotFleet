@@ -6,7 +6,7 @@ import {
   recoverArchiveOrphanConsumers,
 } from '../../../infra/archive/lifecycle';
 import { createHash, randomUUID } from 'node:crypto';
-import { Types } from 'mongoose';
+import { Types, mongo } from 'mongoose';
 import { Routes, type Client, type GuildBasedChannel } from 'discord.js';
 import type {
   ArchiveSnapshot,
@@ -37,6 +37,8 @@ import {
 import {
   MongoArchiveRepo,
   type ArchiveMutationInterceptor,
+  type ArchiveSnapshotContext,
+  type ArchiveSnapshotBatchContext,
 } from '../../../persistence/repositories/archive.repo';
 import { ArchiveScheduler } from '../flow/scheduler';
 import { ArchiveRestTelemetry } from '../flow/rest-telemetry';
@@ -127,6 +129,7 @@ export class ArchiveWorker {
           });
   });
   private readonly pipelineBudget = new ArchivePipelineBudget();
+  private performanceReportedAt = 0;
   private readonly captures = new Set<Promise<void>>();
   private readonly admissions = new Map<string, number>();
   private readonly dropped = new Set<string>();
@@ -687,11 +690,12 @@ export class ArchiveWorker {
     interceptor: ArchiveMutationInterceptor | undefined,
     signal: AbortSignal,
     checkpoint: () => Promise<void>,
+    batchInterceptor?: ArchiveSnapshotBatchContext['batchInterceptor'],
   ): Promise<{
     admitted: boolean[];
     counts: Pick<
       ArchiveProgressSnapshot['messages'],
-      'inserted' | 'updated' | 'unchanged' | 'durable'
+      'inserted' | 'updated' | 'upgraded' | 'unchanged' | 'durable'
     >;
     reactions: number;
   }> {
@@ -707,12 +711,20 @@ export class ArchiveWorker {
       }),
     );
     this.pipelineBudget.record('normalize', performance.now() - normalizeStarted);
-    const counts = { inserted: 0, updated: 0, unchanged: 0, durable: 0 };
+    const counts = { inserted: 0, updated: 0, upgraded: 0, unchanged: 0, durable: 0 };
     const writeStarted = performance.now();
     const admitted: boolean[] = [];
-    for (let offset = 0; offset < snapshots.length; offset += 25) {
+    const emptyFinalized = new Set<number>();
+    for (let offset = 0; offset < snapshots.length; ) {
       await checkpoint();
-      const batch = snapshots.slice(offset, offset + 25);
+      // A repeated identity must observe the preceding durable commit.
+      const batch: ArchiveSnapshot[] = [];
+      const identities = new Set<string>();
+      for (const snapshot of snapshots.slice(offset, offset + 25)) {
+        if (identities.has(snapshot.messageId)) break;
+        identities.add(snapshot.messageId);
+        batch.push(snapshot);
+      }
       state.progress?.activity(channel.id, {
         step: 'writing',
         pageProcessed: admitted.length,
@@ -727,17 +739,21 @@ export class ArchiveWorker {
             previous = await state.repo.loadSnapshotBatch(batch.map((item) => item.messageId));
           } catch (error) {
             if (!(error instanceof RangeError)) throw error;
+            // Large legacy images stay on the single-message path instead of accumulating.
+            batch.splice(1);
           }
-          const seen = new Set<string>();
-          for (const snapshot of batch) {
+          const pending: ArchiveSnapshot[] = [];
+          const contexts: ArchiveSnapshotContext[] = [];
+          const positions: number[] = [];
+          let reservationBytes = 0;
+          for (const [batchIndex, snapshot] of batch.entries()) {
             if (signal.aborted) throw new Error('Archive page cancelled before write');
             const observed =
-              previous === undefined || seen.has(snapshot.messageId)
+              previous === undefined
                 ? await state.conn.models.Message.collection.findOne({
                     messageId: snapshot.messageId,
                   })
                 : (previous.get(snapshot.messageId) ?? null);
-            seen.add(snapshot.messageId);
             const decision = evaluatePolicy(
               mergeSnapshot((observed as Partial<ArchiveSnapshot>) ?? {}, snapshot),
               this.options.policy,
@@ -765,18 +781,42 @@ export class ArchiveWorker {
               reason: decision.reason,
               ...(decision.ruleId === undefined ? {} : { ruleId: decision.ruleId }),
             };
-            const outcome = await state.storage.withReservation(
-              Buffer.byteLength(JSON.stringify(snapshot)) * 4 + 4096,
-              true,
-              () => state.repo.persistSnapshot(snapshot, { observed, interceptor }),
-            );
+            const index = offset + batchIndex;
+            const raw = raws[index]!;
+            const observation = this.sourceObservations.get(raw);
+            const empty =
+              observed?.['deletion'] === undefined &&
+              observation?.valid === true &&
+              (raw.reactions === undefined ||
+                (Array.isArray(raw.reactions) && raw.reactions.length === 0)) &&
+              (state.dirty.get(snapshot.messageId) ?? 0) === observation.watermark &&
+              state.gapVersion === observation.gapVersion;
+            contexts.push({
+              observed,
+              ...(empty
+                ? {
+                    emptyReactions: {
+                      observedAt: snapshot.observedAt,
+                      assertCurrent: () => {
+                        if (signal.aborted) throw new Error('Archive page cancelled before write');
+                        if (
+                          (state.dirty.get(snapshot.messageId) ?? 0) !== observation.watermark ||
+                          state.gapVersion !== observation.gapVersion
+                        )
+                          throw new Error('Reaction membership invalidated before publication');
+                      },
+                    },
+                  }
+                : {}),
+            });
+            pending.push(snapshot);
+            positions.push(index);
+            reservationBytes +=
+              (mongo.BSON.calculateObjectSize(snapshot) +
+                (observed === null ? 0 : mongo.BSON.calculateObjectSize(observed))) *
+                4 +
+              4096;
             admitted.push(observed?.['deletion'] === undefined);
-            if (observed?.['deletion'] === undefined) {
-              counts.durable += 1;
-              if (outcome === 'inserted' || outcome === 'updated' || outcome === 'unchanged')
-                counts[outcome] += 1;
-              else counts.unchanged += 1;
-            }
             state.progress?.activity(channel.id, {
               step: 'writing',
               pageProcessed: admitted.length,
@@ -784,16 +824,38 @@ export class ArchiveWorker {
               provisional: true,
             });
           }
+          if (pending.length > 0) {
+            const outcomes = await state.storage.withReservation(reservationBytes, true, () =>
+              state.repo.persistSnapshotsBatch(pending, {
+                interceptor,
+                batchInterceptor,
+                snapshotContexts: contexts,
+                beforeWrite: () => {
+                  if (signal.aborted) throw new Error('Archive page cancelled before write');
+                },
+              }),
+            );
+            for (const [index, outcome] of outcomes.entries()) {
+              const position = positions[index]!;
+              if (!admitted[position]) continue;
+              counts.durable += 1;
+              if (outcome === 'stale') counts.unchanged += 1;
+              else counts[outcome] += 1;
+              if (contexts[index]?.emptyReactions !== undefined && outcome !== 'stale')
+                emptyFinalized.add(position);
+            }
+          }
         },
         interceptor,
       );
-      if (offset + 25 < snapshots.length && state.ready)
+      offset += batch.length;
+      if (offset < snapshots.length && state.ready)
         await this.drainInbox(String(state.conn.guildId), 16);
     }
     this.pipelineBudget.record('write', performance.now() - writeStarted);
     let reactions = 0;
     for (let index = 0; index < raws.length; index += 1) {
-      if (!admitted[index]) continue;
+      if (!admitted[index] || emptyFinalized.has(index)) continue;
       await checkpoint();
       if (signal.aborted) throw new Error('Archive page cancelled before reactions');
       const raw = raws[index]!;
@@ -835,6 +897,36 @@ export class ArchiveWorker {
     active.add(generation);
     state.generations.set(snapshot.messageId, active);
     try {
+      const emptyObservation = this.sourceObservations.get(raw);
+      if (
+        emptyObservation?.valid === true &&
+        (raw.reactions === undefined ||
+          (Array.isArray(raw.reactions) && raw.reactions.length === 0)) &&
+        (state.dirty.get(snapshot.messageId) ?? 0) === emptyObservation.watermark &&
+        state.gapVersion === emptyObservation.gapVersion
+      ) {
+        // Fresh empty evidence needs one atomic publication, including removal of old references.
+        await checkpoint?.();
+        await this.mutate(
+          state,
+          async () => {
+            if (signal.aborted) throw new Error('Archive reaction refresh cancelled');
+            if (
+              (state.dirty.get(snapshot.messageId) ?? 0) !== emptyObservation.watermark ||
+              state.gapVersion !== emptyObservation.gapVersion
+            )
+              throw new Error('Reaction membership invalidated before publication');
+            await state.repo.finalizeReactionRefresh(
+              snapshot.messageId,
+              generation,
+              [],
+              Date.now(),
+            );
+          },
+          interceptor,
+        );
+        return;
+      }
       await this.mutate(
         state,
         () => state.repo.markReactionsStale(snapshot.messageId, Date.now()),
@@ -1302,12 +1394,15 @@ export class ArchiveWorker {
       if (checkpoint?.estimatePrevious !== undefined)
         priors.set(channel.channelId, checkpoint.estimatePrevious);
       if (checkpoint?.runId === runId && checkpoint.scanned !== undefined) {
+        // Writes may have succeeded before an interrupted page saved its outcome counters.
+        if (checkpoint.complete !== true) progress.markLegacyCounts();
         progress.observe('history', checkpoint.scanned, checkpoint.admitted ?? 0);
         progress.commit(
           'history',
           checkpoint.scanned,
           channel.channelId,
           checkpoint.pageSequence ?? 0,
+          true,
         );
         const statistics = (
           checkpoint as HistoryCheckpoint & {
@@ -1315,9 +1410,12 @@ export class ArchiveWorker {
               messages: ArchiveProgressSnapshot['messages'];
               reactions: number;
               countQuality?: 'exact' | 'lower-bound';
+              messageClassificationVersion?: 2;
             };
           }
         ).statistics;
+        if (checkpoint.scanned > 0 && statistics?.messageClassificationVersion !== 2)
+          progress.markLegacyClassifications();
         if (checkpoint.version === 2 && statistics !== undefined) {
           progress.messageCounts(statistics.messages);
           if (statistics.countQuality === 'lower-bound') progress.markLegacyCounts();
@@ -1397,7 +1495,7 @@ export class ArchiveWorker {
             ...(location.parentId === undefined ? {} : { parentId: location.parentId }),
             discovery: {
               runId,
-              passes: location.passes,
+              ...(location.passes === undefined ? {} : { passes: location.passes }),
               gaps: reasons,
               verifiedAt: Date.now(),
               scope: location.passes?.includes('joined-private')
@@ -1495,14 +1593,19 @@ export class ArchiveWorker {
               Math.max(0, page.admitted.length - (checkpoint.pageAdmitted ?? 0)),
             inserted: (previous?.messages.inserted ?? 0) + page.counts.inserted,
             updated: (previous?.messages.updated ?? 0) + page.counts.updated,
+            upgraded: (previous?.messages.upgraded ?? 0) + (page.counts.upgraded ?? 0),
             unchanged: (previous?.messages.unchanged ?? 0) + page.counts.unchanged,
             durable: (previous?.messages.durable ?? 0) + page.counts.durable,
           };
           Object.assign(checkpoint, {
             statistics: {
+              ...(progress.snapshot().messageClassificationVersion === 2
+                ? { messageClassificationVersion: 2 }
+                : {}),
               messages,
               reactions: (previous?.reactions ?? 0) + page.reactions,
               countQuality:
+                progress.snapshot().messageCountQuality === 'lower-bound' ||
                 previous?.countQuality === 'lower-bound' ||
                 (old !== undefined && (old.scanned ?? 0) > 0 && previous === undefined)
                   ? 'lower-bound'
@@ -1578,6 +1681,13 @@ export class ArchiveWorker {
         const duration = performance.now() - checkpointStarted;
         this.durations.checkpointMs += duration;
         this.pipelineBudget.record('checkpoint', duration);
+        if (Date.now() - this.performanceReportedAt >= 30_000) {
+          this.performanceReportedAt = Date.now();
+          this.options.logger.info(
+            { pipeline: this.pipelineBudget.snapshot() },
+            'Archive pipeline performance',
+          );
+        }
         const previous = channels.get(channel.id);
         channels.set(channel.id, {
           ...previous,
@@ -1635,6 +1745,7 @@ export class ArchiveWorker {
           interceptor,
           signal,
           checkBoundary,
+          repair?.applyMutations,
         );
         pageResults.set(channel.id, page);
         await this.drainInbox(guildId);
@@ -2312,6 +2423,10 @@ export class ArchiveWorker {
           signal: state.signal.signal,
           policyHash: this.policyHash,
           schemaHash: 'archive-v2',
+          onEnrichmentBatch: (metric) => {
+            this.pipelineBudget.record('journal', metric.journalMs);
+            this.pipelineBudget.record('writeVerify', metric.writeVerifyMs);
+          },
           classify: (document) => {
             const evidence = document.archiveSourceDecision as
               | { policyHash?: string; admitted?: boolean }

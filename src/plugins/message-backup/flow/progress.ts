@@ -61,6 +61,8 @@ export class ProgressTracker {
   private pausedMs = 0;
   private pausedAt: number | undefined;
   private finishedAt: number | undefined;
+  private messageClassificationVersion: 2 | undefined = 2;
+  private recentHistory: { at: number; units: number }[] = [];
   private messageCountQuality: 'exact' | 'lower-bound' = 'exact';
   private substep: string;
   private readonly messages: ArchiveProgressSnapshot['messages'] = {
@@ -70,6 +72,7 @@ export class ProgressTracker {
     excluded: 0,
     inserted: 0,
     updated: 0,
+    upgraded: 0,
     unchanged: 0,
     durable: 0,
   };
@@ -179,7 +182,14 @@ export class ProgressTracker {
     this.data.phases[phase].scanned += scanned;
     this.data.phases[phase].admitted += admitted;
   }
-  commit(phase: ArchivePhase, units: number, stream: string, sequence: number): boolean {
+  commit(
+    phase: ArchivePhase,
+    units: number,
+    stream: string,
+    sequence: number,
+    restored = false,
+    checkpointAt?: number,
+  ): boolean {
     this.validateUnits(units);
     if (!Number.isSafeInteger(sequence) || sequence < 0)
       throw new Error('invalid-progress-sequence');
@@ -193,9 +203,21 @@ export class ProgressTracker {
     this.data.acknowledgements[key] = sequence;
     const current = this.data.phases[phase];
     current.committed += units;
+    if (current.total !== undefined && current.total < current.committed) current.total = undefined;
+    if (restored) {
+      if (checkpointAt !== undefined && Number.isFinite(checkpointAt) && checkpointAt > 0)
+        this.lastCheckpointAt = Math.max(this.lastCheckpointAt ?? 0, checkpointAt);
+      return true;
+    }
+    if (phase === 'history' && this.data.state === 'running') {
+      const at = this.clock();
+      this.recentHistory.push({ at, units });
+      this.recentHistory = this.recentHistory
+        .filter((sample) => at - sample.at <= 60_000)
+        .slice(-100);
+    }
     if (units > 0) this.lastProgressAt = this.clock();
     this.lastCheckpointAt = this.clock();
-    if (current.total !== undefined && current.total < current.committed) current.total = undefined;
     const now = this.clock();
     const interval = now - (this.lastSample.get(phase) ?? now);
     const accumulated = (this.sampleUnits.get(phase) ?? 0) + units;
@@ -209,6 +231,7 @@ export class ProgressTracker {
     return true;
   }
   pause(reason: string): void {
+    this.recentHistory = [];
     this.data.state = 'paused';
     this.data.reason = reason;
     this.pausedAt ??= this.clock();
@@ -367,7 +390,8 @@ export class ProgressTracker {
   messageCounts(values: Partial<ArchiveProgressSnapshot['messages']>): void {
     for (const [key, value] of Object.entries(values)) {
       this.validateUnits(value);
-      this.messages[key as keyof typeof this.messages] += value;
+      const field = key as keyof typeof this.messages;
+      this.messages[field] = (this.messages[field] ?? 0) + value;
     }
     if ((values.durable ?? 0) > 0) this.lastProgressAt = this.clock();
   }
@@ -382,6 +406,9 @@ export class ProgressTracker {
   }
   setExtras(extras: Partial<typeof this.extras>): void {
     this.extras = { ...this.extras, ...extras };
+  }
+  markLegacyClassifications(): void {
+    this.messageClassificationVersion = undefined;
   }
   markLegacyCounts(): void {
     this.messageCountQuality = 'lower-bound';
@@ -429,6 +456,12 @@ export class ProgressTracker {
         quality: 'discovered',
       },
       messageCountQuality: this.messageCountQuality,
+      ...(this.messageClassificationVersion === undefined
+        ? {}
+        : { messageClassificationVersion: this.messageClassificationVersion }),
+      ...(this.recentThroughput(now) === undefined
+        ? {}
+        : { recentThroughput: this.recentThroughput(now) }),
       messages: { ...this.messages },
       reactions: { ...this.reactions },
       ...this.extras,
@@ -468,6 +501,24 @@ export class ProgressTracker {
       snapshot.estimating = false;
     }
     return sanitizeArchiveProgress(snapshot, { includeRates: true })!;
+  }
+  private recentThroughput(now: number): ArchiveProgressSnapshot['recentThroughput'] {
+    const first = this.recentHistory[0];
+    const last = this.recentHistory.at(-1);
+    if (
+      this.data.state !== 'running' ||
+      first === undefined ||
+      last === undefined ||
+      this.recentHistory.length < 2 ||
+      last.at - first.at < 1000 ||
+      now - last.at > 30_000
+    )
+      return undefined;
+    return {
+      messages: this.recentHistory.slice(1).reduce((total, sample) => total + sample.units, 0),
+      windowMs: last.at - first.at,
+      observedAt: last.at,
+    };
   }
   private validateUnits(units: number): void {
     if (!Number.isSafeInteger(units) || units < 0) throw new Error('invalid-progress-units');

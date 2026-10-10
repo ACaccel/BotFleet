@@ -104,6 +104,7 @@ export interface ArchiveProgressSnapshot {
     excluded: number;
     inserted: number;
     updated: number;
+    upgraded?: number;
     unchanged: number;
     durable: number;
   };
@@ -115,6 +116,8 @@ export interface ArchiveProgressSnapshot {
   nextAction?: 'replan' | 'resume' | 'status';
   nextRunAt?: number;
   primary?: ArchivePhaseProgress;
+  messageClassificationVersion?: 2;
+  recentThroughput?: { messages: number; windowMs: number; observedAt: number };
   messageCountQuality: 'exact' | 'lower-bound';
   validation?: ArchiveValidationOutcome;
 }
@@ -436,16 +439,38 @@ export function sanitizeArchiveProgress(
     ...(validationOutcome(data['validation']) === undefined
       ? {}
       : { validation: validationOutcome(data['validation']) }),
-    messages: numerical(data['messages'], [
-      'fetched',
-      'scanned',
-      'admitted',
-      'excluded',
-      'inserted',
-      'updated',
-      'unchanged',
-      'durable',
-    ]),
+    ...(data['messageClassificationVersion'] === 2
+      ? { messageClassificationVersion: 2 as const }
+      : {}),
+    ...(typeof record(data['recentThroughput'])['messages'] === 'number' &&
+    Number(record(data['recentThroughput'])['messages']) >= 0 &&
+    Number.isFinite(record(data['recentThroughput'])['messages']) &&
+    Number(record(data['recentThroughput'])['windowMs']) >= 1000 &&
+    Number.isFinite(record(data['recentThroughput'])['windowMs']) &&
+    timestamp(record(data['recentThroughput'])['observedAt']) > 0
+      ? {
+          recentThroughput: {
+            messages: finite(record(data['recentThroughput'])['messages']),
+            windowMs: finite(record(data['recentThroughput'])['windowMs']),
+            observedAt: timestamp(record(data['recentThroughput'])['observedAt']),
+          },
+        }
+      : {}),
+    messages: {
+      ...numerical(data['messages'], [
+        'fetched',
+        'scanned',
+        'admitted',
+        'excluded',
+        'inserted',
+        'updated',
+        'unchanged',
+        'durable',
+      ]),
+      ...(typeof record(data['messages'])['upgraded'] === 'number'
+        ? { upgraded: finite(record(data['messages'])['upgraded']) }
+        : {}),
+    },
     reactions: numerical(data['reactions'], ['required', 'completed']),
     reactionCountKnown:
       data['reactionCountKnown'] !== false &&

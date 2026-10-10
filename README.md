@@ -113,10 +113,18 @@ applied changes or active work remain protected.
 Active-only filters are omitted.
 `/archive schedule` manages automatic scans. Deleting control records preserves
 archived messages.
+Selected plans show the associated backup progress above their summary, with
+**Update progress** and **Pause backup** controls. Pausing preserves completed
+work; eligible backups resume through the same plan.
 
 Archive work uses bounded batches and history prefetch with durable checkpoints.
+One-shot conditional writes use indexed identity lookup; both one-shot and periodic
+scans combine trusted empty reaction publication with snapshot writes. Bounded
+journal/write batches retain conflict checks, cancellation and rollback.
 Shared [progress reports](docs/message-archive.md#progress-and-access) distinguish
-confirmed writes, reaction completion and coverage gaps. Partial one-shot results
+content updates, legacy format upgrades, completed reaction lists and coverage gaps.
+They separate saved checkpoints from notification delivery and show recent throughput
+without counting restored progress as new work. Partial one-shot results
 identify stopped work and direct users to review the existing run before resuming.
 Routine cards include one current-activity line with the source, processing step
 and available page or reaction membership counts, refreshed every ten seconds.

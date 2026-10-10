@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   failure: vi.fn(),
   status: vi.fn(),
   stop: vi.fn(),
+  pauseRun: vi.fn(),
   deleteJob: vi.fn(),
   deletePlan: vi.fn(),
   manifest: vi.fn(),
@@ -250,6 +251,41 @@ describe('archive public management', () => {
     expect(String(payload.content)).toContain('目前階段');
     expect(mocks.submit).not.toHaveBeenCalled();
   });
+  it('pauses the exact selected plan job even when its aggregate summary is unavailable', async () => {
+    const activeJob = { jobId: 'guild:active-job', status: 'running', cancelRequested: false };
+    mocks.manifest.mockResolvedValue({
+      run: { ...plan, status: 'enriching', activeJob },
+      summary: { status: 'unavailable', reason: 'timeout' },
+    });
+    const reply = await archiveManagePlan(plan.runId, host(), access, actor);
+    const controls = buttons(reply);
+    const pause = controls.find(
+      (control) => control.label === translator.t('replies:archive.plan_pause'),
+    )!;
+    expect(pause).toBeDefined();
+    expect(controls.map((control) => control.label)).toContain(
+      translator.t('replies:archive.plan_refresh'),
+    );
+    expect(controls.map((control) => control.label)).toContain(
+      translator.t('replies:archive.manage_back_plans'),
+    );
+    const reference = resolveArchiveReference(pause.custom_id.slice('archive_manage|ref|'.length));
+    expect(JSON.parse(reference.id)).toEqual({ runId: plan.runId, jobId: activeJob.jobId });
+    mocks.pauseRun.mockImplementation(async () => {
+      activeJob.cancelRequested = true;
+      return { ...job, runId: plan.runId, cancelRequested: true };
+    });
+    await new Manage().execute(fixture(pause.custom_id) as never, host());
+    expect(mocks.pauseRun).toHaveBeenCalledWith(plan.runId, activeJob.jobId);
+    expect(mocks.failure).not.toHaveBeenCalled();
+    const result = mocks.publish.mock.calls.at(-1)![1];
+    expect(result.content).toContain(translator.t('replies:archive.plan_pausing'));
+    expect(buttons(result).map((control) => control.label)).not.toContain(
+      translator.t('replies:archive.plan_pause'),
+    );
+    expect(mocks.stop).not.toHaveBeenCalled();
+  });
+
   it('requests cooperative stop and displays stopping before deletion', async () => {
     mocks.status.mockResolvedValue({ ...job, cancelRequested: true });
     await new Manage().execute(fixture('archive_manage|stop|guild:job') as never, host());

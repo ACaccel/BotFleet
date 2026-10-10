@@ -100,6 +100,7 @@ interface ArchiveRunSummary {
   issueCount: number;
   issueCategories: ArchiveIssueCategory[];
   actions: ArchiveConfirmedAction[];
+  activeJob?: { jobId: string; status: 'queued' | 'running'; cancelRequested: boolean };
   verification?: ArchiveRunVerification;
   scope?: {
     timestampsOnly?: boolean;
@@ -307,6 +308,7 @@ const runSummary = (
   run: RunDocument,
   actions: ArchiveConfirmedAction[] = [],
   verification?: ArchiveRunVerification,
+  activeJob?: ArchiveRunSummary['activeJob'],
 ): ArchiveRunSummary => ({
   deletable: false,
   runId: reference.parse(run._id),
@@ -333,6 +335,7 @@ const runSummary = (
   journalBytes: finite(run['journalBytes']),
   ...issueSummary(run['issues']),
   actions,
+  ...(activeJob === undefined ? {} : { activeJob }),
   scope: {
     ...(typeof run['timestampsOnly'] === 'boolean'
       ? { timestampsOnly: run['timestampsOnly'] }
@@ -367,9 +370,15 @@ export class ArchiveControlService {
   public constructor(
     private readonly connection: Connection,
     private readonly guildId: string,
-    private readonly settings: { policyHash?: () => string; schemaHash?: string } = {},
+    private readonly settings: {
+      policyHash?: () => string;
+      schemaHash?: string;
+      manifestQueryTimeoutMs?: number;
+    } = {},
   ) {
     id.parse(guildId);
+    if (settings.manifestQueryTimeoutMs !== undefined)
+      z.number().int().min(1).max(300_000).parse(settings.manifestQueryTimeoutMs);
     if (connection.db === undefined) throw new Error('Archive control requires an open database');
   }
   private jobsCollection() {
@@ -517,7 +526,10 @@ export class ArchiveControlService {
               },
             },
           ],
-          { maxTimeMS: MANIFEST_QUERY_TIMEOUT_MS, allowDiskUse: false },
+          {
+            maxTimeMS: this.settings.manifestQueryTimeoutMs ?? MANIFEST_QUERY_TIMEOUT_MS,
+            allowDiskUse: false,
+          },
         )
         .toArray();
       const rows = data[0]?.categories ?? [];
@@ -597,10 +609,20 @@ export class ArchiveControlService {
     run: RunDocument,
     summary: ArchiveManifestSummary,
     requestId?: string,
-  ): Promise<{ actions: ArchiveConfirmedAction[]; verification?: ArchiveRunVerification }> {
+  ): Promise<{
+    actions: ArchiveConfirmedAction[];
+    verification?: ArchiveRunVerification;
+    activeJob?: ArchiveRunSummary['activeJob'];
+  }> {
     const scope = {
       guildId: this.guildId,
-      $or: [{ runId: run._id }, { 'result.runId': run._id }],
+      $or: [
+        { runId: run._id },
+        { 'result.runId': run._id },
+        ...(typeof run['originatingJobId'] === 'string'
+          ? [{ jobId: run['originatingJobId'] }]
+          : []),
+      ],
     };
     const last = await this.jobsCollection()
       .find(
@@ -655,22 +677,35 @@ export class ArchiveControlService {
         issueCategories: [],
       };
     }
-    const state = { ...(verification === undefined ? {} : { verification }) };
-    if (summary.status !== 'available') return { actions: [], ...state };
-    try {
-      this.assertSettings(run);
-    } catch {
-      return { actions: [], ...state };
-    }
     const active = await this.jobsCollection().findOne(
       {
         ...scope,
         status: { $in: ['queued', 'running'] },
         ...(requestId === undefined ? {} : { requestId: { $ne: requestId } }),
       },
-      { projection: { _id: 1 }, maxTimeMS: MANIFEST_QUERY_TIMEOUT_MS },
+      {
+        projection: { jobId: 1, status: 1, cancelRequested: 1 },
+        maxTimeMS: MANIFEST_QUERY_TIMEOUT_MS,
+      },
     );
-    if (active !== null) return { actions: [], ...state };
+    const activeJob: ArchiveRunSummary['activeJob'] =
+      active !== null && (active.status === 'queued' || active.status === 'running')
+        ? {
+            jobId: reference.parse(active.jobId),
+            status: active.status,
+            cancelRequested: active.cancelRequested,
+          }
+        : undefined;
+    const state = {
+      ...(verification === undefined ? {} : { verification }),
+      ...(activeJob === undefined ? {} : { activeJob }),
+    };
+    if (activeJob !== undefined || summary.status !== 'available') return { actions: [], ...state };
+    try {
+      this.assertSettings(run);
+    } catch {
+      return { actions: [], ...state };
+    }
     const result = confirmedActions.filter((action) => this.eligible(action, run));
     if (!result.includes('accept')) return { actions: result, ...state };
     const coverage = record(run['coverage']);
@@ -709,9 +744,11 @@ export class ArchiveControlService {
           },
         },
       )
-      .sort({ sequence: 1, _id: 1 })
-      .batchSize(100)
-      .maxTimeMS(30_000);
+      // Versioned journals enforce a unique run/sequence index; an extra tie-breaker
+      // forces MongoDB to sort the entire recovery journal before returning a row.
+      .sort(run.journalVersion === 2 ? { sequence: 1 } : { sequence: 1, _id: 1 })
+      .batchSize(1000)
+      .maxTimeMS(this.settings.manifestQueryTimeoutMs ?? 30_000);
     try {
       for await (const operation of cursor) hash.update(mongo.BSON.serialize(operation));
     } finally {
@@ -878,6 +915,24 @@ export class ArchiveControlService {
     if (stopped.status !== 'running')
       await releaseArchiveRunConsumer(this.connection, stopped.runId, stopped.requestId);
     return stopped;
+  }
+  /** Pause only the job displayed with this run; recovery images and checkpoints remain intact. */
+  public async pauseRun(runId: string, expectedJobId: string): Promise<ArchiveJobSummary> {
+    const run = await this.run(runId);
+    reference.parse(expectedJobId);
+    const job = await this.jobsCollection().findOne({
+      guildId: this.guildId,
+      jobId: expectedJobId,
+      $or: [
+        { runId },
+        { 'result.runId': runId },
+        ...(typeof run['originatingJobId'] === 'string'
+          ? [{ jobId: run['originatingJobId'] }]
+          : []),
+      ],
+    });
+    if (job === null) throw new Error('Unknown archive job for this guild');
+    return this.cancel(expectedJobId);
   }
   public async stop(jobId: string): Promise<ArchiveJobSummary> {
     return this.cancel(jobId);
@@ -1313,7 +1368,7 @@ export class ArchiveControlService {
     const state = await this.runState(run, summary);
     return {
       run: {
-        ...runSummary(run, state.actions, state.verification),
+        ...runSummary(run, state.actions, state.verification, state.activeJob),
         deletable: await this.planDeletable(run),
       },
       summary,
@@ -1834,7 +1889,7 @@ export class ArchiveControlService {
     return {
       token,
       action,
-      run: runSummary(current, state.actions, state.verification),
+      run: runSummary(current, state.actions, state.verification, state.activeJob),
       summary,
       expiresAt,
     };

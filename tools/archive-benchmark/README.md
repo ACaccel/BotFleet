@@ -130,3 +130,30 @@ const reserve = ArchivePipelineBudget.prototype.reserve;
 })().catch(error => { console.error(error); process.exitCode = 1; });
 '
 ```
+
+## Durable enrichment batching comparison
+
+Compare the real archive repository and repair service using a disposable local
+MongoDB 8.2.6 server:
+
+```bash
+node scripts/runtime.mjs exec ts-node tools/archive-benchmark/enrichment.ts \
+  --count 1200 --runs 3 --output /tmp/archive-enrichment.json
+```
+
+The harness accepts no database URI. Each trial uses a fresh database, seeds the
+same synthetic human messages, edits 10% of their content, and observes empty
+reaction memberships. The serial baseline writes each snapshot and its empty
+reaction publication separately. The batched path prepares 100-message pages,
+combines empty-membership freshness with the snapshot, and uses the actual durable
+repair journal and ordered bulk writes. Trial order alternates to reduce order
+bias; at least three trials per mode are required.
+
+The measured window includes repository enrichment and journal writes, with
+separate accumulated journal and write/readback/acknowledgement timings. It excludes
+seeding, planning, final verification, and Discord REST. Every trial must pass the
+real repair verifier, preserve the expected revision count, and produce the same
+final message digest. The JSON report includes elapsed-time and throughput ranges,
+MongoDB command counts, journal-operation counts, source hashes, and runtime
+versions. These results measure storage throughput for this workload and do not
+predict end-to-end Discord backup speed.

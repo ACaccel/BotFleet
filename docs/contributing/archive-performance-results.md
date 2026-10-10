@@ -1,5 +1,118 @@
 # Archive performance evidence
 
+## Bounded enrichment batches and atomic empty snapshots, 2026-10-08
+
+A synthetic comparison exercises the real repository snapshot path and repair
+service, including durable journals, conditional target writes, readback and final
+verification. It does not use production messages or Discord. Each of three paired
+trials starts an isolated database with the same 1,200 messages; 120 have changed
+content requiring a retained revision. The serial baseline writes snapshots and
+empty reaction publication separately. The batch path prepares 25 independent
+snapshots with atomic empty publication and uses the same recovery guarantees.
+All six final message digests match and each trial verifies 120 revisions.
+
+Environment: Node 22.13.0, MongoDB 8.2.6; measured 2026-10-08 09:25 UTC. Timings cover
+enrichment only; initialization, planning and final verification are outside the
+timer. Both variants run the real final verification successfully.
+
+| Measurement                    |          Serial median |       Batch median |
+| ------------------------------ | ---------------------: | -----------------: |
+| Enrichment wall time           |           7,971.232 ms |         829.276 ms |
+| Observed range                 | 7,762.457–8,221.725 ms | 757.161–863.370 ms |
+| Messages per second            |                150.541 |          1,447.045 |
+| Database commands              |                 30,242 |                602 |
+| Journal operations             |                  2,520 |              1,320 |
+| Journal stage time             |           3,124.743 ms |         208.021 ms |
+| Target write/verify stage time |           3,533.771 ms |         432.019 ms |
+
+This workload's enrichment stage is 9.612 times faster, with 98.01% fewer database
+commands and 47.62% fewer journal operations. These are not end-to-end Discord
+speedup claims: nonempty memberships, quotas, existing collection/index size,
+filesystem durability latency, live traffic and policy exclusions change the mix.
+Stage durations are nested and must not be summed with the encompassing wall time.
+See the [reproduction instructions](../../tools/archive-benchmark/README.md) for
+source fingerprints, fixture details and the machine-readable output contract.
+
+The integrated implementation preserves bounded mutation batches, indexed
+complete-image CAS and revision-before-message ordering. Checkpoints do not advance
+on a failed or cancelled page. Tests cover partial ordered writes and resume,
+rollback conflicts, dirty/gap changes between write waves, duplicate identities,
+large-image fallback, tombstones and schema upgrade counters. Historical mixed
+update counts remain mixed; incomplete-page resumes label outcome counts partial.
+
+Integrated validation passed all eight local quality gates, with 324 test files /
+3,474 tests and no skips, including both isolated migration drills. Statement/line
+coverage was 88.67%, branch coverage 89.14% and function coverage 92.94%; existing
+thresholds passed unchanged. Security checks passed with the existing nine
+low/moderate advisories and no high/critical advisories. Production deployment is
+separate from this synthetic and local validation.
+
+## One-shot enrichment query and empty-reaction fix, 2026-10-08
+
+Read-only inspection of the deployed one-shot executor confirmed that its
+conditional replace/delete filter compared the entire document without an
+indexable identity predicate. MongoDB's query planner selected `COLLSCAN` on a
+message collection containing approximately 5.54 million documents. Adding `_id`
+equality selected `IXSCAN` while retaining the same complete-image comparison.
+No production mutation, explain execution scan, service restart or deployment was
+used for this diagnosis. Operator configuration already used concurrency 8.
+
+The fix anchors single enrichment writes by `_id`, matching the bounded candidate
+lookup used for batch apply and rollback. Regression tests cover replacement and
+deletion with ObjectId, string and embedded-document identities, assert one
+examined document/key, and reject stale recovery images.
+
+An isolated MongoDB 8.2.6 / Node 22.13.0 comparison used 100,000 synthetic documents
+with the target inserted last, one warmup and five execution-stat samples per
+predicate:
+
+| Predicate              | Documents examined | Keys examined |                    Reported query time |
+| ---------------------- | -----------------: | ------------: | -------------------------------------: |
+| Complete image only    |            100,000 |             0 |              39 ms in all five samples |
+| ID plus complete image |                  1 |             1 | 0 ms at MongoDB millisecond resolution |
+
+The zero measurement is below the timer's resolution, not zero cost. This is
+candidate-selection evidence, not a whole-backup benchmark or a claimed
+100,000-fold end-to-end speedup. The integration regressions reproduce the
+index-selection invariant with small fixtures:
+
+```bash
+npm run test:int -- test/integration/plugins/message-backup/repair.int.test.ts test/integration/plugins/message-backup/apply-batch.int.test.ts
+npm run test:int -- test/integration/plugins/message-archive-reaction-progress.test.ts
+```
+
+Both scan types also remove an unnecessary stale mutation for trusted empty
+reaction observations. Empty membership publication still removes old references;
+message/gap fencing is checked again inside the serialized writer. Reaction
+mutations drop from two to one for this path, or three to two message mutations
+when including the snapshot. Tests cover previous membership removal and
+invalidated evidence, cancellation while queued, and real backfill/apply/rollback.
+Recovery chunks are retained for rollback.
+
+The integrated rollback test also exposed a fallback-discovery defect: an absent
+optional `passes` field was serialized as `undefined`, causing a persisted
+recovery image to disagree with the target after-image. Discovery now omits that
+field when unknown. Both complete and fallback inventories pass the same
+one-shot/rollback regression.
+
+Remaining costs include per-mutation durable enrichment journals, metadata writes
+for content-unchanged messages, Discord membership requests and live inbox work.
+The existing planning and mock-pipeline benchmarks below did not exercise the
+unindexed enrichment write against a large collection; their earlier speedups did
+not establish production one-shot throughput. Periodic direct writes already had
+an identity predicate and do not share that specific query defect. Startup/gap
+reconciliation and partial-pass retries remain conservative; see
+[operational boundaries](../message-archive.md#periodic-schedule).
+
+Validation after these fixes passed all eight local gates: `typecheck`,
+`typecheck:emit`, `lint`, `format:check`, `handlers:gen:check`, `test:coverage`,
+`knip` and `security`. Coverage ran 322 files / 3,435 tests without skips, including
+both opt-in isolated MongoDB migration drills. Overall statement/line coverage
+was 88.51%, branch coverage 88.97% and function coverage 92.82%; existing thresholds
+passed unchanged. The security gate reported nine existing low/moderate advisories
+and no high/critical advisories. GitHub-only checks were not run; no commit, push
+or production deployment was performed.
+
 ## Component review and relation-query batching, 2026-10-06
 
 The review covers discovery, history reads, normalization, persistence, reaction

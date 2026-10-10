@@ -42,12 +42,12 @@ Register `/archive` on msg-archive after adding `archive` to its local `commands
 host operations. Reviewed repair, timestamp conversion, automatic verification,
 progress and recovery use the following Discord workflow.
 
-| Entry                 | Purpose                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| `/archive backup`     | Create a plan, review changes and confirm the one-shot backup                              |
-| `/archive jobs`       | Select a job to view progress, stop, resume through its plan, or delete its record         |
-| `/archive plans`      | Select a plan to review its summary/changes, execute it, or delete an eligible unused plan |
-| `/archive schedule …` | View or adjust periodic backup independently of one-shot work                              |
+| Entry                 | Purpose                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `/archive backup`     | Create a plan, review changes and confirm the one-shot backup                            |
+| `/archive jobs`       | Select a job to view progress, stop, resume through its plan, or delete its record       |
+| `/archive plans`      | Select a plan to view progress/changes, pause or resume work, or delete an eligible plan |
+| `/archive schedule …` | View or adjust periodic backup independently of one-shot work                            |
 
 Archive pages use buttons only, with at most five controls per page. Job and plan
 lists show two numbered entries with status and creation time, matching item
@@ -58,6 +58,32 @@ Item panels open apply, resume or acceptance confirmation directly when eligible
 **View details** opens the compact changes view. Routine views omit internal IDs
 and hashes. Long legacy identities use bounded temporary references internally;
 reopen the list if a reference expires.
+
+Selecting a plan displays the associated job's standard progress card above the
+plan summary, including its current activity, message counts, elapsed time and
+last delivered update. The plan panel reads fresh progress when opened or when
+**Update progress** is pressed; the original job notification continues its
+independent ten-second updates. Missing or timed-out manifest totals do not hide
+the progress card or pause control. Source labels use current public-readability
+checks, including when the job was created before its run identity was attached.
+
+**Pause backup** requests a cooperative stop of the exact job shown on that plan.
+The worker finishes its current safe write boundary and preserves acknowledged
+checkpoints, archived messages and recovery images. While stopping, refresh the
+plan to check its state; a later job is never stopped by an old pause button.
+An eligible interrupted apply/backfill can then use **Continue backup**, retaining
+the original cutoff. An interrupted initial planning pass may instead require a
+new plan. Pausing does not roll back changes or make an applied plan deletable.
+
+Large-journal operator continuations can require longer verification than an
+interactive panel allows. `ArchiveControlService` accepts an explicit
+`manifestQueryTimeoutMs` (1–300,000 ms) for trusted operator tools; ordinary
+Discord summary and fingerprint budgets remain 5 and 30 seconds. This extends
+query time only: full manifest fingerprints, before/after hashes, settings,
+state, actor and confirmation checks still run. Version-2 fingerprint reads use
+the unique run/sequence index without a redundant identity sort. A deployment
+that reports ready before continuation times out is already installed; retry
+only continuation after checking for an existing job, not the deployment.
 
 The job page offers **Stop job** while active and **Delete job record** after the
 job stops. There is no combined stop-and-delete button. Stopping is cooperative:
@@ -180,8 +206,51 @@ A disabled running pass preserves checkpoints; enabling resumes that pass before
 starting a fresh one. In-flight requests may finish before a pause is observed.
 Schedule changes never cancel a one-shot repair or live capture.
 
+Normal incremental passes revisit messages since each completed source watermark,
+including the configured overlap window. Startup and Gateway gaps conservatively
+require full reconciliation. An unfinished pass resumes its original cutoff and
+checkpoints; permission gaps or a pending live inbox can keep it partial. Such a
+resume does not establish coverage through the current time. Inspect the reported
+gaps and inbox backlog when an enabled schedule does not advance its cutoff.
+
 For initial setup, finish and accept the one-shot repair, then enable the schedule.
 Follow the [control setup](#discord-controls) to register the command after deployment.
+
+## Backup throughput
+
+One-shot enrichment uses indexed document identity lookup before comparing the
+complete recovery image. History consumers prepare up to 25 independent messages
+per writer turn. Their before-images, recovery journal and verified writes use
+bounded batches; related revisions are durable before their message replacements.
+Oversized legacy images fall back to one message. Fresh empty reaction observations
+are published atomically with the snapshot in both one-shot and periodic scans;
+this clears old membership references and preserves rollback data. Nonempty lists still require Discord
+membership reads. Fallback discovery omits unknown optional pass metadata so
+checkpoint recovery images remain verifiable. See the [measured query comparison](contributing/archive-performance-results.md#one-shot-enrichment-query-and-empty-reaction-fix-2026-10-08).
+
+A source counts as completed only after its entire bounded history is acknowledged.
+Several large sources can therefore show scanned messages while completed sources
+remains zero. New counters separate inserted messages, content updates, legacy
+format upgrades, unchanged content and policy exclusions. The first accepted v2
+snapshot of an older-format record is an upgrade, even if it also adds fields or
+changes content. Older accumulated update counts remain explicitly mixed; they
+are not retrospectively presented as pure content edits. Known upgrades after
+resumption are shown separately. Resuming an incomplete page marks outcome counts
+as partial: writes before the interruption may be durable even though their original
+outcome was not checkpointed, and replay may count them as unchanged. Scanned does
+not mean every record was upgraded:
+excluded records and stale observations have different outcomes. Plan impacts count
+stored mutation operations, including metadata and reaction publication. An unchanged
+message can still require metadata writes; these counters are not interchangeable.
+
+Increasing concurrency does not repair an unindexed database query or bypass
+Discord quotas. Journal durability, membership requests, permissions and live inbox
+work still affect duration. Use source checkpoints and inbox age alongside totals;
+synthetic query speedups are not a prediction of end-to-end backup duration.
+Numeric pipeline diagnostics are logged at most once per 30 seconds on saved
+checkpoints: fetch, normalization, full-page writes, reactions and checkpoints,
+plus one-shot journal and target write/verification stages. Timings overlap
+(e.g. journal time is inside page-write time), so do not sum stages as wall time.
 
 ## Progress and access
 
@@ -199,7 +268,16 @@ page counters; resumed requests clear old wait details. Terminal cards omit the
 activity line. Other bullets retain relevant acknowledged counters. Routine views
 omit the full phase sequence, duplicate persistence counters and empty reaction rows.
 Unknown counts, incomplete writes, coverage gaps and the next operator action remain
-visible. A queued plan explicitly says history backup starts only after confirmation.
+visible.
+Totals are cumulative for the plan; elapsed time belongs to the current job.
+Recent throughput uses only newly acknowledged history pages in this process,
+with at least two samples separated by one second, a 60-second/100-sample window,
+and no display after 30 seconds without a new checkpoint. Restored counts never
+inflate this rate. Last saved checkpoint and last notification delivery are separate.
+The reaction summary counts messages whose nonempty lists were completed, not a
+percentage of all messages or all users. New queued receipts carry an exact detail
+hash: execution removes only that obsolete receipt, preserving inspection and
+confirmation details. Older unmarked receipts require refreshing the job view. A queued plan explicitly says history backup starts only after confirmation.
 Source labels are disclosed only when cached
 permissions establish public readability; restricted, private-thread or unresolved
 sources use safe identity fallbacks. Raw errors, message bodies, membership lists
