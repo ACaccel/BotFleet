@@ -49,7 +49,6 @@ describe('renderEmojiImage', () => {
     ['tears of joy', '\u{1F602}'],
     ['red heart with VS16', '❤️'],
     ['Taiwan flag', '\u{1F1F9}\u{1F1FC}'],
-    ['family ZWJ sequence', '\u{1F468}‍\u{1F469}‍\u{1F467}'],
     ['skin-tone modifier', '\u{1F44D}\u{1F3FD}'],
   ])('draws %s in colour at chart sizes', (_label, emoji) => {
     for (const size of [16, 20, 28]) {
@@ -58,6 +57,16 @@ describe('renderEmojiImage', () => {
       if (image === null) return;
       expect([image.width, image.height]).toEqual([size, size]);
       // At least a fifth of the square is saturated colour, not a gray mask.
+      expect(colourPixels(pixelsOf(image))).toBeGreaterThan((size * size) / 5);
+    }
+  });
+
+  // Whether a ZWJ sequence shapes into one colour glyph depends on the host's
+  // text stack, so it must come back either in colour or as null, never gray.
+  it('draws a ZWJ sequence in colour or returns null, never a gray image', () => {
+    for (const size of [16, 20, 28]) {
+      const image = renderEmojiImage('\u{1F468}\u200D\u{1F469}\u200D\u{1F467}', size);
+      if (image === null) continue;
       expect(colourPixels(pixelsOf(image))).toBeGreaterThan((size * size) / 5);
     }
   });

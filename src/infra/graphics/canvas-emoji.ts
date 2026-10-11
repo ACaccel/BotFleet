@@ -36,6 +36,10 @@ const PROBE_EMOJI = '\u{1F602}';
  * several glyphs; anything wider than one cell plus this slack is rejected.
  */
 const MAX_ADVANCE_RATIO = 1.25;
+/** Channel spread that separates a coloured pixel from a gray one. */
+const COLOUR_SPREAD = 60;
+/** Share of inked pixels that must be coloured for the glyph to count as a colour emoji. */
+const MIN_COLOURED_SHARE = 0.05;
 const MAX_IMAGE_SIZE = 512;
 const CACHE_LIMIT = 512;
 // Colour bitmap glyphs ignore the fill style; outline glyphs from any
@@ -76,12 +80,19 @@ const drawNative = (text: string, geometry: EmojiCell): Canvas | null => {
   });
   const [first, second] = canvases;
   if (first === undefined || second === undefined) return null;
-  let inked = false;
-  for (let i = 0; i < first.pixels.length; i++) {
-    if (first.pixels[i] !== second.pixels[i]) return null;
-    if (i % 4 === 3 && first.pixels[i] !== 0) inked = true;
+  let inked = 0;
+  let coloured = 0;
+  for (let i = 0; i < first.pixels.length; i += 4) {
+    for (let c = 0; c < 4; c++) if (first.pixels[i + c] !== second.pixels[i + c]) return null;
+    const alpha = first.pixels[i + 3] ?? 0;
+    if (alpha === 0) continue;
+    inked++;
+    const [r = 0, g = 0, b = 0] = first.pixels.subarray(i, i + 3);
+    if (alpha > 128 && Math.max(r, g, b) - Math.min(r, g, b) > COLOUR_SPREAD) coloured++;
   }
-  return inked ? first.canvas : null;
+  // Some hosts shape unsupported sequences into a monochrome glyph that ignores
+  // the fill; a mostly gray result is treated as not covered by the colour font.
+  return inked > 0 && coloured >= inked * MIN_COLOURED_SHARE ? first.canvas : null;
 };
 
 const loadEmojiFont = (): EmojiCell | null => {
