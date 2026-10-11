@@ -5,7 +5,7 @@
 | Install and run locally          | [Local setup](contributing/local-setup.md)                                                |
 | Configure a bot                  | [Configuration](configuration.md)                                                         |
 | Understand the design            | [Architecture](architecture.md)                                                           |
-| Back up or repair messages       | [Message archive](message-archive.md)                                                     |
+| Back up messages                 | [Message archive](message-archive.md)                                                     |
 | Moderate a thread on Nijika      | [Thread moderation](thread-moderation.md)                                                 |
 | Deploy or recover services       | [Deployment](contributing/deployment.md)                                                  |
 | Operate bots and migrate hosts   | [Operations](contributing/operations.md)                                                  |

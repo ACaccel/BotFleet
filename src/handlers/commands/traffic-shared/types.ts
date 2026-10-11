@@ -1,31 +1,14 @@
 /**
- * Cross-cutting types shared by the `/traffic` command family
- * (`/traffic`, `/traffic_me`, `/traffic_user`). Command-specific shapes
- * (e.g. each command's aggregate) stay in the command's own folder.
+ * Types shared by every `/traffic` subcommand. Subcommand-specific shapes stay
+ * next to the subcommand's report builder.
  */
 export type Visibility = 'ephemeral' | 'public';
-export type TrafficRange = '24h' | '7d' | '30d';
-export type BucketGranularity = 'hour' | 'day';
-
-/** A resolved look-back window with its contiguous bucket layout. */
-export interface TimeWindow {
-  readonly startMs: number;
-  readonly endMs: number;
-  readonly bucket: BucketGranularity;
-  readonly bucketMs: number;
-  readonly bucketCount: number;
-}
-
-/** One contiguous time bucket. `count` is mutated during accumulation. */
-export interface BucketCount {
-  readonly startMs: number;
-  count: number;
-}
+export type TrafficRange = '24h' | '7d' | '30d' | '90d' | '365d';
 
 /** Translator function compatible with `bot.translator.t`. */
 export type TFn = (key: string, params?: Record<string, string | number>) => string;
 
-/** Parsed and clamped `visibility` / `range` / `top_n` command options. */
+/** Parsed and clamped `visibility` / `range` / `top_n` options. */
 export interface TrafficOptions {
   readonly visibility: Visibility;
   readonly range: TrafficRange;

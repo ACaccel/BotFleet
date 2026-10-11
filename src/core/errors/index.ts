@@ -14,6 +14,12 @@ export { isTransientNetworkError } from './transient-network-error';
 export { DomainError, type DomainErrorInit, type AnyDomainError } from './domain-error';
 export { ConfigurationError } from './configuration-error';
 export {
+  ArchiveControlError,
+  type ArchiveControlErrorCode,
+  ArchiveAccessError,
+  ArchiveInputError,
+} from './archive-control-error';
+export {
   ExternalServiceError,
   type ExternalServiceErrorCode,
   DatabaseError,

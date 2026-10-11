@@ -14,47 +14,33 @@ Start with [local setup](docs/contributing/local-setup.md) and the
 
 Message archive changes must preserve [exclusive writer ownership, recovery and
 source privacy](docs/message-archive.md), including the separation between
-[periodic scheduling](docs/message-archive.md#periodic-schedule), live capture and repair jobs.
+[periodic scheduling](docs/message-archive.md#periodic-schedule), live capture and the
+[full backup](docs/message-archive.md#full-backup).
 Archive operator workflows belong to the [Discord control plane](docs/message-archive.md#discord-controls);
-keep host migration and unrelated collection cleanup in their existing tools.
-Plan progress and pause controls must remain usable when manifest totals are
-unavailable. Use the standard public progress renderer with current source access
-checks; secondary panels must not take ownership of the original notification.
-Bind pause to the displayed run and exact job so stale controls cannot stop a successor.
-Archive summaries must describe actual impacts across the whole manifest and retain
-destructive changes, unknown targets and mixed states. Follow the
-[compact inspection contract](docs/message-archive.md#review-and-recovery): at most
-five buttons, no select menus, two entries per list page and one changes view. Identify affected sources and safe before/after differences without
-category, source or individual-operation drilldowns, technical pages or downloads.
-Navigation edits its originating public panel. Preserve a live status card only
-for its matching item; background updates must not overwrite a panel browsing
-another target. Confirmation bindings must identify the displayed message without
-moving the job's durable notification reference.
-Public source labels require evidence of audience-safe access; never expose raw
-recovery images, message bodies or signed URLs.
-Guided actions reuse durable jobs and actor-bound confirmations;
-presentation changes must not bypass current-state or source-access checks.
-Keep the four archive entry points and [deletion lifecycle](docs/message-archive.md#discord-controls)
-consistent: stop-and-delete must drain the worker, retain replay tombstones and
-preserve archived messages and recovery data for changes that have not been fully
-rolled back. Single and bulk plan deletion must share the
-[plan eligibility rules](docs/message-archive.md#discord-controls), including conflict,
-journal and active-consumer checks for fully rolled-back plans. Whole-list deletion must
-retain an exact all-pages snapshot, actor/channel/message-bound consent and
-per-item eligibility checks; later arrivals are excluded.
-Bulk deletion must bind consent to an exact guild-scoped snapshot, recheck each
-item, preserve protected plans and keep shared result/resume controls intact.
-Enrichment, apply and rollback conditional writes must retain an indexable native
-ID predicate and the complete-image comparison; preserve recovery order and
-later-write protection. Verify candidate selection with MongoDB execution stats,
+keep host migration, rebuild tools and unrelated collection cleanup in their existing tools.
+Every `/archive` command and button must recheck the `admin` list, `backup_server`, the
+debug channel and msg-archive ownership, and reject privately without changing the
+shared panel. Custom-ID prefixes of retired panels stay registered only to reply
+privately that the panel is stale ([`retired-archive-controls.ts`](src/handlers/retired-archive-controls.ts));
+they perform no action. Only starting a full backup asks for confirmation; it stays bound to the
+operator, channel and message and returns its existing job on replay. Panels render
+from durable records through the shared application renderer; the worker may edit only a
+backup's own panel and must leave an open detail page alone. A full backup keeps its
+cutoff and its own checkpoints through stops and restarts, settles Gateway continuity
+against its first-start origin, and completes with known gaps. A single message's
+reaction failure marks only that message stale. Panels never show message bodies,
+raw errors or signed URLs.
+Conditional writes must retain an indexable native ID predicate and the
+complete-image comparison; verify candidate selection with MongoDB execution stats,
 not only small-fixture correctness. Empty reaction optimizations must retain
 observation fencing before every write wave and remove old membership references.
-Snapshot batching must flush repeated identities, preserve revision-before-message
-order, verify target images before checkpointing, and pass partial-write/resume and
-rollback tests. Progress migrations must preserve mixed historical counters and
-exclude restored work from recent throughput; transient receipt removal must match
-its stored detail hash rather than deleting arbitrary secondary embeds.
-Use the [isolated archive benchmarks](tools/archive-benchmark/README.md) for repair,
+Snapshot batching must flush repeated identities, write each message and its edit
+history in one replacement, verify target images before checkpointing, and pass
+partial-write/resume tests. Message documents follow the schema 3 contract in
+[message archive](docs/message-archive.md#message-documents); a normalizer change
+must keep the schema contract test passing. Progress changes must exclude restored
+work from recent throughput.
+Use the [isolated archive benchmarks](tools/archive-benchmark/README.md) for
 pipeline, CPU-worker and notification comparisons; never use production messages
 as benchmark fixtures. Keep resource limits, durability, dataset identity and
 cache mode comparable, and distinguish mock REST ceilings from live API behavior.
@@ -99,20 +85,23 @@ run on GitHub only. The live `npm run smoke` check is separate from CI; see
 ## Architectural rules
 
 1. **Use translator keys for user-facing text.** CJK literals in
-   `src/handlers/` and `src/plugins/` are rejected. Catalogs live in
+   `src/handlers/`, `src/plugins/`, `src/application/`, `src/bot/` and
+   `src/infra/` (the directories `test/i18n/no-literal-cjk.test.ts` scans) are rejected. Catalogs live in
    `src/i18n/locales/<lang>/{commands,errors,replies}.json`.
    `// i18n-ignore: <reason>` is only for non-user-facing literals.
 2. **Read environment variables through `src/core/config/env.ts`.** Do not
    access `process.env.X` elsewhere, including tools; existing file-log
    overrides have explicit inline exceptions.
-3. **Test new handlers and plugins.** New public functions in `core/` and
-   `plugins/` need happy-path and error-path tests. Repository methods need
+3. **Test new handlers and plugins.** New public functions in `core/`,
+   `application/` and `plugins/` need happy-path and error-path tests. Repository methods need
    integration tests against `mongodb-memory-server`.
 4. **Update affected documentation with the code.** Keep user behavior,
    configuration, public contracts, commands, and matching
    `config.example.json` files current in the same commit. Link to the
    authoritative guide instead of duplicating it. Update `CHANGELOG.md` only
    at release time, following the [release rules](docs/contributing/branching-and-releases.md#releasing).
+
+ESLint also enforces the [layer boundaries](docs/architecture.md#layers-and-boundaries).
 
 ## Reporting a security vulnerability
 

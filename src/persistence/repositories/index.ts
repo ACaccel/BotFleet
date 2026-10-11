@@ -8,14 +8,13 @@
  * Adding a new repo means: write the file, append to the exports
  * below, add a key to `Repos`, and add one line to `buildRepos`.
  */
-import { MongoArchiveRepo, type ArchiveRepo } from './archive.repo';
-import type { GuildConnection } from '../../infra/mongo/connection-manager';
+import type { GuildConnection } from '../connection';
 
 import { MongoActivityRepo, type ActivityRepo } from './activity.repo';
+import { MongoArchiveStatsRepo } from './archive-stats.repo';
+import type { ArchiveStatsRepo } from './archive-stats.types';
 import { MongoFeedSubscriptionRepo, type FeedSubscriptionRepo } from './feed-subscription.repo';
-import { MongoFetchRepo, type FetchReader } from './fetch.repo';
 import { MongoGiveawayRepo, type GiveawayRepo } from './giveaway.repo';
-import { MongoMessageRepo, type MessageReader } from './message.repo';
 import { MongoReplyRepo, type ReplyRepo } from './reply.repo';
 import { MongoTempRoleRepo, type TempRoleRepo } from './temp-role.repo';
 import { MongoThreadModerationRepo, type ThreadModerationRepo } from './thread-moderation.repo';
@@ -27,6 +26,27 @@ export {
 } from './archive.repo';
 
 export { MongoActivityRepo, type ActivityRepo, type ActivityInput } from './activity.repo';
+export { MongoArchiveStatsRepo } from './archive-stats.repo';
+export type {
+  ArchiveStatsRepo,
+  ArchiveStatsScope,
+  ActivitySections,
+  ActivityReport,
+  ComparedActivityReport,
+  ActivitySummary,
+  ActivityHeatmap,
+  AppUsageStats,
+  AuthorRanking,
+  ChannelRanking,
+  EmojiUsage,
+  ReactionSummary,
+  ReactionsGivenStats,
+  ReplyPartnersStats,
+  RetentionStats,
+  StickerUsage,
+  TopReactedMessage,
+  TrendBucket,
+} from './archive-stats.types';
 export {
   MongoFeedSubscriptionRepo,
   type FeedSubscriptionRepo,
@@ -35,9 +55,8 @@ export {
   type FeedSubscriptionUpsertResult,
   type FeedSubscriptionDeleteWhere,
 } from './feed-subscription.repo';
-export { MongoFetchRepo, type FetchReader } from './fetch.repo';
+export { MongoFetchRepo } from './fetch.repo';
 export { MongoGiveawayRepo, type GiveawayRepo, type GiveawayInput } from './giveaway.repo';
-export { MongoMessageRepo } from './message.repo';
 export { MongoReplyRepo, type ReplyRepo } from './reply.repo';
 export { MongoTempRoleRepo, type TempRoleRepo, type TempRoleInput } from './temp-role.repo';
 export { MongoThreadModerationRepo, type ThreadModerationRepo } from './thread-moderation.repo';
@@ -54,11 +73,10 @@ export {
  * handlers can read it.
  */
 export interface Repos {
-  readonly archive?: ArchiveRepo;
   readonly activity: ActivityRepo;
-  readonly fetch: FetchReader;
+  /** Read-only archive statistics; every bot may read through its reader connection. */
+  readonly archiveStats: ArchiveStatsRepo;
   readonly giveaway: GiveawayRepo;
-  readonly message: MessageReader;
   readonly reply: ReplyRepo;
   readonly tempRole: TempRoleRepo;
   readonly threadModeration: ThreadModerationRepo;
@@ -72,35 +90,13 @@ export interface Repos {
  * persistence imports — composition roots register this builder as
  * the implementation of every `*RepoFactory` token.
  */
-export const buildRepos = (conn: GuildConnection, owner?: 'msg-archive'): Repos => ({
-  ...(owner === 'msg-archive' ? { archive: new MongoArchiveRepo(conn, owner) } : {}),
+export const buildRepos = (conn: GuildConnection): Repos => ({
   activity: new MongoActivityRepo(conn),
-  fetch: owner === 'msg-archive' ? new MongoFetchRepo(conn) : buildFetchReader(conn),
+  archiveStats: new MongoArchiveStatsRepo(conn),
   giveaway: new MongoGiveawayRepo(conn),
-  message: owner === 'msg-archive' ? new MongoMessageRepo(conn) : buildMessageReader(conn),
   reply: new MongoReplyRepo(conn),
   tempRole: new MongoTempRoleRepo(conn),
   threadModeration: new MongoThreadModerationRepo(conn),
   userApiSetting: new MongoUserApiSettingRepo(conn),
   feedSubscription: new MongoFeedSubscriptionRepo(conn),
 });
-
-/** Reader objects expose no mutation function to other bot composition roots. */
-const buildMessageReader = (conn: GuildConnection): MessageReader => {
-  const repo = new MongoMessageRepo(conn);
-  return {
-    countAll: repo.countAll.bind(repo),
-    findRecentByChannel: repo.findRecentByChannel.bind(repo),
-    findByMessageId: repo.findByMessageId.bind(repo),
-    findByTimestampRange: repo.findByTimestampRange.bind(repo),
-    findByChannelAndTimestampRange: repo.findByChannelAndTimestampRange.bind(repo),
-    findExistingMessageIds: repo.findExistingMessageIds.bind(repo),
-  };
-};
-const buildFetchReader = (conn: GuildConnection): FetchReader => {
-  const repo = new MongoFetchRepo(conn);
-  return {
-    listChannelIds: repo.listChannelIds.bind(repo),
-    findByChannelId: repo.findByChannelId.bind(repo),
-  };
-};

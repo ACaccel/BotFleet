@@ -1,3 +1,4 @@
+import { ArchiveBackpressureError } from '../../../core/archive/errors';
 import { performance } from 'node:perf_hooks';
 
 interface WriterSnapshot {
@@ -26,7 +27,8 @@ export class ArchiveSerialWriter {
   public constructor(private readonly limit = 1000) {}
   public async run<T>(operation: () => Promise<T>): Promise<T> {
     if (this.stopped) throw new Error('Archive writer is draining');
-    if (this.pending >= this.limit) throw new Error('Archive writer queue is full');
+    if (this.pending >= this.limit)
+      throw new ArchiveBackpressureError('Archive writer queue is full');
     this.pending += 1;
     this.metrics.peakPending = Math.max(this.metrics.peakPending, this.pending);
     const queuedAt = performance.now();

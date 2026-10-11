@@ -15,6 +15,8 @@ export interface DiscoveryGap {
   pass: DiscoveryPass | 'history';
   channelId?: string;
   reason: string;
+  /** Discord rejected the request for lack of access rather than failing transiently. */
+  forbidden?: true;
 }
 export interface DiscoveryPage {
   locations: DiscoveryLocation[];
@@ -150,7 +152,12 @@ export async function discoverGuild(
         before = next;
       }
     } catch (error) {
-      gaps.push({ pass, channelId: parentId, reason: String(error) });
+      gaps.push({
+        pass,
+        channelId: parentId,
+        reason: String(error),
+        ...(isForbiddenDiscordError(error) ? { forbidden: true } : {}),
+      });
       return false;
     }
   };
@@ -174,10 +181,66 @@ export async function discoverGuild(
   };
 }
 
+/** Missing permissions are stable coverage limits until an administrator changes them. */
+export const PERMISSION_GAPS = [
+  'missing-view-channel',
+  'missing-read-message-history',
+  'missing-connect',
+] as const;
+export type PermissionGap = (typeof PERMISSION_GAPS)[number];
+/**
+ * The bot's own member is not cached yet, so permissions are unknown. Unlike a
+ * missing permission this is transient and remains a blocking failure.
+ */
+const MEMBER_UNAVAILABLE = 'bot-member-unavailable';
+const UNSUPPORTED_TYPE = /^unsupported-channel-type:/;
+
+export function isPermissionGap(reason: string): reason is PermissionGap {
+  return (PERMISSION_GAPS as readonly string[]).includes(reason);
+}
+
+/** Discord API access denials: Missing Access / Missing Permissions, or a 403 API error. */
+export function isForbiddenDiscordError(
+  error: unknown,
+): error is { readonly code: number; readonly status?: unknown } {
+  // HTTP-only 403s (proxies, gateways) carry no API code and stay blocking.
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+  if (typeof error.code !== 'number') return false;
+  return (
+    error.code === 50001 || error.code === 50013 || ('status' in error && error.status === 403)
+  );
+}
+
+/**
+ * Known gaps describe a stable coverage limit (permissions, channel type or a
+ * denied thread listing) that retrying cannot close; every other gap is blocking.
+ */
+export function isKnownDiscoveryGap(gap: DiscoveryGap): boolean {
+  switch (gap.pass) {
+    case 'history':
+      return isPermissionGap(gap.reason);
+    case 'channels':
+      return UNSUPPORTED_TYPE.test(gap.reason);
+    case 'active':
+      return false;
+    case 'public':
+    case 'private':
+    case 'joined-private':
+      // Listing archived threads requires parent access; a denial is a permission limit.
+      return gap.forbidden === true;
+    default: {
+      const unreachable: never = gap.pass;
+      throw new Error(`Unknown discovery pass: ${String(unreachable)}`);
+    }
+  }
+}
+
 /** History access is checked before empty pages can be treated as exhausted. */
-export function historyPermissionGap(channel: GuildBasedChannel): string | undefined {
+export function historyPermissionGap(
+  channel: GuildBasedChannel,
+): PermissionGap | typeof MEMBER_UNAVAILABLE | undefined {
   const member = channel.guild.members.me;
-  if (member === null) return 'bot-member-unavailable';
+  if (member === null) return MEMBER_UNAVAILABLE;
   const permissions = channel.permissionsFor(member);
   if (permissions === null || !permissions.has(PermissionFlagsBits.ViewChannel))
     return 'missing-view-channel';

@@ -72,12 +72,9 @@ Readiness checks MongoDB and the active process after Discord, repositories and
 plugins initialize; enabled archive history scans continue in the background. It verifies
 startup only. Systemd restarts crashed processes.
 
-For msg-archive, resuming a paused repair is a separate control operation after
-readiness. A continuation timeout does not undo a successful deployment. Inspect
-whether the original plan already has an active job before retrying only the
-continuation. Large-journal operator verification budgets are described in
-[archive controls](../message-archive.md#discord-controls); they do not bypass
-manifest or confirmation checks.
+For msg-archive, a full backup interrupted by the deployment continues on its own
+after readiness with its original cutoff and checkpoints; a stopped one needs
+**Resume** in [archive controls](../message-archive.md#discord-controls).
 
 ## Initial cutover
 
@@ -107,9 +104,9 @@ data, settings, environments and releases. For host transfer, follow
 
 Follow the [archive upgrade notes](../upgrading.md#message-archive-worker-and-tools)
 and [ownership/recovery procedure](../message-archive.md#capacity-and-recovery).
-Code deployment does not authorize applying a production repair manifest.
+Code deployment does not authorize starting a production full backup.
 
 Configure the guild debug channel and register `/archive` after adding `archive` to msg-archive's local
-`commands` list: `npm run register -- -t msg-archive`. See
+`commands` list: `npm run register -t msg-archive`. See
 [archive control setup](../message-archive.md#discord-controls); existing installations
 without saved schedule settings start with periodic scans disabled.

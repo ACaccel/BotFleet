@@ -253,7 +253,7 @@ describe('catalog runtime behaviour', () => {
   });
 
   it('resolves every errors:db.* DatabaseError messageKey with no leftover placeholder', async () => {
-    // The five DatabaseErrorCode sub-codes map to these keys via
+    // The six DatabaseErrorCode sub-codes map to these keys via
     // `error-translator.i18nKeyFor`. `databaseErrorFrom` passes no
     // `messageParams`, so none of these texts may carry an interpolation
     // slot — otherwise a raw `{{...}}` token would leak into the reply.
@@ -263,6 +263,7 @@ describe('catalog runtime behaviour', () => {
     const dbKeys = [
       'errors:db.duplicate_key',
       'errors:db.timeout',
+      'errors:db.query_timeout',
       'errors:db.network',
       'errors:db.validation',
       'errors:db.unavailable',

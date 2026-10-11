@@ -1,12 +1,5 @@
-export interface PeriodicHistory {
-  version?: 2;
-  policyHash?: string;
-  lastCutoff: number;
-  windowMs: number;
-  scanned: number;
-  elapsedMs: number;
-  samples: number;
-}
+import type { PeriodicHistory } from '../../../core/archive/types';
+
 interface PeriodicEstimate {
   total?: number;
   rates: number[];

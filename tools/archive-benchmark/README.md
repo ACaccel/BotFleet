@@ -1,68 +1,16 @@
 # Archive performance benchmarks
 
-Developer validation for the actual `ArchiveRepairService` audit, plan and verify paths.
-The harness creates and destroys a dedicated localhost `mongodb-memory-server`
-instance. It accepts no database URI, Discord token, operator configuration or
-production input. Nothing is copied from a running archive.
+Developer probes for the archive worker end to end, the history pipeline, REST
+admission, CPU normalization, repository persistence, capacity sampling, progress
+publication and statistics queries. They use synthetic
+data and disposable resources only; they accept no database URI, Discord token,
+operator configuration or production input.
 
-Run with the existing project runtime, then compare the JSON report's three-run
-median and range against the same dataset identity, Mongo version, index version,
-write concern and cache mode:
-
-```bash
-node scripts/runtime.mjs exec ts-node tools/archive-benchmark/run.ts \
-  --count 100000 --scenario clean --runs 3 --cache after-seed \
-  --output /tmp/archive-baseline.json
-
-node scripts/runtime.mjs exec vitest run --project tools tools/archive-benchmark
-```
-
-Use counts `100000`, `1000000`, and `5500000` for the planned scales. Smaller
-counts are useful for smoke validation. Scenarios are `clean`, `bot-heavy`,
-`duplicate-conflicts`, `old-timestamps`, `reaction-heavy`, `many-threads`,
-and `live-updates`. Only run one benchmark at a time on a
-shared host. Large dirty scenarios produce repair before/after images and can
-take substantially longer than clean scenarios.
-
-The default database budget is 1024 MiB. Increase `--max-db-mib` explicitly after
-reviewing shared-host capacity. A conservative six-times-document-size preflight
-estimate and free-disk reserve reject workloads outside the selected budget.
-Seed batches stop at 500 documents or 4 MiB. Mongo uses a 0.25 GiB WiredTiger
-cache, four database connections, and `w:majority,j:true`; repair execution is
-serial. These are benchmark parameters, not operator defaults.
-
-`after-seed` measures after dataset insertion and index preparation, without an
-extra warm-up audit. `warm` adds one unmeasured audit. `mongo-cold` restarts only the
-disposable mongod before each measured phase, clearing its WiredTiger cache.
-All modes retain OS cache state; none claims an OS-cold read or drops host caches.
-Mongo 8.2.6 is pinned and may require the existing
-memory-server binary download on first use. The temporary database lives under
-`/tmp` and is removed on normal completion or a handled error. Force-killing the
-process can leave its disposable directory behind.
-
-Reports include synthetic identity, implementation hash, indexes, cgroup limits,
-durability, phase timing, DB command counts and logical BSON bytes, Node CPU,
-sampled memory peaks, event-loop delay, GC, storage sizes and synthetic sort
-execution stats. Command/reply payloads and per-message IDs are never retained in
-metrics. BSON size monitoring has overhead; use the same instrumentation on both
-sides of a comparison. Logical BSON bytes are not wire traffic. Node metrics do
-not include the Mongo process or other bots. On Linux, a separate 100 ms sampler
-records the disposable mongod's CPU and RSS using its server-reported PID.
-
-`--batch-documents 100`, `500` or `1000` compares planning-journal batches with a
-4 MiB target. A single larger recovery image uses a singleton batch up to the
-existing 15 MiB safety limit. The product default remains 500; this developer flag
-does not change operator configuration. Verify runs against the planned manifest
-without applying it, so unapplied repairs or absent Discord coverage can truthfully
-return partial. It measures the verification path, not successful coverage acceptance.
-
-This DB harness does not exercise Discord quotas, real permission discovery,
-history fetching, normal/burst membership REST requests, inbox backlog or
-shutdown drain. Permission loss and discovery races are covered by isolated tests.
-Reaction data tests serialization costs, and thread data tests channel
-cardinality. `live-updates` issues at most 100 synthetic concurrent DB edits per
-phase; it is not a gateway pipeline test. The report states these limitations.
-Operator-facing workflows remain documented in
+The repair-service benchmark (`run.ts`) and the durable enrichment batching
+comparison (`enrichment.ts`) measured the one-shot repair workflow, which is
+retired; their recorded results remain in the
+[performance report](../../docs/contributing/archive-performance-results.md) as
+history. Operator-facing workflows are documented in
 [`docs/message-archive.md`](../../docs/message-archive.md).
 
 ## Pipeline, CPU and publication probes
@@ -93,13 +41,73 @@ workers, and receive no credentials or database handles.
 
 The notification probe keeps normalization and snapshot collection identical,
 alternates enabled/disabled delivery, excludes a warmup pair and reports three-run
-medians. It uses the actual notifier/renderer with a 5-second logical cadence,
+medians. It uses the actual notifier and full-backup panel renderer with a 5-second logical cadence,
 isolated majority/journaled progress writes and mock payload encoding; remote
 Discord latency is outside its claim. In-flight publication,
 retry, coalescing and terminal drain behavior are tested independently.
 
 Results and adoption decisions are recorded in the
 [performance report](../../docs/contributing/archive-performance-results.md).
+
+## Worker, re-observation and storage probes
+
+`worker.ts` runs the real `ArchiveWorker`, repository and a disposable MongoDB 8.2.6
+(majority/journaled writes, 0.25 GiB cache) against a synthetic guild of voice
+channels served by `discord-fake.ts`. The fake REST owner mirrors `@discordjs/rest`:
+requests of one route and channel run one after another, each taking `--latency`
+milliseconds, while different routes and channels run in parallel. It sends no HTTP.
+The probe chdirs into an empty temporary directory so the storage monitor's walk
+stays out of the measurement.
+
+```bash
+node scripts/runtime.mjs exec ts-node --transpile-only tools/archive-benchmark/worker.ts /tmp/archive-worker.json
+node scripts/runtime.mjs exec ts-node --transpile-only tools/archive-benchmark/worker.ts /tmp/archive-segments.json --scenario segments --concurrency 4
+```
+
+Scenarios (`--scenario`, comma-separated): `full` confirms and runs a full backup of
+an empty archive; `periodic` runs the next periodic pass, whose overlap window
+(`overlap_minutes: 1440`) revisits every message; `live` decodes MESSAGE_CREATE
+and MESSAGE_REACTION_ADD packets and drains them; `segments` splits the largest
+channel into adjacent snowflake ranges that share its SDK handlers (`shared`) or not
+(`independent`), the measurement behind cancelling channel segmentation (C9). Each
+scenario verifies stored reaction lists against the source.
+Sizes: `--largest` (2000) and `--small` (300) messages in one large and
+`--small-channels` (3) small channels, `--reaction-rate` (0.1), `--concurrency`
+(2), `--runs` (3), `--live-creates` (100), `--live-reactions` (50), `--segments`
+(`1,2,4`). `--channel-mutex` restores one admission resource per channel for
+comparison.
+
+`reobserve.ts` times the same fenced write of `observedAt` on 20,000 stored messages
+as a replacement and as a `$set` in 100-document bulk writes, then the repository's
+batch path on identical re-observations (`--count`, `--runs`). `storage.ts` builds a
+synthetic static tree (`--files`, 100,000) beside a live MongoDB data directory,
+times a full walk and the stable/live sampler, and measures the latency of small
+reservations every 25 ms while samples expire (`--max-age`, 2000 ms; `--seconds`,
+20).
+
+```bash
+node scripts/runtime.mjs exec ts-node --transpile-only tools/archive-benchmark/reobserve.ts /tmp/archive-reobserve.json
+node scripts/runtime.mjs exec ts-node --transpile-only tools/archive-benchmark/storage.ts /tmp/archive-storage.json
+```
+
+## Statistics query probe
+
+`stats.ts` measures the read-only `ArchiveStatsRepo` that backs `/traffic`. It loads
+a deterministic synthetic guild (text channels, threads, forum posts, a skewed
+author mix, replies, mentions, reactions with membership chunks, custom emoji,
+stickers, bots and interaction records) into a disposable MongoDB 8.2.6, then times
+the overview and member `activity` queries and the reactions-given, application,
+emoji and sticker queries for 7-, 30- and 365-day windows (one warmup and three
+measured runs each, all visible channels in the `$in` list):
+
+```bash
+node scripts/runtime.mjs exec ts-node --transpile-only tools/archive-benchmark/stats.ts /tmp/archive-stats.json --messages 1000000 --days 400
+```
+
+`--messages` and `--days` size the dataset (messages are spread evenly over the
+days); `--cache-gb` sets the WiredTiger cache (default 1). Query time grows with the
+messages inside the window, not the collection size, because every query is an
+index range on `createdTimestamp`.
 
 ### Reservation reclamation comparison
 
@@ -130,30 +138,3 @@ const reserve = ArchivePipelineBudget.prototype.reserve;
 })().catch(error => { console.error(error); process.exitCode = 1; });
 '
 ```
-
-## Durable enrichment batching comparison
-
-Compare the real archive repository and repair service using a disposable local
-MongoDB 8.2.6 server:
-
-```bash
-node scripts/runtime.mjs exec ts-node tools/archive-benchmark/enrichment.ts \
-  --count 1200 --runs 3 --output /tmp/archive-enrichment.json
-```
-
-The harness accepts no database URI. Each trial uses a fresh database, seeds the
-same synthetic human messages, edits 10% of their content, and observes empty
-reaction memberships. The serial baseline writes each snapshot and its empty
-reaction publication separately. The batched path prepares 100-message pages,
-combines empty-membership freshness with the snapshot, and uses the actual durable
-repair journal and ordered bulk writes. Trial order alternates to reduce order
-bias; at least three trials per mode are required.
-
-The measured window includes repository enrichment and journal writes, with
-separate accumulated journal and write/readback/acknowledgement timings. It excludes
-seeding, planning, final verification, and Discord REST. Every trial must pass the
-real repair verifier, preserve the expected revision count, and produce the same
-final message digest. The JSON report includes elapsed-time and throughput ranges,
-MongoDB command counts, journal-operation counts, source hashes, and runtime
-versions. These results measure storage throughput for this workload and do not
-predict end-to-end Discord backup speed.

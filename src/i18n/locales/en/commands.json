@@ -42,52 +42,6 @@
       }
     }
   },
-  "db_list_message": {
-    "description": "List message records for a specific channel, date, and hour",
-    "options": {
-      "channel": {
-        "description": "The channel/thread to query"
-      },
-      "date": {
-        "description": "Date (YYYY-MM-DD)"
-      },
-      "print": {
-        "description": "Whether to post directly as messages (yes: messages, no: text file, default no)",
-        "choices": {
-          "no": "Text file (default)",
-          "yes": "Messages"
-        }
-      },
-      "hour": {
-        "description": "Hour (0-23)"
-      }
-    }
-  },
-  "emoji_frequency": {
-    "description": "Show emoji usage frequency",
-    "options": {
-      "frequency": {
-        "description": "Frequency order (optional)",
-        "choices": {
-          "asc": "Lowest-N frequency",
-          "desc": "Highest-N frequency"
-        }
-      },
-      "type": {
-        "description": "Animated or static (optional)",
-        "choices": {
-          "animated": "Animated",
-          "static": "Static"
-        }
-      },
-      "top_n": {
-        "description": "Top n (optional, max: 30)"
-      },
-      "last_n_months": {
-        "description": "Search the past n months (optional, max: 24)"
-      }
-    }
-  },
   "gay": {
     "description": "Are they gay",
     "options": {
@@ -183,24 +137,6 @@
       }
     }
   },
-  "sticker_frequency": {
-    "description": "Show sticker usage frequency",
-    "options": {
-      "frequency": {
-        "description": "Frequency order (optional)",
-        "choices": {
-          "asc": "Lowest-N frequency",
-          "desc": "Highest-N frequency"
-        }
-      },
-      "top_n": {
-        "description": "Top n (optional, max: 30)"
-      },
-      "last_n_months": {
-        "description": "Search the past n months (optional, max: 24)"
-      }
-    }
-  },
   "talk": {
     "description": "Make the bot speak",
     "options": {
@@ -238,306 +174,26 @@
     "description": "Weather forecast (Taipei)"
   },
   "archive": {
-    "description": "Manage message archive jobs and background schedules",
-    "groups": {
-      "schedule": {
-        "description": "Control this guild's scheduled history scans",
-        "subcommands": {
-          "status": {
-            "description": "Show scheduled backup settings and current or last scan",
-            "options": {
-              "page": {
-                "description": "Source and issue detail page (1–100000, 3 per page)"
-              }
-            }
-          },
-          "enable": {
-            "description": "Enable scheduled backups and optionally set the interval",
-            "options": {
-              "minutes": {
-                "description": "Minutes between scans (optional, 1–10080; keeps current interval when omitted)"
-              }
-            }
-          },
-          "disable": {
-            "description": "Pause background history scans; live capture continues"
-          },
-          "interval": {
-            "description": "Set the interval without changing enabled status",
-            "options": {
-              "minutes": {
-                "description": "Minutes between scans (1–10080)"
-              }
-            }
-          }
-        }
-      }
-    },
+    "description": "Manage msg-archive's full backup and periodic backup",
     "subcommands": {
-      "jobs": {
-        "description": "List active or recent archive jobs",
-        "options": {
-          "scope": {
-            "description": "Active jobs or all recent jobs",
-            "choices": {
-              "active": "Active jobs",
-              "all": "All recent jobs"
-            }
-          },
-          "before": {
-            "description": "Pagination cursor from the previous job list"
-          }
-        }
-      },
-      "audit": {
-        "description": "Audit archived data without changing messages"
-      },
-      "plan": {
-        "description": "Create a reviewable repair plan"
-      },
-      "inspect": {
-        "description": "Read a backup plan summary, changes or technical details",
-        "options": {
-          "run_id": {
-            "description": "Repair plan or run ID"
-          },
-          "after_sequence": {
-            "description": "Continue after this operation sequence; selects changes by default"
-          },
-          "limit": {
-            "description": "Operations per page (1–5, default: 5; fewer when content is long)"
-          },
-          "view": {
-            "description": "Summary, readable changes, or shared technical details",
-            "choices": {
-              "summary": "Summary",
-              "changes": "Changes",
-              "technical": "Technical details"
-            }
-          },
-          "category": {
-            "description": "Filter changes by operation category",
-            "choices": {
-              "reset-progress": "Reset backup progress",
-              "remove-duplicate-progress": "Remove duplicate progress",
-              "repair-message-time": "Repair message timestamps",
-              "merge-duplicate-messages": "Merge duplicate messages",
-              "exclude-by-policy": "Exclude by policy",
-              "quarantine-data": "Quarantine data",
-              "unknown": "Unknown changes"
-            }
-          }
-        }
-      },
-      "apply": {
-        "description": "Confirm and apply a repair plan",
-        "options": {
-          "run_id": {
-            "description": "Repair plan or run ID"
-          }
-        }
+      "backup": {
+        "description": "Start, resume or stop the full backup"
       },
       "status": {
-        "description": "Locate or refresh the shared backup status",
+        "description": "Show archive status in one panel"
+      },
+      "schedule": {
+        "description": "Show or change the periodic backup schedule",
         "options": {
-          "job_id": {
-            "description": "Archive job ID"
+          "enabled": {
+            "description": "Enable or disable periodic backup (unchanged when omitted)"
           },
-          "page": {
-            "description": "Source and issue detail page (1–100000, 3 per page)"
+          "minutes": {
+            "description": "Minutes between passes, 1–10080 (unchanged when omitted)"
           }
         }
-      },
-      "cancel": {
-        "description": "Request archive job cancellation",
-        "options": {
-          "job_id": {
-            "description": "Archive job ID"
-          }
-        }
-      },
-      "resume": {
-        "description": "Confirm and resume a repair run",
-        "options": {
-          "run_id": {
-            "description": "Repair plan or run ID"
-          }
-        }
-      },
-      "verify": {
-        "description": "Verify a repair run",
-        "options": {
-          "run_id": {
-            "description": "Repair plan or run ID"
-          }
-        }
-      },
-      "accept": {
-        "description": "Confirm acceptance; keep recovery data for 72 more hours",
-        "options": {
-          "run_id": {
-            "description": "Repair plan or run ID"
-          }
-        }
-      },
-      "rollback": {
-        "description": "Confirm restoration of a repair run",
-        "options": {
-          "run_id": {
-            "description": "Repair plan or run ID"
-          }
-        }
-      },
-      "refresh-attachment": {
-        "description": "Refresh attachment metadata after checking source access",
-        "options": {
-          "channel": {
-            "description": "Original message channel"
-          },
-          "message_id": {
-            "description": "Original message ID"
-          },
-          "attachment_id": {
-            "description": "Attachment ID"
-          }
-        }
-      },
-      "purge-jobs": {
-        "description": "Delete queued and finished job records; preserve running jobs",
-        "options": {
-          "confirm": {
-            "description": "Confirm deletion of this guild's queued and finished job records",
-            "choices": {
-              "delete": "Delete records and queued jobs"
-            }
-          }
-        }
-      },
-      "backup": {
-        "description": "Prepare a one-shot backup plan; review and confirm before starting"
-      },
-      "plans": {
-        "description": "Browse backup plans and review, execute or delete them"
       }
     }
-  },
-  "archive_ui": {
-    "filter": "Filter change type",
-    "unavailable": "unknown",
-    "plan_not_applied": "Plan: {{state}} · Archive data has not been modified by this plan.",
-    "scope": "Scope: guild {{guild}} · History cutoff {{cutoff}}",
-    "policy_unavailable": "Saved source policy: unavailable; scope needs review.",
-    "history_scope_pending": "Sources for history backfill: discovery is pending.",
-    "history_scope_complete": "History discovery is complete; see the result for covered sources.",
-    "history_scope_unknown": "Sources for history backfill: exact coverage is unavailable.",
-    "timestamps_only": "This plan only repairs stored message timestamps.",
-    "existing_scope": "Existing sources needing changes: {{sources}} · {{operations}} operations",
-    "identity_unavailable": "Source identity unavailable for {{count}} operations.",
-    "summary_category": "{{category}}: {{operations}}{{effects}}",
-    "mutation_insert": "insert {{count}}",
-    "mutation_update": "update {{count}}",
-    "mutation_delete": "delete {{count}}",
-    "mutation_unknown": "unknown impact {{count}}",
-    "effect_reset-progress": "Progress reset clears the saved cursor for later history reconciliation.",
-    "effect_remove-duplicate-progress": "Duplicate progress removal keeps the primary record for each source.",
-    "effect_merge-duplicate-messages": "Message merge may update retained records and remove duplicate backup records.",
-    "effect_exclude-by-policy": "Policy exclusion removes affected backup data; revision and reaction records may be affected.",
-    "effect_quarantine-data": "Quarantine preserves evidence and may remove records from their original collection.",
-    "effect_unknown": "Impact is unknown; review these changes before confirming.",
-    "progress_only": "This repair plan has no operation deleting backed-up messages.",
-    "plan_issues": "Plan checks: {{unresolved}} unresolved records; {{issues}} reported issues. Backup integrity has not been verified.",
-    "historical_issues": "Historical plan checks: {{unresolved}} unresolved records; {{issues}} issues. See the current verification result.",
-    "start_expiry": "Plan can start until {{date}} ({{relative}}).",
-    "groups_heading": "Change groups · {{category}}",
-    "group_title": "{{action}} · {{target}}",
-    "group_counts": "{{operations}} operations · {{sources}} distinct sources",
-    "states": "Status counts: {{states}}",
-    "impact": "Impact: {{effect}}",
-    "examples": "Source examples: {{sources}}",
-    "more_sources": "{{count}} additional sources; open the full source list.",
-    "group_open": "All sources in group {{index}}",
-    "source_open": "Changes for source {{index}}",
-    "sources_heading": "All sources in this group",
-    "source_operations": "{{count}} operations for this source",
-    "filtered_total": "{{operations}} matching operations in the full plan.",
-    "statistics_unavailable": "Cannot retrieve the full-scope statistics. Reopen the panel to retry.",
-    "back": "Back",
-    "operation_heading": "Change {{index}} | {{source}}",
-    "action_target": "Action: {{action}} · Target: {{target}}",
-    "state": "Status: {{state}}",
-    "operation_range": "Visible change numbers: {{first}}–{{last}}",
-    "operation_open": "View change {{index}}",
-    "collection_fetches": "source backup progress records",
-    "collection_messages": "backed-up messages",
-    "collection_archive_revisions": "message edit records",
-    "collection_archive_reactions": "reaction records",
-    "collection_archive_quarantine": "quarantine evidence records",
-    "collection_unknown": "unidentified backup data",
-    "effect_progress_insert": "Adds a backup progress record; does not delete backed-up messages.",
-    "effect_progress_update": "Changes backup progress data; does not delete backed-up messages.",
-    "effect_progress_delete": "Removes a backup progress record; does not delete backed-up messages.",
-    "effect_record_insert": "Adds {{target}}.",
-    "effect_record_update": "Updates {{target}}.",
-    "effect_record_delete": "Deletes {{target}}.",
-    "effect_quarantine_move": "Removes the message record from its original collection after preserving quarantine evidence.",
-    "effect_quarantine_evidence": "Adds quarantine evidence; this operation does not remove the original record.",
-    "record": "Record: {{record}}",
-    "field_lastMessageId": "Resume message position",
-    "field_timestamp": "Message time",
-    "field_editedTimestamp": "Edit time",
-    "value_unset": "not set",
-    "value_unknown": "unavailable",
-    "diff": "{{field}}: {{before}} → {{after}}",
-    "reason": "Reason: {{reason}}",
-    "message_link": "Message: {{url}}",
-    "message_id": "Message ID: {{id}}",
-    "policy_rule": "Excluded by policy rule: {{rule}}",
-    "quarantine_reason": "Quarantine reason: {{reason}}",
-    "storage_number": "number",
-    "storage_string": "text",
-    "diff_unavailable": "The earlier value is unavailable in this saved plan.",
-    "survivor": "Retained record: {{record}}",
-    "survivor_unknown": "The retained record relationship could not be verified.",
-    "dependency": "Wait for change {{index}} · {{state}}",
-    "dependency_unknown": "A dependency could not be identified. See technical details.",
-    "technical_run": "Guild {{guild}} · Created {{created}} · Cutoff {{cutoff}}",
-    "technical_version": "Journal version {{version}} · Recovery journal {{size}} bytes",
-    "technical_operation": "Change {{index}} · operation ID {{id}}",
-    "download_scope": "Safe JSON covers these {{count}} operations only. Choose download to receive a private file.",
-    "download": "Download safe JSON",
-    "download_ready": "Safe metadata for {{count}} operations. Recovery images and message content are excluded.",
-    "record_type_impact": "{{target}}: {{effects}}",
-    "record_types_unavailable": "Exact affected data types are unavailable; deletion and quarantine impacts need review.",
-    "detail_section": "Detail section {{page}}/{{total}}",
-    "download_permission": "The bot needs Attach Files permission in this channel to download safe JSON. Update the permission, then reopen the panel.",
-    "dependencies_unavailable": "Some dependency relationships could not be retrieved; this list is incomplete.",
-    "quarantine_invalid-channel-cursor": "The source progress record has an invalid source identity.",
-    "quarantine_unknown": "The exact diagnosis is unavailable; see technical details.",
-    "rollback_title": "Review rollback of this run",
-    "rollback_original": "Original repair plan: {{count}} operations. Counts below are historical candidates.",
-    "rollback_type": "{{target}}: {{effects}}",
-    "rollback_remove": "remove originally inserted {{count}}",
-    "rollback_restore_update": "restore updated {{count}}",
-    "rollback_restore_delete": "restore deleted {{count}}",
-    "rollback_eligible_unknown": "Currently recoverable counts and newer-change conflicts are not yet known. Records changed since this run may be retained as conflicts.",
-    "effect_progress_combined": "Progress resets clear cursors; duplicate removal retains primary records.",
-    "quarantine_invalid-identity-or-timestamp": "The message identity or timestamp is invalid.",
-    "quarantine_large-duplicate-group": "The duplicate group is too large to merge safely.",
-    "quarantine_conflicting-channel-id": "Duplicate records disagree on the source identity.",
-    "quarantine_conflicting-user-id": "Duplicate records disagree on the author identity.",
-    "quarantine_conflicting-timestamp": "Duplicate records disagree on the message time.",
-    "policy_exclusion_reason": "Policy exclusion: {{reason}}",
-    "policy_bot-not-allowlisted": "The source bot is absent from the saved allowlist.",
-    "policy_webhook-not-allowlisted": "The source webhook is absent from the saved allowlist.",
-    "policy_rule-exclude": "A saved source rule excludes this data.",
-    "policy_guild-out-of-scope": "The guild is outside the saved archive policy scope.",
-    "policy_unknown": "The exact failed policy condition is unavailable.",
-    "quarantine_conflicting-message-data": "Duplicate records disagree on message data.",
-    "name_coverage_unavailable": "Current names: coverage not counted.",
-    "rollback_retain_revisions": "retain {{count}} observed edit versions",
-    "effect_progress_reset": "Clears the saved resume position for history reconciliation; this operation only changes progress data and does not delete backed-up messages.",
-    "confirm_actor": "Approval: {{actor}} only.",
-    "plan_not_verified": "Backup integrity will be checked after execution."
   },
   "feed": {
     "description": "Manage social feed subscriptions",
@@ -792,9 +448,19 @@
   "traffic": {
     "description": "View message activity statistics",
     "subcommands": {
-      "me": {
-        "description": "Show your own message-activity stats",
+      "overview": {
+        "description": "Show server activity: counts, trend, rankings, heat map and top messages",
         "options": {
+          "range": {
+            "description": "Look-back window (optional, default: 7d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
           "visibility": {
             "description": "Who can see the reply (optional, default: ephemeral)",
             "choices": {
@@ -802,24 +468,82 @@
               "public": "Everyone"
             }
           },
+          "top_n": {
+            "description": "How many entries to rank (optional, 1-10, default: 10)"
+          }
+        }
+      },
+      "channel": {
+        "description": "Show one channel's activity",
+        "options": {
+          "channel": {
+            "description": "Channel, forum or thread to look up"
+          },
+          "include_threads": {
+            "description": "Include the threads under the channel (optional, default: true)"
+          },
           "range": {
             "description": "Look-back window (optional, default: 7d)",
             "choices": {
               "24h": "Last 24 hours",
               "7d": "Last 7 days",
-              "30d": "Last 30 days"
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: ephemeral)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
             }
           },
           "top_n": {
-            "description": "How many top channels to rank (optional, 1-25, default: 10)"
+            "description": "How many entries to rank (optional, 1-10, default: 10)"
+          }
+        }
+      },
+      "me": {
+        "description": "Show your own activity",
+        "options": {
+          "range": {
+            "description": "Look-back window (optional, default: 7d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: ephemeral)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
+            }
+          },
+          "top_n": {
+            "description": "How many entries to rank (optional, 1-10, default: 10)"
           }
         }
       },
       "user": {
-        "description": "Show a specified user's message-activity stats",
+        "description": "Show a member's activity",
         "options": {
           "user": {
-            "description": "User to look up"
+            "description": "Member to look up"
+          },
+          "range": {
+            "description": "Look-back window (optional, default: 7d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
           },
           "visibility": {
             "description": "Who can see the reply (optional, default: ephemeral)",
@@ -828,22 +552,27 @@
               "public": "Everyone"
             }
           },
-          "range": {
-            "description": "Look-back window (optional, default: 7d)",
-            "choices": {
-              "24h": "Last 24 hours",
-              "7d": "Last 7 days",
-              "30d": "Last 30 days"
-            }
-          },
           "top_n": {
-            "description": "How many top channels to rank (optional, 1-25, default: 10)"
+            "description": "How many entries to rank (optional, 1-10, default: 10)"
           }
         }
       },
-      "overview": {
-        "description": "Show guild message-traffic charts and statistics",
+      "apps": {
+        "description": "Show command and app usage",
         "options": {
+          "app": {
+            "description": "Only this bot (optional)"
+          },
+          "range": {
+            "description": "Look-back window (optional, default: 7d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
           "visibility": {
             "description": "Who can see the reply (optional, default: ephemeral)",
             "choices": {
@@ -851,16 +580,88 @@
               "public": "Everyone"
             }
           },
+          "top_n": {
+            "description": "How many entries to rank (optional, 1-10, default: 10)"
+          }
+        }
+      },
+      "emoji": {
+        "description": "Show use of this server's custom emoji",
+        "options": {
+          "order": {
+            "description": "Order of the ranking (optional, default: most)",
+            "choices": {
+              "most": "Most used first",
+              "least": "Least used first"
+            }
+          },
+          "kind": {
+            "description": "Static or animated emoji (optional, default: all)",
+            "choices": {
+              "all": "All",
+              "static": "Static",
+              "animated": "Animated"
+            }
+          },
+          "source": {
+            "description": "Count message text, reactions or both (optional, default: all)",
+            "choices": {
+              "all": "Both",
+              "message": "Message text",
+              "reaction": "Reactions"
+            }
+          },
           "range": {
-            "description": "Look-back window (optional, default: 7d)",
+            "description": "Look-back window (optional, default: 30d)",
             "choices": {
               "24h": "Last 24 hours",
               "7d": "Last 7 days",
-              "30d": "Last 30 days"
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: ephemeral)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
             }
           },
           "top_n": {
-            "description": "How many top channels / users to rank (optional, 1-25, default: 10)"
+            "description": "How many entries to rank (optional, 1-20, default: 20)"
+          }
+        }
+      },
+      "sticker": {
+        "description": "Show use of this server's stickers",
+        "options": {
+          "order": {
+            "description": "Order of the ranking (optional, default: most)",
+            "choices": {
+              "most": "Most used first",
+              "least": "Least used first"
+            }
+          },
+          "range": {
+            "description": "Look-back window (optional, default: 30d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: ephemeral)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
+            }
+          },
+          "top_n": {
+            "description": "How many entries to rank (optional, 1-12, default: 12)"
           }
         }
       }

@@ -1,3 +1,4 @@
+import { ArchiveBackpressureError } from '../../../core/archive/errors';
 import { ARCHIVE_LIMITS, archiveConcurrencySchema } from '../../../core/archive/limits';
 import type { ArchiveRestWait } from './rest-telemetry';
 
@@ -12,7 +13,8 @@ interface ScheduleOptions {
   signal?: AbortSignal;
   generation?: string;
   guildId?: string;
-  resourceId?: string;
+  /** Defaults to the resource the request key names (see `resource`). */
+  resource?: ArchiveResource;
 }
 interface SchedulerOptions {
   concurrency?: number;
@@ -27,10 +29,38 @@ interface Work {
   signal?: AbortSignal;
   cancel?: () => void;
   guildId: string;
-  resourceId?: string;
+  resource?: ArchiveResource;
   queuedAt: number;
 }
 const weights: ArchivePriority[] = ['live', 'live', 'live', 'history', 'enrichment'];
+/**
+ * Discord REST routes the archive reads per channel. `@discordjs/rest` runs the
+ * requests of one route and channel (one rate-limit handler) one after another, so
+ * the scheduler admits at most one of them at a time, while different routes of
+ * the same channel proceed in parallel. `discovery` covers the inventory routes.
+ */
+export type ArchiveRoute = 'messages' | 'message' | 'reactions' | 'channel' | 'discovery';
+/**
+ * What a request occupies while it runs: one route of a channel (its SDK major
+ * parameter), or the whole resource when `route` is absent.
+ */
+export interface ArchiveResource {
+  readonly channelId: string;
+  readonly route?: ArchiveRoute;
+}
+const ROUTE_TEMPLATES: ReadonlyMap<string, ArchiveRoute> = new Map([
+  ['/channels/:id/messages', 'messages'],
+  ['/channels/:id/messages/:id', 'message'],
+  ['/channels/:id/messages/:id/reactions/:reaction', 'reactions'],
+  ['/channels/:id', 'channel'],
+]);
+/** The archive route of an SDK bucket route template, if the archive reads it. */
+export const archiveRouteOf = (template: string | undefined): ArchiveRoute | undefined =>
+  template === undefined ? undefined : ROUTE_TEMPLATES.get(template);
+const sameResource = (left: ArchiveResource, right: ArchiveResource): boolean =>
+  left.channelId === right.channelId && left.route === right.route;
+/** A map key for a route of a channel. */
+const routeKey = (route: ArchiveRoute, channelId: string): string => `${route}\u0000${channelId}`;
 
 /** Admission only: Discord's shared SDK REST manager owns route/global waits and transport retries. */
 export class ArchiveScheduler {
@@ -47,7 +77,9 @@ export class ArchiveScheduler {
   private stopped: Error | undefined;
   private readonly running = new Set<Work>();
   private readonly lastGuild = new Map<ArchivePriority, string>();
-  private readonly resourceWaits = new Map<string, number>();
+  /** Announced waits per route of a channel, and per whole channel (unknown routes). */
+  private readonly routeWaits = new Map<string, number>();
+  private readonly channelWaits = new Map<string, number>();
   private globalWaitUntil = 0;
   private wake: ReturnType<typeof setTimeout> | undefined;
   private readonly metrics: Record<
@@ -86,7 +118,7 @@ export class ArchiveScheduler {
     const shared = this.pending.get(identity);
     if (shared !== undefined) return shared as Promise<T>;
     if (this.queue.length >= this.maxQueued + (priority === 'live' ? 1 : 0))
-      return Promise.reject(new Error('archive-read-queue-full'));
+      return Promise.reject(new ArchiveBackpressureError('archive-read-queue-full'));
     let work: Work;
     const result = new Promise<T>((resolve, reject) => {
       work = {
@@ -97,7 +129,7 @@ export class ArchiveScheduler {
         reject,
         signal: options.signal,
         guildId: options.guildId ?? 'unspecified',
-        resourceId: options.resourceId ?? this.resource(key),
+        resource: options.resource ?? this.resource(key),
         queuedAt: Date.now(),
       };
       if (options.signal !== undefined) {
@@ -150,12 +182,10 @@ export class ArchiveScheduler {
     if (!Number.isFinite(wait.deadlineAt) || wait.deadlineAt <= Date.now()) return;
     if (wait.global) this.globalWaitUntil = Math.max(this.globalWaitUntil, wait.deadlineAt);
     else {
-      this.resourceWaits.set(
-        wait.resourceId,
-        Math.max(this.resourceWaits.get(wait.resourceId) ?? 0, wait.deadlineAt),
-      );
-      if (this.resourceWaits.size > 128)
-        this.resourceWaits.delete(this.resourceWaits.keys().next().value!);
+      const waits = wait.route === undefined ? this.channelWaits : this.routeWaits;
+      const key = wait.route === undefined ? wait.channelId : routeKey(wait.route, wait.channelId);
+      waits.set(key, Math.max(waits.get(key) ?? 0, wait.deadlineAt));
+      if (waits.size > 128) waits.delete(waits.keys().next().value!);
     }
     this.pump();
   }
@@ -174,7 +204,7 @@ export class ArchiveScheduler {
       queued: this.queue.length,
       background: this.background,
       paused: this.paused,
-      waitingResources: this.resourceWaits.size,
+      waitingResources: this.routeWaits.size + this.channelWaits.size,
       ...(this.globalWaitUntil > Date.now() ? { globalWaitUntil: this.globalWaitUntil } : {}),
       metrics: structuredClone(this.metrics),
     };
@@ -207,8 +237,11 @@ export class ArchiveScheduler {
         const priority = weights[this.turn++ % weights.length]!;
         const eligible = (work: Work): boolean =>
           !this.waiting(work) &&
-          (work.resourceId === undefined ||
-            ![...this.running].some((active) => active.resourceId === work.resourceId)) &&
+          (work.resource === undefined ||
+            ![...this.running].some(
+              (active) =>
+                active.resource !== undefined && sameResource(active.resource, work.resource!),
+            )) &&
           work.signal?.aborted !== true &&
           (work.priority === 'live' || (!this.paused && readyBackground < this.concurrency));
         index = this.queue.findIndex(
@@ -254,26 +287,43 @@ export class ArchiveScheduler {
           this.pump();
         });
     }
-    const deadlines = [...this.resourceWaits.values()].filter((deadline) => deadline > Date.now());
+    const deadlines = [...this.routeWaits.values(), ...this.channelWaits.values()].filter(
+      (deadline) => deadline > Date.now(),
+    );
     if (this.queue.length > 0 && deadlines.length > 0) this.scheduleWake(Math.min(...deadlines));
   }
 
-  private resource(key: string): string | undefined {
-    const pieces = key.split(':');
-    return ['history', 'reaction', 'attachment', 'discovery'].includes(pieces[0] ?? '')
-      ? pieces[1] === 'known'
-        ? pieces[2]
-        : pieces[1]
-      : undefined;
+  /** The resource a request key names: `history`, `reaction` and `discovery` keys carry their channel. */
+  private resource(key: string): ArchiveResource | undefined {
+    const [kind, id, detail] = key.split(':');
+    if (id === undefined) return undefined;
+    switch (kind) {
+      case 'history':
+        return { route: 'messages', channelId: id };
+      case 'reaction':
+        return { route: 'reactions', channelId: id };
+      case 'discovery':
+        return id === 'known' && detail !== undefined
+          ? { route: 'channel', channelId: detail }
+          : { route: 'discovery', channelId: id };
+      default:
+        return undefined;
+    }
   }
+  /** A wait announced for the request's route, or for its whole channel, holds it back. */
   private waiting(work: Work): boolean {
+    const resource = work.resource;
+    if (resource === undefined) return false;
+    const now = Date.now();
     return (
-      work.resourceId !== undefined && (this.resourceWaits.get(work.resourceId) ?? 0) > Date.now()
+      (resource.route !== undefined &&
+        (this.routeWaits.get(routeKey(resource.route, resource.channelId)) ?? 0) > now) ||
+      (this.channelWaits.get(resource.channelId) ?? 0) > now
     );
   }
   private pruneWaits(): void {
-    for (const [resource, until] of this.resourceWaits)
-      if (until <= Date.now()) this.resourceWaits.delete(resource);
+    for (const waits of [this.routeWaits, this.channelWaits])
+      for (const [key, until] of waits) if (until <= Date.now()) waits.delete(key);
   }
   private scheduleWake(deadline: number): void {
     this.wake = setTimeout(

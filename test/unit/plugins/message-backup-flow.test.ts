@@ -124,12 +124,12 @@ describe('acknowledged ETA and cutoff', () => {
     const now = 0;
     const tracker = new ProgressTracker({ cutoff: new Date(), clock: () => now });
     expect(() => tracker.finish('complete')).toThrow('work-incomplete');
-    for (const phase of ['discovery', 'history', 'reactions', 'repair', 'verification'] as const)
+    for (const phase of ['discovery', 'history', 'reactions', 'verification'] as const)
       tracker.setTotal(phase, 0);
     tracker.finish('complete');
     expect(tracker.snapshot().state).toBe('complete');
   });
-  it.each(['discovery', 'reactions', 'repair'] as const)(
+  it.each(['discovery', 'reactions'] as const)(
     'rejects a %s denominator below acknowledged work without changing progress',
     (phase) => {
       const tracker = new ProgressTracker({ cutoff: new Date('2026-01-01') });
@@ -203,7 +203,7 @@ describe('complete reaction membership staging', () => {
       messageId: '2',
       streams: [{ emoji: 'custom:3', kinds: ['normal', 'burst'] }],
       stage,
-      dirtyVersion: () => 0,
+      isCurrent: () => true,
     });
     expect(results.map((result) => [result.kind, result.users, result.complete])).toEqual([
       ['normal', 101, true],
@@ -223,10 +223,36 @@ describe('complete reaction membership staging', () => {
       stage: async () => {
         dirty++;
       },
-      dirtyVersion: () => dirty,
+      isCurrent: () => dirty === 0,
     });
     expect(results[0]?.complete).toBe(false);
     expect(results[0]?.reason).toContain('changed-during-fetch');
+  });
+  it('keeps the thrown error of an incomplete stream and stops a stale fetch before reading', async () => {
+    const denied = Object.assign(new Error('Missing Access'), { code: 50001, status: 403 });
+    const get = vi.fn(async () => {
+      throw denied;
+    });
+    const results = await fetchReactionMemberships({
+      rest: { get } as any,
+      channelId: '1',
+      messageId: '2',
+      streams: [{ emoji: 'x', kinds: ['normal'] }],
+      stage: async () => undefined,
+      isCurrent: () => true,
+    });
+    expect(results[0]).toMatchObject({ complete: false, error: denied });
+    const stale = vi.fn(async () => [{ id: '1' }]);
+    const aborted = await fetchReactionMemberships({
+      rest: { get: stale } as any,
+      channelId: '1',
+      messageId: '2',
+      streams: [{ emoji: 'x', kinds: ['normal'] }],
+      stage: async () => undefined,
+      isCurrent: () => false,
+    });
+    expect(aborted[0]).toMatchObject({ complete: false, reason: 'reaction-changed-during-fetch' });
+    expect(stale).not.toHaveBeenCalled();
   });
   it('reports stalled pages as partial, keeps earlier staged work and still reads another kind', async () => {
     const users = Array.from({ length: 100 }, (_, i) => ({ id: String(i + 1) }));
@@ -238,7 +264,7 @@ describe('complete reaction membership staging', () => {
       messageId: '2',
       streams: [{ emoji: 'x', kinds: ['normal', 'burst'] }],
       stage,
-      dirtyVersion: () => 0,
+      isCurrent: () => true,
     });
     expect(results[0]?.complete).toBe(false);
     expect(results[1]?.complete).toBe(true);

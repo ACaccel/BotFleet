@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EnvLoadError, loadEnv } from '../../../../src/core/config/env';
+import { EnvLoadError, loadEnv, readNpmConfigFlags } from '../../../../src/core/config/env';
 import { captureStderrNdjson } from '../../../support/ndjson';
 
 const validBase = {
@@ -255,5 +255,23 @@ describe('loadEnv', () => {
       expect(() => loadEnv({ exitOnFailure: true, source: {} })).toThrow('__test_exit:1');
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
+  });
+});
+
+describe('readNpmConfigFlags', () => {
+  it('maps kebab-case flags to their npm_config_ variables and omits unset ones', () => {
+    const flags = readNpmConfigFlags(['t', 'dry-run', 'dev-guild', 'keep-guild-commands'], {
+      npm_config_t: 'true',
+      npm_config_dry_run: 'true',
+      npm_config_dev_guild: '123456789012345678',
+      npm_config_unrelated: 'x',
+    });
+
+    expect(flags).toEqual({ t: 'true', 'dry-run': 'true', 'dev-guild': '123456789012345678' });
+    expect(Object.isFrozen(flags)).toBe(true);
+  });
+
+  it('keeps an empty value npm set for a disabled flag', () => {
+    expect(readNpmConfigFlags(['dry-run'], { npm_config_dry_run: '' })).toEqual({ 'dry-run': '' });
   });
 });

@@ -3,6 +3,8 @@
 Part of the [contributing guide](../../CONTRIBUTING.md).
 
 Use plugins for bot-scoped jobs and listeners; interactions belong in `src/handlers/`.
+Code a plugin shares with handlers lives in `src/application/`; see
+[layers and boundaries](../architecture.md#layers-and-boundaries).
 
 1. Create `src/plugins/<name>/plugin.ts`: a private zod schema, inferred config
    type, and factory returning [`Plugin`](../../src/core/plugin/types.ts).
@@ -28,5 +30,5 @@ Gate channel behavior with `PermissionRankPolicy` and add feature keys to
 Use [`TOKENS`](../../src/bot/tokens.ts) with `ctx.resolve(token)` and publish
 instances with `ctx.registerInstance(token, instance)` **only inside `init`**;
 duplicate registrations fail. Add new tokens to that catalog.
-ESLint forbids imports from `@core/ioc` and `src/bot/<name>/**`.
+ESLint forbids `@core/ioc` and every `src/bot` module except `tokens` and `guild-registry`.
 Do not cast the context to access the container.

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { APIRequest, RateLimitData, ResponseLike, REST } from 'discord.js';
+import { archiveRouteOf, type ArchiveRoute } from './scheduler';
 
 interface RestTelemetrySnapshot {
   observedAt: number;
@@ -17,7 +18,10 @@ interface RestTelemetrySnapshot {
 }
 
 export interface ArchiveRestWait {
-  readonly resourceId: string;
+  /** The SDK's major parameter, usually the channel. */
+  readonly channelId: string;
+  /** The archive route waiting; absent for routes the archive does not know, holding the whole channel. */
+  readonly route?: ArchiveRoute;
   readonly bucketKey: string;
   readonly global: boolean;
   readonly deadlineAt: number;
@@ -71,7 +75,7 @@ export class ArchiveRestTelemetry {
       RateLimitData,
       'hash' | 'majorParameter' | 'retryAfter' | 'timeToReset' | 'sublimitTimeout'
     > &
-      Partial<Pick<RateLimitData, 'global' | 'scope'>>,
+      Partial<Pick<RateLimitData, 'global' | 'scope' | 'route'>>,
   ): void {
     const delay = Math.max(
       0,
@@ -93,8 +97,10 @@ export class ArchiveRestTelemetry {
     this.buckets.set(key, bucket);
     if (this.buckets.size > 128) this.buckets.delete(this.buckets.keys().next().value!);
     try {
+      const route = archiveRouteOf(info.route);
       this.onWait?.({
-        resourceId: info.majorParameter,
+        channelId: info.majorParameter,
+        ...(route === undefined ? {} : { route }),
         bucketKey: key,
         global,
         deadlineAt: this.clock() + delay,

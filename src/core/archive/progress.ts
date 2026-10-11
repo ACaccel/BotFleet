@@ -1,11 +1,12 @@
-import type { ArchiveJob } from './types';
+import { z } from 'zod';
+import { archiveJobCutoff, type ArchiveJob } from './types';
 
-const archivePhases = ['discovery', 'history', 'reactions', 'repair', 'verification'] as const;
+const archivePhases = ['discovery', 'history', 'reactions', 'verification'] as const;
 export type ArchivePhase = (typeof archivePhases)[number];
 export type ArchiveProgressState = ArchiveJob['status'] | 'paused' | 'waiting' | 'cancelling';
 export type ArchiveProgressUnit = 'messages' | 'documents' | 'operations' | 'channels' | 'checks';
 export type ArchiveDenominatorQuality = 'exact' | 'discovered' | 'estimated' | 'unknown';
-type ArchiveActivityStep =
+export type ArchiveActivityStep =
   | 'fetching'
   | 'processing'
   | 'writing'
@@ -56,20 +57,9 @@ interface ArchiveRemainingEstimate {
   confidence: 'low' | 'medium';
   reason: string;
 }
-interface ArchiveValidationOutcome {
-  state: 'passed' | 'incomplete' | 'previously-accepted';
-  checks?: {
-    pendingOperations: number;
-    unresolvedEvidence: number;
-    invalidOperations: number;
-    missingDependencies: number;
-  };
-  coverage?: 'complete' | 'incomplete' | 'timestamps-only';
-  recoveryExpiresAt?: number;
-}
 export interface ArchiveProgressSnapshot {
   version: 2;
-  work: ArchiveJob['command'] | 'periodic';
+  work: ArchiveJob['command'];
   jobId?: string;
   runId?: string;
   scanId?: string;
@@ -104,77 +94,25 @@ export interface ArchiveProgressSnapshot {
     excluded: number;
     inserted: number;
     updated: number;
-    upgraded?: number;
     unchanged: number;
     durable: number;
   };
-  reactions: { required: number; completed: number };
+  /** `stale`: messages whose membership refresh failed and was left marked stale. */
+  reactions: { required: number; completed: number; stale?: number };
   reactionCountKnown?: boolean;
   live?: { pending: number; oldestAgeMs: number; windowMs: number };
-  candidates?: { timestamps: number; duplicates: number; excluded: number };
-  outcomes?: { restored: number; conflicts: number; skipped: number };
-  nextAction?: 'replan' | 'resume' | 'status';
   nextRunAt?: number;
   primary?: ArchivePhaseProgress;
-  messageClassificationVersion?: 2;
   recentThroughput?: { messages: number; windowMs: number; observedAt: number };
-  messageCountQuality: 'exact' | 'lower-bound';
-  validation?: ArchiveValidationOutcome;
 }
 
-const record = (value: unknown): Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-const finite = (value: unknown): number =>
-  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
-const timestamp = (value: unknown): number =>
-  typeof value === 'number' &&
-  Number.isFinite(value) &&
-  value >= 0 &&
-  value <= 8_640_000_000_000_000
-    ? value
-    : 0;
-const reference = (value: unknown): string | undefined =>
-  typeof value === 'string' && /^[A-Za-z0-9:_-]{1,160}$/.test(value) ? value : undefined;
-const validationOutcome = (value: unknown): ArchiveValidationOutcome | undefined => {
-  const data = record(value);
-  if (!['passed', 'incomplete', 'previously-accepted'].includes(String(data['state'])))
-    return undefined;
-  const checks = record(data['checks']);
-  const checkKeys = [
-    'pendingOperations',
-    'unresolvedEvidence',
-    'invalidOperations',
-    'missingDependencies',
-  ] as const;
-  const hasChecks = checkKeys.every(
-    (key) => Number.isSafeInteger(checks[key]) && Number(checks[key]) >= 0,
-  );
-  if (data['state'] !== 'previously-accepted' && !hasChecks) return undefined;
-  return {
-    state:
-      data['state'] === 'passed' && checkKeys.some((key) => Number(checks[key]) > 0)
-        ? 'incomplete'
-        : (data['state'] as ArchiveValidationOutcome['state']),
-    ...(hasChecks
-      ? {
-          checks: Object.fromEntries(checkKeys.map((key) => [key, checks[key]])) as NonNullable<
-            ArchiveValidationOutcome['checks']
-          >,
-        }
-      : {}),
-    ...(['complete', 'incomplete', 'timestamps-only'].includes(String(data['coverage']))
-      ? { coverage: data['coverage'] as NonNullable<ArchiveValidationOutcome['coverage']> }
-      : {}),
-    ...(typeof data['recoveryExpiresAt'] === 'number' && timestamp(data['recoveryExpiresAt']) > 0
-      ? { recoveryExpiresAt: timestamp(data['recoveryExpiresAt']) }
-      : {}),
-  };
-};
-const units: ArchiveProgressUnit[] = ['messages', 'documents', 'operations', 'channels', 'checks'];
-const qualities: ArchiveDenominatorQuality[] = ['exact', 'discovered', 'estimated', 'unknown'];
-const states: ArchiveProgressState[] = [
+/** The snapshot version written now; version 1 and unversioned snapshots are upgraded on read. */
+const ARCHIVE_PROGRESS_VERSION = 2 as const;
+/** Stored versions this release reads; unversioned snapshots predate version 1. */
+const SUPPORTED_PROGRESS_VERSIONS = [1, ARCHIVE_PROGRESS_VERSION] as const;
+const units = ['messages', 'documents', 'operations', 'channels', 'checks'] as const;
+const qualities = ['exact', 'discovered', 'estimated', 'unknown'] as const;
+const states = [
   'queued',
   'running',
   'paused',
@@ -184,8 +122,8 @@ const states: ArchiveProgressState[] = [
   'partial',
   'failed',
   'cancelled',
-];
-const steps: ArchiveActivityStep[] = [
+] as const satisfies readonly ArchiveProgressState[];
+const steps = [
   'fetching',
   'processing',
   'writing',
@@ -194,21 +132,21 @@ const steps: ArchiveActivityStep[] = [
   'waiting',
   'queued',
   'draining',
-];
-const substeps = [
-  ...archivePhases,
-  'check-messages',
-  'check-duplicate-identities',
-  'check-legacy-cursors',
-  'plan-legacy-cursors',
-  'validate-manifest',
-  'apply-manifest',
-  'rollback-manifest',
-  'attachment-access',
-  'attachment-fetch',
-  'attachment-write',
-];
-const reasons: ArchiveGapReason[] = ['permission', 'discovery', 'capacity', 'conflict', 'other'];
+] as const satisfies readonly ArchiveActivityStep[];
+const reasons = [
+  'permission',
+  'discovery',
+  'capacity',
+  'conflict',
+  'other',
+] as const satisfies readonly ArchiveGapReason[];
+/** Estimate reasons a snapshot may name; anything else reads as `observed-throughput`. */
+const estimateReasons = [
+  'observed-throughput',
+  'currently-known-work-only',
+  'observed-phase-throughput',
+  'observed-throughput-with-overlap-and-contention',
+] as const;
 export const safeArchiveName = (value: unknown): string =>
   typeof value === 'string'
     ? Array.from(value, (character) => (character.charCodeAt(0) < 32 ? ' ' : character))
@@ -216,327 +154,338 @@ export const safeArchiveName = (value: unknown): string =>
         .slice(0, 100)
     : '';
 
+const toRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+/** An object whose fields fall back individually; a non-object reads as `{}`. */
+const lenientObject = <T extends z.ZodRawShape>(shape: T) =>
+  z.preprocess(toRecord, z.object(shape));
+/** Any JavaScript number, `NaN` included. */
+const anyNumber = z.union([z.number(), z.nan()]);
+const nonNegative = z.number().finite().nonnegative();
+/** A counter: invalid values read as 0. */
+const count = nonNegative.catch(0);
+const time = nonNegative.max(8_640_000_000_000_000);
+/** A timestamp: invalid values read as 0. */
+const timestamp = time.catch(0);
+/** Present only when stored as a number; invalid numbers read as 0. */
+const presentCount = anyNumber.pipe(count).optional().catch(undefined);
+const presentTime = anyNumber.pipe(timestamp).optional().catch(undefined);
+/** Present only when valid. */
+const validCount = nonNegative.optional().catch(undefined);
+/** A counter and whether it was stored as an exact non-negative integer. */
+const exactCount = z.unknown().transform((value) => ({
+  value: count.parse(value),
+  exact: z.number().int().safe().nonnegative().safeParse(value).success,
+}));
+const reference = z
+  .string()
+  .regex(/^[A-Za-z0-9:_-]{1,160}$/)
+  .optional()
+  .catch(undefined);
+const notFalse = z.literal(false).optional().catch(undefined);
+const displayName = z.string().catch('').transform(safeArchiveName);
+
+const phaseSchema = (phase: ArchivePhase) =>
+  lenientObject({
+    committed: count,
+    scanned: count,
+    admitted: count,
+    unit: z.enum(units).catch(phase === 'history' ? 'messages' : 'documents'),
+    quality: z.enum(qualities).catch('unknown'),
+    total: z.number().finite().optional().catch(undefined),
+    referenceTotal: presentCount,
+    rates: z.array(z.unknown()).catch([]),
+  });
+const activitySchema = lenientObject({
+  sourceId: z.string().regex(/^[A-Za-z0-9:_-]{1,160}$/),
+  name: displayName,
+  step: z.enum(steps),
+  scanned: count,
+  updatedAt: timestamp,
+  startedAt: timestamp,
+  pageProcessed: validCount,
+  pageTotal: validCount,
+  reactionUsers: validCount,
+  reactionPages: validCount,
+  provisional: z.literal(true).optional().catch(undefined),
+  direction: z.literal('before').optional().catch(undefined),
+  cursor: reference,
+  waitSince: presentTime,
+  retryAt: presentTime,
+});
+const gapSchema = lenientObject({
+  sourceId: reference,
+  name: z.string().transform(safeArchiveName).optional().catch(undefined),
+  reason: z.enum(reasons).catch('other'),
+});
+const estimateSchema = lenientObject({
+  lowerMs: nonNegative,
+  upperMs: z.number().finite(),
+  scope: z.enum(['phase', 'run']),
+  reason: z.preprocess(String, z.enum(estimateReasons)).catch('observed-throughput'),
+  phase: z.enum(archivePhases).optional().catch(undefined),
+})
+  .refine((estimate) => estimate.upperMs >= estimate.lowerMs)
+  .transform(
+    ({ lowerMs, upperMs, scope, reason, phase }): ArchiveRemainingEstimate => ({
+      lowerMs,
+      upperMs,
+      scope,
+      confidence: 'low',
+      reason,
+      ...(phase === undefined ? {} : { phase }),
+    }),
+  )
+  .optional()
+  .catch(undefined);
+
+/**
+ * Stored progress, every version: a snapshot without a known phase or state is
+ * rejected, and every other field falls back on its own.
+ */
+const storedProgressSchema = lenientObject({
+  version: z
+    .custom<
+      (typeof SUPPORTED_PROGRESS_VERSIONS)[number]
+    >((value) => (SUPPORTED_PROGRESS_VERSIONS as readonly unknown[]).includes(value))
+    .optional(),
+  work: z.enum(['full-backup', 'periodic']).catch('periodic'),
+  jobId: reference,
+  runId: reference,
+  scanId: reference,
+  cutoff: z
+    .string()
+    .refine((value) => Number.isFinite(Date.parse(value)))
+    .optional()
+    .catch(undefined),
+  cutoffKnown: notFalse,
+  startedAt: timestamp,
+  phase: z.enum(archivePhases),
+  substep: z.preprocess(String, z.enum(archivePhases)).optional().catch(undefined),
+  state: z.enum(states),
+  reason: z.enum(reasons).optional().catch(undefined),
+  phases: lenientObject({
+    discovery: phaseSchema('discovery'),
+    history: phaseSchema('history'),
+    reactions: phaseSchema('reactions'),
+    verification: phaseSchema('verification'),
+  }),
+  elapsedMs: count,
+  activeMs: count,
+  pausedMs: count,
+  updatedAt: timestamp,
+  lastProgressAt: timestamp,
+  estimatedAt: timestamp,
+  lastCheckpointAt: presentTime,
+  estimating: z.boolean().catch(false),
+  activities: z.array(z.unknown()).catch([]),
+  activityCount: count,
+  gaps: z.array(z.unknown()).optional().catch(undefined),
+  gapCount: exactCount,
+  gapCountKnown: notFalse,
+  sources: lenientObject({
+    completed: count,
+    total: exactCount,
+    quality: z.literal('unknown').optional().catch(undefined),
+  }),
+  recentThroughput: lenientObject({
+    messages: nonNegative,
+    windowMs: z.number().finite().min(1000),
+    observedAt: time.positive(),
+  })
+    .optional()
+    .catch(undefined),
+  messages: lenientObject({
+    fetched: count,
+    scanned: count,
+    admitted: count,
+    excluded: count,
+    inserted: count,
+    updated: count,
+    unchanged: count,
+    durable: count,
+  }),
+  reactions: lenientObject({
+    required: exactCount,
+    completed: exactCount,
+    stale: presentCount,
+  }),
+  reactionCountKnown: notFalse,
+  live: lenientObject({ pending: count, oldestAgeMs: count, windowMs: count }).optional(),
+  estimate: estimateSchema,
+  phaseEstimate: estimateSchema,
+  nextRunAt: presentTime,
+  primary: lenientObject({
+    committed: count,
+    scanned: count,
+    admitted: count,
+    unit: z.enum(units).catch('documents'),
+    quality: z.enum(qualities).catch('unknown'),
+    total: z.number().finite().pipe(count).optional().catch(undefined),
+  }).optional(),
+});
+
+/**
+ * Upgrades fields older snapshots stored differently: the retired repair workflow's
+ * `repair` phase, timings derived from `elapsedMs` and `estimatedAt`, and version 1's
+ * run estimate kept in `phaseEstimate`.
+ */
+const upgradeStoredProgress = (value: unknown): Record<string, unknown> => {
+  const data = toRecord(value);
+  return {
+    ...data,
+    phase: data['phase'] === 'repair' ? 'history' : data['phase'],
+    activeMs: data['activeMs'] ?? data['elapsedMs'],
+    updatedAt: data['updatedAt'] ?? data['estimatedAt'],
+    lastProgressAt: data['lastProgressAt'] ?? data['estimatedAt'],
+    estimate:
+      data['estimate'] ??
+      (data['version'] === ARCHIVE_PROGRESS_VERSION ? undefined : data['phaseEstimate']),
+  };
+};
+
+const positiveRate = z.number().finite().positive();
+
 /** Only explicit display metadata crosses the private status and notification boundary. */
 export function sanitizeArchiveProgress(
   value: unknown,
   options: { includeRates?: boolean } = {},
 ): ArchiveProgressSnapshot | undefined {
-  const data = record(value);
-  if (data['version'] !== undefined && data['version'] !== 1 && data['version'] !== 2)
-    return undefined;
-  if (
-    !archivePhases.includes(data['phase'] as ArchivePhase) ||
-    !states.includes(data['state'] as ArchiveProgressState)
-  )
-    return undefined;
-  const phase = data['phase'] as ArchivePhase;
-  const work = data['work'];
+  const parsed = storedProgressSchema.safeParse(upgradeStoredProgress(value));
+  if (!parsed.success) return undefined;
+  const data = parsed.data;
   const phases = Object.fromEntries(
     archivePhases.map((key) => {
-      const counters = record(record(data['phases'])[key]);
-      const total = counters['total'];
-      const quality = qualities.includes(counters['quality'] as ArchiveDenominatorQuality)
-        ? (counters['quality'] as ArchiveDenominatorQuality)
-        : 'unknown';
+      const counters = data.phases[key];
+      const { total, referenceTotal } = counters;
       return [
         key,
         {
-          committed: finite(counters['committed']),
-          scanned: finite(counters['scanned']),
-          admitted: finite(counters['admitted']),
-          unit: units.includes(counters['unit'] as ArchiveProgressUnit)
-            ? (counters['unit'] as ArchiveProgressUnit)
-            : key === 'history'
-              ? 'messages'
-              : 'documents',
-          quality,
-          ...(typeof total === 'number' &&
-          Number.isFinite(total) &&
-          total >= finite(counters['committed'])
-            ? { total }
-            : {}),
-          ...(typeof counters['referenceTotal'] === 'number'
-            ? { referenceTotal: finite(counters['referenceTotal']) }
-            : {}),
+          committed: counters.committed,
+          scanned: counters.scanned,
+          admitted: counters.admitted,
+          unit: counters.unit,
+          quality: counters.quality,
+          ...(total !== undefined && total >= counters.committed ? { total } : {}),
+          ...(referenceTotal === undefined ? {} : { referenceTotal }),
           ...(options.includeRates
             ? {
-                rates: Array.isArray(counters['rates'])
-                  ? counters['rates']
-                      .filter(
-                        (rate): rate is number =>
-                          typeof rate === 'number' && Number.isFinite(rate) && rate > 0,
-                      )
-                      .slice(-16)
-                  : [],
+                rates: counters.rates
+                  .filter((rate): rate is number => positiveRate.safeParse(rate).success)
+                  .slice(-16),
               }
             : {}),
         },
       ];
     }),
   ) as Record<ArchivePhase, ArchivePhaseProgress>;
-  const activities = (Array.isArray(data['activities']) ? data['activities'] : [])
-    .slice(0, 3)
-    .flatMap((raw): ArchiveActivity[] => {
-      const activity = record(raw);
-      const sourceId = reference(activity['sourceId']);
-      if (sourceId === undefined || !steps.includes(activity['step'] as ArchiveActivityStep))
-        return [];
-      return [
-        {
-          sourceId,
-          name: safeArchiveName(activity['name']),
-          step: activity['step'] as ArchiveActivityStep,
-          scanned: finite(activity['scanned']),
-          updatedAt: timestamp(activity['updatedAt']),
-          startedAt: timestamp(activity['startedAt']),
-          ...(typeof activity['pageProcessed'] === 'number' &&
-          Number.isFinite(activity['pageProcessed']) &&
-          activity['pageProcessed'] >= 0
-            ? { pageProcessed: finite(activity['pageProcessed']) }
-            : {}),
-          ...(typeof activity['pageTotal'] === 'number' &&
-          Number.isFinite(activity['pageTotal']) &&
-          activity['pageTotal'] >= 0
-            ? { pageTotal: finite(activity['pageTotal']) }
-            : {}),
-          ...(typeof activity['reactionUsers'] === 'number' &&
-          Number.isFinite(activity['reactionUsers']) &&
-          activity['reactionUsers'] >= 0
-            ? { reactionUsers: finite(activity['reactionUsers']) }
-            : {}),
-          ...(typeof activity['reactionPages'] === 'number' &&
-          Number.isFinite(activity['reactionPages']) &&
-          activity['reactionPages'] >= 0
-            ? { reactionPages: finite(activity['reactionPages']) }
-            : {}),
-          ...(activity['provisional'] === true ? { provisional: true } : {}),
-          ...(activity['direction'] === 'before' ? { direction: 'before' as const } : {}),
-          ...(reference(activity['cursor']) === undefined
-            ? {}
-            : { cursor: reference(activity['cursor']) }),
-          ...(typeof activity['waitSince'] === 'number'
-            ? { waitSince: timestamp(activity['waitSince']) }
-            : {}),
-          ...(typeof activity['retryAt'] === 'number'
-            ? { retryAt: timestamp(activity['retryAt']) }
-            : {}),
-        },
-      ];
-    });
-  const gaps = (Array.isArray(data['gaps']) ? data['gaps'] : [])
-    .slice(0, 3)
-    .map((raw): ArchiveScopeGap => {
-      const gap = record(raw);
-      return {
-        ...(reference(gap['sourceId']) === undefined
-          ? {}
-          : { sourceId: reference(gap['sourceId']) }),
-        ...(typeof gap['name'] === 'string' ? { name: safeArchiveName(gap['name']) } : {}),
-        reason: reasons.includes(gap['reason'] as ArchiveGapReason)
-          ? (gap['reason'] as ArchiveGapReason)
-          : 'other',
-      };
-    });
-  const numerical = <T extends string>(raw: unknown, keys: readonly T[]): Record<T, number> =>
-    Object.fromEntries(keys.map((key) => [key, finite(record(raw)[key])])) as Record<T, number>;
-  const estimate = (raw: unknown): ArchiveRemainingEstimate | undefined => {
-    const item = record(raw);
-    if (
-      !['phase', 'run'].includes(String(item['scope'])) ||
-      typeof item['lowerMs'] !== 'number' ||
-      typeof item['upperMs'] !== 'number' ||
-      !Number.isFinite(item['lowerMs']) ||
-      !Number.isFinite(item['upperMs']) ||
-      item['lowerMs'] < 0 ||
-      item['upperMs'] < item['lowerMs']
-    )
-      return undefined;
+  const activities = data.activities.slice(0, 3).flatMap((raw): ArchiveActivity[] => {
+    const parsedActivity = activitySchema.safeParse(raw);
+    if (!parsedActivity.success) return [];
+    const activity = parsedActivity.data;
+    return [
+      {
+        sourceId: activity.sourceId,
+        name: activity.name,
+        step: activity.step,
+        scanned: activity.scanned,
+        updatedAt: activity.updatedAt,
+        startedAt: activity.startedAt,
+        ...(activity.pageProcessed === undefined ? {} : { pageProcessed: activity.pageProcessed }),
+        ...(activity.pageTotal === undefined ? {} : { pageTotal: activity.pageTotal }),
+        ...(activity.reactionUsers === undefined ? {} : { reactionUsers: activity.reactionUsers }),
+        ...(activity.reactionPages === undefined ? {} : { reactionPages: activity.reactionPages }),
+        ...(activity.provisional === undefined ? {} : { provisional: true }),
+        ...(activity.direction === undefined ? {} : { direction: 'before' as const }),
+        ...(activity.cursor === undefined ? {} : { cursor: activity.cursor }),
+        ...(activity.waitSince === undefined ? {} : { waitSince: activity.waitSince }),
+        ...(activity.retryAt === undefined ? {} : { retryAt: activity.retryAt }),
+      },
+    ];
+  });
+  const gaps = (data.gaps ?? []).slice(0, 3).map((raw): ArchiveScopeGap => {
+    const gap = gapSchema.parse(raw);
     return {
-      lowerMs: item['lowerMs'],
-      upperMs: item['upperMs'],
-      scope: item['scope'] as 'phase' | 'run',
-      confidence: 'low',
-      reason: [
-        'currently-known-work-only',
-        'observed-phase-throughput',
-        'observed-throughput-with-overlap-and-contention',
-      ].includes(String(item['reason']))
-        ? String(item['reason'])
-        : 'observed-throughput',
-      ...(archivePhases.includes(item['phase'] as ArchivePhase)
-        ? { phase: item['phase'] as ArchivePhase }
-        : {}),
+      ...(gap.sourceId === undefined ? {} : { sourceId: gap.sourceId }),
+      ...(gap.name === undefined ? {} : { name: gap.name }),
+      reason: gap.reason,
     };
-  };
+  });
+  const { sources, reactions, primary } = data;
   return {
-    version: 2,
-    work: [
-      'audit',
-      'plan',
-      'apply',
-      'resume',
-      'verify',
-      'rollback',
-      'accept',
-      'backfill',
-      'migrate-timestamp',
-      'refresh-attachment',
-      'periodic',
-    ].includes(String(work))
-      ? (work as ArchiveProgressSnapshot['work'])
-      : 'periodic',
-    ...(reference(data['jobId']) === undefined ? {} : { jobId: reference(data['jobId']) }),
-    ...(reference(data['runId']) === undefined ? {} : { runId: reference(data['runId']) }),
-    ...(reference(data['scanId']) === undefined ? {} : { scanId: reference(data['scanId']) }),
-    cutoff:
-      typeof data['cutoff'] === 'string' && Number.isFinite(Date.parse(data['cutoff']))
-        ? data['cutoff']
-        : new Date(0).toISOString(),
-    cutoffKnown:
-      data['cutoffKnown'] !== false &&
-      typeof data['cutoff'] === 'string' &&
-      Number.isFinite(Date.parse(data['cutoff'])),
-    startedAt: timestamp(data['startedAt']),
-    phase,
-    substep: substeps.includes(String(data['substep'])) ? String(data['substep']) : phase,
-    state: data['state'] as ArchiveProgressState,
-    ...(reasons.includes(data['reason'] as ArchiveGapReason)
-      ? { reason: data['reason'] as ArchiveGapReason }
-      : {}),
+    version: ARCHIVE_PROGRESS_VERSION,
+    work: data.work,
+    ...(data.jobId === undefined ? {} : { jobId: data.jobId }),
+    ...(data.runId === undefined ? {} : { runId: data.runId }),
+    ...(data.scanId === undefined ? {} : { scanId: data.scanId }),
+    cutoff: data.cutoff ?? new Date(0).toISOString(),
+    cutoffKnown: data.cutoffKnown === undefined && data.cutoff !== undefined,
+    startedAt: data.startedAt,
+    phase: data.phase,
+    substep: data.substep ?? data.phase,
+    state: data.state,
+    ...(data.reason === undefined ? {} : { reason: data.reason }),
     phases,
-    elapsedMs: finite(data['elapsedMs']),
-    activeMs: finite(data['activeMs'] ?? data['elapsedMs']),
-    pausedMs: finite(data['pausedMs']),
-    updatedAt: timestamp(data['updatedAt'] ?? data['estimatedAt']),
-    lastProgressAt: timestamp(data['lastProgressAt'] ?? data['estimatedAt']),
-    estimatedAt: timestamp(data['estimatedAt']),
-    ...(typeof data['lastCheckpointAt'] === 'number'
-      ? { lastCheckpointAt: timestamp(data['lastCheckpointAt']) }
-      : {}),
-    estimating: data['estimating'] === true,
+    elapsedMs: data.elapsedMs,
+    activeMs: data.activeMs,
+    pausedMs: data.pausedMs,
+    updatedAt: data.updatedAt,
+    lastProgressAt: data.lastProgressAt,
+    estimatedAt: data.estimatedAt,
+    ...(data.lastCheckpointAt === undefined ? {} : { lastCheckpointAt: data.lastCheckpointAt }),
+    estimating: data.estimating,
     activities,
-    activityCount: Math.max(activities.length, finite(data['activityCount'])),
+    activityCount: Math.max(activities.length, data.activityCount),
     gaps,
-    gapCount: Math.max(gaps.length, finite(data['gapCount'])),
+    gapCount: Math.max(gaps.length, data.gapCount.value),
     gapCountKnown:
-      data['gapCountKnown'] !== false &&
-      ((Number.isSafeInteger(data['gapCount']) && Number(data['gapCount']) >= 0) ||
-        Array.isArray(data['gaps'])),
+      data.gapCountKnown === undefined && (data.gapCount.exact || data.gaps !== undefined),
     sources: {
-      completed: finite(record(data['sources'])['completed']),
-      total: finite(record(data['sources'])['total']),
-      quality:
-        record(data['sources'])['quality'] !== 'unknown' &&
-        Number.isSafeInteger(record(data['sources'])['total']) &&
-        Number(record(data['sources'])['total']) >= 0
-          ? 'discovered'
-          : 'unknown',
+      completed: sources.completed,
+      total: sources.total.value,
+      quality: sources.quality === undefined && sources.total.exact ? 'discovered' : 'unknown',
     },
-    messageCountQuality:
-      data['messageCountQuality'] === 'lower-bound' || data['version'] !== 2
-        ? 'lower-bound'
-        : 'exact',
-    ...(validationOutcome(data['validation']) === undefined
-      ? {}
-      : { validation: validationOutcome(data['validation']) }),
-    ...(data['messageClassificationVersion'] === 2
-      ? { messageClassificationVersion: 2 as const }
-      : {}),
-    ...(typeof record(data['recentThroughput'])['messages'] === 'number' &&
-    Number(record(data['recentThroughput'])['messages']) >= 0 &&
-    Number.isFinite(record(data['recentThroughput'])['messages']) &&
-    Number(record(data['recentThroughput'])['windowMs']) >= 1000 &&
-    Number.isFinite(record(data['recentThroughput'])['windowMs']) &&
-    timestamp(record(data['recentThroughput'])['observedAt']) > 0
-      ? {
-          recentThroughput: {
-            messages: finite(record(data['recentThroughput'])['messages']),
-            windowMs: finite(record(data['recentThroughput'])['windowMs']),
-            observedAt: timestamp(record(data['recentThroughput'])['observedAt']),
-          },
-        }
-      : {}),
-    messages: {
-      ...numerical(data['messages'], [
-        'fetched',
-        'scanned',
-        'admitted',
-        'excluded',
-        'inserted',
-        'updated',
-        'unchanged',
-        'durable',
-      ]),
-      ...(typeof record(data['messages'])['upgraded'] === 'number'
-        ? { upgraded: finite(record(data['messages'])['upgraded']) }
-        : {}),
+    ...(data.recentThroughput === undefined ? {} : { recentThroughput: data.recentThroughput }),
+    messages: data.messages,
+    reactions: {
+      required: reactions.required.value,
+      completed: reactions.completed.value,
+      ...(reactions.stale === undefined ? {} : { stale: reactions.stale }),
     },
-    reactions: numerical(data['reactions'], ['required', 'completed']),
     reactionCountKnown:
-      data['reactionCountKnown'] !== false &&
-      ['required', 'completed'].every(
-        (key) =>
-          Number.isSafeInteger(record(data['reactions'])[key]) &&
-          Number(record(data['reactions'])[key]) >= 0,
-      ),
-    ...(data['live'] === undefined
-      ? {}
-      : { live: numerical(data['live'], ['pending', 'oldestAgeMs', 'windowMs']) }),
-    ...(data['candidates'] === undefined
-      ? {}
-      : { candidates: numerical(data['candidates'], ['timestamps', 'duplicates', 'excluded']) }),
-    ...(data['outcomes'] === undefined
-      ? {}
-      : { outcomes: numerical(data['outcomes'], ['restored', 'conflicts', 'skipped']) }),
-    ...(estimate(
-      data['estimate'] ?? (data['version'] === 2 ? undefined : data['phaseEstimate']),
-    ) === undefined
-      ? {}
-      : {
-          estimate: estimate(
-            data['estimate'] ?? (data['version'] === 2 ? undefined : data['phaseEstimate']),
-          ),
-        }),
-    ...(estimate(data['phaseEstimate']) === undefined
-      ? {}
-      : { phaseEstimate: estimate(data['phaseEstimate']) }),
-    ...(['replan', 'resume', 'status'].includes(String(data['nextAction']))
-      ? { nextAction: data['nextAction'] as 'replan' | 'resume' | 'status' }
-      : {}),
-    ...(typeof data['nextRunAt'] === 'number' ? { nextRunAt: timestamp(data['nextRunAt']) } : {}),
-    ...(data['primary'] === undefined
+      data.reactionCountKnown === undefined &&
+      reactions.required.exact &&
+      reactions.completed.exact,
+    ...(data.live === undefined ? {} : { live: data.live }),
+    ...(data.estimate === undefined ? {} : { estimate: data.estimate }),
+    ...(data.phaseEstimate === undefined ? {} : { phaseEstimate: data.phaseEstimate }),
+    ...(data.nextRunAt === undefined ? {} : { nextRunAt: data.nextRunAt }),
+    ...(primary === undefined
       ? {}
       : {
           primary: {
-            committed: finite(record(data['primary'])['committed']),
-            scanned: finite(record(data['primary'])['scanned']),
-            admitted: finite(record(data['primary'])['admitted']),
-            unit: units.includes(record(data['primary'])['unit'] as ArchiveProgressUnit)
-              ? (record(data['primary'])['unit'] as ArchiveProgressUnit)
-              : 'documents',
-            quality: qualities.includes(
-              record(data['primary'])['quality'] as ArchiveDenominatorQuality,
-            )
-              ? (record(data['primary'])['quality'] as ArchiveDenominatorQuality)
-              : 'unknown',
-            ...(typeof record(data['primary'])['total'] === 'number' &&
-            Number.isFinite(record(data['primary'])['total'])
-              ? { total: finite(record(data['primary'])['total']) }
-              : {}),
+            committed: primary.committed,
+            scanned: primary.scanned,
+            admitted: primary.admitted,
+            unit: primary.unit,
+            quality: primary.quality,
+            ...(primary.total === undefined ? {} : { total: primary.total }),
           },
         }),
   };
 }
 
+/** The saved progress of a job record, or an empty snapshot before its first update. */
 export function archiveJobProgress(job: ArchiveJob, now = Date.now()): ArchiveProgressSnapshot {
-  const result = record(job.result);
-  const saved = sanitizeArchiveProgress(result['progress']);
+  const saved = sanitizeArchiveProgress(toRecord(job.result)['progress']);
   const state: ArchiveProgressState =
     job.status === 'running' && job.cancelRequested ? 'cancelling' : job.status;
   const terminal = ['complete', 'partial', 'failed', 'cancelled'].includes(state);
-  const phase: ArchivePhase = ['verify', 'accept'].includes(job.command)
-    ? 'verification'
-    : 'repair';
+  const startedAt = job.startedAt ?? job.createdAt;
+  const elapsedMs = Math.max(0, (job.finishedAt ?? now) - startedAt);
+  const cutoff = archiveJobCutoff(job);
   const phases = Object.fromEntries(
     archivePhases.map((key) => [
       key,
@@ -550,105 +499,17 @@ export function archiveJobProgress(job: ArchiveJob, now = Date.now()): ArchivePr
       },
     ]),
   ) as unknown as Record<ArchivePhase, ArchivePhaseProgress>;
-  const total = record(result['counts'])['total'];
-  if (
-    job.command === 'audit' &&
-    terminal &&
-    typeof total === 'number' &&
-    Number.isSafeInteger(total) &&
-    total >= 0
-  )
-    phases.repair = {
-      committed: total,
-      scanned: total,
-      admitted: total,
-      rates: [],
-      quality: 'exact',
-      unit: 'documents',
-      total,
-    };
-  const issues = Array.isArray(result['issues']) ? result['issues'] : [];
-  const reportedIssues = [...issues, ...(result['error'] === undefined ? [] : [result['error']])];
-  const gapReasons = reportedIssues.map((issue): ArchiveGapReason => {
-    const text = typeof issue === 'string' ? issue : '';
-    return /permission|forbidden|access|denied/i.test(text)
-      ? 'permission'
-      : /space|capacity|disk|budget/i.test(text)
-        ? 'capacity'
-        : /conflict|changed/i.test(text)
-          ? 'conflict'
-          : /discovery|inventory|gap|thread/i.test(text)
-            ? 'discovery'
-            : 'other';
-  });
-  const startedAt = job.startedAt ?? job.createdAt;
-  const elapsedMs = Math.max(0, (job.finishedAt ?? now) - startedAt);
-  const counts = record(result['counts']);
-  const details = record(result['details']);
-  const verificationCounts = [
-    'pending',
-    'unresolvedEvidence',
-    'invalidManifestOperations',
-    'missingDependencies',
-  ] as const;
-  let validation: ArchiveValidationOutcome | undefined;
-  // Completion counters alone cannot establish that the verifier ran.
-  if (
-    ['apply', 'resume', 'verify', 'accept'].includes(job.command) &&
-    ['complete', 'partial'].includes(job.status) &&
-    ['complete', 'partial'].includes(String(result['status'])) &&
-    Array.isArray(result['issues']) &&
-    verificationCounts.every((key) => Number.isSafeInteger(counts[key]) && Number(counts[key]) >= 0)
-  ) {
-    const coverage = record(details['coverage']);
-    validation = {
-      state:
-        job.status === 'complete' &&
-        result['status'] === 'complete' &&
-        issues.length === 0 &&
-        verificationCounts.every((key) => counts[key] === 0)
-          ? 'passed'
-          : 'incomplete',
-      checks: {
-        pendingOperations: counts['pending'] as number,
-        unresolvedEvidence: counts['unresolvedEvidence'] as number,
-        invalidOperations: counts['invalidManifestOperations'] as number,
-        missingDependencies: counts['missingDependencies'] as number,
-      },
-      ...(coverage['status'] === 'complete'
-        ? {
-            coverage:
-              record(coverage['details'])['scope'] === 'timestamps-only'
-                ? ('timestamps-only' as const)
-                : ('complete' as const),
-          }
-        : ['partial', 'failed', 'cancelled'].includes(String(coverage['status']))
-          ? { coverage: 'incomplete' as const }
-          : {}),
-    };
-  }
-  if (
-    job.command === 'accept' &&
-    job.status === 'complete' &&
-    result['status'] === 'complete' &&
-    Array.isArray(result['issues']) &&
-    issues.length === 0 &&
-    timestamp(details['acceptedAt']) > 0 &&
-    timestamp(details['expiresAt']) > timestamp(details['acceptedAt'])
-  )
-    validation = {
-      ...(validation ?? { state: 'previously-accepted' as const }),
-      recoveryExpiresAt: timestamp(details['expiresAt']),
-    };
   return {
     ...(saved ?? {
-      version: 2,
+      version: ARCHIVE_PROGRESS_VERSION,
       work: job.command,
-      cutoff: new Date(timestamp(job.createdAt)).toISOString(),
-      cutoffKnown: false,
+      cutoff: new Date(
+        timestamp.parse(typeof cutoff === 'number' ? cutoff : job.createdAt),
+      ).toISOString(),
+      cutoffKnown: typeof cutoff === 'number',
       startedAt,
-      phase,
-      substep: phase,
+      phase: 'discovery',
+      substep: 'discovery',
       state,
       phases,
       elapsedMs,
@@ -662,9 +523,7 @@ export function archiveJobProgress(job: ArchiveJob, now = Date.now()): ArchivePr
       activityCount: 0,
       gaps: [],
       gapCount: 0,
-      gapCountKnown: Array.isArray(result['issues']) || result['error'] !== undefined,
       sources: { completed: 0, total: 0, quality: 'unknown' },
-      messageCountQuality: 'lower-bound',
       messages: {
         fetched: 0,
         scanned: 0,
@@ -679,16 +538,8 @@ export function archiveJobProgress(job: ArchiveJob, now = Date.now()): ArchivePr
     }),
     jobId: job.jobId,
     work: job.command,
-    runId: job.runId,
+    ...(job.runId === undefined ? {} : { runId: job.runId }),
     state,
-    validation,
-    ...(gapReasons.length === 0
-      ? {}
-      : {
-          gaps: gapReasons.slice(0, 3).map((reason) => ({ reason })),
-          gapCount: Math.max(saved?.gapCount ?? 0, gapReasons.length),
-        }),
-    ...(job.status === 'queued' ? { elapsedMs: Math.max(0, now - job.createdAt) } : {}),
     ...(terminal
       ? {
           estimating: false,
@@ -698,5 +549,5 @@ export function archiveJobProgress(job: ArchiveJob, now = Date.now()): ArchivePr
           activityCount: 0,
         }
       : {}),
-  } as ArchiveProgressSnapshot;
+  };
 }

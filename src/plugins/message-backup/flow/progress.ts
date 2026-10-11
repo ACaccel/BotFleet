@@ -42,7 +42,7 @@ interface ProgressOptions {
   runId?: string;
   scanId?: string;
 }
-const phases: ArchivePhase[] = ['discovery', 'history', 'reactions', 'repair', 'verification'];
+const phases: ArchivePhase[] = ['discovery', 'history', 'reactions', 'verification'];
 
 /** Only acknowledged work counts as complete. Persist checkpoint with the owning job's durable writes. */
 export class ProgressTracker {
@@ -61,9 +61,7 @@ export class ProgressTracker {
   private pausedMs = 0;
   private pausedAt: number | undefined;
   private finishedAt: number | undefined;
-  private messageClassificationVersion: 2 | undefined = 2;
   private recentHistory: { at: number; units: number }[] = [];
-  private messageCountQuality: 'exact' | 'lower-bound' = 'exact';
   private substep: string;
   private readonly messages: ArchiveProgressSnapshot['messages'] = {
     fetched: 0,
@@ -72,15 +70,11 @@ export class ProgressTracker {
     excluded: 0,
     inserted: 0,
     updated: 0,
-    upgraded: 0,
     unchanged: 0,
     durable: 0,
   };
-  private readonly reactions = { required: 0, completed: 0 };
-  private extras: Pick<
-    ArchiveProgressSnapshot,
-    'live' | 'candidates' | 'outcomes' | 'nextAction' | 'nextRunAt' | 'primary'
-  > = {};
+  private readonly reactions = { required: 0, completed: 0, stale: 0 };
+  private extras: Pick<ArchiveProgressSnapshot, 'live' | 'nextRunAt' | 'primary'> = {};
   private readonly stages = new Map<string, PhaseProgress>();
 
   constructor(options: ProgressOptions) {
@@ -124,14 +118,6 @@ export class ProgressTracker {
                 admitted: 0,
                 rates: [],
                 unit: 'messages',
-                quality: 'unknown',
-              },
-              repair: {
-                committed: 0,
-                scanned: 0,
-                admitted: 0,
-                rates: [],
-                unit: 'documents',
                 quality: 'unknown',
               },
               verification: {
@@ -404,14 +390,13 @@ export class ProgressTracker {
     this.reactions.completed += units;
     if (units > 0) this.lastProgressAt = this.clock();
   }
+  /** A message whose membership refresh failed; it stays marked stale. */
+  reactionStale(units = 1): void {
+    this.validateUnits(units);
+    this.reactions.stale += units;
+  }
   setExtras(extras: Partial<typeof this.extras>): void {
     this.extras = { ...this.extras, ...extras };
-  }
-  markLegacyClassifications(): void {
-    this.messageClassificationVersion = undefined;
-  }
-  markLegacyCounts(): void {
-    this.messageCountQuality = 'lower-bound';
   }
   snapshot(): ProgressSnapshot {
     const now = this.clock();
@@ -455,10 +440,6 @@ export class ProgressTracker {
         completed: this.completedSources.size,
         quality: 'discovered',
       },
-      messageCountQuality: this.messageCountQuality,
-      ...(this.messageClassificationVersion === undefined
-        ? {}
-        : { messageClassificationVersion: this.messageClassificationVersion }),
       ...(this.recentThroughput(now) === undefined
         ? {}
         : { recentThroughput: this.recentThroughput(now) }),

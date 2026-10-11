@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
-import { createConnection } from 'mongoose';
+import { createConnection, mongo } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { asGuildId } from '../../src/core/ids';
 import { ArchivePerformanceSampler } from '../../src/core/archive/performance';
 import { StaticConnectionManager } from '../../src/infra/mongo/connection-manager';
-import { MongoArchiveRepo } from '../../src/persistence/repositories/archive.repo';
+import { buildArchiveWriterRepos } from '../../src/persistence/repositories/archive-repos';
 import { CpuProbeWorker, createCpuBatch, processCpuBatch } from './cpu';
 import { summarize } from './metrics';
 
@@ -31,7 +31,7 @@ async function main(output: string): Promise<void> {
         indexes[name] = await model.collection.listIndexes().toArray();
       }
     }
-    const repo = new MongoArchiveRepo(guild, 'msg-archive');
+    const repo = buildArchiveWriterRepos(guild).messages;
     const scenarios = [];
     for (const workload of [
       { count: 2_000, bodyBytes: 64 },
@@ -81,10 +81,10 @@ async function main(output: string): Promise<void> {
               }
               const metrics = sampler.stop();
               const digest = createHash('sha256');
-              const cursor = guild.models.Message.collection.find({}).sort({ messageId: 1 });
+              const cursor = guild.models.Message.collection.find({}).sort({ _id: 1 });
               let count = 0;
               for await (const row of cursor) {
-                digest.update(String(row.messageId) + String(row.contentHash));
+                digest.update(mongo.BSON.serialize(row));
                 count += 1;
               }
               const hash = digest.digest('hex');

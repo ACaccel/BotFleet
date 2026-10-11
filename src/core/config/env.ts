@@ -247,6 +247,31 @@ export const loadEnv = (options: LoadEnvOptions = {}): Env => {
   return env;
 };
 
+/**
+ * Read the `npm_config_<flag>` variables npm sets for script flags.
+ *
+ * `npm run <script> --some-flag` without a `--` separator does not pass
+ * the flag to the script: npm consumes it and exports
+ * `npm_config_some_flag` instead (`"true"` for a bare flag, the value
+ * for `--some-flag=value`). CLIs that accept the separator-free form
+ * read those variables through this helper so the raw `process.env`
+ * access stays in this module.
+ *
+ * Flag names are given in their kebab-case CLI spelling (`dry-run`);
+ * the result is keyed the same way and omits flags npm did not set.
+ */
+export const readNpmConfigFlags = <const K extends string>(
+  flags: readonly K[],
+  source: NodeJS.ProcessEnv = process.env,
+): Readonly<Partial<Record<K, string>>> => {
+  const out: Partial<Record<K, string>> = {};
+  for (const flag of flags) {
+    const value = source[`npm_config_${flag.replace(/-/g, '_')}`];
+    if (value !== undefined) out[flag] = value;
+  }
+  return Object.freeze(out);
+};
+
 const handleFailure = (issues: readonly z.ZodIssue[], exitOnFailure: boolean): never => {
   const error = new EnvLoadError(issues);
   const payload = {

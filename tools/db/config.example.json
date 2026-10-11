@@ -8,6 +8,22 @@
     },
     "drop-xfeed": {
       "dry_run": true
+    },
+    "archive-legacy-isolate": {
+      "dry_run": true,
+      "legacy_timestamp": null
+    },
+    "archive-legacy-export": {
+      "dry_run": true,
+      "legacy_timestamp": "<timestamp reported by archive-legacy-isolate>",
+      "force": false,
+      "output_dir": null,
+      "batch_size": 1000
+    },
+    "archive-legacy-drop": {
+      "dry_run": true,
+      "legacy_timestamp": "<timestamp reported by archive-legacy-isolate>",
+      "output_dir": null
     }
   }
 }

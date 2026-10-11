@@ -4,3 +4,8 @@ channels:
 dependencies:
   - nodejs=22.13.0
   - font-ttf-noto-cjk=2.004
+  # NotoColorEmoji.ttf (CBDT bitmaps, OFL-1.1) for colour emoji in Canvas charts.
+  - font-ttf-noto-emoji=2.034
+  # Info-ZIP binaries used by `npm run db -- archive-legacy-export` / `archive-legacy-drop`.
+  - zip=3.0
+  - unzip=6.0

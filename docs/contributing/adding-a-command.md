@@ -26,7 +26,8 @@ Use `subcommands` for `/command subcommand` and `subcommandGroups` for
 coexist with root `options`. Localize root subcommand descriptions/options under
 `commands:<command>.subcommands.<subcommand>`, group descriptions under
 `commands:<command>.groups.<group>.description` and subcommand descriptions/options
-under `.groups.<group>.subcommands.<subcommand>`. See the [archive handler](../../src/handlers/commands/archive/index.ts).
+under `.groups.<group>.subcommands.<subcommand>`. See the [archive handler](../../src/handlers/commands/archive/config.ts)
+for root subcommands with boolean and integer options.
 `guildOnly` and `defaultMemberPermissions` constrain registration; handlers must
 still validate guild scope and permissions at execution time.
 
@@ -67,7 +68,15 @@ Use [typed options](../../src/infra/discord/options.ts) matching each declared
 [`requireCapture`](../../src/core/regex-capture.ts) for regex captures.
 Validate per-bot configuration with `Command.validateBotConfig`; see
 [`weather_forecast/config.ts`](../../src/handlers/commands/weather_forecast/config.ts).
-Handlers and plugins cannot import each other; shared adapters belong in `infra/`.
+Code a command shares with plugins lives in `src/application/`; see
+[layers and boundaries](../architecture.md#layers-and-boundaries).
+A `channel` option accepts the text-capable channels and threads by default; set
+`channelTypes` on the option to narrow or widen that list (for example to add forum
+and media channels).
+Renderers and view helpers shared by one command group live in its `<group>-shared/`
+folder (for example the `/traffic` dashboards in `traffic-shared/dashboard/`), while
+SDK adapters they draw on, such as fonts, colour emoji and the bounded CDN
+[image loader](../../src/infra/graphics/image-loader.ts), live in `src/infra/graphics/`.
 
 ## Privacy-aware data commands
 

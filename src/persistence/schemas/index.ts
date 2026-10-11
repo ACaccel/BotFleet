@@ -1,21 +1,13 @@
 import {
   archiveInboxSchema,
   archiveJobSchema,
-  archiveJournalSchema,
-  archiveRevisionSchema,
   archiveReactionSchema,
   archiveChannelSchema,
   archiveLeaseSchema,
-  type ArchiveRevisionDoc,
   type ArchiveReactionDoc,
   type ArchiveLeaseDoc,
 } from './archive.schema';
-import type {
-  ArchiveInboxEntry,
-  ArchiveJob,
-  ArchiveJournal,
-  ArchiveChannel,
-} from '../../core/archive/types';
+import type { ArchiveInboxDocument, ArchiveJob, ArchiveChannel } from '../../core/archive/types';
 /**
  * Schema registry — single source of truth for "which models exist".
  *
@@ -62,8 +54,6 @@ export { userApiSettingSchema, type UserApiSettingDoc } from './user-api-setting
 export const SCHEMAS = {
   ArchiveInbox: archiveInboxSchema,
   ArchiveJob: archiveJobSchema,
-  ArchiveJournal: archiveJournalSchema,
-  ArchiveRevision: archiveRevisionSchema,
   ArchiveReaction: archiveReactionSchema,
   ArchiveChannel: archiveChannelSchema,
   ArchiveLease: archiveLeaseSchema,
@@ -86,10 +76,8 @@ export type SchemaName = keyof typeof SCHEMAS;
  * `infra/mongo/connection-manager` to derive the typed Models map.
  */
 export interface DocByName {
-  ArchiveInbox: ArchiveInboxEntry;
+  ArchiveInbox: ArchiveInboxDocument;
   ArchiveJob: ArchiveJob;
-  ArchiveJournal: ArchiveJournal;
-  ArchiveRevision: ArchiveRevisionDoc;
   ArchiveReaction: ArchiveReactionDoc;
   ArchiveChannel: ArchiveChannel;
   ArchiveLease: ArchiveLeaseDoc;

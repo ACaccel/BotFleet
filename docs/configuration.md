@@ -37,7 +37,7 @@ The optional base fields are defined by [Config](../src/bot/index.ts).
 
 | Field                         | Purpose                                                                                                     |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `admin`                       | Bot-admin IDs for `/ai whitelist` and `/bug_report`; default `[]`                                           |
+| `admin`                       | Bot-admin IDs for `/ai whitelist`, `/bug_report` and msg-archive's `/archive`; default `[]`                 |
 | `language`                    | `zh-TW` (default) or `en`; also controls registered command text                                            |
 | `commands`                    | Commands to expose; [register again](contributing/local-setup.md#registering-slash-commands) after changing |
 | `guilds.<id>.channels`        | Symbolic channel names mapped to IDs                                                                        |
@@ -134,54 +134,91 @@ downloads continue. Allow extra headroom for in-flight downloads.
 ## Message archive
 
 `backup_server` selects msg-archive's guilds. Periodic history backup defaults to
-disabled per guild; live capture and repair jobs remain active. Add `"archive"`
-to `commands` and register msg-archive's commands to use `/archive`. Configure
-`guilds.<guildId>.channels.debug`: all archive buttons, legacy controls and forms require
-that channel, with the bot able to view it, send messages and embed links.
-See [access and confirmations](message-archive.md#access-and-confirmations).
-The [guided backup flow](message-archive.md#one-shot-repair) uses these same
-settings; no additional configuration is required for public status cards, grouped
-change navigation or target-aware summaries.
-Explicit public JSON downloads also require the bot's **Attach Files** permission
-in the debug channel; ordinary text inspection does not require that permission.
+disabled per guild; live capture and full backups remain active. Add `"archive"`
+to `commands` and register msg-archive's commands to use `/archive`. Only users in
+msg-archive's `admin` list may use it; server owners and Manage Server holders need
+to be listed too. Configure `guilds.<guildId>.channels.debug`: every archive command
+and button requires that channel, with the bot able to view it, send messages and
+embed links. See [access and confirmations](message-archive.md#access-and-confirmations).
+The [full backup](message-archive.md#full-backup) and periodic failure notices use
+these same settings.
 `backup_interval_minutes` supplies the initial interval (default `60`); persisted
-slash-command settings override it. `/archive schedule enable [minutes]` can save
-an interval and enable scanning together; omitting minutes retains the saved value.
+slash-command settings override it. `/archive schedule enabled:true minutes:<value>`
+saves an interval and enables scanning together; omitting `minutes` keeps the saved
+value.
 `backup_log_enabled` defaults to `false` and
 enables transcripts under `logs/backup/`. See [schedule controls](message-archive.md#periodic-schedule).
 
-`archive_policy` defaults to `{ "version": "1", "bots": [], "webhooks": [] }`.
-Rules are evaluated in order within each source class. Each rule needs a unique
-`ruleId` and numeric-string `sourceId`; `action` is `include` (default) or
-`exclude`. Optional conditions are `guildIds`, `channelIds` (also matching thread
-parents), `parentIds`, `applicationIds`, `messageTypes`, literal `contains`, and
-`structures`. Humans remain included; unknown authors remain unresolved.
-Use source IDs, never tokens or webhook URLs. See the
-[policy schema](../src/core/archive/policy.ts) for accepted structures and limits.
+### Archive policy
+
+`archive_policy` decides which bot and webhook messages msg-archive keeps. It
+defaults to `{ "version": "1", "bots": [], "webhooks": [] }`. Its guild scope is
+`backup_server`; a rule's `guildIds` only narrows that rule further.
+
+- Human messages are always kept.
+- A live update that does not name its author (a partial Gateway event for a
+  message the archive does not hold yet) keeps only the message's identity, and its
+  content never enters the inbox. The REST read that follows classifies the author;
+  if the policy then rejects the message, the identity-only document is removed.
+- A bot or webhook message is kept in full only when a rule with `action:
+"include"` (the default) matches it. Rules are evaluated in order within each
+  source class (`bots` by the bot's user ID, `webhooks` by the webhook ID); the
+  first matching rule decides, and a matching `exclude` rule drops the message.
+- A bot's reply to an interaction (a slash or context command, button, select menu
+  or modal) that no rule matches keeps only its interaction record: message and
+  channel IDs, author, application ID, `interactionMetadata` (including the user
+  who invoked the interaction), message type and times. Content, attachments, embeds, reactions and edit history are not kept;
+  `excludedFields` lists the omitted fields and `policy.reason` is
+  `interaction-record`. `/traffic apps` counts command use from these records; a
+  command answered only ephemerally leaves no record.
+- An interaction reply sent through the application's webhook is also matched
+  against the `bots` rules for its author, so an `exclude` rule for a bot drops even
+  its interaction records, and an `include` rule keeps its replies in full.
+- Other bot and webhook messages are not kept.
+
+Policy changes apply to new observations only. Adding an `exclude` rule, or
+removing an `include` rule, does not delete or shrink messages already stored;
+remove them manually if they must go (with msg-archive stopped, from the guild's
+`messages` collection, matching `policy.ruleId` or `author.id`).
+
+Each rule needs a unique `ruleId` and numeric-string `sourceId`. Optional
+conditions are `guildIds`, `channelIds` (also matching thread parents),
+`parentIds`, `applicationIds`, `messageTypes`, literal `contains`, and `structures`
+(`attachments`, `embeds`, `stickers`, `poll`, `components`, or `snapshots` for
+forwarded messages). The parent of a channel comes from the Gateway event, the
+client cache or `archive_channels`. Changing `version` marks a policy change; kept
+bot and webhook messages record the version in `policy.version`. Use source IDs,
+never tokens or webhook URLs. See the [policy schema](../src/core/archive/policy.ts)
+for accepted structures and limits.
+
+### Archive runtime
 
 `archive_runtime` is optional:
 
-| Field                            | Default         | Purpose                                                    |
-| -------------------------------- | --------------- | ---------------------------------------------------------- |
-| `concurrency`                    | `2`             | Background readers, range 1–8                              |
-| `progress_interval_seconds`      | `10`            | Fixed ten-second public status cadence; only `10` accepted |
-| `overlap_minutes`                | `60`            | Incremental history overlap                                |
-| `job_poll_seconds`               | `5`             | Control/inbox polling                                      |
-| `max_pending_events`             | `1000`          | In-process admission limit                                 |
-| `max_inbox_bytes`                | `1000000000`    | Durable inbox allocation limit                             |
-| `storage.budget_bytes`           | `100000000000`  | Entire BotFleet budget                                     |
-| `storage.background_limit_bytes` | `85000000000`   | Background work ceiling                                    |
-| `storage.reserve_bytes`          | `5000000000`    | Budget/filesystem headroom                                 |
-| `storage.mongo_data_root`        | auto-discovered | Explicit MongoDB data root if discovery is unavailable     |
-| `storage.additional_roots`       | `[]`            | Other managed storage roots                                |
+| Field                            | Default         | Purpose                                                         |
+| -------------------------------- | --------------- | --------------------------------------------------------------- |
+| `concurrency`                    | `2`             | Background readers, range 1–8                                   |
+| `progress_interval_seconds`      | `10`            | Fixed ten-second full-backup panel cadence; only `10` accepted  |
+| `overlap_minutes`                | `60`            | Incremental overlap before watermarks and Gateway downtime      |
+| `job_poll_seconds`               | `5`             | Full-backup job polling and the idle inbox loop's recheck       |
+| `max_pending_events`             | `1000`          | In-process admission limit; ×10 sizes the changed-message table |
+| `max_inbox_bytes`                | `1000000000`    | Durable inbox allocation limit                                  |
+| `storage.budget_bytes`           | `100000000000`  | Entire BotFleet budget                                          |
+| `storage.background_limit_bytes` | `85000000000`   | Background work ceiling                                         |
+| `storage.reserve_bytes`          | `5000000000`    | Budget/filesystem headroom                                      |
+| `storage.mongo_data_root`        | auto-discovered | Explicit MongoDB data root if discovery is unavailable          |
+| `storage.additional_roots`       | `[]`            | Other managed storage roots, re-measured every ten minutes      |
 
 The [runtime schema](../src/plugins/message-backup/config.ts) defines validation
 limits. Storage roots must be accessible on the worker host. Capacity includes
-projected writes and recovery data; lowering a budget never authorizes deletion.
+projected writes; lowering a budget never authorizes deletion. The MongoDB data
+root is measured on every sample; the project, the runtime and `additional_roots`
+are re-measured every ten minutes (see [capacity](message-archive.md#status-panel)).
+The worker saves its latest host measurement for `/archive status`.
 
 Concurrency and notification cadence share validators across startup, scheduling,
 notifications and deploy preparation. Internal batches normally stop at 500 documents
-or 4 MiB. A single larger repair recovery image uses its own batch up to the existing
+or 4 MiB. A single larger message image uses its own batch up to the existing
 15 MiB safety limit; it is never truncated. History/reaction staging shares a 64 MiB owner budget. These bounds are
 implementation limits, not additional configuration fields. CPU worker offloading
 remains disabled; see the [measurement report](contributing/archive-performance-results.md).

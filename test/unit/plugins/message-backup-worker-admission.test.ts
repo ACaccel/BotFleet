@@ -28,6 +28,7 @@ it('bounds capture before initialization and drains initialization-waiting event
     messageId: '100',
     observedAt: 1,
     kind: 'delete' as const,
+    bulk: false,
   };
   const first = worker.capture(event).catch((error: unknown) => error);
   await expect(worker.capture({ ...event, eventId: 'second' })).rejects.toThrow('queue overflow');
@@ -58,8 +59,8 @@ describe('capture admission scope', () => {
     await worker.capture({
       eventId: 'outside',
       guildId: '2',
-      channelId: '20',
       kind: 'gap',
+      reason: 'test',
       observedAt: 1,
     });
     expect(initialize).not.toHaveBeenCalled();

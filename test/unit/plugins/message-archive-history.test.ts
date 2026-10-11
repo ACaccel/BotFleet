@@ -2,11 +2,11 @@ import { ChannelType, type Client, type Guild } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger } from '../../../src/core/logger';
 import { collectChannels } from '../../../src/plugins/message-backup/internal/collect-channels';
+import type { ArchiveHistoryCheckpoint as HistoryCheckpoint } from '../../../src/core/archive/types';
 import {
   scanArchiveHistory,
-  type HistoryCheckpoint,
   type HistoryHooks,
-} from '../../../src/plugins/message-backup/runtime/history';
+} from '../../../src/plugins/message-backup/runtime/history-scan';
 import { historyBefore } from '../../../src/plugins/message-backup/flow/history-boundary';
 import { ArchivePipelineBudget } from '../../../src/plugins/message-backup/flow/pipeline';
 
@@ -158,23 +158,75 @@ describe('historical location reconciliation', () => {
     expect(f.checkpoints.get('20')?.complete).toBe(true);
   });
   it.each([
-    { code: 10003, access: 'deleted', gap: false },
-    { code: 50001, status: 403, access: 'denied', gap: true },
-    { code: 123, access: 'unknown', gap: true },
+    { code: 10003, access: 'deleted', issue: false, known: false },
+    { code: 50001, status: 403, access: 'denied', issue: false, known: true },
+    { code: 123, access: 'unknown', issue: true, known: false },
   ])(
     'distinguishes revalidation $access from unknown absence',
-    async ({ code, status, access, gap }) => {
+    async ({ code, status, access, issue, known }) => {
       const f = fixture();
       f.hooks.knownChannelIds = ['20'];
       vi.mocked(f.client.channels.fetch).mockRejectedValue({ code, status });
       const revalidated = vi.fn(async () => undefined);
       f.hooks.revalidated = revalidated;
       const result = await f.run();
-      expect(result.issues.length > 0).toBe(gap);
+      expect(result.issues.length > 0).toBe(issue);
+      expect(result.gaps.length > 0).toBe(known);
       expect(revalidated).toHaveBeenCalledWith('20', access, undefined, expect.any(String));
       expect(f.checkpoints.has('20')).toBe(false);
     },
   );
+  it.each([
+    {
+      name: 'an unsupported known channel type',
+      type: 999,
+      me: {},
+      allowed: true,
+      access: 'unknown',
+      gap: '20: unsupported-known-channel-type',
+    },
+    {
+      name: 'a known channel the bot cannot view',
+      type: ChannelType.GuildVoice,
+      me: {},
+      allowed: false,
+      access: 'denied',
+      gap: '20: missing-view-channel',
+      reason: 'missing-view-channel',
+    },
+    {
+      name: 'an uncached bot member',
+      type: ChannelType.GuildVoice,
+      me: null,
+      allowed: true,
+      access: 'denied',
+      issue: '20: bot-member-unavailable',
+      reason: 'bot-member-unavailable',
+    },
+  ])('classifies $name during known-channel revalidation', async (row) => {
+    const f = fixture();
+    const known = {
+      ...channel('20'),
+      type: row.type,
+      guild: { id: 'guild', members: { me: row.me } },
+      permissionsFor: () => ({ has: () => row.allowed }),
+      messages: { fetch: vi.fn() },
+    };
+    vi.mocked(f.client.channels.fetch).mockResolvedValue(known as any);
+    f.hooks.knownChannelIds = ['20'];
+    const revalidated = vi.fn(async () => undefined);
+    f.hooks.revalidated = revalidated;
+    const result = await f.run();
+    expect(result.gaps).toEqual(row.gap === undefined ? [] : [row.gap]);
+    expect(result.issues).toEqual(row.issue === undefined ? [] : [row.issue]);
+    expect(revalidated).toHaveBeenCalledWith(
+      '20',
+      row.access,
+      known,
+      ...(row.reason === undefined ? [] : [row.reason]),
+    );
+    expect(f.checkpoints.has('20')).toBe(false);
+  });
   it('persists inventory gaps without skipping successful locations', async () => {
     const f = fixture();
     vi.mocked(collectChannels).mockResolvedValue({
@@ -191,7 +243,40 @@ describe('historical location reconciliation', () => {
       ['10'],
     );
     expect(result.channels).toBe(1);
-    expect(result.issues).toContain('403');
+    expect(result.issues).toEqual(['10: 403']);
+    expect(result.gaps).toEqual([]);
+  });
+  it('reports permission and channel-type limits as known gaps instead of blocking issues', async () => {
+    const f = fixture();
+    vi.mocked(collectChannels).mockResolvedValue({
+      channels: [channel('10')],
+      locations: [{ id: '10', type: ChannelType.GuildText }],
+      gaps: [
+        { pass: 'history', channelId: '11', reason: 'missing-view-channel' },
+        { pass: 'channels', channelId: '12', reason: 'unsupported-channel-type:999' },
+        { pass: 'private', channelId: '10', reason: 'DiscordAPIError[50001]', forbidden: true },
+        { pass: 'channels', reason: 'sdk-inventory:Error: offline' },
+      ],
+    } as any);
+    const result = await f.run();
+    expect(result.channels).toBe(1);
+    expect(result.gaps).toEqual([
+      '11: missing-view-channel',
+      '12: unsupported-channel-type:999',
+      '10: DiscordAPIError[50001]',
+    ]);
+    expect(result.issues).toEqual(['sdk-inventory:Error: offline']);
+  });
+  it('scans carried-over sources fully inside an incremental run', async () => {
+    const f = fixture(['10', '20']);
+    (f.hooks as { full: boolean }).full = false;
+    f.hooks.fullChannelIds = ['20'];
+    (f.hooks as { load: HistoryHooks['load'] }).load = async () => ({
+      lastMessageId: '1000000000000000000',
+    });
+    await f.run();
+    expect(f.checkpoints.get('10')?.lower).toBeDefined();
+    expect(f.checkpoints.get('20')?.lower).toBeUndefined();
   });
   it('falls back to full history for a malformed legacy cursor', async () => {
     const f = fixture();
@@ -256,7 +341,6 @@ describe('speculative page barriers', () => {
     expect((await run).scanned).toBe(101);
     expect(f.checkpoints.get('10')?.before).toBe('100');
     expect(f.checkpoints.get('10')?.pageSequence).toBe(2);
-    expect(f.checkpoints.get('10')?.version).toBe(2);
     // Two inventories, one initial channel boundary, and one boundary after each committed page.
     expect(f.hooks.afterPage).toHaveBeenCalledTimes(5);
     expect(budget.snapshot().reservedBytes).toBe(0);

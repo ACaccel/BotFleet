@@ -21,8 +21,9 @@ configuration IDs have been removed; there are no compatibility aliases.
    with the root IDs `feed`, `reply`, `activity`, `giveaway`, `ai`, `thread`, and
    `traffic`. Include each enabled root once. A root enables all its actions;
    existing runtime permission checks still apply individually.
-2. Restart the affected bots with the updated configuration. Register each bot's
-   commands with `npm run register -- -t <bot>` to replace Discord's old entries;
+2. Restart the affected bots with the updated configuration. Register every bot's
+   commands with `npm run register` (one bot: `npm run register -t <bot>`) to
+   replace Discord's old entries;
    see [registration and guild-command pruning](contributing/local-setup.md#registering-slash-commands).
 3. Review any custom Discord command permissions for the new roots. Discord
    command-level overrides apply to the root, while application authorization
@@ -32,6 +33,26 @@ Options, stored data, button/modal identifiers, and per-action authorization
 remain unchanged. `/help` lists full executable paths; its command count counts
 registered roots, not individual actions. Internal action modules are not public
 command entries. See [configuration](configuration.md) for enabled-command setup.
+
+## Message statistics commands
+
+The statistics commands are rebuilt on the archive's statistics reader. Three
+standalone commands are removed without aliases:
+
+| Previous command     | Replacement                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `/emoji_frequency`   | `/traffic emoji`: `order` replaces `frequency`, `kind` replaces `type`, `range` replaces `last_n_months`; new `source` |
+| `/sticker_frequency` | `/traffic sticker`: `order` replaces `frequency`, `range` replaces `last_n_months`                                     |
+| `/db_list_message`   | None yet                                                                                                               |
+
+`/traffic` adds `channel` and `apps`, the `90d` and `365d` ranges, and a dashboard
+image per reply; `top_n` now stops at the rows a dashboard draws (10, 20 for emoji, 12
+for stickers).
+
+1. Remove `emoji_frequency`, `sticker_frequency` and `db_list_message` from each bot's
+   `commands` in `config.json`; keep `traffic`. Unknown IDs are skipped at startup.
+2. Deploy, then run `npm run register` (one bot: `npm run register -t <bot>`) so
+   Discord drops the old commands and shows the new subcommands.
 
 ## Thread management controls
 
@@ -60,7 +81,7 @@ A remaining `x_media_feed` block prevents startup. Subscriptions now live in gui
    [nijika example](../src/bot/nijika/config.example.json).
 3. Remove `accounts`, `defaultChannel` and the unused `guilds.<id>.channels.x_feed` mapping.
 4. Add `feed` to `commands`, then
-   run `npm run register -- -t nijika`; review the
+   run `npm run register -t nijika`; review the
    [guild-command pruning behavior](contributing/local-setup.md#registering-slash-commands).
 5. Recreate subscriptions with `/feed subscribe` (up to 20 accounts per call),
    specifying destination and media filter. Check failures and unattempted accounts.
@@ -85,10 +106,10 @@ archive indexes or receive mutation repositories. Their guild-events attachment
 cache/deletion behavior is unchanged.
 
 The `tools/msg_backup` adapter and message-only `db` operations have been removed.
-Use [Discord archive controls](message-archive.md#discord-controls) for planning,
-timestamp repair, automatic verification, job inspection and recovery. Add `archive`
+Use [Discord archive controls](message-archive.md#discord-controls) for archive
+work. Add `archive`
 to msg-archive's local `commands`, configure each guild's debug channel, deploy,
-and register with `npm run register -- -t msg-archive`. Existing local
+and register with `npm run register -t msg-archive`. Existing local
 `tools/db/config.json` credentials and `report.json` results are preserved; retired
 operation sections can be removed manually when no longer needed. Unrelated
 collection cleanup and whole-database migration remain available in their tools.
@@ -96,13 +117,13 @@ Archive writes and timestamp/index work belong to msg-archive. Empty bot/webhook
 allowlists do not remove existing unknown-source rows.
 
 Review [capacity and recovery](message-archive.md#capacity-and-recovery) before rollout.
-Legacy duplicates can leave the worker in capture-only mode until a reviewed repair
-establishes the unique message index. Existing identity/query fields are preserved;
+Legacy duplicates can leave the worker in capture-only mode until the
+[rebuild](#rebuilding-the-message-archive) replaces them. Existing identity/query fields are preserved;
 startup performs no bulk data conversion.
 
 Periodic history scans now default to disabled per guild. Add `archive` to the
 local msg-archive `commands` list, redeploy and register commands, then explicitly
-enable the schedule after repair. Live capture remains active. Existing
+enable the schedule after the first full backup. Live capture remains active. Existing
 `backup_interval_minutes` provides only the initial interval; saved command
 settings take precedence. See [schedule controls](message-archive.md#periodic-schedule).
 
@@ -128,6 +149,9 @@ migration is required.
 
 ### Guided archive controls
 
+These controls are retired; see
+[full backup replaces the repair flow](#full-backup-replaces-the-repair-flow).
+
 Register commands again to expose `/archive schedule enable [minutes]`. Existing
 schedule settings and command names remain valid; the optional interval and enable
 change are saved together. Repeating existing settings no longer changes the next
@@ -135,11 +159,11 @@ backup time. Routine progress omits internal steps and duplicate counters while
 retaining problems, recovery actions and incomplete-count indicators.
 
 After deploying the updated msg-archive release, register its command metadata
-with `npm run register -- -t msg-archive` to expose the four entry points:
+with `npm run register -t msg-archive` to expose the four entry points:
 `backup`, `jobs`, `plans` and `schedule`. Reopen job/plan lists after deployment to
 use button-only pages: two entries per list page and at most five controls.
 Eligible deletion and rollback appear directly; whole-list deletion opens an
-[all-pages review](message-archive.md#bulk-deletion). Active-only filtering and
+all-pages review. Active-only filtering and
 combined single-item stop-and-delete buttons are removed from new pages. Existing
 select interactions remain compatible and refresh into buttons. Apply, resume and
 acceptance retain scoped confirmation. Audit, standalone verification and
@@ -167,7 +191,7 @@ Single and bulk plan deletion now also accept fully rolled-back plans when no
 conflicts, recovery journals, active consumers or jobs remain. All operations must
 be rolled back or still planned without ever mutating data. Incomplete rollback
 and remaining applied changes stay protected; archived messages are preserved.
-See the [plan deletion rules](message-archive.md#discord-controls).
+Plan deletion followed the rules of that release.
 
 Target-aware inspection reads allowlisted fields from existing journal images;
 it does not require rebuilding old plans or migrating recovery data. Missing
@@ -182,7 +206,7 @@ downloads have been removed. Old detail buttons open the compact changes view.
 Routine views omit internal IDs and hashes; meaningful source IDs remain available.
 Public progress offers details and stop controls and keeps the same ten-second card.
 
-The [guided flow](message-archive.md#one-shot-repair) removes the redundant manual
+The guided flow removes the redundant manual
 verify step after a successful apply. It does not automatically accept results or
 enable periodic scans. Acceptance still checks current data and explicitly starts
 the recovery retention period.
@@ -191,3 +215,136 @@ Rollback conditional writes now combine a native `_id` equality predicate with
 the existing complete-document comparison. This lets MongoDB use its ID index
 without weakening protection against later edits. No index or data migration is
 needed; recovery remains sequential and preserves its journal order.
+
+### Live inbox retry counters
+
+`archive_inbox.attempts` now counts only failed reconciliations that were the
+event's fault. Earlier versions incremented it on every claim, so values written
+before this change are inflated by capacity waits and releases; such an event can
+be dead-lettered on its next counted failure. A new `claims` field tracks claims
+that end without any outcome, and dead letters (`state: "dead"`) expire through a
+30-day TTL index on `deadAt`, created by the worker at startup. The archive rebuild
+below moves the old inbox aside, so a rebuilt archive starts with clean counters.
+
+### Full backup replaces the repair flow
+
+The one-shot repair workflow (plan → apply → verify → accept → 72-hour rollback)
+is retired with its recovery data, and `/archive` is redesigned. After deploying,
+register msg-archive's commands again with `npm run register -t msg-archive`.
+
+- **Commands.** `/archive backup`, `/archive status` and
+  `/archive schedule [enabled] [minutes]` remain. `/archive jobs`, `/archive plans`
+  and `/archive schedule status|enable|disable|interval` are removed: use
+  `/archive schedule` without options to show the schedule, `enabled:true|false`
+  instead of `enable`/`disable`, and `minutes:<value>` instead of `interval`.
+- **Full backup.** `/archive backup` starts a [full backup](message-archive.md#full-backup)
+  after one confirmation: a fixed cutoff, per-channel checkpoints kept apart from
+  periodic ones, cooperative stop and resume, and automatic continuation after a
+  restart. It needs no acceptance step and has no rollback. Plans, journals,
+  quarantine and job or plan deletion are gone; job records are pruned
+  automatically to the ten newest finished ones.
+- **Access.** `/archive` now requires the user to be in msg-archive's `admin` list
+  ([configuration](configuration.md#common-bot-settings)); server owners and Manage
+  Server holders no longer qualify automatically. Add every operator to `admin`
+  before deploying. The command no longer sets a Discord default member permission,
+  so every member sees it and non-admins get a private refusal. The debug channel
+  and `backup_server` requirements are unchanged.
+- **Notifications.** Periodic passes no longer post progress cards. The debug
+  channel gets one notice after three consecutive failed passes and one when a
+  pass completes again.
+- **Old panels.** Buttons, menus and forms on messages from earlier versions no
+  longer act. Using one replies privately that the panel is out of date and leaves
+  the old message as it is; run the command again for a current panel.
+- **Data.** Plan, journal, quarantine and control collections of the old flow
+  (`archive_repair_*`, `archive_journals`, `archive_quarantine`,
+  `archive_plan_deletions`, `archive_control_deletions`, `archive_bulk_*`,
+  `archive_progress_details`) are no longer read or written. The
+  [rebuild](#rebuilding-the-message-archive) removes them; until then they are
+  inert. Unfinished repair runs cannot be resumed or rolled back after this update.
+  The new `archive_storage_usage` (host storage sample) and `archive_control_confirmations`
+  (start approvals, expired by a TTL index on `purgeAt`) are metadata the rebuild
+  also drops.
+  A history checkpoint from before this update is reused only by the periodic run
+  that wrote it.
+
+### Rebuilding the message archive
+
+The legacy message archive is retired by a rebuild rather than migrated. With
+msg-archive stopped and every guild database backed up with `mongodump`, move the
+legacy collections aside, run a full backup with the new design, export the legacy
+messages that backup cannot reproduce (and any unprocessed live events) into a
+verified zip, then drop the legacy data. The `db` CLI provides the three dry-run-by-default steps:
+`archive-legacy-isolate`, `archive-legacy-export` and `archive-legacy-drop`. Their
+preconditions, options and export format are in the
+[`db` tool reference](../tools/db/README.md#legacy-message-archive-rebuild).
+Export and drop need the `zip` and `unzip` binaries: re-run
+`bash scripts/setup-env.sh` (after undeploying managed services) to install them
+from `environment.yml`.
+
+Run the rebuild one step at a time and check each report before the next step:
+
+1. **Prepare.** Deploy the new release without starting msg-archive. If the host
+   storage check may pause background work while the `legacy_*` collections still
+   count towards usage, raise `storage.background_limit_bytes` temporarily.
+2. **Back up.** Stop msg-archive, run `mongodump --gzip` for every guild database
+   to a location outside the storage budget, and restore it once into a scratch
+   database to confirm the document counts before deleting the scratch copy.
+3. **Isolate.** Run `npm run db -- archive-legacy-isolate` as a dry run, review the
+   report, then set `dry_run: false` and run it again. Note the reported
+   `legacy_timestamp`.
+4. **Full backup.** Start msg-archive (it creates the schema 3 indexes on start),
+   then run `/archive backup` in each guild's debug channel and confirm. Wait for
+   it to finish. Continue or restart it until only known coverage gaps remain;
+   a transient failure would otherwise make that channel's legacy messages look
+   missing.
+5. **Export.** Run `npm run db -- archive-legacy-export` as a dry run and check
+   the per-category counts; stop and investigate if `message-missing` is
+   unexpectedly large. Then set `dry_run: false`, confirm the report says the
+   archive verified, and open one file per category from the zip as a spot check.
+   The zip stays in `tools/db/backups/` (mode 0600, private channel content).
+6. **Drop.** Run `npm run db -- archive-legacy-drop` as a dry run, review the
+   listed collections, then set `dry_run: false`. Delete the `mongodump` files
+   from step 2 afterwards.
+7. **Resume.** Run `/archive schedule enabled:true`, restore any limit raised in
+   step 1, update the production `config.json` files (the msg-archive `admin`
+   list must contain everyone who operates `/archive`; remove `emoji_frequency`,
+   `sticker_frequency` and `db_list_message` from the bots that listed them),
+   restart msg-archive and the reader bots, and run `npm run register` so Discord
+   shows every bot's new command list.
+8. **Verify.** Watch the first two periodic passes: the cutoff advances and the
+   second pass is incremental. Run `/traffic overview` and `/traffic me` and check
+   on desktop and mobile that the dashboard image inside the embed stays readable.
+
+### Message schema 3
+
+msg-archive now writes only schema 3 `messages` documents and never reads or
+converts earlier ones. Isolate the legacy archive with `archive-legacy-isolate`
+before starting the new worker: a `messages` collection that still has the legacy
+`messageId_1` index, holds documents without the schema 3 indexes
+(`createdTimestamp_1`, `channelId_1_createdTimestamp_1`), or holds documents of an
+earlier schema keeps the guild in capture-only mode, where live events only queue
+in `archive_inbox`.
+
+- The Discord message ID is `_id`; field names follow discord.js
+  (`author { id, username, globalName, bot }`, `createdTimestamp`,
+  `reference.messageId`, `messageSnapshots` …). `guildId`, `channelName`,
+  `channelParentId`, `contentHash`, `presence`, `authorKind`, `source`,
+  `firstObservedAt` and the attachment `spoiler`/`urlObservedAt` fields are gone.
+  See [message documents](message-archive.md#message-documents).
+- `archive_revisions` is no longer written. Up to 50 previous versions live in each
+  message's `editHistory`; `editHistoryDropped` counts older ones.
+- Attachment and Discord media URLs are stored without their expiring signature.
+- Channel names, parents and `everyoneCanView` live in `archive_channels`, which
+  channel events and live capture now update; deleted channels keep their record.
+  `archive_reactions` chunks record their message's `channelId`, and reaction keys
+  are the custom emoji ID or the Unicode emoji (no `custom:`/`unicode:` prefix);
+  `reactionGenerations` keys add `:0` (normal) or `:1` (burst).
+- Bot replies to interactions that no `archive_policy` rule names are now kept as
+  interaction records (no content). Add an `exclude` rule for a bot whose command
+  use should not be recorded. Policy changes never remove stored messages. See
+  [archive policy](configuration.md#archive-policy).
+- Progress no longer reports format upgrades or lower-bound counts. A channel whose
+  only checkpoint predates per-kind checkpoints is scanned from the start.
+
+`/traffic` reads schema 3; its statistics stay incomplete until the first full backup
+after the rebuild completes.

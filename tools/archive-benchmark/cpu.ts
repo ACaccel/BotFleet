@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks';
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { mongo } from 'mongoose';
 import { ArchivePerformanceSampler } from '../../src/core/archive/performance';
-import { normalizeMessage, contentHash } from '../../src/core/archive/normalize';
+import { normalizeMessage } from '../../src/core/archive/normalize';
 import type { ArchiveSnapshot } from '../../src/core/archive/types';
 import { summarize } from './metrics';
 
@@ -27,17 +27,13 @@ export function processCpuBatch(batch: CpuBatch): CpuReply {
     documents: Record<string, unknown>[];
   };
   const snapshots = documents.map((raw) =>
-    normalizeMessage(raw, {
-      guildId: '1',
-      channelName: 'synthetic',
-      source: 'history',
-      observedAt: 1_700_000_000_000,
-    }),
+    normalizeMessage(raw, { observedAt: 1_700_000_000_000 }),
   );
   const hashes = documents.map((raw, index) => {
     const snapshot = snapshots[index]!;
     return (
-      contentHash(snapshot) + createHash('sha256').update(mongo.BSON.serialize(raw)).digest('hex')
+      createHash('sha256').update(mongo.BSON.serialize(snapshot)).digest('hex') +
+      createHash('sha256').update(mongo.BSON.serialize(raw)).digest('hex')
     );
   });
   return { sequence: batch.sequence, hashes, snapshots };

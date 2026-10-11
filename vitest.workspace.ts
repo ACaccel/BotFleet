@@ -131,7 +131,10 @@ export default defineWorkspace([
   },
   // `tools` project covers the unit tests that live next to the ops
   // scripts under `tools/<name>/*.test.ts`. Aliases are mirrored so
-  // the helpers can import `@core/*` for shared error types.
+  // the helpers can import `@core/*` for shared error types. Suites that
+  // need MongoDB (`tools/db/commands/archive-legacy/`) start their own
+  // in-memory server per file, since the `integration` globalSetup is
+  // not shared with this project.
   {
     test: {
       name: 'tools',

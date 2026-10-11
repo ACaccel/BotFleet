@@ -10,11 +10,11 @@
  *
  * Convention for `operation`: `"<Class>.<method>"` for class-scoped
  * failures, `"<module>.<function>"` for free functions
- * (e.g. `"MongoMessageRepo.insertManyIgnoringDuplicates"`,
+ * (e.g. `"MongoArchiveStatsRepo.activity"`,
  * `"MongoConnectionManager.open"`).
  */
 export interface ErrorContext {
-  /** What was being attempted, e.g. `"MongoMessageRepo.findRecentByChannel"`. */
+  /** What was being attempted, e.g. `"MongoArchiveStatsRepo.activity"`. */
   readonly operation: string;
   /** Sanitised input that scoped the failure (IDs, counts, flags). */
   readonly input?: Readonly<Record<string, unknown>>;

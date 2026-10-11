@@ -62,35 +62,21 @@ other persistent failures, then restart the bot.
 ## Message archive maintenance
 
 Use [archive operations](../message-archive.md) for health, capacity, owner recovery,
-jobs, reviewed repair and conditional rollback through `/archive` in the configured
-guild debug channel. Local tests do not authorize production repair. Unrelated
-collection cleanup remains in the [database CLI](../../tools/db/README.md);
-whole-database transfer remains in the [migration runbook](../../tools/migration/README.md).
+the full backup and the periodic schedule through `/archive` in the configured guild
+debug channel; only users in msg-archive's `admin` list can use it. Local tests do
+not authorize a production backup. Unrelated collection cleanup and the legacy
+archive rebuild remain in the [database CLI](../../tools/db/README.md); whole-database
+transfer remains in the [migration runbook](../../tools/migration/README.md).
 
-For normal one-shot work, use the [guided backup flow](../message-archive.md#one-shot-repair).
-Its public status card updates every ten seconds and offers **View details** and
-cooperative stopping. The changes view shows small plans directly and groups
-larger plans with source examples. Pages use buttons only, with at most five
-controls. `/archive jobs` and `/archive plans` show two items per page; select an
-item button or use refresh/next-page navigation. **Delete all jobs** and
-**Delete all plans** open an all-pages review before confirmation. Item panels offer eligible delete
-and rollback buttons directly. Stop a running job before deleting its record.
-Apply, resume and acceptance open confirmation on the selected item's panel.
-Use the same panel's item, refresh and list buttons to navigate without comparing
-separate messages. Other panels retain their current view. The original job card
-shows actual current activity every ten seconds; a running job opened in a list
-panel uses **Refresh** to retrieve a new snapshot.
-There are no active-only filters, technical pages or nested change drilldowns.
-Unused plans can be deleted before application or after a complete rollback when
-no conflicts, recovery journals or active work remain. Single and bulk deletion
-use the same checks and preserve archived messages.
-See the [deletion rules](../message-archive.md#discord-controls) for protected
-recovery data and [bulk deletion](../message-archive.md#bulk-deletion) for snapshot
-review, cooperative job stopping and durable result/resume controls.
+Start a [full backup](../message-archive.md#full-backup) with `/archive backup` and
+confirm once. Its public panel updates every ten seconds and offers **Stop** and
+**Gap details**; a stopped or failed backup offers **Resume**, which keeps the cutoff
+and checkpoints. A backup interrupted by a restart continues automatically.
+`/archive status` shows the latest results, coverage, live capture and capacity.
 
-Periodic scans are disabled until explicitly enabled per guild. Use
-[`/archive schedule enable minutes:60`](../message-archive.md#periodic-schedule)
-after the one-shot repair is accepted to save an interval and enable scanning in
-one command. Repeating saved settings preserves the next due time. Disabling it
-leaves live capture and control jobs available and pauses history or reaction
-pagination at a safe boundary.
+Periodic scans are disabled until explicitly enabled per guild. After the first
+full backup, use [`/archive schedule enabled:true minutes:60`](../message-archive.md#periodic-schedule)
+to save an interval and enable scanning in one command. Repeating saved settings
+preserves the next due time. Disabling it leaves live capture and full backups
+available and pauses history or reaction pagination at a safe boundary. After three
+consecutive failed passes the debug channel gets one notice; check the worker log.

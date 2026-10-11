@@ -1,13 +1,20 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '../command';
-import { archiveConfig, ArchiveAccessError, requireArchiveAccess } from './access';
+import type { ArchivePanel } from '../../../application/archive/panel';
+import { withArchivePublicMessageLock } from '../../../application/archive/public-message';
+import { ArchiveInputError } from '../../../core/errors';
+import { archiveConfig, requireArchiveAccess } from '../archive-shared/access';
+import { archiveFailure } from '../archive-shared/failure';
+import { archiveBackupEntry, archiveStatusView } from '../archive-shared/views';
 import { archiveCommandConfig } from './config';
-import { executeArchiveOperation } from './operations';
-import { archiveFailure, publishArchiveReply } from './replies';
 import { executeArchiveSchedule } from './schedule';
 
-/** Discord is the worker's sole public operational control surface. */
+const SUBCOMMANDS = ['backup', 'status', 'schedule'] as const;
+const isArchiveSubcommand = (value: string): value is (typeof SUBCOMMANDS)[number] =>
+  (SUBCOMMANDS as readonly string[]).includes(value);
+
+/** Discord control of msg-archive: full backup, status and the periodic schedule. */
 export default class archive extends Command {
   constructor() {
     super();
@@ -20,28 +27,42 @@ export default class archive extends Command {
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    await interaction.deferReply();
     try {
-      const group = interaction.options.getSubcommandGroup(false);
-      if (group !== null && group !== 'schedule')
-        throw new ArchiveAccessError('replies:archive.invalid_action');
-      if (group === 'schedule') {
-        const action = interaction.options.getSubcommand();
-        if (!['status', 'enable', 'disable', 'interval'].includes(action))
-          throw new ArchiveAccessError('replies:archive.invalid_action');
-        const minutes =
-          action === 'interval' || action === 'enable'
-            ? interaction.options.getInteger('minutes', action === 'interval')
-            : null;
-        if (minutes !== null && (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 10_080))
-          throw new ArchiveAccessError('replies:archive.invalid_interval');
-      }
+      const action = interaction.options.getSubcommand();
+      if (!isArchiveSubcommand(action))
+        throw new ArchiveInputError('replies:archive.invalid_action');
       const access = await requireArchiveAccess(interaction, bot);
-      const reply =
-        group === 'schedule'
-          ? await executeArchiveSchedule(interaction, bot, access)
-          : await executeArchiveOperation(interaction, bot, access.control, access);
-      if (reply !== undefined) await publishArchiveReply(interaction, reply, bot, access);
+      // Panels are public in the debug channel; access was checked first.
+      await interaction.deferReply();
+      const show = async (panel: ArchivePanel): Promise<void> => {
+        await interaction.editReply({ content: '', ...panel, allowedMentions: { parse: [] } });
+      };
+      switch (action) {
+        case 'backup': {
+          const messageId = (await interaction.fetchReply()).id;
+          // A backup's panel may move here; the worker's edits wait for this one.
+          await withArchivePublicMessageLock(interaction.channelId, messageId, async () =>
+            show(
+              await archiveBackupEntry(bot, access, {
+                userId: interaction.user.id,
+                channelId: interaction.channelId,
+                messageId,
+              }),
+            ),
+          );
+          return;
+        }
+        case 'status':
+          await show(await archiveStatusView(bot, access));
+          return;
+        case 'schedule':
+          await show(await executeArchiveSchedule(interaction, bot, access));
+          return;
+        default: {
+          const unreachable: never = action;
+          throw new TypeError(`Unknown archive subcommand ${String(unreachable)}`);
+        }
+      }
     } catch (error) {
       await archiveFailure(interaction, bot, error);
     }

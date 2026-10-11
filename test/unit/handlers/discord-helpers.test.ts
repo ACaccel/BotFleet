@@ -3,22 +3,12 @@ import type { Message } from 'discord.js';
 
 import {
   buildButtonRows,
-  listInOneImage,
   msgReact,
   scheduleJob,
 } from '../../../src/handlers/commands/discord-helpers';
 
 const scheduleJobMock = vi.fn();
 
-// `discord-helpers` fetches through the shared bounded instance
-// (`boundedHttp`), so the mock has to provide `axios.create`.
-const axiosGetMock = vi.fn();
-vi.mock('axios', () => ({
-  default: {
-    create: () => ({ get: (...args: unknown[]) => axiosGetMock(...args) }),
-    get: (...args: unknown[]) => axiosGetMock(...args),
-  },
-}));
 vi.mock('node-schedule', () => ({
   default: {
     scheduleJob: (...args: unknown[]) => scheduleJobMock(...args),
@@ -98,51 +88,6 @@ describe('msgReact', () => {
     const react = vi.fn().mockRejectedValue(new Error('boom'));
 
     await expect(msgReact(fakeMessage(react), ['x'])).resolves.toBeUndefined();
-  });
-});
-
-describe('listInOneImage', () => {
-  it('returns null when there is no content', async () => {
-    await expect(listInOneImage([])).resolves.toBeNull();
-  });
-
-  it('renders an attachment for downloaded images', async () => {
-    // A 1x1 transparent PNG is enough for `canvas.loadImage` to succeed.
-    const onePixelPng = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-      'base64',
-    );
-    axiosGetMock.mockResolvedValue({ data: onePixelPng });
-
-    const attachment = await listInOneImage([{ url: 'https://example.test/a.png', text: 'tile' }], {
-      itemsPerRow: 1,
-    });
-
-    expect(attachment).not.toBeNull();
-    expect(attachment?.name).toBe('listInOneImage.png');
-  });
-
-  it('draws distinct Chinese glyphs in image captions', async () => {
-    axiosGetMock.mockRejectedValue(new Error('404'));
-    const render = async (text: string): Promise<Buffer> => {
-      const attachment = await listInOneImage([{ url: 'https://example.test/missing.png', text }]);
-      return attachment?.attachment as Buffer;
-    };
-
-    const first = await render('繁體');
-    const second = await render('測試');
-    expect(first.equals(second)).toBe(false);
-  });
-
-  it('draws a placeholder when an image download fails', async () => {
-    axiosGetMock.mockRejectedValue(new Error('404'));
-
-    const attachment = await listInOneImage([
-      { url: 'https://example.test/missing.png', text: 'missing' },
-    ]);
-
-    // A bad URL must not fail the whole grid.
-    expect(attachment).not.toBeNull();
   });
 });
 

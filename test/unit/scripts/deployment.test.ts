@@ -104,7 +104,7 @@ describe('deployment configuration and command boundaries', () => {
       '--keep-guild-commands',
       '--cleanup-guild-commands',
     ]) {
-      expect(() => parseAction(['deploy', flag])).toThrow('npm run register');
+      expect(() => parseAction(['deploy', flag])).toThrow('npm run register -t <bot>');
     }
     expect(parseAction(['recover'])).toBe('recover');
     expect(() => parseAction(['unknown'])).toThrow('Usage');

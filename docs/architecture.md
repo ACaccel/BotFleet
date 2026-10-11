@@ -11,15 +11,33 @@ connects shared services to Discord, MongoDB and external providers. See
 | [core](../src/core/)               | Contracts, errors, Result, i18n, IoC, logging and policies |
 | [persistence](../src/persistence/) | Repository contracts and Mongoose storage                  |
 | [infra](../src/infra/)             | Discord, MongoDB, HTTP and provider adapters               |
+| [application](../src/application/) | Feature services that handlers and plugins share           |
 | [handlers](../src/handlers/)       | Commands and interaction entry points                      |
 | [plugins](../src/plugins/)         | Features, subscriptions and scheduled jobs                 |
 | [bot](../src/bot/)                 | Composition roots, service tokens and lifecycle            |
 
-ESLint enforces boundaries: core cannot depend on application layers; handlers
-and plugins cannot import each other. Plugins use context instead of importing IoC
-or personality roots; [tokens](../src/bot/tokens.ts) and
-[guild lookup](../src/bot/guild-registry.ts) are explicit contract exceptions.
-Shared Discord helpers belong in infra. `src/` cannot import `scripts/`; `tools/` owns operator workflows.
+ESLint enforces boundaries. Each layer imports only layers listed before it in the
+table: core nothing; persistence core (it declares the per-guild
+[`GuildConnection`](../src/persistence/connection.ts) that `infra/mongo` builds);
+infra core and persistence; application core, persistence and infra. Handlers and
+plugins may import application and the layers it uses, but not each other; handlers
+take `BaseBot` as a type only. Plugins use context instead of importing IoC or
+`src/bot`, except the [tokens](../src/bot/tokens.ts) and
+[guild lookup](../src/bot/guild-registry.ts) contracts, the only `src/bot`
+modules they may import. An application service never imports `src/bot`: it declares a narrow
+port, such as [`GuildLookup`](../src/application/guild-lookup.ts), that the
+composition root's objects satisfy. Raw MongoDB access (a collection by name, or a
+guild's models in handlers, plugins and application) belongs in persistence
+repositories. `src/` cannot import `scripts/`; `tools/` owns operator workflows.
+
+The application layer holds code with more than one consumer: the activity,
+giveaway and temporary-role services, whose jobs plugins rebuild and commands
+create, and archive control with the panels that the archive worker and the
+`/archive` handlers both render. Code with a single consumer stays with it; the
+archive panel publisher, storage admission and owner recovery belong to the
+message-backup plugin runtime. Infra keeps adapters and probes only, such as
+Discord helpers, the bounded HTTP client, connection management, MongoDB
+administration commands, storage measurement and process checks.
 
 ## Startup and shutdown
 
@@ -39,7 +57,9 @@ for this startup marker, which does not indicate continuous health.
 
 The typed [ServiceContainer](../src/core/ioc/) binds singleton services with
 `ServiceToken<T>`. Factories and registries hold per-guild state. Handlers use BaseBot
-accessors; plugins resolve the same instances through context.
+accessors; plugins resolve the same instances through context. A token bound only by
+some composition roots, such as msg-archive's `ArchiveControlFactory`, reads as
+`undefined` elsewhere, and handler tests pass a fake in its place.
 
 | Hook                   | Responsibility                                                    |
 | ---------------------- | ----------------------------------------------------------------- |
@@ -86,6 +106,9 @@ client and guild. See [temporary moderation](contributing/operations.md#temporar
 [Repositories](../src/persistence/repositories/) form a per-guild bundle and can be
 replaced with test fakes. Operational failures return `Result<T, DatabaseError>`;
 missing records succeed with an empty result; invalid programmer arguments throw.
+The msg-archive repositories (writer, control and archive metadata) are the
+exception: they throw driver errors, which the worker classifies and the `/archive`
+handlers report with a trace ID.
 [MongoConnectionManager](../src/infra/mongo/connection-manager.ts) owns pooled
 connections and bounded retries. See [database recovery](contributing/operations.md#database-recovery)
 and [persisted models](contributing/persisted-models.md).
@@ -97,12 +120,19 @@ Cursors advance after successful delivery; post IDs stay strings.
 ## Errors, logs and localization
 
 `DomainError` carries a code, translation key, parameters and cause. Expected
-failures use `Result`; adapters translate external errors. Pino logs include bot
-and optional guild context; file output is JSON Lines under `logs/`.
+failures use `Result`; adapters translate external errors. Archive control use cases
+return `Result<T, ArchiveControlError>` for a stale, foreign or conflicting request;
+the `/archive` interaction boundary raises `ArchiveAccessError` and
+`ArchiveInputError` itself, and answers all three privately with their keys.
+`ConfigurationError` marks a deployment fault: startup, setup and release
+preparation raise it fail-fast, and a feature that finds one only when used (the
+canvas font when a chart first renders, the archive settings an interaction
+rereads) raises it for the interaction boundary to log and answer with a trace ID.
+Pino logs include bot and optional guild context; file output is JSON Lines under `logs/`.
 
 User-facing strings use aligned English and Traditional Chinese
-[catalogs](../src/i18n/locales/). CI scans application layers for CJK literals; the
-guild-event mirror is an English operator audit surface. See
+[catalogs](../src/i18n/locales/). CI scans handlers, plugins, application, bot and
+infra for CJK literals; the guild-event mirror is an English operator audit surface. See
 [Adding a command](contributing/adding-a-command.md).
 
 ## Privacy-aware data commands
@@ -110,15 +140,29 @@ guild-event mirror is an English operator audit surface. See
 [PermissionRankPolicy](../src/core/plugin/permission-rank-policy.ts) supplements
 Discord permissions with static channel ranks and member clearance. Channel rank
 includes ancestry; invalid configuration fails startup and unknown ancestry must
-not widen access. Aggregate commands such as `/traffic overview*` must:
+not widen access. Aggregate commands such as the `/traffic` subcommands must:
 
 1. Include only channels passing the invoker's Discord `ViewChannel` check and rank
    ceiling, resolving the invoker's roles and permissions.
 2. Cap public replies at `min(userRank, commandChannelRank)` and ephemeral replies
-   at `userRank`; gate the invoker, not the report subject.
-3. Exclude unknown/deleted channels and filter before aggregation. Use the same
-   permitted channel set for all statistics and comparisons; keep empty results
-   neutral so hidden channels are not revealed.
+   at `userRank`; gate the invoker, not the report subject. A public reply also
+   needs audience coverage: every role, `@everyone` included, that can view the
+   command channel must view the counted channel (threads through the parent), and
+   private threads never count publicly.
+3. Build candidates from `archive_channels` plus the guild cache. Judge threads,
+   archived ones included, through the parent (rank through the recorded parent
+   chain); count a private thread, or a recorded thread of unknown type, only when
+   the invoker has Manage Threads on the parent. Count a channel missing from the
+   cache only when its record says it was deleted, its last record says `@everyone`
+   could view it, and its rank passes.
+4. Filter before aggregation (`channelId: { $in: [...] }`). Use the same permitted
+   channel set for all statistics and comparisons; keep empty results neutral so
+   hidden channels are not revealed; a report about one named channel answers a
+   hidden channel exactly like a missing one. Emoji and sticker usage counts are the
+   only exception: they cover every channel and show no channel information.
+
+The filter is [`resolveVisibleChannelIds`](../src/handlers/commands/traffic-shared/visibility-filter.ts),
+a pure function over injected cache and record lookups.
 
 Feed commands use Discord visibility without rank gating and fail closed when
 visibility cannot be resolved. Threads use parent checks; removal rechecks access
@@ -139,146 +183,155 @@ and the [migration runbook](../tools/migration/README.md).
 Only msg-archive receives the archive writer capability. Reader/writer connection
 pools are separate; shared startup suppresses automatic archive collection/index
 creation. Other bots expose archive reads while unrelated repositories retain writes.
+[`ArchiveStatsRepo`](../src/persistence/repositories/archive-stats.repo.ts) is the
+read-only statistics reader every bot receives: aggregations only, combined per
+command with `$facet` over one indexed scan, each limited by `maxTimeMS` (60
+seconds); an exceeded limit is a `DatabaseError` with code `DATABASE_QUERY_TIMEOUT`.
+The scan index is chosen explicitly: `createdTimestamp` for scopes covering most
+channels, `{ channelId, createdTimestamp }` for narrow ones, because a channel-order
+scan over most of the guild thrashes the cache. Timezone bucketing happens on
+15-minute UTC groups in the repository rather than per document. Its counting rules (deleted messages count; documents
+without `author`, bots, webhooks and system messages do not) and the channel
+attribution rule live in [`core/archive/stats`](../src/core/archive/stats.ts).
 
 The archive plugin owns the durable Gateway inbox, serialized mutations,
-reconciliation and repair execution. Normalization and admission are shared domain
-contracts. Repairs journal relationship mutations before applying them; structural
-maintenance stays with the owner. Discord archive commands submit durable jobs
-through an infra control service; handlers never become archive writers. Mutating
-run controls require durable actor-bound confirmations. Results and journals
-survive Discord interaction expiry and process restarts.
-Repair cancellation state is scoped to one execution, with coalesced bounded-age
-reads and a local shutdown signal. Job results are persisted before terminal
-notifications; best-effort progress publication cannot replace the durable outcome.
-The repair-to-history transition preserves committed phase totals in the shared
-tracker. Terminal notices distinguish completed repair operations from scanned
-messages and make stopped one-shot work explicit; recovery uses the existing run.
-New enrichment records place `_id` first before their recovery images are hashed,
-matching MongoDB's stored BSON field order without weakening hash verification.
+reconciliation and full-backup execution. Normalization, observation merging and
+admission (`core/archive/normalize`, `core/archive/policy`) are shared domain
+contracts; structural maintenance stays with the owner. Discord commands enqueue
+full-backup jobs and read status through the application
+[control service](../src/application/archive/control.ts), built per guild by the
+`ArchiveControlFactory` token only msg-archive binds (over `buildArchiveRepos`); handlers never become archive
+writers. The service is a facade over job commands, start confirmations, schedule
+settings and status queries (`control-jobs`, `control-confirmation`,
+`control-schedule`, `control-status`). Every archive collection has a persistence
+repository, and [`archive-repos.ts`](../src/persistence/repositories/archive-repos.ts)
+holds the two archive factories. `buildArchiveWriterRepos` builds the writer's
+repositories (messages, inbox, reactions, channels with their fetch cursors, jobs,
+and the owner lease with structural maintenance); each refuses a connection without
+msg-archive ownership, and the plugin injects the factory into the worker.
+`buildArchiveRepos` builds one each for control (confirmations, jobs and status
+reads), the periodic run, the schedule, Gateway continuity and storage usage, for
+both the control factory and the worker. The per-bot `buildRepos` holds no archive
+writer: its only archive member is the read-only `ArchiveStatsRepo`.
 
-The guided backup entry point reuses plan/apply/accept jobs. Apply already includes
-post-backfill verification; acceptance retains fresh verification and a separate
-confirmation before the recovery-retention clock begins. Public status messages
-reconstruct their state from durable jobs/runs instead of relying on interaction
-tokens. Runtime and handler edits share a serialized message coordinator: the
-first embed is the live summary, and subsequent detail/confirmation state survives
-ten-second heartbeat edits and restarts.
-Successor jobs reuse the run's public message and mark predecessor notification
-ownership as superseded, preventing delayed replay from replacing newer status.
-Selected-plan panels render a fresh snapshot of the associated job above the
-manifest summary without taking over its canonical notification. Refresh reads
-latest durable progress; only the canonical notification has a heartbeat.
-Planning jobs can be resolved through the guild-scoped `originatingJobId` until
-`runId` is attached. Pause controls bind both run and exact job identities, expose
-active work even when manifest aggregation is unavailable, and use cooperative
-cancellation without changing recovery semantics. Resume remains unavailable
-until the active job drains and existing eligibility checks pass.
+The [worker](../src/plugins/message-backup/runtime/worker.ts) is a facade that keeps
+each guild's state and lifecycle and delegates to one collaborator per
+responsibility: Gateway capture, inbox reduction, continuity, channel location
+(`ChannelLocator`), REST evidence windows (`SourceObservations`), history ingestion
+with reaction refresh, scans (`ScanRunner`, one `ScanPass` per scan, whose
+`ScanMode` separates periodic passes from full backups and their checkpoints),
+periodic passes, full-backup jobs, progress publication, notification recovery and
+storage reporting. A per-guild work slot arbitrates between periodic passes and full
+backups. Collaborators share a worker context narrowed to the options each reads,
+keep their own fields of the guild state in their own sub-records, and receive each
+other as narrow `Pick`-based dependency ports through their constructors.
 
-Legacy runs without job records keep a `publicMessage` reference on the run;
-this display metadata does not alter repair images or confirmation semantics.
-Whole-manifest impact summaries use bounded server-side aggregation and safe
-metadata projections; unavailable or unknown classifications remain explicit.
-Target-aware inspection projects only allowlisted identity and difference fields
-from journal images. One changes view shows at most ten concrete rows, up to five
-per page, or grouped impacts with source examples for larger plans. Grouped
-results distinguish record types, impacts and states; source counts cover the
-complete selected scope, not the visible page. Category, source and individual
-operation drilldowns, technical pages and downloads are not UI entry points.
-Legacy detail controls redirect to the compact changes view. Routine views omit
-internal IDs and hashes while retaining meaningful source identities. Cached
-Discord metadata can enrich historical identities without a REST call per record.
-Shared public navigation edits its originating message, keeping notification volume
-independent of the number of changes. Canonical worker notifications and browsing
-panels have separate references: opening another item removes an unrelated status
-card, and its former publisher skips the repurposed panel. Explicit navigation to
-the canonical item can restore its status. Approval records bind their displayed
-panel without moving the successor job's canonical notification. Source labels require public readability
-evidence; cached historical names do not bypass it. Raw recovery images never
-reach presenters.
-Read-only navigation rechecks guild permissions, and mutating buttons retain the
-existing single-use, actor/channel-bound confirmation protocol.
-Archive management exposes four entry points with button-only pages. Lists fetch
-two entries and expose matching item buttons, refresh, next-page controls and
-whole-list deletion, for at most five buttons. Longer legacy pages continue after the last displayed
-entry so compact pagination cannot skip records. Item deletion and eligible rollback
-use direct buttons; active-only filters and combined single-item stop-and-delete
-buttons are omitted. Whole-list delete buttons open an all-pages review before
-confirmation. Legacy select handlers and accepted cleanup batches
-retain their existing authorization/recovery contracts without emitting new menus.
-Eligible apply, resume and acceptance open scoped actor-bound confirmation
-directly on the item panel. Public progress offers details and cooperative stopping
-and retains the ten-second message cadence. Audit, standalone verification and
-attachment-refresh entry points have been removed; legacy backend compatibility,
-automatic apply verification and fresh acceptance validation remain intact.
-Single-item deletion approvals are additionally message-bound, disposable five-minute tokens.
-Accepted job deletion intents persist in `archive_control_deletions`; worker claim
-and submission reject tombstoned identities. Cleanup waits for drained terminal
-work, records the run identity before removing the job, releases consumer
-reservations and retries final public notification after restart. These receipts
-remain to fence stale confirmation replay. Run-consumer reservations retain hashed
-request-to-process ownership; startup releases an absent-job reservation only
-after proving the prior same-host process has stopped and its database operations
-have drained. Unknown or live owners remain protected. Plan deletion reserves the
-run against new consumers, checks operation/journal state and active jobs, then
-removes only plan and operation/control metadata. Eligibility includes
-never-applied plans and fully `rolled-back` plans whose operations are all
-`rolled-back` or never-mutated `planned`, with no conflict records, journal, active
-consumer or active job. The complete [eligibility rules](message-archive.md#discord-controls)
-also protect incomplete rollback and remaining applied changes.
-`archive_plan_deletions` fences retry/replay; archived messages are preserved.
-Superseded publishers cannot revive deleted cards.
-Final plan deletion notices re-read their message under the shared edit lock and
-replace only a recognizable status card, preserving unrelated navigation and bulk
-cleanup panels. Unmarked legacy standalone notices are left unchanged.
-Bulk deletion stores bounded per-item snapshots in `archive_bulk_deletions` and
-`archive_bulk_deletion_items`. An actor/channel/message-bound review becomes a
-claimed execution; per-item outcomes survive interruption, and exact identities
-exclude later arrivals. Reviews show eligible/protected counts and active jobs;
-confirmation expires after five minutes. Existing single-item lifecycle checks
-remain authoritative: job cleanup requests cooperative stopping before deletion,
-and plan cleanup shares single-plan eligibility, including fully rolled-back plans
-without conflicts or retained journals. Remaining applied changes and in-use plans
-are protected.
-A prior executor must be proven stopped before takeover. The whole-card bulk
-presenter and ten-second heartbeat retain result/resume markers; ordinary job
-notifications respect these markers even when cleanup deletes the card's source job.
-Failed or incomplete reviews cannot execute. Snapshot cleanup atomically revokes
-expired consent before removing items and preserves accepted running batches.
+`messages` documents use schema version 3 (`persistence/schemas/message.schema.ts`):
+the Discord message ID is `_id`, field names follow discord.js, and an absent field
+means "not observed". Each write merges an observation into the stored document:
+stale observations (an older edit time, or the same version observed earlier) only
+fill fields the document lacks, a newer one replaces only the fields it carries, and an edit moves the
+previous content into the document's bounded `editHistory` in the same
+replacement, so no separate revision collection or write-ahead marker is needed.
+Messages carry no guild, channel name or parent: the database is the guild, and
+`archive_channels` holds one record per channel or thread, written by discovery,
+by live capture for a channel it does not know yet (an in-process set avoids a
+lookup per message) and by Gateway channel events; deleted channels keep their
+record. Policy decisions take the guild and parent from the event, the client cache
+or `archive_channels` (fetching an unknown channel for bot and webhook messages).
+An unlisted bot's interaction reply is admitted as an interaction record that keeps
+only identifying fields and lists the rest in `excludedFields`; a message whose
+author is unknown keeps only its identity, and its content stays out of the inbox,
+until a REST read classifies it. `MessageDoc` is the writer's `ArchiveMessage`, and
+compile-time checks pin the mongoose schema's fields and required fields to it.
+Inbox events are discriminated by kind and validated when claimed.
+
+A full backup is one `archive_jobs` record with a cutoff fixed at confirmation; a
+partial unique index on `activeSlot` allows one queued or running backup per guild.
+Start approvals persist in `archive_control_confirmations`, bound to the operator,
+channel and message for five minutes, and a replay returns the job it already
+created. The worker runs the job as its own full scan with per-channel checkpoints
+kept apart from periodic ones (`archive_channels.checkpoints`), so neither kind
+resets the other. A queued backup preempts a periodic pass at a safe boundary and
+periodic passes wait until it ends. Stop requests are polled at scan boundaries at
+most every 250 ms; shutdown leaves the job running and startup queues it again with
+its cutoff and checkpoints. A completed backup settles Gateway continuity like a
+full periodic run, against the origin recorded at its first start. The terminal
+state is written with bounded retries before the slot is released, then shown. Job
+and periodic-pass records are pruned to the ten newest finished ones, never an
+active backup, the newest complete one or the newest resumable one.
+
+Panels render in the application layer from durable job, run, schedule and channel records, so the
+worker and button handlers share one renderer. The worker edits only a backup's own
+panel message, through a per-guild publisher the plugin injects, and leaves it alone while an operator shows gap details; worker and
+handler edits of one message share an in-process lock. Periodic passes publish
+nothing: three consecutive failures raise one notice stored in `archive_schedule`,
+and the next complete pass raises one recovered notice, each delivered once across
+restarts. The worker persists its latest host storage sample for status; message
+backup size comes from MongoDB collection statistics. Background samples walk the
+MongoDB data directory each time and reuse the size of the project, runtime and
+additional roots for ten minutes (never at 90% of the budget); writers do not wait
+for a sample younger than twice its maximum age. Every command and button
+rechecks the bot's `admin` list, `backup_server`, the guild debug channel and
+msg-archive ownership; the command carries no Discord default member permission.
 
 History pages preload archive snapshots in bounded batches; conditional mutations
 still compare the complete observed image so a live edit cannot be overwritten by
-a stale preload. Exact snapshot replays avoid replacement writes. Repair planning
-reserves sequence ranges before majority/journaled manifest batches, reconciles
-durable prefixes after partial failures, and keeps deterministic operation IDs.
-Excluded sources are queued within the document/byte batch bounds. Related
-revision and reaction records are streamed using batched identity queries, with
-per-message dependency chains retaining related-before-source deletion order.
-Apply batches contain only independent scopes with satisfied dependencies. Their
-before-images become durable before target writes, and readback precedes verified
-acknowledgement. Standalone MongoDB remains supported without transactions.
-Enrichment, batched apply and rollback all combine an indexable native `_id`
-equality predicate with the complete current-image comparison for conditional
-delete/replace. Rollback retains reverse journal order. The ID index bounds candidate reads without weakening protection
-against racing edits. Recovery does not parallelize arbitrary dependent operations.
-History snapshot preparation is restricted to independent message identities and
-flushes before repeated identities. Up to 25 messages share bounded journal and
-verified bulk writes; revision waves precede message waves. Large images fall back
-to single writes. Fresh REST observations with no reactions publish empty membership
-references in the snapshot mutation, removing old references without a second write.
-Cancellation, message observation watermarks and Gateway gap versions are checked
+a stale preload. Exact snapshot replays avoid replacement writes. Standalone
+MongoDB remains supported without transactions. Conditional writes combine an
+indexable native `_id` equality predicate with the complete current-image
+comparison, so the ID index bounds candidate reads without weakening protection
+against racing edits. History snapshot preparation is restricted to independent
+message identities and flushes before repeated identities. A page's messages, up
+to 500 documents and 4 MiB per writer turn, share bounded verified bulk writes, one
+write per message; a turn whose stored images exceed the byte bound is halved, and
+large documents fall back to single writes. A write that changes only backup
+metadata (`observedAt` and the reaction freshness fields) is a `$set`/`$unset`
+under the same full-image fence instead of a replacement. Fresh REST observations
+with no reactions publish empty membership references in the snapshot mutation,
+removing old references without a second write. A message whose lists are refreshed
+is marked stale by that same snapshot write; its staged membership chunks are
+inserted together, and one write publishes every refreshed stream with its
+freshness. An incremental periodic pass keeps lists that Gateway continuity proves
+current instead of rereading them (see [backup throughput](message-archive.md#backup-throughput)).
+A message whose membership refresh fails stays marked stale and its page still
+checkpoints; interruption, capacity pressure and programmer errors still fail the
+page.
+Cancellation, message observation epochs and Gateway gap versions are checked
 again inside the writer and before each dependent write wave; untrusted or nonempty
-observations retain full enrichment. Checkpoints acknowledge only completed pages.
-Versioned outcome counters distinguish legacy upgrades from content updates while
-preserving older mixed totals. Fresh throughput samples exclude restored counters;
-queued receipt hashes let notifications remove only obsolete submission details.
-Unknown optional discovery fields are omitted so target records and durable
-recovery images retain the same BSON representation.
+observations retain full enrichment. The bounded table of recently observed
+messages invalidates only readers older than an evicted observation; Gateway gap
+versions advance only when events may have been lost. A durable per-guild
+continuity record carries the gap version and full-reconciliation requirement
+across restarts, and indexed continuity breaks (restarts, replaced sessions,
+source visibility changes) bound the incremental rescan until a run created after
+them completes. Readers pin the messages
+whose evidence they hold, so settling an acknowledged event cannot hide a change
+from them. Failed live reconciliations are classified by typed errors and their
+causes: inaccessible sources become coverage gaps, capacity pressure and transient
+faults wait uncounted (transient ones for at most a day), superseded events are
+dropped, and other failures back off until the event is dead-lettered. The next
+periodic run rescans a dead letter's source and reports it as a known gap. Each
+ready guild reduces its inbox in its own loop, woken by captures; history pages
+never wait for it, and a pass waits for one round only before it is planned and
+before it judges completion. A complete MESSAGE_CREATE is stored without a REST
+read, and a reaction event rereads only the list it names while the others are
+complete and unmarked.
+Checkpoints acknowledge only completed pages.
+Outcome counters distinguish inserted, updated and unchanged messages. Fresh
+throughput samples exclude restored counters. Reaction membership chunks
+(`archive_reactions`, keyed by custom emoji ID or Unicode emoji and carrying the
+message's channel) are collected once neither the message's published
+`reactionGenerations` nor an in-flight refresh references their generation and
+they are older than a day.
 
 The shared SDK REST manager owns transport retries and quotas. The owner scheduler
 adds bounded, fair admission across guilds and reserves live capacity; announced
 local waits can release admission capacity for other resources, while global waits
-pause new requests. Each channel retains its ordered cursor with at most one
-speculative next page. Checkpoints advance only after message writes and complete
+pause new requests. Admission runs at most one request per route and channel, the
+unit `@discordjs/rest` serializes, so a channel's history pages, message reads and
+reaction lists proceed in parallel. Each channel retains its ordered cursor with at
+most one speculative next page. Checkpoints advance only after message writes and complete
 reaction generations. History and reaction queues share a 64 MiB logical staging
 budget with a reserved reaction lane; this is not a hard limit on V8/SDK transient
 allocations or process RSS. Oversized pages produce partial coverage instead of
@@ -295,20 +348,21 @@ reaction page and membership counters are provisional until generation publicati
 The existing ten-second notifier samples these counters without extra Discord
 requests per reaction page or invented movement during slow requests.
 Per-guild `archive_schedule` state defaults to disabled and is controlled by
-msg-archive's restricted slash command in the configured guild debug channel. Control jobs precede periodic scans;
-disabling scans preserves live ingestion and resumable checkpoints.
+msg-archive's restricted slash command in the configured guild debug channel. A queued
+full backup precedes periodic scans; disabling scans preserves live ingestion and
+resumable checkpoints.
 Schedule updates are atomic and idempotent: repeating saved settings does not move
 the due time or supersede the completion timer of an active pass. Stop/pause checks
 also run between history write batches and reaction membership pages.
-A due schedule that loses worker admission to a control job releases its claim
-without advancing its due time; the next poll retries after that job drains.
+A due schedule that loses worker admission to a full backup releases its claim
+without advancing its due time; the next poll retries after that backup ends.
 
-See [archive operations](message-archive.md) for data contracts, repair controls and
-[progress access](message-archive.md#progress-and-access).
+See [archive operations](message-archive.md) for data contracts, the
+[full backup](message-archive.md#full-backup) and [progress](message-archive.md#progress).
 
 The [developer archive benchmarks](../tools/archive-benchmark/README.md) exercise
-the repair service and repository against disposable synthetic databases, and
-history scheduling against a shared mock REST transport. Node and disposable
+normalization, repository writes and progress publication against disposable
+synthetic databases, and history scheduling against a shared mock REST transport. Node and disposable
 mongod process metrics are reported separately, excluding other services. CPU
 worker offloading remains disabled following the measured adoption gate; see the
 [performance evidence](contributing/archive-performance-results.md).

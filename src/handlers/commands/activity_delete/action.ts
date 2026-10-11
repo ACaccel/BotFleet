@@ -1,7 +1,7 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
-import * as activity from '../../../plugins/activity/internal';
+import { handleActivityDelete } from '../activity-shared/interactions';
 
 export default class activity_delete extends Command {
   constructor() {
@@ -24,6 +24,6 @@ export default class activity_delete extends Command {
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    await activity.handleActivityDelete(interaction, bot);
+    await handleActivityDelete(interaction, bot);
   }
 }

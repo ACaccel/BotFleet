@@ -5,26 +5,26 @@
  * against synthetic handlers. What only these two barrels can show is
  * that the real generated registry, the real handler classes, and the
  * `BaseBot` field each family publishes to are actually joined up — and
- * that the thin `giveaway_*` components forward to the plugin that owns
- * the behaviour rather than reimplementing it.
+ * that the thin `giveaway_*` components forward to the shared giveaway
+ * interaction bodies rather than reimplementing them.
  */
 import type { ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  handleGiveawayCreate,
-  handleGiveawayDeleteSelection,
-} from '../../../src/plugins/giveaway/internal';
+import { handleGiveawayCreate } from '../../../src/handlers/commands/giveaway-shared/create';
+import { handleGiveawayDeleteSelection } from '../../../src/handlers/commands/giveaway-shared/delete';
 import { executeModal, registerModals } from '../../../src/handlers/modals';
 import { executeSSM, registerSSMs } from '../../../src/handlers/select-menus';
 import type { BaseBot } from '../../../src/bot';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
 
-// The two `giveaway_*` components are pure delegations, so the plugin
-// surface they delegate to is replaced with spies. Its own behaviour is
-// covered in `test/unit/plugins/giveaway-*.test.ts`.
-vi.mock('../../../src/plugins/giveaway/internal', () => ({
+// The two `giveaway_*` components are pure delegations, so the bodies
+// they delegate to are replaced with spies. Their own behaviour is
+// covered in `test/unit/handlers/giveaway-*.test.ts`.
+vi.mock('../../../src/handlers/commands/giveaway-shared/create', () => ({
   handleGiveawayCreate: vi.fn(async () => undefined),
+}));
+vi.mock('../../../src/handlers/commands/giveaway-shared/delete', () => ({
   handleGiveawayDeleteSelection: vi.fn(async () => undefined),
 }));
 

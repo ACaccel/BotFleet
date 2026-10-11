@@ -14,7 +14,11 @@ import ThreadClaim from '../../../src/handlers/commands/thread_claim/action';
 import ThreadManager from '../../../src/handlers/commands/thread_manager/action';
 import Traffic from '../../../src/handlers/commands/traffic';
 import TrafficOverview from '../../../src/handlers/commands/traffic/action';
+import TrafficApps from '../../../src/handlers/commands/traffic_apps/action';
+import TrafficChannel from '../../../src/handlers/commands/traffic_channel/action';
+import TrafficEmoji from '../../../src/handlers/commands/traffic_emoji/action';
 import TrafficMe from '../../../src/handlers/commands/traffic_me/action';
+import TrafficSticker from '../../../src/handlers/commands/traffic_sticker/action';
 import TrafficUser from '../../../src/handlers/commands/traffic_user/action';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
 
@@ -48,6 +52,10 @@ describe('AI, thread, and traffic command groups', () => {
     [Traffic, 'overview', null, TrafficOverview],
     [Traffic, 'me', null, TrafficMe],
     [Traffic, 'user', null, TrafficUser],
+    [Traffic, 'channel', null, TrafficChannel],
+    [Traffic, 'apps', null, TrafficApps],
+    [Traffic, 'emoji', null, TrafficEmoji],
+    [Traffic, 'sticker', null, TrafficSticker],
   ] as const)('routes %p %s in group %s to its action', async (Root, name, group, Action) => {
     const execute = vi.spyOn(Action.prototype, 'execute').mockResolvedValue(undefined);
     const interaction = interactionFor(name, group);

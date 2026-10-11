@@ -25,6 +25,8 @@ vi.mock('@reaction', () => barrelStubs.reaction);
 import { BaseBot, type Config, type GuildInfo } from '../../../src/bot/index';
 import type { Repos } from '../../../src/persistence/repositories';
 import { TOKENS } from '../../../src/bot/tokens';
+import { archiveControlFactory } from '../../../src/application/archive/control';
+import { buildArchiveRepos } from '../../../src/persistence/repositories/archive-repos';
 
 const fakeGuild = (id: string): Guild => ({ id, name: `Guild ${id}` }) as unknown as Guild;
 
@@ -118,7 +120,7 @@ describe('BaseBot guildInfo accessors', () => {
 });
 
 /**
- * The accessors the plugin-side `deps-from-bot` bridges read. Each must
+ * The accessors the handler-side `deps-from-bot` bridges read. Each must
  * hand back the very object the container binds under the matching
  * token, because that identity is what keeps a plugin's own
  * `ctx.resolve` path and its handler path pointed at one instance.
@@ -150,6 +152,14 @@ describe('BaseBot container-backed accessors', () => {
 
     bot.jobMap.set('job-1', {} as unknown as Job);
     expect(bot.container.resolve(TOKENS.JobMap).get('job-1')).toBeDefined();
+  });
+
+  it('archiveControlFactory is unbound until a composition root registers it', () => {
+    const bot = buildBot();
+    expect(bot.archiveControlFactory).toBeUndefined();
+    const factory = archiveControlFactory(buildArchiveRepos);
+    bot.container.registerSingleton(TOKENS.ArchiveControlFactory, () => factory);
+    expect(bot.archiveControlFactory).toBe(factory);
   });
 
   it('requireLogger throws before run() binds the logger', () => {

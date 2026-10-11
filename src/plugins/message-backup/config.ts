@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  ARCHIVE_DEFAULT_INTERVAL_MS,
   ARCHIVE_LIMITS,
   archiveConcurrencySchema,
   archiveNotificationSecondsSchema,
@@ -59,7 +60,7 @@ export function parseArchiveSettings(input: {
   config: ArchiveRuntimeConfig;
   policy: z.infer<typeof ArchivePolicySchema>;
 } {
-  const interval = input.backupIntervalMs ?? 3_600_000;
+  const interval = input.backupIntervalMs ?? ARCHIVE_DEFAULT_INTERVAL_MS;
   if (!Number.isInteger(interval) || interval <= 0 || interval > 2_147_483_647)
     throw new TypeError('Invalid archive backup interval');
   if (

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ApplicationCommandOptionType,
   ApplicationCommandType,
+  ChannelType,
   PermissionFlagsBits,
 } from 'discord.js';
 
@@ -212,6 +213,7 @@ describe('buildCommandJsonBody', () => {
         user: [{ name: 'target', description: 'Target user', required: true }],
         channel: [{ name: 'where', description: 'Target channel', required: false }],
         attachment: [{ name: 'file', description: 'A file', required: false }],
+        boolean: [{ name: 'enabled', description: 'On or off', required: false }],
       },
     };
 
@@ -219,7 +221,41 @@ describe('buildCommandJsonBody', () => {
     const options = 'options' in json ? (json.options ?? []) : [];
 
     expect(options.map((o) => o.name).sort()).toEqual(
-      ['count', 'file', 'mode', 'ratio', 'target', 'where'].sort(),
+      ['count', 'enabled', 'file', 'mode', 'ratio', 'target', 'where'].sort(),
+    );
+    // Discord's BOOLEAN option type.
+    expect(options.find((o) => o.name === 'enabled')?.type).toBe(5);
+  });
+
+  it('limits a channel option to its declared types, or the text-capable defaults', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'inspect',
+      description: 'Inspect a channel',
+      options: {
+        channel: [
+          {
+            name: 'forum',
+            description: 'Forum or media channel',
+            required: true,
+            channelTypes: [ChannelType.GuildForum, ChannelType.GuildMedia],
+          },
+          { name: 'any', description: 'Any text channel', required: false },
+        ],
+      },
+    };
+
+    const json = buildCommandJsonBody(config);
+    const options = ('options' in json ? (json.options ?? []) : []) as {
+      name: string;
+      channel_types?: number[];
+    }[];
+
+    expect(options.find((o) => o.name === 'forum')?.channel_types).toEqual([
+      ChannelType.GuildForum,
+      ChannelType.GuildMedia,
+    ]);
+    expect(options.find((o) => o.name === 'any')?.channel_types).not.toContain(
+      ChannelType.GuildMedia,
     );
   });
 

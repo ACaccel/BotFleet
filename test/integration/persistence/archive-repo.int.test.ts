@@ -2,34 +2,92 @@ import { mongo } from 'mongoose';
 import { describe, expect, it, vi } from 'vitest';
 import { asGuildId } from '../../../src/core/ids';
 import { ARCHIVE_LIMITS } from '../../../src/core/archive/limits';
+import { ArchiveLimitExceededError } from '../../../src/core/archive/errors';
 import { normalizeMessage } from '../../../src/core/archive/normalize';
+import { ARCHIVE_EDIT_HISTORY_LIMIT, type ArchiveMessage } from '../../../src/core/archive/types';
 import { StaticConnectionManager } from '../../../src/infra/mongo/connection-manager';
 import {
   MongoArchiveRepo,
   type ArchiveMutationInterceptor,
 } from '../../../src/persistence/repositories/archive.repo';
+import {
+  ArchiveInboxInvalidError,
+  ArchiveInboxOversizedError,
+  isArchiveInboxUnclaimable,
+  MongoArchiveInboxRepo,
+} from '../../../src/persistence/repositories/archive-inbox.repo';
+import { MongoArchiveChannelRepo } from '../../../src/persistence/repositories/archive-channel.repo';
+import { MongoArchiveJobRepo } from '../../../src/persistence/repositories/archive-job.repo';
+import { MongoArchiveOwnerRepo } from '../../../src/persistence/repositories/archive-owner.repo';
+import { MongoArchiveReactionRepo } from '../../../src/persistence/repositories/archive-reaction.repo';
+import { buildArchiveWriterRepos } from '../../../src/persistence/repositories/archive-repos';
 import { buildRepos } from '../../../src/persistence/repositories';
 import { withFreshConnection } from '../helpers/mongo';
 const guildId = asGuildId('1');
-const snapshot = (content: string, edited = 1700000000000) =>
-  normalizeMessage(
-    {
-      id: '3',
-      channel_id: '2',
-      author: { id: '4', username: 'Alice' },
-      content,
-      timestamp: '2023-11-14T22:13:20.000Z',
-      edited_timestamp: new Date(edited).toISOString(),
-      attachments: [],
-      reactions: [],
-    },
-    { guildId: '1', channelName: 'general', source: 'history', observedAt: edited },
-  );
+const created = Date.parse('2023-11-14T22:13:20.000Z');
+const raw = (content: string, edited: number | null, extra: Record<string, unknown> = {}) => ({
+  id: '3',
+  channel_id: '2',
+  author: { id: '4', username: 'Alice' },
+  content,
+  timestamp: new Date(created).toISOString(),
+  edited_timestamp: edited === null ? null : new Date(edited).toISOString(),
+  attachments: [],
+  embeds: [],
+  reactions: [],
+  ...extra,
+});
+/** A REST observation of message 3, edited at `edited` (`created`: the original version). */
+const snapshot = (content: string, edited = created, observedAt = edited) =>
+  normalizeMessage(raw(content, edited === created ? null : edited), { observedAt });
+type Db = Parameters<Parameters<typeof withFreshConnection>[0]>[0];
+const messages = (connection: Db) =>
+  connection.collection<ArchiveMessage & Record<string, unknown>>('messages');
+const stored = (connection: Db, id = '3') => messages(connection).findOne({ _id: id });
+const openRepo = async (connection: Db) => {
+  const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+  const repos = buildArchiveWriterRepos(conn);
+  return {
+    conn,
+    repo: repos.messages,
+    inboxRepo: repos.inbox,
+    reactionRepo: repos.reactions,
+    channelRepo: repos.channels,
+    jobRepo: repos.jobs,
+    ownerRepo: repos.owner,
+  };
+};
+/** One staged membership chunk of message 3 in channel 2. */
+const chunk = (
+  emojiKey: string,
+  generation: string,
+  userIds: string[],
+  observedAt: number,
+  index = 0,
+  messageId = '3',
+) => ({
+  messageId,
+  channelId: '2',
+  emojiKey,
+  type: 0 as const,
+  generation,
+  chunk: index,
+  userIds,
+  observedAt,
+});
+/** A reaction inbox event for message 3 in channel 2. */
+const reactionEvent = (eventId: string, observedAt: number) => ({
+  eventId,
+  kind: 'reaction' as const,
+  messageId: '3',
+  channelId: '2',
+  payload: {},
+  observedAt,
+});
 describe('Mongo archive durability', () => {
-  it('bulk-writes independent snapshots and verifies images after the write', async () => {
+  it('bulk-writes independent snapshots keyed by message ID and verifies images', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { repo } = await openRepo(connection);
       const collection = connection.collection('messages');
       const bulk = vi.spyOn(collection, 'bulkWrite');
       const originalCollection = connection.collection.bind(connection);
@@ -37,54 +95,31 @@ describe('Mongo archive durability', () => {
         name === 'messages' ? collection : originalCollection(name, options),
       );
       expect(
-        await repo.persistSnapshotsBatch([snapshot('A'), { ...snapshot('B'), messageId: '5' }]),
+        await repo.persistSnapshotsBatch([snapshot('A'), { ...snapshot('B'), _id: '5' }]),
       ).toEqual(['inserted', 'inserted']);
       expect(bulk).toHaveBeenCalledTimes(1);
       expect(bulk.mock.calls[0]?.[0]).toHaveLength(2);
-      expect(await collection.countDocuments()).toBe(2);
-    });
-  });
-
-  it('keeps embedded legacy identities distinct during bulk verification', async () => {
-    await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const messages = connection.collection<{
-        _id: { legacy: string };
-        messageId: string;
-        content?: string;
-      }>('messages');
-      await messages.insertMany([
-        { _id: { legacy: 'first' }, ...snapshot('A') },
-        { _id: { legacy: 'second' }, ...snapshot('A'), messageId: '5' },
+      expect((await collection.find({}).sort({ _id: 1 }).toArray()).map((doc) => doc._id)).toEqual([
+        '3',
+        '5',
       ]);
-      expect(
-        await repo.persistSnapshotsBatch([
-          snapshot('B', 1700000001000),
-          { ...snapshot('C', 1700000001000), messageId: '5' },
-        ]),
-      ).toEqual(['updated', 'updated']);
-      expect((await messages.findOne({ messageId: '3' }))?._id).toEqual({ legacy: 'first' });
-      expect((await messages.findOne({ messageId: '5' }))?._id).toEqual({ legacy: 'second' });
-      expect((await messages.findOne({ messageId: '3' }))?.content).toBe('B');
-      expect((await messages.findOne({ messageId: '5' }))?.content).toBe('C');
+      expect(await stored(connection)).toMatchObject({ schemaVersion: 3, channelId: '2' });
     });
   });
 
   it('rejects an after-image changed between bulk persistence and verification', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const collection = connection.collection('messages');
+      const { repo } = await openRepo(connection);
+      const collection = connection.collection<{ _id: string }>('messages');
       const originalBulk = collection.bulkWrite.bind(collection);
       vi.spyOn(collection, 'bulkWrite').mockImplementation(async (operations, options) => {
         const result = await originalBulk(operations, options);
-        await collection.updateOne({ messageId: '3' }, { $set: { content: 'external' } });
+        await collection.updateOne({ _id: '3' }, { $set: { content: 'external' } });
         return result;
       });
       const originalCollection = connection.collection.bind(connection);
       vi.spyOn(connection, 'collection').mockImplementation((name, options) =>
-        name === 'messages' ? collection : originalCollection(name, options),
+        name === 'messages' ? (collection as never) : originalCollection(name, options),
       );
       await expect(repo.persistSnapshotsBatch([snapshot('A')])).rejects.toThrow(
         'Archive batch verification failed',
@@ -92,134 +127,67 @@ describe('Mongo archive durability', () => {
     });
   });
 
-  it('counts mutation envelopes when splitting batches at the byte boundary', async () => {
-    await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      let imageBytes = 0;
-      await repo.persistSnapshot(snapshot('A'), {
-        observed: null,
-        interceptor: async (_collection, _before, after) => {
-          imageBytes = mongo.BSON.calculateObjectSize(after!);
-        },
-      });
-      const content = 'A'.repeat(Math.floor((ARCHIVE_LIMITS.batchBytes - 10) / 2) - imageBytes + 1);
-      const batchSizes: number[] = [];
-      await repo.persistSnapshotsBatch(
-        [
-          { ...snapshot('A'), content },
-          { ...snapshot('A'), messageId: '5', content },
-        ],
-        {
-          snapshotContexts: [{ observed: null }, { observed: null }],
-          batchInterceptor: async (mutations) => {
-            const bytes = mutations.reduce(
-              (sum, mutation) => sum + mongo.BSON.calculateObjectSize(mutation),
-              0,
-            );
-            expect(bytes).toBeLessThanOrEqual(ARCHIVE_LIMITS.batchBytes);
-            batchSizes.push(mutations.length);
-          },
-        },
-      );
-      expect(batchSizes).toEqual([1, 1]);
-    });
-  });
-
-  it('never bypasses a batch journal for an oversized single mutation', async () => {
-    await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const batchInterceptor = vi.fn(async () => undefined);
-      await expect(
-        repo.persistSnapshotsBatch(
-          [{ ...snapshot('A'), content: 'A'.repeat(ARCHIVE_LIMITS.batchBytes) }],
-          {
-            snapshotContexts: [{ observed: null }],
-            batchInterceptor,
-          },
-        ),
-      ).rejects.toThrow('requires a single-mutation interceptor');
-      expect(batchInterceptor).not.toHaveBeenCalled();
-      expect(await conn.models.Message.countDocuments()).toBe(0);
-    });
-  });
-
   it('rejects stale bulk before-images without replacing external changes', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { repo } = await openRepo(connection);
       await repo.persistSnapshot(snapshot('A'));
       const observed = (await repo.loadSnapshotBatch(['3'])).get('3')!;
-      await conn.models.Message.collection.updateOne(
-        { messageId: '3' },
-        { $set: { content: 'external' } },
-      );
+      await messages(connection).updateOne({ _id: '3' }, { $set: { content: 'external' } });
       await expect(
-        repo.persistSnapshotsBatch([snapshot('B', 1700000001000)], {
+        repo.persistSnapshotsBatch([snapshot('B', created + 1000)], {
           snapshotContexts: [{ observed }],
         }),
       ).rejects.toThrow('Archive write conflict');
-      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.content).toBe(
-        'external',
-      );
+      expect((await stored(connection))?.content).toBe('external');
     });
   });
 
-  it('rechecks reaction evidence after revision persistence and before publishing the message', async () => {
+  it('rechecks reaction evidence before publishing the message', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { repo } = await openRepo(connection);
       await repo.persistSnapshot(snapshot('A'));
       let checks = 0;
       await expect(
-        repo.persistSnapshotsBatch([snapshot('B', 1700000001000)], {
+        repo.persistSnapshotsBatch([snapshot('B', created + 1000)], {
           snapshotContexts: [
             {
               emptyReactions: {
-                observedAt: 1700000001000,
+                observedAt: created + 1000,
                 assertCurrent: () => {
-                  if (++checks === 4) throw new Error('Reaction changed during refresh');
+                  if (++checks === 3) throw new Error('Reaction changed during refresh');
                 },
               },
             },
           ],
         }),
       ).rejects.toThrow('Reaction changed during refresh');
-      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(1);
-      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.content).toBe('A');
+      expect((await stored(connection))?.content).toBe('A');
     });
   });
 
-  it('distinguishes first schema upgrades from later content changes', async () => {
+  it('reports content changes separately from freshness-only rewrites', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { repo } = await openRepo(connection);
       const first = snapshot('A');
-      await conn.models.Message.collection.insertOne({
-        messageId: '3',
-        content: 'A',
-        timestamp: first.timestamp,
-      });
-      expect(await repo.persistSnapshot(first)).toBe('upgraded');
+      expect(await repo.persistSnapshot(first)).toBe('inserted');
       expect(await repo.persistSnapshot({ ...first, observedAt: first.observedAt + 1 })).toBe(
         'unchanged',
       );
-      expect(await repo.persistSnapshot(snapshot('B', 1700000001000))).toBe('updated');
+      expect((await stored(connection))?.observedAt).toBe(first.observedAt + 1);
+      expect(await repo.persistSnapshot(snapshot('B', created + 1000))).toBe('updated');
     });
   });
 
   it('merges proven empty reactions into the snapshot and removes stale generation pointers', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { repo } = await openRepo(connection);
       const first = snapshot('A');
       await repo.persistSnapshot(first);
-      await conn.models.Message.collection.updateOne(
-        { messageId: '3' },
+      await messages(connection).updateOne(
+        { _id: '3' },
         {
           $set: {
-            reactionGenerations: { old: { generation: 'old' } },
+            reactionGenerations: { 'old:0': { generation: 'old', observedAt: 1, complete: true } },
             reactionsStaleAt: first.observedAt,
           },
         },
@@ -230,7 +198,7 @@ describe('Mongo archive durability', () => {
           { emptyReactions: { observedAt: first.observedAt + 10, assertCurrent } },
         ],
       });
-      const after = await conn.models.Message.collection.findOne({ messageId: '3' });
+      const after = await stored(connection);
       expect(after?.reactionGenerations).toEqual({});
       expect(after?.reactionsFreshAt).toBe(first.observedAt + 10);
       expect(after).not.toHaveProperty('reactionsStaleAt');
@@ -238,10 +206,68 @@ describe('Mongo archive durability', () => {
     });
   });
 
+  it('raises only the freshness of an unchanged re-observation, fenced on the full image', async () => {
+    await withFreshConnection(async (connection) => {
+      const { repo, reactionRepo } = await openRepo(connection);
+      const collection = connection.collection('messages');
+      const originalCollection = connection.collection.bind(connection);
+      vi.spyOn(connection, 'collection').mockImplementation((name, options) =>
+        name === 'messages' ? collection : originalCollection(name, options),
+      );
+      const first = snapshot('A');
+      await repo.persistSnapshot(first);
+      const before = await stored(connection);
+      const replace = vi.spyOn(collection, 'replaceOne');
+      const update = vi.spyOn(collection, 'updateOne');
+      const bulk = vi.spyOn(collection, 'bulkWrite');
+      expect(await repo.persistSnapshot({ ...first, observedAt: first.observedAt + 10 })).toBe(
+        'unchanged',
+      );
+      expect(update).toHaveBeenCalledWith(expect.anything(), {
+        $set: { observedAt: first.observedAt + 10 },
+      });
+      const after = await stored(connection);
+      expect(after).toEqual({ ...before, observedAt: first.observedAt + 10 });
+      expect(Object.keys(after!)).toEqual(Object.keys(before!));
+      expect(
+        await repo.persistSnapshotsBatch([{ ...first, observedAt: first.observedAt + 20 }]),
+      ).toEqual(['unchanged']);
+      expect(bulk.mock.calls[0]?.[0]).toEqual([
+        {
+          updateOne: expect.objectContaining({
+            update: { $set: { observedAt: first.observedAt + 20 } },
+          }),
+        },
+      ]);
+      expect(replace).not.toHaveBeenCalled();
+      // A stale read of the document fails the update instead of raising its freshness.
+      const observed = await stored(connection);
+      await messages(connection).updateOne({ _id: '3' }, { $set: { content: 'elsewhere' } });
+      await expect(
+        repo.persistSnapshot({ ...first, observedAt: first.observedAt + 30 }, { observed }),
+      ).rejects.toThrow('Archive write conflict');
+      expect((await stored(connection))?.observedAt).toBe(first.observedAt + 20);
+      // Content changes, with or without an edit, and added fields are still replacements.
+      expect(
+        await repo.persistSnapshot({
+          ...first,
+          observedAt: first.observedAt + 40,
+          embeds: [{ title: 'link preview' }],
+        }),
+      ).toBe('updated');
+      expect(replace).toHaveBeenCalledTimes(1);
+      await repo.persistSnapshot(snapshot('B', created + 1000));
+      expect(replace).toHaveBeenCalledTimes(2);
+      await reactionRepo.markReactionsStale('3', created + 2000);
+      expect(replace).toHaveBeenCalledTimes(3);
+      // The freshness update, the external edit and the rejected fenced update.
+      expect(update).toHaveBeenCalledTimes(3);
+    });
+  });
+
   it('fences cancellation and invalid empty evidence before any snapshot batch is issued', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { conn, repo } = await openRepo(connection);
       const cancelled = () => {
         throw new Error('cancelled');
       };
@@ -250,9 +276,7 @@ describe('Mongo archive durability', () => {
       ).rejects.toThrow('cancelled');
       await expect(
         repo.persistSnapshotsBatch([snapshot('A')], {
-          snapshotContexts: [
-            { emptyReactions: { observedAt: 1700000000000, assertCurrent: cancelled } },
-          ],
+          snapshotContexts: [{ emptyReactions: { observedAt: created, assertCurrent: cancelled } }],
         }),
       ).rejects.toThrow('cancelled');
       expect(await conn.models.Message.countDocuments()).toBe(0);
@@ -261,21 +285,20 @@ describe('Mongo archive durability', () => {
 
   it('preserves intercepted insert image bytes when MongoDB places the identity first', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { repo, channelRepo } = await openRepo(connection);
       const persisted: string[] = [];
       const interceptor: ArchiveMutationInterceptor = async (collection, before, after) => {
         expect(before).toBeNull();
         if (after === null) throw new Error('Expected a new archive record');
         const target = connection.collection<Record<string, unknown>>(collection);
         await target.insertOne(after);
-        const stored = await target.findOne({});
-        expect(stored).not.toBeNull();
-        expect(mongo.BSON.serialize(stored!)).toEqual(mongo.BSON.serialize(after));
+        const found = await target.findOne({});
+        expect(found).not.toBeNull();
+        expect(mongo.BSON.serialize(found!)).toEqual(mongo.BSON.serialize(after));
         persisted.push(collection);
       };
-      await repo.upsertChannel(
-        { channelId: '2', name: 'general', type: 0, observedAt: 1700000000000, access: 'readable' },
+      await channelRepo.upsertChannel(
+        { channelId: '2', name: 'general', type: 0, observedAt: created, access: 'readable' },
         { interceptor },
       );
       await repo.persistSnapshot(snapshot('first'), { interceptor });
@@ -283,447 +306,854 @@ describe('Mongo archive durability', () => {
     });
   });
 
-  it('batch-loads observations once and preserves successive versions of the same identity', async () => {
+  it('batch-loads observations once and applies successive versions of the same identity', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { repo } = await openRepo(connection);
       const loading = vi.spyOn(repo, 'loadSnapshotBatch');
       const outcomes = await repo.persistSnapshotsBatch([
         snapshot('A'),
-        snapshot('B', 1700000001000),
-        snapshot('A', 1700000002000),
+        snapshot('B', created + 1000),
+        snapshot('A', created + 2000),
       ]);
       expect(loading).toHaveBeenCalledTimes(1);
       expect(outcomes).toEqual(['inserted', 'updated', 'updated']);
-      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.content).toBe('A');
-      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(2);
+      const after = await stored(connection);
+      expect(after?.content).toBe('A');
+      expect(after?.editHistory?.map((entry) => entry.content)).toEqual(['A', 'B']);
     });
   });
 
   it('skips identical durable images while persisting newer freshness metadata', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { conn, repo } = await openRepo(connection);
       const first = snapshot('same');
       await repo.persistSnapshot(first);
-      const replacing = vi.spyOn(conn.models.Message.collection, 'replaceOne');
+      const replacing = vi.spyOn(conn.connection.collection('messages'), 'replaceOne');
+      const updating = vi.spyOn(conn.connection.collection('messages'), 'updateOne');
       expect(await repo.persistSnapshot(first)).toBe('unchanged');
       expect(replacing).not.toHaveBeenCalled();
+      expect(updating).not.toHaveBeenCalled();
       expect(await repo.persistSnapshot({ ...first, observedAt: first.observedAt + 1000 })).toBe(
         'unchanged',
       );
-      expect(replacing).toHaveBeenCalledTimes(1);
-      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.observedAt).toBe(
-        first.observedAt + 1000,
-      );
-      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(0);
+      expect(replacing).not.toHaveBeenCalled();
+      expect(updating).toHaveBeenCalledTimes(1);
+      expect((await stored(connection))?.observedAt).toBe(first.observedAt + 1000);
     });
   });
 
   it('fences cached no-op observations against an external modification', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { repo } = await openRepo(connection);
       const first = snapshot('same');
       await repo.persistSnapshot(first);
       const cached = await repo.loadSnapshotBatch(['3']);
-      await conn.models.Message.collection.updateOne(
-        { messageId: '3' },
-        { $set: { content: 'external' } },
-      );
+      await messages(connection).updateOne({ _id: '3' }, { $set: { content: 'external' } });
       await expect(repo.persistSnapshot(first, { observed: cached.get('3')! })).rejects.toThrow(
         'Archive write conflict',
       );
-      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.content).toBe(
-        'external',
-      );
+      expect((await stored(connection))?.content).toBe('external');
     });
   });
 
-  it('keeps operation-scoped interceptors isolated from the ambient repair interceptor', async () => {
+  it('records each real edit once, in the same write as the new content', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const ambient = vi.fn(async () => {
-        throw new Error('unexpected ambient interceptor');
+      const { conn, repo } = await openRepo(connection);
+      await repo.persistSnapshot(snapshot('first'));
+      const collection = conn.connection.collection('messages');
+      const originalReplace = collection.replaceOne.bind(collection);
+      const crash = vi.spyOn(collection, 'replaceOne').mockImplementationOnce(async () => {
+        throw new Error('crash during write');
       });
-      const first = vi.fn<ArchiveMutationInterceptor>(async () => undefined);
-      const second = vi.fn<ArchiveMutationInterceptor>(async () => undefined);
-      repo.setMutationInterceptor(ambient);
-      await Promise.all([
-        repo.persistSnapshot(snapshot('A'), { observed: null, interceptor: first }),
-        repo.persistSnapshot(
-          { ...snapshot('B'), messageId: '5' },
-          { observed: null, interceptor: second },
-        ),
+      await expect(repo.persistSnapshot(snapshot('second', created + 1000))).rejects.toThrow(
+        'crash',
+      );
+      // Neither the edit nor its history entry was written.
+      expect((await stored(connection))?.editHistory).toBeUndefined();
+      crash.mockImplementation(originalReplace);
+      await repo.persistSnapshot(snapshot('second', created + 1000));
+      await repo.persistSnapshot(snapshot('third', created + 2000));
+      // A replayed or older observation is stale and changes nothing.
+      expect(await repo.persistSnapshot(snapshot('second', created + 1000))).toBe('stale');
+      expect(await repo.persistSnapshot(snapshot('third', created + 2000, created))).toBe('stale');
+      const after = await stored(connection);
+      expect(after?.content).toBe('third');
+      expect(after?.editHistory).toEqual([
+        {
+          editedTimestamp: null,
+          observedAt: created,
+          content: 'first',
+          attachments: [],
+          embeds: [],
+        },
+        {
+          editedTimestamp: created + 1000,
+          observedAt: created + 1000,
+          content: 'second',
+          attachments: [],
+          embeds: [],
+        },
       ]);
-      expect(ambient).not.toHaveBeenCalled();
-      expect(first).toHaveBeenCalledTimes(1);
-      expect(second).toHaveBeenCalledTimes(1);
-      expect(first.mock.calls[0]?.[2]).toMatchObject({ messageId: '3', content: 'A' });
-      expect(second.mock.calls[0]?.[2]).toMatchObject({ messageId: '5', content: 'B' });
+      await repo.tombstone('3', '2', created + 3000);
+      await repo.persistSnapshot(snapshot('third', created + 2000, created + 4000));
+      expect((await stored(connection))?.deletedAt).toBe(created + 3000);
+    });
+  });
+
+  it('does not record link previews, poll votes or reaction counts as edits', async () => {
+    await withFreshConnection(async (connection) => {
+      const { repo } = await openRepo(connection);
+      await repo.persistSnapshot(
+        normalizeMessage(
+          raw('poll', null, { poll: { question: { text: 'Q' }, answers: [{ answer_id: 1 }] } }),
+          { observedAt: created },
+        ),
+      );
+      const preview = [{ type: 'link', url: 'https://example.com' }];
+      const later = (observedAt: number, extra: Record<string, unknown>) =>
+        normalizeMessage(raw('poll', null, { embeds: preview, ...extra }), { observedAt });
+      await repo.persistSnapshot(later(created + 1, {}));
+      await repo.persistSnapshot(
+        later(created + 2, {
+          poll: {
+            question: { text: 'Q' },
+            answers: [{ answer_id: 1 }],
+            results: { answer_counts: [{ id: 1, count: 5 }] },
+          },
+        }),
+      );
+      await repo.persistSnapshot(
+        later(created + 3, { reactions: [{ emoji: { name: '👍' }, count: 2 }] }),
+      );
+      const after = await stored(connection);
+      expect(after?.editHistory).toBeUndefined();
+      expect(after?.embeds).toEqual(preview);
+      expect(after?.poll?.answers?.[0]?.voteCount).toBe(5);
+      expect(after?.reactions).toEqual([{ emoji: { name: '👍' }, count: 2 }]);
+    });
+  });
+
+  it('keeps the newest edit history and counts what it drops', async () => {
+    await withFreshConnection(async (connection) => {
+      const { repo } = await openRepo(connection);
+      await repo.persistSnapshot(snapshot('v0'));
+      const edits = ARCHIVE_EDIT_HISTORY_LIMIT + 3;
+      for (let version = 1; version <= edits; version += 1)
+        await repo.persistSnapshot(snapshot(`v${version}`, created + version * 1000));
+      const after = await stored(connection);
+      expect(after?.content).toBe(`v${edits}`);
+      expect(after?.editHistory).toHaveLength(ARCHIVE_EDIT_HISTORY_LIMIT);
+      expect(after?.editHistoryDropped).toBe(3);
+      expect(after?.editHistory?.[0]?.content).toBe('v3');
+    });
+  });
+
+  it('merges partial live updates without clearing unobserved fields', async () => {
+    await withFreshConnection(async (connection) => {
+      const { repo } = await openRepo(connection);
+      await repo.persistSnapshot(
+        normalizeMessage(
+          raw('A', null, { embeds: [{ title: 'notice' }], attachments: [{ id: '9' }] }),
+          {
+            observedAt: 10,
+          },
+        ),
+      );
+      // A Gateway update that carries only the changed content and its edit time.
+      await repo.persistSnapshot(
+        normalizeMessage(
+          {
+            id: '3',
+            channel_id: '2',
+            content: 'B',
+            edited_timestamp: new Date(created + 5000).toISOString(),
+          },
+          { observedAt: 20 },
+        ),
+      );
+      const after = await stored(connection);
+      expect(after).toMatchObject({
+        content: 'B',
+        embeds: [{ title: 'notice' }],
+        attachments: [{ id: '9' }],
+        author: { id: '4', username: 'Alice' },
+        editedTimestamp: created + 5000,
+      });
+      expect(after?.editHistory?.map((entry) => entry.content)).toEqual(['A']);
+      // A partial update without an edit time only fills the fields it carries.
+      await repo.persistSnapshot(
+        normalizeMessage({ id: '3', channel_id: '2', embeds: [] }, { observedAt: 30 }),
+      );
+      expect(await stored(connection)).toMatchObject({ content: 'B', embeds: [] });
+      expect((await stored(connection))?.editHistory).toHaveLength(1);
+    });
+  });
+
+  it('never lets an older observation overwrite newer content', async () => {
+    await withFreshConnection(async (connection) => {
+      const { repo } = await openRepo(connection);
+      await repo.persistSnapshot(snapshot('new', created + 5000, 100));
+      // Read before the edit, written after it.
+      expect(await repo.persistSnapshot(snapshot('old', created, 200))).toBe('stale');
+      // Same version, older observation.
+      expect(
+        await repo.persistSnapshot(
+          normalizeMessage(raw('new', created + 5000, { embeds: [{ title: 'x' }] }), {
+            observedAt: 50,
+          }),
+        ),
+      ).toBe('stale');
+      const after = await stored(connection);
+      expect(after).toMatchObject({ content: 'new', embeds: [], observedAt: 100 });
+      expect(after?.editHistory).toBeUndefined();
+    });
+  });
+
+  it('fills a tombstone from an older observation without undeleting it', async () => {
+    await withFreshConnection(async (connection) => {
+      const { repo } = await openRepo(connection);
+      // A snowflake created at `created`, as Discord assigns them.
+      const id = (BigInt(created - 1420070400000) << 22n).toString();
+      const observed = (content: string, observedAt: number) =>
+        normalizeMessage({ ...raw(content, null), id }, { observedAt });
+      await repo.tombstone(id, '2', created + 5000);
+      // The create was read before the deletion but applied after it.
+      expect(await repo.persistSnapshot(observed('hello', created + 1000))).toBe('filled');
+      expect(await stored(connection, id)).toMatchObject({
+        content: 'hello',
+        author: { id: '4', username: 'Alice' },
+        deletedAt: created + 5000,
+        observedAt: created + 5000,
+      });
+      expect((await stored(connection, id))?.editHistory).toBeUndefined();
+      // Nothing is left to fill, and nothing is replaced.
+      expect(await repo.persistSnapshot(observed('older', created + 500))).toBe('stale');
+      expect((await stored(connection, id))?.content).toBe('hello');
+    });
+  });
+
+  it('discards only messages kept until their author was known, fenced on the observed image', async () => {
+    await withFreshConnection(async (connection) => {
+      const { conn, repo } = await openRepo(connection);
+      const unresolved = {
+        ...normalizeMessage({ id: '7', channel_id: '2' }, { observedAt: 1 }),
+        policy: { version: '1', reason: 'unknown-author-retained' },
+      };
+      await repo.persistSnapshot(unresolved);
+      await repo.persistSnapshot(snapshot('human'));
+      expect(await repo.discardUnresolved((await stored(connection))!)).toBe(false);
+      const observed = (await stored(connection, '7'))!;
+      await messages(connection).updateOne({ _id: '7' }, { $set: { content: 'concurrent' } });
+      await expect(repo.discardUnresolved(observed)).rejects.toThrow('Archive write conflict');
+      expect(await repo.discardUnresolved((await stored(connection, '7'))!)).toBe(true);
+      expect(await stored(connection, '7')).toBeNull();
+      expect(await conn.models.Message.countDocuments()).toBe(1);
+    });
+  });
+
+  it('tombstones an unseen deletion with only identity and deletion metadata', async () => {
+    await withFreshConnection(async (connection) => {
+      const { repo } = await openRepo(connection);
+      await repo.tombstone('1180000000000000000', '2', 50);
+      await repo.tombstone('1180000000000000000', '2', 40);
+      expect(await stored(connection, '1180000000000000000')).toEqual({
+        _id: '1180000000000000000',
+        schemaVersion: 3,
+        channelId: '2',
+        createdTimestamp: Number(BigInt('1180000000000000000') >> 22n) + 1420070400000,
+        observedAt: 50,
+        deletedAt: 40,
+      });
     });
   });
 
   it('renews bounded inbox claims, tolerates acknowledged members and rejects foreign leases', async () => {
     await withFreshConnection(async (connection) => {
       const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      for (const eventId of ['a', 'b', 'c'])
-        await repo.enqueue({ eventId, kind: 'snapshot', payload: {}, observedAt: 1 });
+      const inboxRepo = new MongoArchiveInboxRepo(conn, 'msg-archive');
+      for (const eventId of ['a', 'b', 'c']) await inboxRepo.enqueue(reactionEvent(eventId, 1));
       expect(
-        (await repo.claimInboxBatch('owner', 10, 100, 2)).map((entry) => entry.eventId),
+        (await inboxRepo.claimInboxBatch('owner', 10, 100, 2)).map((entry) => entry.eventId),
       ).toEqual(['a', 'b']);
-      await repo.ackInbox('a', 'owner');
-      await repo.renewInboxBatch('owner', ['a', 'b'], 50, 100);
+      await inboxRepo.ackInbox('a', 'owner');
+      await inboxRepo.renewInboxBatch('owner', ['a', 'b'], 50, 100);
       expect(
-        (await repo.claimInboxBatch('other', 110, 100, 2)).map((entry) => entry.eventId),
+        (await inboxRepo.claimInboxBatch('other', 110, 100, 2)).map((entry) => entry.eventId),
       ).toEqual(['c']);
-      await expect(repo.renewInboxBatch('other', ['b'], 120, 100)).rejects.toThrow('claim lost');
+      await expect(inboxRepo.renewInboxBatch('other', ['b'], 120, 100)).rejects.toThrow(
+        'claim lost',
+      );
       expect(
-        (await repo.claimInboxBatch('other', 150, 100, 2)).map((entry) => entry.eventId),
+        (await inboxRepo.claimInboxBatch('other', 150, 100, 2)).map((entry) => entry.eventId),
       ).toEqual(['b']);
-      await expect(repo.ackInbox('b', 'owner')).rejects.toThrow('claim lost');
+      await expect(inboxRepo.ackInbox('b', 'owner')).rejects.toThrow('claim lost');
     });
   });
 
   it('bounds empty polling and invalidates the cache as soon as a local event is enqueued', async () => {
     await withFreshConnection(async (connection) => {
       const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const inboxRepo = new MongoArchiveInboxRepo(conn, 'msg-archive');
       const finding = vi.spyOn(conn.models.ArchiveInbox.collection, 'find');
-      expect(await repo.claimInboxBatch('owner', 10, 100)).toEqual([]);
-      expect(await repo.claimInboxBatch('owner', 100, 100)).toEqual([]);
-      expect(await repo.claimInboxBatch('owner', 259, 100)).toEqual([]);
+      expect(await inboxRepo.claimInboxBatch('owner', 10, 100)).toEqual([]);
+      expect(await inboxRepo.claimInboxBatch('owner', 100, 100)).toEqual([]);
+      expect(await inboxRepo.claimInboxBatch('owner', 259, 100)).toEqual([]);
       expect(finding).toHaveBeenCalledTimes(1);
-      expect(await repo.claimInboxBatch('owner', 260, 100)).toEqual([]);
+      expect(await inboxRepo.claimInboxBatch('owner', 260, 100)).toEqual([]);
       expect(finding).toHaveBeenCalledTimes(2);
-      await repo.enqueue({ eventId: 'new', kind: 'snapshot', payload: {}, observedAt: 1 });
-      expect((await repo.claimInboxBatch('owner', 261, 100)).map((entry) => entry.eventId)).toEqual(
-        ['new'],
-      );
+      await inboxRepo.enqueue(reactionEvent('new', 1));
+      expect(
+        (await inboxRepo.claimInboxBatch('owner', 261, 100)).map((entry) => entry.eventId),
+      ).toEqual(['new']);
     });
   });
 
-  it('preserves every actual edit and handles retry after revision commit', async () => {
-    await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      await repo.persistSnapshot(snapshot('first'));
-      const originalReplace = conn.models.Message.collection.replaceOne.bind(
-        conn.models.Message.collection,
-      );
-      conn.models.Message.collection.replaceOne = async () => {
-        throw new Error('crash after revision');
-      };
-      await expect(repo.persistSnapshot(snapshot('second', 1700000001000))).rejects.toThrow(
-        'crash',
-      );
-      conn.models.Message.collection.replaceOne = originalReplace;
-      await repo.persistSnapshot(snapshot('second', 1700000001000));
-      await repo.persistSnapshot(snapshot('third', 1700000002000));
-      await repo.persistSnapshot(snapshot('second', 1700000001000));
-      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(2);
-      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.content).toBe(
-        'third',
-      );
-      await repo.tombstone('3', '2', 1700000003000);
-      await repo.persistSnapshot(snapshot('third', 1700000002000));
-      expect(
-        (await conn.models.Message.collection.findOne({ messageId: '3' }))?.deletion,
-      ).toBeTruthy();
-    });
-  });
-  it('does not manufacture revisions for stale same-content snapshots', async () => {
-    await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      await repo.persistSnapshot(snapshot('same', 1700000002000));
-      expect(await repo.persistSnapshot(snapshot('same', 1700000001000))).toBe('stale');
-      await repo.tombstone('3', '2', 1700000003000);
-      await repo.persistSnapshot(snapshot('same', 1700000002000));
-      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(0);
-      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.content).toBe(
-        'same',
-      );
-    });
-  });
-  it('retains A-B-A observed embed changes with unchanged edit timestamps and ignores event replay', async () => {
-    await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const observed = (label: string, id: string, at: number) =>
-        normalizeMessage(
-          {
-            id: '3',
-            channel_id: '2',
-            author: { id: '4', username: 'Alice' },
-            content: 'hello',
-            embeds: [{ title: label }],
-            timestamp: '2023-11-14T22:13:20.000Z',
-            edited_timestamp: null,
-          },
-          { guildId: '1', source: 'gateway', observedAt: at, observationId: id },
-        );
-      await repo.persistSnapshot(observed('A', 'e1', 1700000001000));
-      await repo.persistSnapshot(observed('B', 'e2', 1700000002000));
-      await repo.persistSnapshot(observed('A', 'e3', 1700000003000));
-      await repo.persistSnapshot(observed('C', 'e4', 1700000004000));
-      const revisions = await conn.models.ArchiveRevision.find({})
-        .sort({ versionObservationId: 1 })
-        .lean()
-        .exec();
-      expect(revisions.map((entry) => entry.versionObservationId)).toEqual(['e1', 'e2', 'e3']);
-      await repo.persistSnapshot(observed('A', 'e3', 1700000003000));
-      expect(
-        (await conn.models.Message.collection.findOne({ messageId: '3' }))?.embeds[0].title,
-      ).toBe('C');
-      const refreshed = normalizeMessage(
-        {
-          id: '3',
-          channel_id: '2',
-          author: { id: '4', username: 'Alice' },
-          content: 'hello',
-          embeds: [{ title: 'C' }],
-          timestamp: '2023-11-14T22:13:20.000Z',
-          edited_timestamp: null,
-        },
-        { guildId: '1', source: 'history', observedAt: 1700000005000 },
-      );
-      await repo.persistSnapshot(refreshed);
-      expect(
-        (await conn.models.Message.collection.findOne({ messageId: '3' }))?.versionObservationId,
-      ).toBe('e4');
-      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(3);
-    });
-  });
-  it('recovers Gateway transitions after revision commit and preserves REST-interleaved A-B-A', async () => {
-    await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const observed = (content: string, id: string, at: number) =>
-        normalizeMessage(
-          {
-            id: '3',
-            channel_id: '2',
-            author: { id: '4', username: 'Alice' },
-            content,
-            timestamp: '2023-11-14T22:13:20.000Z',
-            edited_timestamp: null,
-          },
-          { guildId: '1', source: 'gateway', observedAt: at, observationId: id },
-        );
-      await repo.persistSnapshot(
-        observed('A', 'session:00000000000000000001:MESSAGE_UPDATE', 1700000001000),
-      );
-      await repo.persistSnapshot(
-        normalizeMessage(
-          {
-            id: '3',
-            channel_id: '2',
-            content: 'A',
-            timestamp: '2023-11-14T22:13:20.000Z',
-            edited_timestamp: null,
-          },
-          { guildId: '1', source: 'history', observedAt: 1700000010000 },
-        ),
-      );
-      const originalReplace = conn.models.Message.collection.replaceOne.bind(
-        conn.models.Message.collection,
-      );
-      conn.models.Message.collection.replaceOne = async () => {
-        throw new Error('crash before watermark');
-      };
-      await expect(
-        repo.persistSnapshot(
-          observed('B', 'session:00000000000000000002:MESSAGE_UPDATE', 1700000002000),
-        ),
-      ).rejects.toThrow('watermark');
-      conn.models.Message.collection.replaceOne = originalReplace;
-      await repo.persistSnapshot(
-        observed('B', 'session:00000000000000000002:MESSAGE_UPDATE', 1700000002000),
-      );
-      await repo.persistSnapshot(
-        observed('A', 'session:00000000000000000003:MESSAGE_UPDATE', 1700000003000),
-      );
-      await repo.persistSnapshot(
-        observed('C', 'session:00000000000000000004:MESSAGE_UPDATE', 1700000011000),
-      );
-      const revisions = await conn.models.ArchiveRevision.find({}).lean().exec();
-      expect(revisions.map((entry) => entry.versionObservationId)).toEqual(
-        expect.arrayContaining([
-          'session:00000000000000000001:MESSAGE_UPDATE',
-          'session:00000000000000000002:MESSAGE_UPDATE',
-          'session:00000000000000000003:MESSAGE_UPDATE',
-        ]),
-      );
-      await repo.persistSnapshot(
-        observed('B', 'session:00000000000000000002:MESSAGE_UPDATE', 1700000099000),
-      );
-      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(revisions.length);
-      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.content).toBe('C');
-    });
-  });
-  it('does not treat unknown omitted Gateway fields as a content transition', async () => {
-    await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const first = normalizeMessage(
-        { id: '3', channel_id: '2', content: 'A', embeds: [{ title: 'notice' }] },
-        { guildId: '1', source: 'gateway', observedAt: 10, observationId: 'e1' },
-      );
-      await repo.persistSnapshot(first);
-      await repo.persistSnapshot(
-        normalizeMessage(
-          { id: '3', channel_id: '2', content: 'A' },
-          { guildId: '1', source: 'gateway', observedAt: 20, observationId: 'e2' },
-        ),
-      );
-      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(0);
-      expect((await conn.models.Message.collection.findOne({ messageId: '3' }))?.embeds).toEqual([
-        { title: 'notice' },
-      ]);
-    });
-  });
   it('reclaims crashed inbox consumers and fences acknowledgements', async () => {
     await withFreshConnection(async (connection) => {
       const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const event = {
-        eventId: 'e1',
-        kind: 'snapshot' as const,
-        payload: { content: 'x' },
-        observedAt: 10,
-      };
-      await repo.enqueue(event);
-      await repo.enqueue(event);
-      expect((await repo.claimInbox('first', 10, 100))?.attempts).toBe(1);
-      expect(await repo.claimInbox('second', 50, 100)).toBeUndefined();
-      expect((await repo.claimInbox('second', 110, 100))?.attempts).toBe(2);
-      await expect(repo.ackInbox('e1', 'first')).rejects.toThrow('claim lost');
-      await repo.ackInbox('e1', 'second');
+      const inboxRepo = new MongoArchiveInboxRepo(conn, 'msg-archive');
+      const event = reactionEvent('e1', 10);
+      await inboxRepo.enqueue(event);
+      await inboxRepo.enqueue(event);
+      // A claim is not a failure: only reported failures count as attempts.
+      expect((await inboxRepo.claimInbox('first', 10, 100))?.attempts).toBe(0);
+      expect(await inboxRepo.claimInbox('second', 50, 100)).toBeUndefined();
+      expect((await inboxRepo.claimInbox('second', 110, 100))?.attempts).toBe(0);
+      await expect(inboxRepo.ackInbox('e1', 'first')).rejects.toThrow('claim lost');
+      await inboxRepo.ackInbox('e1', 'second');
       expect(await conn.models.ArchiveInbox.countDocuments()).toBe(0);
     });
   });
   it('defers inaccessible events without starving later writes', async () => {
     await withFreshConnection(async (connection) => {
       const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      await repo.enqueue({ eventId: 'denied', kind: 'reaction', payload: {}, observedAt: 1 });
-      await repo.enqueue({ eventId: 'later', kind: 'snapshot', payload: {}, observedAt: 2 });
-      expect((await repo.claimInbox('a', 10, 100))?.eventId).toBe('denied');
-      await repo.deferInbox('denied', 'a', 'source-denied', 1000);
-      expect((await repo.claimInbox('b', 20, 100))?.eventId).toBe('later');
-      await repo.ackInbox('later', 'b');
-      expect(await repo.claimInbox('c', 999, 100)).toBeUndefined();
-      expect((await repo.claimInbox('c', 1000, 100))?.eventId).toBe('denied');
+      const inboxRepo = new MongoArchiveInboxRepo(conn, 'msg-archive');
+      await inboxRepo.enqueue(reactionEvent('denied', 1));
+      await inboxRepo.enqueue(reactionEvent('later', 2));
+      expect((await inboxRepo.claimInbox('a', 10, 100))?.eventId).toBe('denied');
+      await inboxRepo.deferInbox('denied', 'a', 'source-denied', 1000);
+      expect((await inboxRepo.claimInbox('b', 20, 100))?.eventId).toBe('later');
+      await inboxRepo.ackInbox('later', 'b');
+      expect(await inboxRepo.claimInbox('c', 999, 100)).toBeUndefined();
+      expect((await inboxRepo.claimInbox('c', 1000, 100))?.eventId).toBe('denied');
+    });
+  });
+  it('records failure counters and claim streaks under the claim fence', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const inboxRepo = new MongoArchiveInboxRepo(conn, 'msg-archive');
+      const stored = () => conn.models.ArchiveInbox.findOne({ eventId: 'poison' }).lean();
+      await inboxRepo.enqueue(reactionEvent('poison', 1));
+      expect((await inboxRepo.claimInbox('a', 10, 100))?.claims).toBe(1);
+      await expect(inboxRepo.deferInbox('poison', 'stale', 'transient', 20)).rejects.toThrow(
+        'claim lost',
+      );
+      await inboxRepo.deferInbox('poison', 'a', 'transient', 20, {
+        attempts: 3,
+        firstFailedAt: 10,
+      });
+      expect(await stored()).toMatchObject({
+        state: 'pending',
+        attempts: 3,
+        firstFailedAt: 10,
+        nextAttemptAt: 20,
+        claims: 0,
+      });
+      // A claim that expires without an outcome extends the streak; a release ends it.
+      expect((await inboxRepo.claimInbox('b', 20, 100))?.claims).toBe(1);
+      expect((await inboxRepo.claimInbox('c', 200, 100))?.claims).toBe(2);
+      await inboxRepo.releaseInbox('poison', 'c');
+      expect(await stored()).toMatchObject({ state: 'pending', claims: 0, attempts: 3 });
+    });
+  });
+  it('retires dead events from claims, pending counts and the empty-inbox probe', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const inboxRepo = new MongoArchiveInboxRepo(conn, 'msg-archive');
+      await inboxRepo.enqueue(reactionEvent('poison', 1));
+      await inboxRepo.enqueue(reactionEvent('later', 2));
+      expect((await inboxRepo.claimInbox('b', 20, 100))?.eventId).toBe('poison');
+      await expect(
+        inboxRepo.deadLetterInbox('poison', { kind: 'claim', token: 'a' }, 'stale token', 30),
+      ).rejects.toThrow('claim lost');
+      await inboxRepo.deadLetterInbox(
+        'poison',
+        { kind: 'claim', token: 'b' },
+        'still failing',
+        30,
+        {
+          attempts: 11,
+        },
+      );
+      const dead = await conn.models.ArchiveInbox.findOne({ eventId: 'poison' }).lean();
+      expect(dead).toMatchObject({ state: 'dead', attempts: 11, deadAt: new Date(30) });
+      expect(dead).not.toHaveProperty('claimToken');
+      expect(dead).not.toHaveProperty('nextAttemptAt');
+      expect((await inboxRepo.claimInbox('c', 40, 100))?.eventId).toBe('later');
+      await inboxRepo.ackInbox('later', 'c');
+      // Only the dead event remains. Its missing retry time must not defeat the
+      // short empty-inbox cache, so a second poll within it issues no query.
+      const find = vi.spyOn(conn.models.ArchiveInbox.collection, 'find');
+      const now = Date.now();
+      expect(await inboxRepo.claimInbox('d', now, 100)).toBeUndefined();
+      expect(await inboxRepo.claimInbox('d', now + 1, 100)).toBeUndefined();
+      expect(find).toHaveBeenCalledTimes(1);
+      find.mockRestore();
+      await inboxRepo.enqueue(reactionEvent('next', 3));
+      expect((await inboxRepo.claimInbox('d', now + 2, 100))?.eventId).toBe('next');
+    });
+  });
+  it('expires dead letters after 30 days through a TTL index', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      await conn.models.ArchiveInbox.createCollection();
+      await conn.models.ArchiveInbox.createIndexes();
+      const indexes = await conn.models.ArchiveInbox.collection.indexes();
+      expect(indexes.find((index) => index.key['deadAt'] === 1)).toMatchObject({
+        expireAfterSeconds: 30 * 24 * 60 * 60,
+      });
+    });
+  });
+  it('names an invalid inbox event after claiming the valid events ahead of it', async () => {
+    await withFreshConnection(async (connection) => {
+      const { conn, inboxRepo } = await openRepo(connection);
+      await inboxRepo.enqueue(reactionEvent('valid', 1));
+      await conn.models.ArchiveInbox.collection.insertOne({
+        eventId: 'broken',
+        kind: 'snapshot',
+        messageId: '3',
+        channelId: '2',
+        payload: { content: 'not a normalized snapshot' },
+        observedAt: 2,
+        state: 'pending',
+        attempts: 0,
+      });
+      expect((await inboxRepo.claimInboxBatch('a', 10, 100)).map((entry) => entry.eventId)).toEqual(
+        ['valid'],
+      );
+      await inboxRepo.ackInbox('valid', 'a');
+      const error = await inboxRepo.claimInbox('b', 10, 100).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(ArchiveInboxInvalidError);
+      expect((error as ArchiveInboxInvalidError).eventId).toBe('broken');
+      expect(isArchiveInboxUnclaimable(error)).toBe(true);
+      await inboxRepo.deadLetterInbox('broken', { kind: 'unclaimable' }, 'invalid', 10);
+      expect(await inboxRepo.claimInbox('b', 10, 100)).toBeUndefined();
+    });
+  });
+
+  it('rejects a reaction event whose target does not match its contract', async () => {
+    await withFreshConnection(async (connection) => {
+      const { conn, inboxRepo } = await openRepo(connection);
+      await inboxRepo.enqueue({
+        ...reactionEvent('targeted', 1),
+        payload: { target: { scope: 'emoji' as const, emojiKey: '👍', type: 1 as const } },
+      });
+      await conn.models.ArchiveInbox.collection.insertOne({
+        ...reactionEvent('broken', 2),
+        payload: { target: { scope: 'emoji', emojiKey: '' } },
+        state: 'pending',
+        attempts: 0,
+      });
+      const claimed = await inboxRepo.claimInboxBatch('token', 10, 60_000);
+      expect(claimed.map((entry) => entry.eventId)).toEqual(['targeted']);
+      await inboxRepo.ackInbox('targeted', 'token');
+      await expect(inboxRepo.claimInboxBatch('token', 10, 60_000)).rejects.toThrow(
+        ArchiveInboxInvalidError,
+      );
+    });
+  });
+
+  it('names an unclaimable oversized event so it can be dead-lettered', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const inboxRepo = new MongoArchiveInboxRepo(conn, 'msg-archive');
+      const limits = ARCHIVE_LIMITS as { pipelineBytes: number };
+      const original = limits.pipelineBytes;
+      await inboxRepo.enqueue({
+        eventId: 'huge',
+        kind: 'gap',
+        payload: { reason: 'x'.repeat(4096) },
+        observedAt: 1,
+      });
+      await inboxRepo.enqueue(reactionEvent('small', 2));
+      limits.pipelineBytes = 2048;
+      try {
+        const error = await inboxRepo.claimInbox('a', 10, 100).catch((caught: unknown) => caught);
+        expect(error).toBeInstanceOf(ArchiveInboxOversizedError);
+        expect(error).toBeInstanceOf(ArchiveLimitExceededError);
+        expect(error).not.toBeInstanceOf(RangeError);
+        expect((error as ArchiveInboxOversizedError).eventId).toBe('huge');
+        await inboxRepo.deadLetterInbox('huge', { kind: 'unclaimable' }, 'oversized', 10);
+        expect((await inboxRepo.claimInbox('a', 10, 100))?.eventId).toBe('small');
+        await expect(
+          inboxRepo.deadLetterInbox('huge', { kind: 'unclaimable' }, 'again', 11),
+        ).rejects.toThrow('claim lost');
+      } finally {
+        limits.pipelineBytes = original;
+      }
     });
   });
   it('claims a single fixed owner without requiring indexes or expiry takeover', async () => {
     await withFreshConnection(async (connection) => {
       const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const results = await Promise.all([repo.acquireOwner('a', 10), repo.acquireOwner('b', 10)]);
+      const ownerRepo = new MongoArchiveOwnerRepo(conn, 'msg-archive');
+      const results = await Promise.all([
+        ownerRepo.acquireOwner('a', 10),
+        ownerRepo.acquireOwner('b', 10),
+      ]);
       expect(results.filter(Boolean)).toHaveLength(1);
       const owner = results[0] ? 'a' : 'b';
-      expect(await repo.acquireOwner('c', 999999999)).toBe(false);
-      await repo.releaseOwner('c');
-      expect(await repo.acquireOwner('c', 999999999)).toBe(false);
-      await repo.releaseOwner(owner);
-      expect(await repo.acquireOwner('c', 999999999)).toBe(true);
+      expect(await ownerRepo.acquireOwner('c', 999999999)).toBe(false);
+      await ownerRepo.releaseOwner('c');
+      expect(await ownerRepo.acquireOwner('c', 999999999)).toBe(false);
+      await ownerRepo.releaseOwner(owner);
+      expect(await ownerRepo.acquireOwner('c', 999999999)).toBe(true);
+    });
+  });
+  it('releases a recorded owner lease only while it still names that owner', async () => {
+    await withFreshConnection(async (connection) => {
+      const { ownerRepo } = await openRepo(connection);
+      expect(await ownerRepo.ownerLease()).toBeNull();
+      expect(await ownerRepo.acquireOwner('old', 10)).toBe(true);
+      const lease = await ownerRepo.ownerLease();
+      expect(lease).toEqual({ id: 'owner', ownerId: 'old' });
+      expect(await ownerRepo.releaseOwnerLease(lease?.id, 'other')).toBe(false);
+      expect(await ownerRepo.releaseOwnerLease(lease?.id, 'old')).toBe(true);
+      expect(await ownerRepo.ownerLease()).toBeNull();
+      expect(await ownerRepo.acquireOwner('new', 20)).toBe(true);
     });
   });
   it('does not replace current reaction references with incomplete chunks', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const { conn, repo, reactionRepo } = await openRepo(connection);
       await repo.persistSnapshot(snapshot('first'));
-      await repo.stageReaction('3', 'unicode:👍', 0, 'a', 0, ['4', '5'], 10);
-      await repo.publishReaction('3', 'unicode:👍', 0, 'a', 1, 10);
-      await repo.finalizeReactionRefresh('3', 'a', ['unicode:👍:0'], 10);
-      await repo.markReactionsStale('3', 20);
-      await repo.stageReaction('3', 'unicode:👍', 0, 'b', 0, ['4'], 20);
-      await expect(repo.publishReaction('3', 'unicode:👍', 0, 'b', 2, 20)).rejects.toThrow(
-        'Incomplete',
-      );
-      const stored = await conn.models.Message.collection.findOne({ messageId: '3' });
-      expect(stored?.reactionGenerations['unicode:👍:0'].generation).toBe('a');
-      await repo.finalizeReactionRefresh('3', 'empty', [], 30);
+      await reactionRepo.stageReactions([chunk('👍', 'a', ['4', '5'], 10)]);
+      await reactionRepo.finalizeReactionRefresh('3', 'a', [{ key: '👍:0', chunks: 1 }], 10);
+      await reactionRepo.markReactionsStale('3', 20);
+      await reactionRepo.stageReactions([chunk('👍', 'b', ['4'], 20)]);
+      await expect(
+        reactionRepo.finalizeReactionRefresh('3', 'b', [{ key: '👍:0', chunks: 2 }], 20),
+      ).rejects.toThrow('Incomplete');
+      expect((await stored(connection))?.reactionGenerations?.['👍:0']?.generation).toBe('a');
       expect(
-        (await conn.models.Message.collection.findOne({ messageId: '3' }))?.reactionGenerations,
-      ).toEqual({});
+        await conn.models.ArchiveReaction.find({}, { _id: 0, channelId: 1, generation: 1 })
+          .sort({ generation: 1 })
+          .lean()
+          .exec(),
+      ).toEqual([
+        { channelId: '2', generation: 'a' },
+        { channelId: '2', generation: 'b' },
+      ]);
+      await reactionRepo.finalizeReactionRefresh('3', 'empty', [], 30);
+      expect((await stored(connection))?.reactionGenerations).toEqual({});
     });
   });
-  it('records excluded-source evidence without copying excluded content or creating revisions', async () => {
+
+  it('stages chunks in one insert and publishes every stream of a refresh in one write', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      await repo.persistSnapshot(snapshot('legacy body'));
-      const evidence = { ...snapshot('excluded secret'), authorKind: 'bot' as const };
-      await repo.recordSourceEvidence('3', evidence, {
-        policyHash: 'p1',
-        admitted: false,
-        reason: 'content-rule',
-        observedAt: 1700000002000,
-      });
-      await repo.recordSourceEvidence('not-stored', evidence);
-      const stored = await conn.models.Message.collection.findOne({ messageId: '3' });
-      expect(stored?.authorKind).toBe('bot');
-      expect(stored?.content).toBe('legacy body');
-      expect(stored?.archiveSourceDecision).toMatchObject({
-        policyHash: 'p1',
-        admitted: false,
-        reason: 'content-rule',
-      });
-      await repo.recordSourceEvidence(
+      const { conn, repo, reactionRepo } = await openRepo(connection);
+      await repo.persistSnapshot(snapshot('first'));
+      const inserting = vi.spyOn(conn.models.ArchiveReaction.collection, 'insertMany');
+      await reactionRepo.stageReactions([
+        chunk('👍', 'g', ['4', '5'], 10),
+        chunk('👍', 'g', ['6'], 10, 1),
+        { ...chunk('50', 'g', ['7'], 10), type: 1 },
+      ]);
+      expect(inserting).toHaveBeenCalledTimes(1);
+      await expect(
+        reactionRepo.stageReactions([chunk('👍', 'x', ['not-an-id'], 10)]),
+      ).rejects.toThrow('Invalid reaction chunk');
+      await expect(
+        reactionRepo.stageReactions(
+          Array.from({ length: ARCHIVE_LIMITS.batchDocuments + 1 }, (_, index) =>
+            chunk('👍', 'y', ['4'], 10, index),
+          ),
+        ),
+      ).rejects.toThrow(ArchiveLimitExceededError);
+      await reactionRepo.markReactionsStale('3', 20);
+      const before = await stored(connection);
+      // A change marked after the refresh began fails the publication.
+      await expect(
+        reactionRepo.finalizeReactionRefresh('3', 'g', [{ key: '👍:0', chunks: 2 }], 15),
+      ).rejects.toThrow('Reaction changed during refresh');
+      const updates = vi.spyOn(connection.collection('messages'), 'updateOne');
+      const replacements = vi.spyOn(connection.collection('messages'), 'replaceOne');
+      await reactionRepo.finalizeReactionRefresh(
         '3',
-        { ...evidence, authorKind: 'unknown' },
-        { policyHash: 'p1', admitted: false, reason: 'newer-partial', observedAt: 1700000003000 },
+        'g',
+        [
+          { key: '👍:0', chunks: 2 },
+          { key: '50:1', chunks: 1 },
+          { key: '50:0', chunks: 0 },
+        ],
+        25,
       );
-      await repo.recordSourceEvidence('3', evidence, {
-        policyHash: 'p1',
-        admitted: false,
-        reason: 'older-proof',
-        observedAt: 1700000001000,
+      expect(updates.mock.calls.length + replacements.mock.calls.length).toBe(1);
+      const after = await stored(connection);
+      expect(after?.reactionGenerations).toEqual({
+        '👍:0': { generation: 'g', observedAt: 25, complete: true },
+        '50:1': { generation: 'g', observedAt: 25, complete: true },
+        '50:0': { generation: 'g', observedAt: 25, complete: true },
       });
-      expect(
-        (await conn.models.Message.collection.findOne({ messageId: '3' }))?.archiveSourceDecision
-          .reason,
-      ).toBe('newer-partial');
-      await repo.persistSnapshot(snapshot('legacy body', 1700000004000));
-      expect(
-        (await conn.models.Message.collection.findOne({ messageId: '3' }))?.archiveSourceDecision,
-      ).toBeUndefined();
-      expect(await conn.models.Message.countDocuments()).toBe(1);
-      expect(await conn.models.ArchiveRevision.countDocuments()).toBe(0);
+      expect(after?.reactionsFreshAt).toBe(25);
+      expect(after).not.toHaveProperty('reactionsStaleAt');
+      expect(before?.reactionsStaleAt).toBe(20);
+      // A missing chunk keeps the published generation.
+      await expect(
+        reactionRepo.finalizeReactionRefresh('3', 'g', [{ key: '50:1', chunks: 2 }], 30),
+      ).rejects.toThrow('Incomplete');
     });
   });
-  it('rejects mutation capabilities from reader compositions and journals every intercepted mutation', async () => {
+
+  it('publishes a partial refresh over the other streams and clears only its own stale mark', async () => {
     await withFreshConnection(async (connection) => {
-      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
-      const reader = buildRepos({ ...conn, archiveOwner: undefined });
-      expect(reader.archive).toBeUndefined();
-      expect('insertManyIgnoringDuplicates' in reader.message).toBe(false);
-      expect('upsertLastMessageID' in reader.fetch).toBe(false);
-      expect(
-        () => new MongoArchiveRepo({ ...conn, archiveOwner: undefined }, 'msg-archive'),
-      ).toThrow('ownership');
-      const repo = new MongoArchiveRepo(conn, 'msg-archive');
-      const mutations: string[] = [];
-      repo.setMutationInterceptor(async (collectionName, before, after) => {
-        expect(after?._id ?? before?._id).toBeTruthy();
-        mutations.push(collectionName);
-      });
+      const { repo, reactionRepo } = await openRepo(connection);
       await repo.persistSnapshot(snapshot('first'));
-      await repo.upsertChannel({
+      await reactionRepo.stageReactions([chunk('👍', 'a', ['4'], 10), chunk('50', 'a', ['5'], 10)]);
+      await reactionRepo.finalizeReactionRefresh(
+        '3',
+        'a',
+        [
+          { key: '👍:0', chunks: 1 },
+          { key: '👍:1', chunks: 0 },
+          { key: '50:0', chunks: 1 },
+          { key: '50:1', chunks: 0 },
+        ],
+        10,
+      );
+      await reactionRepo.markReactionsStale('3', 40);
+      await reactionRepo.stageReactions([chunk('👍', 'b', ['4', '6'], 50)]);
+      await reactionRepo.finalizeReactionRefresh('3', 'b', [{ key: '👍:0', chunks: 1 }], 50, {
+        partial: { removedKeys: ['50'], staleMark: 40 },
+      });
+      const after = await stored(connection);
+      expect(after?.reactionGenerations).toEqual({
+        '👍:0': { generation: 'b', observedAt: 50, complete: true },
+        '👍:1': { generation: 'a', observedAt: 10, complete: true },
+      });
+      // Freshness belongs to full refreshes.
+      expect(after?.reactionsFreshAt).toBe(10);
+      expect(after).not.toHaveProperty('reactionsStaleAt');
+      // Another change marked meanwhile keeps the lists stale.
+      await reactionRepo.markReactionsStale('3', 60);
+      await reactionRepo.markReactionsStale('3', 70);
+      await reactionRepo.stageReactions([chunk('👍', 'c', ['4'], 80)]);
+      await reactionRepo.finalizeReactionRefresh('3', 'c', [{ key: '👍:0', chunks: 1 }], 80, {
+        partial: { removedKeys: [], staleMark: 60 },
+      });
+      expect((await stored(connection))?.reactionsStaleAt).toBe(70);
+    });
+  });
+
+  it('moves the stale mark only forward and merges it into snapshot writes', async () => {
+    await withFreshConnection(async (connection) => {
+      const { repo, reactionRepo } = await openRepo(connection);
+      const first = snapshot('first');
+      await repo.persistSnapshot(first);
+      const replacing = vi.spyOn(connection.collection('messages'), 'replaceOne');
+      const updating = vi.spyOn(connection.collection('messages'), 'updateOne');
+      const writes = () => replacing.mock.calls.length + updating.mock.calls.length;
+      await reactionRepo.markReactionsStale('3', 30);
+      await reactionRepo.markReactionsStale('3', 20);
+      // An equal mark is not rewritten either.
+      await reactionRepo.markReactionsStale('3', 30);
+      expect(writes()).toBe(1);
+      expect((await stored(connection))?.reactionsStaleAt).toBe(30);
+      // Content unchanged: the mark and freshness are written, the outcome stays unchanged.
+      expect(
+        await repo.persistSnapshot(
+          { ...first, observedAt: first.observedAt + 10 },
+          { staleReactions: 40 },
+        ),
+      ).toBe('unchanged');
+      expect((await stored(connection))?.reactionsStaleAt).toBe(40);
+      // An observation too old to apply still records the mark.
+      expect(await repo.persistSnapshot(first, { staleReactions: 50 })).toBe('stale');
+      expect((await stored(connection))?.reactionsStaleAt).toBe(50);
+      const marked = writes();
+      expect(await repo.persistSnapshot(first, { staleReactions: 45 })).toBe('stale');
+      expect(await repo.persistSnapshot(first, { staleReactions: 50 })).toBe('stale');
+      expect(writes()).toBe(marked);
+      expect((await stored(connection))?.reactionsStaleAt).toBe(50);
+      // Deleted messages are not refreshed, so they are not marked.
+      await repo.tombstone('3', '2', created + 5000);
+      await repo.persistSnapshot(
+        { ...first, observedAt: created + 6000 },
+        { staleReactions: created + 6000 },
+      );
+      expect((await stored(connection))?.reactionsStaleAt).toBe(50);
+    });
+  });
+
+  it('collects unreferenced old membership chunks, including those of missing messages', async () => {
+    await withFreshConnection(async (connection) => {
+      const { conn, repo, reactionRepo } = await openRepo(connection);
+      await repo.persistSnapshot(snapshot('first'));
+      await reactionRepo.stageReactions([chunk('👍', 'live', ['4'], 10)]);
+      await reactionRepo.finalizeReactionRefresh('3', 'live', [{ key: '👍:0', chunks: 1 }], 10);
+      await reactionRepo.stageReactions([
+        chunk('👍', 'abandoned', ['4'], 10),
+        chunk('👍', 'running', ['4'], 10),
+        chunk('👍', 'recent', ['4'], 100),
+        chunk('👍', 'orphan', ['4'], 10, 0, '9'),
+      ]);
+      expect(await reactionRepo.collectReactionGarbage('3', ['running'], 50)).toBe(1);
+      expect(await reactionRepo.collectReactionGarbage('9', [], 50)).toBe(1);
+      expect(
+        (await conn.models.ArchiveReaction.find({}).lean().exec())
+          .map((chunk) => chunk.generation)
+          .sort(),
+      ).toEqual(['live', 'recent', 'running']);
+    });
+  });
+
+  it('keeps interaction records free of reaction metadata and edit history', async () => {
+    await withFreshConnection(async (connection) => {
+      const { repo, reactionRepo } = await openRepo(connection);
+      await repo.persistSnapshot(snapshot('full'));
+      await repo.persistSnapshot(snapshot('edited', created + 1000));
+      await repo.persistSnapshot({
+        ...normalizeMessage({ id: '3', channel_id: '2', type: 0 }, { observedAt: created + 2000 }),
+        excludedFields: ['content', 'attachments', 'embeds', 'reactions', 'editedTimestamp'],
+        policy: { version: '1', reason: 'interaction-record' },
+      });
+      await reactionRepo.markReactionsStale('3', created + 3000);
+      const after = await stored(connection);
+      expect(after).toMatchObject({
+        excludedFields: ['content', 'attachments', 'embeds', 'reactions', 'editedTimestamp'],
+        policy: { version: '1', reason: 'interaction-record' },
+      });
+      for (const field of ['content', 'editHistory', 'editedTimestamp', 'reactionsStaleAt'])
+        expect(after).not.toHaveProperty(field);
+    });
+  });
+
+  it("treats a scan's channel record as authoritative for the parent", async () => {
+    await withFreshConnection(async (connection) => {
+      const { conn, channelRepo } = await openRepo(connection);
+      const channel = { channelId: '2', name: 'general', type: 0, observedAt: 1 } as const;
+      await channelRepo.upsertChannel({
+        ...channel,
+        parentId: '1',
+        access: 'readable',
+        everyoneCanView: true,
+      });
+      await channelRepo.recordChannel({ channelId: '2', observedAt: 2, everyoneCanView: false });
+      expect(
+        await conn.models.ArchiveChannel.findOne({ channelId: '2' }).lean().exec(),
+      ).toMatchObject({ parentId: '1', everyoneCanView: false });
+      // Moved out of its category.
+      await channelRepo.upsertChannel({ ...channel, observedAt: 3, access: 'readable' });
+      const after = await conn.models.ArchiveChannel.findOne({ channelId: '2' }).lean().exec();
+      expect(after).not.toHaveProperty('parentId');
+      expect(after?.everyoneCanView).toBe(false);
+    });
+  });
+
+  it('records live channel observations and keeps deleted channels', async () => {
+    await withFreshConnection(async (connection) => {
+      const { conn, channelRepo } = await openRepo(connection);
+      await channelRepo.upsertChannel({
         channelId: '2',
         name: 'general',
         type: 0,
+        parentId: '1',
+        observedAt: 1,
         access: 'readable',
-        observedAt: 10,
+        checkpoints: { periodic: { runId: 'r', cutoff: 1, before: '9', complete: false } },
       });
-      await repo.stageReaction('3', 'unicode:👍', 0, 'a', 0, ['4'], 10);
-      expect(mutations).toEqual(['messages', 'archive_channels', 'archive_reactions']);
+      await channelRepo.recordChannel({
+        channelId: '2',
+        observedAt: 2,
+        name: 'renamed',
+        parentId: null,
+      });
+      await channelRepo.recordChannel({ channelId: '2', observedAt: 3, access: 'deleted' });
+      await channelRepo.recordChannel({
+        channelId: '7',
+        observedAt: 4,
+        name: 'thread',
+        type: 11,
+        parentId: '2',
+        everyoneCanView: false,
+        initialAccess: 'readable',
+      });
+      const channels = await conn.models.ArchiveChannel.find({}, { _id: 0 })
+        .sort({ channelId: 1 })
+        .lean()
+        .exec();
+      expect(channels).toEqual([
+        {
+          channelId: '2',
+          name: 'renamed',
+          type: 0,
+          observedAt: 3,
+          access: 'deleted',
+          checkpoints: { periodic: { runId: 'r', cutoff: 1, before: '9', complete: false } },
+        },
+        {
+          channelId: '7',
+          name: 'thread',
+          type: 11,
+          parentId: '2',
+          observedAt: 4,
+          access: 'readable',
+          everyoneCanView: false,
+        },
+      ]);
+    });
+  });
+
+  it.each([
+    ['messages', MongoArchiveRepo],
+    ['inbox', MongoArchiveInboxRepo],
+    ['reactions', MongoArchiveReactionRepo],
+    ['channels', MongoArchiveChannelRepo],
+    ['jobs', MongoArchiveJobRepo],
+    ['owner', MongoArchiveOwnerRepo],
+  ] as const)(
+    'refuses the %s writer repository without msg-archive ownership',
+    async (_name, Repo) => {
+      await withFreshConnection(async (connection) => {
+        const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+        expect(() => new Repo({ ...conn, archiveOwner: undefined }, 'msg-archive')).toThrow(
+          'ownership',
+        );
+        expect(() => new Repo(conn, 'reader' as never)).toThrow('ownership');
+        expect(() => new Repo(conn, 'msg-archive')).not.toThrow();
+      });
+    },
+  );
+
+  it('rejects mutation capabilities from reader compositions and routes every intercepted mutation', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const reader = buildRepos({ ...conn, archiveOwner: undefined });
+      // Reader compositions expose no archive writer and no legacy cursor writer.
+      expect(Object.keys(reader)).toEqual(expect.not.arrayContaining(['archive', 'fetch']));
+      const statsMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(reader.archiveStats));
+      expect(statsMethods.some((key) => /insert|write|update|delete/i.test(key))).toBe(false);
+      const repo = new MongoArchiveRepo(conn, 'msg-archive');
+      const reactionRepo = new MongoArchiveReactionRepo(conn, 'msg-archive');
+      const channelRepo = new MongoArchiveChannelRepo(conn, 'msg-archive');
+      const mutations: string[] = [];
+      const interceptor: ArchiveMutationInterceptor = async (collectionName, before, after) => {
+        expect(after?._id ?? before?._id).toBeTruthy();
+        mutations.push(collectionName);
+      };
+      await repo.persistSnapshot(snapshot('first'), { interceptor });
+      await channelRepo.upsertChannel(
+        { channelId: '2', name: 'general', type: 0, access: 'readable', observedAt: 10 },
+        { interceptor },
+      );
+      await channelRepo.recordChannel({ channelId: '2', observedAt: 11 }, { interceptor });
+      await reactionRepo.stageReactions([chunk('👍', 'a', ['4'], 10)], { interceptor });
+      expect(mutations).toEqual([
+        'messages',
+        'archive_channels',
+        'archive_channels',
+        'archive_reactions',
+      ]);
       expect(await conn.models.Message.countDocuments()).toBe(0);
     });
   });

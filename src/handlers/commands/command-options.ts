@@ -63,7 +63,7 @@ export const addCommandOptions = (
           .setName(e.name)
           .setDescription(e.description)
           .setRequired(e.required)
-          .addChannelTypes(...channelTypes),
+          .addChannelTypes(...(e.channelTypes ?? channelTypes)),
       ),
 
     string: (e: LocalizedCommandOption) =>
@@ -92,11 +92,19 @@ export const addCommandOptions = (
         return o;
       }),
 
+    boolean: (e: LocalizedCommandOption) =>
+      builder.addBooleanOption((o) =>
+        o.setName(e.name).setDescription(e.description).setRequired(e.required),
+      ),
+
     attachment: (e: LocalizedCommandOption) =>
       builder.addAttachmentOption((o) =>
         o.setName(e.name).setDescription(e.description).setRequired(e.required),
       ),
-  } as const;
+  } as const satisfies Record<
+    keyof NonNullable<LocalizedCommandConfig['options']>,
+    (e: LocalizedCommandOption) => unknown
+  >;
 
   // Discord requires required options to precede optional ones.
   const allOptions: { type: keyof typeof optionHandlers; data: LocalizedCommandOption }[] = [];

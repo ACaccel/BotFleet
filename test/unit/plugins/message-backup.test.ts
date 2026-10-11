@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PluginInitContext, PluginRuntimeContext } from '../../../src/core/plugin';
+import type {
+  PluginEventContext,
+  PluginInitContext,
+  PluginRuntimeContext,
+} from '../../../src/core/plugin';
 import { createMessageBackupPlugin } from '../../../src/plugins/message-backup';
 import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
 import { createLogger } from '../../../src/core/logger';
@@ -17,9 +21,18 @@ vi.mock('../../../src/plugins/message-backup/runtime/worker', () => ({
     return fake;
   }),
 }));
+/** A logged-in client whose shard 0 already holds the session from login. */
+const discordClient = {
+  ws: {
+    status: 0,
+    shards: new Map([
+      [0, { status: 0, lastPingTimestamp: -1, sessionInfo: { sessionId: 'login' } }],
+    ]),
+  },
+};
 const context = () =>
   ({
-    resolve: () => ({}),
+    resolve: () => discordClient,
     logger: createLogger({ level: 'silent', pretty: false }),
     translator: { t: (key: string) => key },
   }) as unknown as PluginInitContext;
@@ -168,6 +181,97 @@ describe('message archive lifecycle', () => {
     expect(fake.scheduledPeriodic).toHaveBeenCalledWith('2', 3_600_000);
     await vi.advanceTimersByTimeAsync(1000);
     expect(fake.scheduledPeriodic).toHaveBeenCalledWith('1', 3_600_000);
+    await plugin.onShutdown!(ctx);
+  });
+  it('forwards a replaced Gateway session to every guild even when one capture fails', async () => {
+    const plugin = createMessageBackupPlugin({ backupServers: ['1', '2'] });
+    const ctx = context();
+    await plugin.init!(ctx);
+    const raw = (packet: unknown) =>
+      plugin.events!.raw!(ctx as unknown as PluginEventContext, packet, 0) as Promise<void>;
+    const ready = (session: string) => ({
+      t: 'READY',
+      s: 1,
+      d: { session_id: session, guilds: [{ id: '1' }, { id: '2' }] },
+    });
+    // Nothing seeded the first session, so it is reported as unseeded.
+    await raw(ready('first'));
+    await raw({ t: 'RESUMED', s: 5, d: {} });
+    expect(fake.capture.mock.calls.map(([event]) => [event.guildId, event.unseeded])).toEqual([
+      ['1', true],
+      ['2', true],
+    ]);
+    fake.capture.mockClear();
+    fake.capture.mockRejectedValueOnce(new Error('guild 1 unavailable'));
+    await raw(ready('second'));
+    expect(
+      fake.capture.mock.calls.map(([event]) => [event.guildId, event.kind, event.unseeded]),
+    ).toEqual([
+      ['1', 'session', undefined],
+      ['2', 'session', undefined],
+    ]);
+    fake.markGap.mockRejectedValueOnce(new AggregateError([new Error('down')]));
+    await expect(
+      plugin.events!.shardDisconnect!(ctx as unknown as PluginEventContext, {} as never, 0),
+    ).resolves.toBeUndefined();
+    await plugin.onShutdown!(ctx);
+  });
+  it('warns once when a ready shard exposes no session to seed', async () => {
+    const shard = discordClient.ws.shards.get(0)!;
+    const sessionInfo = shard.sessionInfo;
+    Object.assign(shard, { sessionInfo: null });
+    try {
+      const plugin = createMessageBackupPlugin({ backupServers: ['1'] });
+      const ctx = context();
+      const warn = vi.spyOn(ctx.logger, 'warn');
+      await plugin.init!(ctx);
+      await plugin.onReady!(ctx);
+      await plugin.onReady!(ctx);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        { shardId: 0 },
+        'Archive Gateway session seeding unavailable; first session replacement after login may be missed',
+      );
+      await plugin.onShutdown!(ctx);
+    } finally {
+      Object.assign(shard, { sessionInfo });
+    }
+  });
+  it('recognizes the first session replacement after login', async () => {
+    const plugin = createMessageBackupPlugin({ backupServers: ['1'] });
+    const ctx = context();
+    await plugin.init!(ctx);
+    // The raw listener only starts receiving after login and the ready hook.
+    await plugin.onReady!(ctx);
+    const raw = (packet: unknown) =>
+      plugin.events!.raw!(ctx as unknown as PluginEventContext, packet, 0) as Promise<void>;
+    await raw({ t: 'READY', s: 1, d: { session_id: 'replaced', guilds: [{ id: '1' }] } });
+    expect(fake.capture).toHaveBeenCalledWith(
+      expect.objectContaining({ guildId: '1', kind: 'session' }),
+    );
+    await plugin.onShutdown!(ctx);
+  });
+  it('admits every event of a packet without waiting for earlier captures', async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fake.capture.mockImplementation(() => blocked);
+    const plugin = createMessageBackupPlugin({ backupServers: ['1'] });
+    const ctx = context();
+    await plugin.init!(ctx);
+    const dispatched = plugin.events!.raw!(
+      ctx as unknown as PluginEventContext,
+      {
+        t: 'MESSAGE_DELETE_BULK',
+        s: 3,
+        d: { guild_id: '1', channel_id: '10', ids: ['4', '5', '6'] },
+      },
+      0,
+    ) as Promise<void>;
+    expect(fake.capture).toHaveBeenCalledTimes(3);
+    release();
+    await dispatched;
     await plugin.onShutdown!(ctx);
   });
   it('waits for active work before releasing the owner', async () => {

@@ -51,9 +51,11 @@ import {
 import { systemClock, type Clock } from '../core/time';
 import { MongoConnectionManager, type ConnectionManager } from '../infra/mongo/connection-manager';
 import { buildRepos, type Repos } from '../persistence/repositories';
+import type { ArchiveOwner } from '../persistence/connection';
 import type { ModelCatalog } from '../infra/llm/models-catalog';
 import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { FeedPlatformRegistry } from '../infra/social-feed';
+import type { ArchiveControlFactory } from '../application/archive/control';
 
 import {
   ClientEventBridge,
@@ -80,7 +82,7 @@ const sharedConnectionManagers = new Map<string, MongoConnectionManager>();
 const sharedConnectionManagerForUri = (
   uri: string,
   recoveryIntervalMs?: number,
-  archiveOwner?: 'msg-archive',
+  archiveOwner?: ArchiveOwner,
 ): MongoConnectionManager => {
   const poolKey = `${archiveOwner ?? 'reader'}:${uri}`;
   const existing = sharedConnectionManagers.get(poolKey);
@@ -304,6 +306,16 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     return this.container.tryResolve<PermissionRankPolicy>(TOKENS.PermissionRankPolicy);
   }
 
+  /**
+   * Builds a guild's archive control service. Registered under
+   * `TOKENS.ArchiveControlFactory` by the msg-archive composition root only;
+   * other bots see `undefined`. The `/archive` command and panel buttons
+   * build their per-guild service through this getter.
+   */
+  public get archiveControlFactory(): ArchiveControlFactory | undefined {
+    return this.container.tryResolve<ArchiveControlFactory>(TOKENS.ArchiveControlFactory);
+  }
+
   /** Bot-scoped {@link Translator}. Undefined only in the pre-`run()` window. */
   public translator: Translator | undefined;
 
@@ -325,7 +337,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   protected helpMessageKey?: string;
 
   /** Archive mutation authority is granted only by the worker composition root. */
-  protected archiveOwner(): 'msg-archive' | undefined {
+  protected archiveOwner(): ArchiveOwner | undefined {
     return undefined;
   }
 
@@ -404,7 +416,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     const reposFactory: ReposFactory = async (guildId: ReturnType<typeof asGuildId>) => {
       const cm = this.container.resolve<ConnectionManager>(TOKENS.ConnectionManager);
       const guildConn = await cm.getConnection(guildId);
-      return buildRepos(guildConn, this.archiveOwner());
+      return buildRepos(guildConn);
     };
     this.container.registerSingleton(TOKENS.ReposFactory, () => reposFactory);
     this.container.registerSingleton(TOKENS.Clock, () => systemClock);
@@ -458,10 +470,10 @@ export abstract class BaseBot<TConfig extends Config = Config> {
 
   /**
    * The canonical read-only view over this bot's guild slots — the same
-   * object plugins resolve as `TOKENS.GuildRegistry`. Each plugin's
-   * handler-side `deps-from-bot` bridge reads it here instead of
-   * rebuilding an adapter, so both sides of a plugin observe one lookup
-   * implementation. Registered in the constructor, so it resolves from
+   * object plugins resolve as `TOKENS.GuildRegistry`. Each handler-side
+   * `deps-from-bot` bridge into a shared feature service reads it here
+   * instead of rebuilding an adapter, so the plugin and its commands
+   * observe one lookup implementation. Registered in the constructor, so it resolves from
    * the moment the bot exists.
    */
   public get guildRegistry(): GuildRegistry {

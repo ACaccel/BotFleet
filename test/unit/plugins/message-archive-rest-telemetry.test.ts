@@ -12,7 +12,8 @@ const wait = (majorParameter = 'one') => ({
 });
 describe('shared SDK REST observation', () => {
   it('exposes local/global waits separately and contains observer failures', () => {
-    const updates: { resourceId: string; global: boolean; deadlineAt: number }[] = [];
+    const updates: { channelId: string; route?: string; global: boolean; deadlineAt: number }[] =
+      [];
     const telemetry = new ArchiveRestTelemetry(
       () => 1000,
       (value) => {
@@ -22,16 +23,20 @@ describe('shared SDK REST observation', () => {
     );
     expect(() => telemetry.wait({ ...wait('10'), global: false })).not.toThrow();
     expect(() => telemetry.wait({ ...wait('20'), global: true })).not.toThrow();
+    expect(() =>
+      telemetry.wait({ ...wait('30'), route: '/channels/:id/messages', global: false }),
+    ).not.toThrow();
     expect(updates).toEqual([
-      expect.objectContaining({ resourceId: '10', global: false, deadlineAt: 1500 }),
-      expect.objectContaining({ resourceId: '20', global: true, deadlineAt: 1500 }),
+      { channelId: '10', bucketKey: expect.any(String), global: false, deadlineAt: 1500 },
+      { channelId: '20', bucketKey: expect.any(String), global: true, deadlineAt: 1500 },
+      expect.objectContaining({ channelId: '30', route: 'messages', global: false }),
     ]);
     expect(telemetry.snapshot()).toMatchObject({
-      announcedLocalWaitMs: 500,
+      announcedLocalWaitMs: 1000,
       announcedGlobalWaitMs: 500,
-      sdkWaitEvents: 2,
+      sdkWaitEvents: 3,
       responses: 0,
-      observerFailures: 2,
+      observerFailures: 3,
     });
   });
   it('distinguishes queue waits from actual attempts and shared 429 invalid exposure', () => {

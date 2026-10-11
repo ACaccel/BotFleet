@@ -7,10 +7,8 @@ import { ChannelType, type Client, type Guild, type GuildBasedChannel } from 'di
 import type { Logger } from '../../src/core/logger';
 import { ArchivePipelineBudget } from '../../src/plugins/message-backup/flow/pipeline';
 import { ArchiveScheduler } from '../../src/plugins/message-backup/flow/scheduler';
-import {
-  scanArchiveHistory,
-  type HistoryCheckpoint,
-} from '../../src/plugins/message-backup/runtime/history';
+import type { ArchiveHistoryCheckpoint as HistoryCheckpoint } from '../../src/core/archive/types';
+import { scanArchiveHistory } from '../../src/plugins/message-backup/runtime/history-scan';
 
 interface ProbeOptions {
   concurrency: number;
@@ -68,7 +66,7 @@ export async function runArchivePipelineProbe(options: ProbeOptions) {
       nextQuotaAt = Math.max(Date.now(), nextQuotaAt) + quota;
       if (wait > 0)
         scheduler.observeWait({
-          resourceId: 'global',
+          channelId: 'global',
           bucketKey: 'synthetic-global',
           global: true,
           deadlineAt: Date.now() + wait,

@@ -6,6 +6,9 @@ import { collectChannels } from '../../../src/plugins/message-backup/internal/co
 import {
   discoverGuild,
   historyPermissionGap,
+  isForbiddenDiscordError,
+  isKnownDiscoveryGap,
+  isPermissionGap,
   type DiscoveryAdapter,
   type DiscoveryLocation,
 } from '../../../src/plugins/message-backup/flow/discovery';
@@ -113,6 +116,50 @@ describe('complete guild discovery', () => {
       channelId: '99',
       reason: 'unsupported-channel-type:999',
     });
+  });
+  it('flags forbidden archived-thread listings so they classify as known gaps', async () => {
+    const api = adapter();
+    api.archived = vi.fn(async (_id: string, pass: string) => {
+      if (pass === 'private') throw Object.assign(new Error('Missing Access'), { code: 50001 });
+      return { locations: [], hasMore: false };
+    });
+    const result = await discoverGuild(api);
+    expect(result.gaps).toEqual([
+      { pass: 'private', channelId: '1', reason: 'Error: Missing Access', forbidden: true },
+    ]);
+    expect(isKnownDiscoveryGap(result.gaps[0]!)).toBe(true);
+  });
+  it.each([
+    [{ pass: 'history', channelId: '1', reason: 'missing-view-channel' }, true],
+    [{ pass: 'history', channelId: '1', reason: 'missing-read-message-history' }, true],
+    [{ pass: 'history', channelId: '1', reason: 'missing-connect' }, true],
+    [{ pass: 'history', channelId: '1', reason: 'bot-member-unavailable' }, false],
+    [{ pass: 'history', channelId: '1', reason: 'message-channel-not-materialized' }, false],
+    [{ pass: 'channels', channelId: '1', reason: 'unsupported-channel-type:999' }, true],
+    [{ pass: 'channels', reason: 'sdk-inventory:Error: offline' }, false],
+    [{ pass: 'channels', reason: 'archive-discovery-cancelled' }, false],
+    [{ pass: 'active', reason: 'Error: 403', forbidden: true }, false],
+    [{ pass: 'private', channelId: '1', reason: 'Error: 403', forbidden: true }, true],
+    [{ pass: 'public', channelId: '1', reason: 'Error: 403', forbidden: true }, true],
+    [{ pass: 'joined-private', channelId: '1', reason: 'Error: 403', forbidden: true }, true],
+    [{ pass: 'private', channelId: '1', reason: 'Error: timeout' }, false],
+    [{ pass: 'public', channelId: '1', reason: 'archive-cursor-stalled' }, false],
+  ] as const)('classifies discovery gap %o as known=%s', (gap, known) => {
+    expect(isKnownDiscoveryGap(gap)).toBe(known);
+  });
+  it('recognizes Discord access denials and known coverage reasons', () => {
+    expect(isForbiddenDiscordError({ code: 50001 })).toBe(true);
+    expect(isForbiddenDiscordError({ code: 50013 })).toBe(true);
+    expect(isForbiddenDiscordError({ code: 10003, status: 404 })).toBe(false);
+    expect(isForbiddenDiscordError({ code: 123, status: 403 })).toBe(true);
+    // HTTP-only 403s and non-numeric codes are not Discord API denials.
+    expect(isForbiddenDiscordError({ status: 403 })).toBe(false);
+    expect(isForbiddenDiscordError({ code: '50001', status: 403 })).toBe(false);
+    expect(isForbiddenDiscordError(new Error('403'))).toBe(false);
+    expect(isForbiddenDiscordError(null)).toBe(false);
+    expect(isPermissionGap('missing-view-channel')).toBe(true);
+    expect(isPermissionGap('missing-connect')).toBe(true);
+    expect(isPermissionGap('bot-member-unavailable')).toBe(false);
   });
   it('checks history and Connect permissions independently', () => {
     const channel = {

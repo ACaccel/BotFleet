@@ -1,7 +1,7 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
-import * as activity from '../../../plugins/activity/internal';
+import { handleActivityCreate } from '../activity-shared/interactions';
 
 export default class activity_create extends Command {
   constructor() {
@@ -32,6 +32,6 @@ export default class activity_create extends Command {
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    await activity.handleActivityCreate(interaction, bot);
+    await handleActivityCreate(interaction, bot);
   }
 }

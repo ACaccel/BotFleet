@@ -10,6 +10,9 @@ describe('db / registry', () => {
   it('finds each registered command by name', () => {
     expect(findCommand('drop-todo')?.name).toBe('drop-todo');
     expect(findCommand('drop-xfeed')?.name).toBe('drop-xfeed');
+    expect(findCommand('archive-legacy-isolate')?.name).toBe('archive-legacy-isolate');
+    expect(findCommand('archive-legacy-export')?.name).toBe('archive-legacy-export');
+    expect(findCommand('archive-legacy-drop')?.name).toBe('archive-legacy-drop');
   });
 
   it('returns undefined for an unknown subcommand', () => {
@@ -18,7 +21,13 @@ describe('db / registry', () => {
 
   it('lists every command exactly once', () => {
     const names = commandNames();
-    expect(names).toEqual(['drop-todo', 'drop-xfeed']);
+    expect(names).toEqual([
+      'drop-todo',
+      'drop-xfeed',
+      'archive-legacy-isolate',
+      'archive-legacy-export',
+      'archive-legacy-drop',
+    ]);
     expect(new Set(names).size).toBe(names.length);
   });
 

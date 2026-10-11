@@ -2,12 +2,12 @@
  * ActivityPlugin — rebuilds jobs on startup and guild database recovery.
  *
  * The plugin resolves its dependencies through `ctx` and calls
- * `rebootActivityJobs` directly, so composition roots never deep-import
- * `./internal`.
+ * `rebootActivityJobs` from `application/activity`, the service the slash-command
+ * handlers share, since handlers and plugins may not import each other.
  */
 import { TOKENS } from '../../bot/tokens';
 import type { Plugin, PluginRuntimeContext } from '../../core/plugin';
-import { type ActivityDeps, rebootActivityJobs } from './internal/activity';
+import { type ActivityDeps, rebootActivityJobs } from '../../application/activity/activity';
 
 const PLUGIN_ID = 'activity';
 const PLUGIN_VERSION = '1.0.0';

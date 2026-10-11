@@ -10,11 +10,9 @@
  */
 import type { DatabaseError } from '../../core/errors/external-service-error';
 import { err, ok, type Result } from '../../core/result';
-import type { GuildConnection } from '../../infra/mongo/connection-manager';
+import type { GuildConnection } from '../connection';
 import { databaseErrorFrom } from '../error-translator';
 import type { FetchDoc } from '../schemas/fetch.schema';
-
-export type FetchReader = Pick<FetchRepo, 'listChannelIds' | 'findByChannelId'>;
 
 interface FetchRepo {
   /** All progress markers in this guild, projected to `channelID`. */

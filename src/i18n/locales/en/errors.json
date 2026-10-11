@@ -23,6 +23,7 @@
     "unavailable": "The database is temporarily unreachable. You can retry this command later.",
     "duplicate_key": "That record already exists, so it can't be added again. Double-check and try once more.",
     "timeout": "The database took too long to respond and the request timed out. Give it a moment and retry.",
+    "query_timeout": "The query took too long and was stopped. Try a smaller range.",
     "network": "I can't reach the database right now, the network might be acting up. Try again in a little while.",
     "validation": "The data format isn't quite right, so it couldn't be saved. Check the input and try again.",
     "operation_failed": "The database operation failed. Please try again later.",
@@ -63,5 +64,8 @@
     "login_failed": "Failed to log in to Discord ({{clientId}}).",
     "login_no_user": "Logged in to Discord but no user was returned ({{clientId}})."
   },
-  "unexpected": "An unexpected error occurred while running the command. An administrator has been notified (error ID: {{traceId}})."
+  "unexpected": "An unexpected error occurred while running the command. An administrator has been notified (error ID: {{traceId}}).",
+  "graphics": {
+    "font_missing": "Charts are unavailable on this host right now. Please tell an administrator."
+  }
 }

@@ -8,6 +8,7 @@
  * `registry.generated.ts`).
  */
 import type {
+  ApplicationCommandOptionAllowedChannelTypes,
   AutocompleteInteraction,
   ChatInputCommandInteraction,
   ContextMenuCommandInteraction,
@@ -64,6 +65,7 @@ export interface CommandConfig {
     string?: CommandOption[];
     number?: CommandOption[];
     float?: CommandOption[];
+    boolean?: CommandOption[];
     user?: CommandOption[];
     channel?: CommandOption[];
     attachment?: CommandOption[];
@@ -101,6 +103,11 @@ interface CommandOption {
   min?: number;
   /** Maximum numeric value (only applies to `number` and `float` options). */
   max?: number;
+  /**
+   * Channel types a `channel` option accepts; defaults to the text-capable
+   * guild channels and threads (`addCommandOptions`).
+   */
+  channelTypes?: readonly ApplicationCommandOptionAllowedChannelTypes[];
 }
 
 interface CommandChoice {
@@ -128,6 +135,7 @@ export interface LocalizedCommandConfig extends CommandConfig {
   options?: {
     string?: LocalizedCommandOption[];
     number?: LocalizedCommandOption[];
+    boolean?: LocalizedCommandOption[];
     float?: LocalizedCommandOption[];
     user?: LocalizedCommandOption[];
     channel?: LocalizedCommandOption[];

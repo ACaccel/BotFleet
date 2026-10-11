@@ -24,9 +24,10 @@ import {
   tempRoleJobKey,
   MAX_GUILD_ROLES,
   type TempRoleDeps,
-} from '../../../src/plugins/temp-role/internal/temp-role';
+} from '../../../src/application/temp-role/temp-role';
 import { buildGuild, buildGuildRoles } from '../../fixtures/discord/guild-builder';
 import { buildSendableChannel } from '../../fixtures/discord/channel-builder';
+import type { GuildRegistry } from '../../../src/bot/guild-registry';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // A fixed point well in the real future so node-schedule (which runs on
@@ -349,7 +350,7 @@ describe('rebootTempRoleJobs', () => {
     const getRepos = vi.spyOn(deps.registry, 'getRepos');
     const container = createContainer();
     container.registerSingleton(TOKENS.DiscordClient, () => deps.client);
-    container.registerSingleton(TOKENS.GuildRegistry, () => deps.registry);
+    container.registerSingleton(TOKENS.GuildRegistry, () => deps.registry as GuildRegistry);
     container.registerSingleton(TOKENS.JobMap, () => deps.jobMap);
     const ctx: PluginRuntimeContext = {
       logger: deps.logger,

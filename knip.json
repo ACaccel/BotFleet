@@ -5,13 +5,15 @@
     "src/register.ts",
     "src/bot/*/index.ts",
     "tools/db/db.ts",
-    "tools/archive-benchmark/run.ts",
-    "tools/archive-benchmark/enrichment.ts",
     "tools/archive-benchmark/cpu.ts",
     "tools/archive-benchmark/cpu-persistence.ts",
     "tools/archive-benchmark/rest.ts",
     "tools/archive-benchmark/notifications.ts",
-    "tools/archive-benchmark/pipeline.ts"
+    "tools/archive-benchmark/pipeline.ts",
+    "tools/archive-benchmark/stats.ts",
+    "tools/archive-benchmark/worker.ts",
+    "tools/archive-benchmark/reobserve.ts",
+    "tools/archive-benchmark/storage.ts"
   ],
   "project": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "tools/**/*.ts"],
   "vitest": {

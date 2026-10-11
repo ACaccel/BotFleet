@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ArchivePipelineBudget } from '../../../src/plugins/message-backup/flow/pipeline';
-import { ArchiveScheduler } from '../../../src/plugins/message-backup/flow/scheduler';
+import {
+  ArchiveScheduler,
+  archiveRouteOf,
+} from '../../../src/plugins/message-backup/flow/scheduler';
+import { ArchiveRestTelemetry } from '../../../src/plugins/message-backup/flow/rest-telemetry';
 import { fetchReactionMemberships } from '../../../src/plugins/message-backup/flow/reactions';
 import { discoverGuild } from '../../../src/plugins/message-backup/flow/discovery';
 import { runArchivePipelineProbe } from '../../helpers/archive-pipeline-probe';
@@ -105,7 +109,7 @@ describe('shared SDK readiness fallback', () => {
     });
     await Promise.resolve();
     scheduler.observeWait({
-      resourceId: '10',
+      channelId: '10',
       bucketKey: 'hash-major10',
       global: false,
       deadlineAt: Date.now() + 1000,
@@ -119,7 +123,7 @@ describe('shared SDK readiness fallback', () => {
     scheduler.stop();
   });
 
-  it('uses guild rotation and a reserved live slot while preserving one request per channel', async () => {
+  it('uses guild rotation and a reserved live slot while preserving one request per route and channel', async () => {
     const scheduler = new ArchiveScheduler({ concurrency: 1 });
     const blocked = deferred<number>();
     const started: string[] = [];
@@ -162,12 +166,121 @@ describe('shared SDK readiness fallback', () => {
     scheduler.stop();
   });
 
+  it('admits different routes of one channel together and one request per route and channel', async () => {
+    const scheduler = new ArchiveScheduler({ concurrency: 4 });
+    const history = deferred<number>();
+    const reaction = deferred<number>();
+    const started: string[] = [];
+    const run = (key: string, priority: 'history' | 'enrichment', result: Promise<number>) =>
+      scheduler.run(
+        key,
+        priority,
+        () => {
+          started.push(key);
+          return result;
+        },
+        { guildId: 'one' },
+      );
+    const pending = [
+      run('history:10:a', 'history', history.promise),
+      run('reaction:10:m:x', 'enrichment', reaction.promise),
+      run('history:10:b', 'history', Promise.resolve(2)),
+      run('reaction:10:m:y', 'enrichment', Promise.resolve(3)),
+      scheduler.run('live:10:m', 'live', async () => started.push('live'), {
+        resource: { route: 'message', channelId: '10' },
+      }),
+    ];
+    await vi.waitFor(() => expect(started).toContain('live'));
+    expect(started.filter((key) => key !== 'live')).toEqual(['history:10:a', 'reaction:10:m:x']);
+    history.resolve(1);
+    reaction.resolve(1);
+    await Promise.all(pending);
+    expect(started).toHaveLength(5);
+    scheduler.stop();
+  });
+
+  it('maps each SDK route template to its own route and runs discovery beside history', async () => {
+    expect(archiveRouteOf('/channels/:id/messages')).toBe('messages');
+    expect(archiveRouteOf('/channels/:id/messages/:id')).toBe('message');
+    expect(archiveRouteOf('/channels/:id/messages/:id/reactions/:reaction')).toBe('reactions');
+    expect(archiveRouteOf('/channels/:id')).toBe('channel');
+    expect(archiveRouteOf('/channels/:id/pins')).toBeUndefined();
+    expect(archiveRouteOf(undefined)).toBeUndefined();
+    const scheduler = new ArchiveScheduler({ concurrency: 4 });
+    const history = deferred<number>();
+    const started: string[] = [];
+    const pending = [
+      scheduler.run('history:10:a', 'history', () => {
+        started.push('history');
+        return history.promise;
+      }),
+      scheduler.run('discovery:10:public:', 'history', async () => {
+        started.push('discovery');
+        return 1;
+      }),
+      scheduler.run('discovery:known:10:0', 'history', async () => {
+        started.push('channel');
+        return 1;
+      }),
+    ];
+    await vi.waitFor(() => expect(started).toEqual(['history', 'discovery', 'channel']));
+    history.resolve(1);
+    await Promise.all(pending);
+    // A message read waiting on its route does not hold back history pages.
+    scheduler.observeWait({
+      channelId: '10',
+      route: 'message',
+      bucketKey: 'message-bucket',
+      global: false,
+      deadlineAt: Date.now() + 60_000,
+    });
+    expect(await scheduler.run('history:10:b', 'history', async () => 2)).toBe(2);
+    scheduler.stop();
+  });
+
+  it('holds back a route under an announced wait while other routes of the channel proceed', async () => {
+    const scheduler = new ArchiveScheduler({ concurrency: 2 });
+    const telemetry = new ArchiveRestTelemetry(Date.now, (wait) => scheduler.observeWait(wait));
+    telemetry.wait({
+      hash: 'bucket',
+      majorParameter: '10',
+      route: '/channels/:id/messages/:id/reactions/:reaction',
+      retryAfter: 60_000,
+      timeToReset: 0,
+      sublimitTimeout: 0,
+    });
+    let reacted = false;
+    const held = scheduler.run('reaction:10:m:x', 'enrichment', async () => {
+      reacted = true;
+    });
+    expect(await scheduler.run('history:10:a', 'history', async () => 1)).toBe(1);
+    expect(reacted).toBe(false);
+    // A wait for an unrecognized route of the channel holds back all of its routes.
+    telemetry.wait({
+      hash: 'other',
+      majorParameter: '20',
+      route: '/channels/:id/pins',
+      retryAfter: 60_000,
+      timeToReset: 0,
+      sublimitTimeout: 0,
+    });
+    let read = false;
+    const blocked = scheduler.run('history:20:a', 'history', async () => {
+      read = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(read).toBe(false);
+    scheduler.stop();
+    await expect(held).rejects.toThrow();
+    await expect(blocked).rejects.toThrow();
+  });
+
   it('defers all token work during global wait and never rearms a stopped owner timer', async () => {
     vi.useFakeTimers();
     try {
       const scheduler = new ArchiveScheduler({ concurrency: 1 });
       scheduler.observeWait({
-        resourceId: 'global',
+        channelId: 'global',
         bucketKey: 'global',
         global: true,
         deadlineAt: Date.now() + 1000,
@@ -180,14 +293,14 @@ describe('shared SDK readiness fallback', () => {
       await vi.advanceTimersByTimeAsync(1);
       expect(await queued).toBe(1);
       scheduler.observeWait({
-        resourceId: 'global',
+        channelId: 'global',
         bucketKey: 'global',
         global: true,
         deadlineAt: Date.now() + 10000,
       });
       scheduler.stop();
       scheduler.observeWait({
-        resourceId: 'global',
+        channelId: 'global',
         bucketKey: 'global',
         global: true,
         deadlineAt: Date.now() + 100000,
@@ -217,7 +330,7 @@ describe('independent sequential membership streams', () => {
       messageId: '100',
       concurrency: 2,
       streams: [{ emoji: 'x', kinds: ['normal', 'burst'] }],
-      dirtyVersion: () => 0,
+      isCurrent: () => true,
       stage: async ({ kind }) => {
         if (kind === 'normal') await stageGate.promise;
       },
@@ -238,7 +351,7 @@ describe('independent sequential membership streams', () => {
       messageId: '100',
       concurrency: 3,
       streams: ['a', 'b', 'c'].map((emoji) => ({ emoji, kinds: ['normal'] })),
-      dirtyVersion: () => 0,
+      isCurrent: () => true,
       stage: async () => gate.promise,
       pipelineBudget: budget,
     });
@@ -257,7 +370,7 @@ describe('independent sequential membership streams', () => {
       channelId: '10',
       messageId: '100',
       streams: [{ emoji: 'x', kinds: ['normal', 'burst'], emptyKinds: ['normal'] }],
-      dirtyVersion: () => 0,
+      isCurrent: () => true,
       stage,
       concurrency: 2,
     });
@@ -275,7 +388,7 @@ describe('independent sequential membership streams', () => {
           channelId: '10',
           messageId: '100',
           streams: [{ emoji: 'x', kinds: ['normal'] }],
-          dirtyVersion: () => 0,
+          isCurrent: () => true,
           stage,
         })
       )[0]?.complete,
@@ -291,7 +404,7 @@ describe('independent sequential membership streams', () => {
       messageId: '100',
       streams: [{ emoji: 'x', kinds: ['normal'] }],
       stage,
-      dirtyVersion: () => 0,
+      isCurrent: () => true,
       pipelineBudget: budget,
     });
     expect(result[0]?.complete).toBe(false);
@@ -311,7 +424,7 @@ describe('independent sequential membership streams', () => {
       stage: async () => {
         dirty += 1;
       },
-      dirtyVersion: () => dirty,
+      isCurrent: () => dirty === 0,
     });
     expect(result.every((stream) => !stream.complete)).toBe(true);
     expect(result.every((stream) => stream.reason === 'reaction-changed-during-fetch')).toBe(true);

@@ -1,9 +1,10 @@
 import type { Client, Guild } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  incrementalLowerBound,
   scanArchiveHistory,
   type HistoryHooks,
-} from '../../../src/plugins/message-backup/runtime/history';
+} from '../../../src/plugins/message-backup/runtime/history-scan';
 import { collectChannels } from '../../../src/plugins/message-backup/internal/collect-channels';
 import { createLogger } from '../../../src/core/logger';
 vi.mock('../../../src/plugins/message-backup/internal/collect-channels', () => ({
@@ -42,7 +43,7 @@ describe('bounded archive history', () => {
     const f = setup();
     const h = hooks();
     const result = await scanArchiveHistory(f.guild, f.client, f.logger, h);
-    expect(result).toEqual({ scanned: 1, channels: 1, issues: [] });
+    expect(result).toEqual({ scanned: 1, channels: 1, issues: [], gaps: [] });
     expect(h.checkpoint).toHaveBeenLastCalledWith(
       channel,
       expect.objectContaining({ cutoff: h.cutoff, complete: true, latest: '101' }),
@@ -67,5 +68,41 @@ describe('bounded archive history', () => {
     const result = await scanArchiveHistory(f.guild, f.client, f.logger, h);
     expect(result.issues.join()).toContain('cutoff mismatch');
     expect(f.get).not.toHaveBeenCalled();
+  });
+});
+
+describe('incremental history lower bound', () => {
+  const epoch = 1420070400000;
+  const snowflakeAt = (timestamp: number) => (BigInt(timestamp - epoch) << 22n).toString();
+  const watermarkAt = 1_700_000_000_000;
+  const watermark = snowflakeAt(watermarkAt);
+  const hour = 3_600_000;
+
+  it('starts the overlap window before the watermark or an earlier rescan time', () => {
+    expect(incrementalLowerBound(watermark, 60)).toBe(snowflakeAt(watermarkAt - hour));
+    expect(incrementalLowerBound(watermark, 60, watermarkAt + hour)).toBe(
+      snowflakeAt(watermarkAt - hour),
+    );
+    expect(incrementalLowerBound(watermark, 60, watermarkAt - 5 * hour)).toBe(
+      snowflakeAt(watermarkAt - 6 * hour),
+    );
+  });
+
+  it.each([
+    { name: 'an incremental source', full: false, fullChannelIds: [], lower: true },
+    { name: 'a carried full source', full: false, fullChannelIds: ['100'], lower: false },
+    { name: 'a full run', full: true, fullChannelIds: [], lower: false },
+  ])('applies the rescan bound to $name', async ({ full, fullChannelIds, lower }) => {
+    const f = setup();
+    const h = {
+      ...hooks(),
+      full,
+      fullChannelIds,
+      rescanFrom: watermarkAt - 5 * hour,
+      load: vi.fn(async () => ({ lastMessageId: watermark })),
+    };
+    await scanArchiveHistory(f.guild, f.client, f.logger, h);
+    const first = vi.mocked(h.checkpoint).mock.calls[0]?.[1];
+    expect(first?.lower).toBe(lower ? snowflakeAt(watermarkAt - 6 * hour) : undefined);
   });
 });

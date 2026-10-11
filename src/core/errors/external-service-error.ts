@@ -29,8 +29,10 @@ export class ExternalServiceError<
 /**
  * MongoDB / Mongoose interaction failed. Sub-code drives retry policy
  * downstream: `DUPLICATE_KEY` is rarely retryable, `TIMEOUT` /
- * `NETWORK` are retryable with backoff, `UNKNOWN` is logged and
- * surfaced to the user as a generic failure.
+ * `NETWORK` are retryable with backoff, `QUERY_TIMEOUT` (a query exceeded
+ * its `maxTimeMS`) is not retried because the same query would run as
+ * long again, `UNKNOWN` is logged and surfaced to the user as a generic
+ * failure.
  *
  * The mongoose-shape → sub-code translation lives in
  * `src/persistence/error-translator.ts`; this class stays free of
@@ -39,6 +41,7 @@ export class ExternalServiceError<
 export type DatabaseErrorCode =
   | 'DATABASE_DUPLICATE_KEY'
   | 'DATABASE_TIMEOUT'
+  | 'DATABASE_QUERY_TIMEOUT'
   | 'DATABASE_NETWORK'
   | 'DATABASE_VALIDATION'
   | 'DATABASE_UNKNOWN';

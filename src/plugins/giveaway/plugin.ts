@@ -2,12 +2,12 @@
  * GiveawayPlugin — rebuilds jobs on startup and guild database recovery.
  *
  * The plugin resolves its dependencies through `ctx` and calls
- * `rebootGiveawayJobs` directly, so composition roots never deep-import
- * `./internal`.
+ * `rebootGiveawayJobs` from `application/giveaway`, the service the slash-command
+ * handlers share, since handlers and plugins may not import each other.
  */
 import { TOKENS } from '../../bot/tokens';
 import type { Plugin, PluginRuntimeContext } from '../../core/plugin';
-import { type GiveawayDeps, rebootGiveawayJobs } from './internal/giveaway';
+import { type GiveawayDeps, rebootGiveawayJobs } from '../../application/giveaway/giveaway';
 
 const PLUGIN_ID = 'giveaway';
 const PLUGIN_VERSION = '1.0.0';

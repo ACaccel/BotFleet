@@ -1,7 +1,8 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
-import * as tempRole from '../../../plugins/temp-role/internal';
+import { MAX_TEMP_ROLE_DAYS } from '../../../application/temp-role/temp-role';
+import { handleTempRoleCreate } from './create';
 import { replyForError } from '../../../infra/discord/reply-for-error';
 
 export default class temp_role extends Command {
@@ -22,7 +23,7 @@ export default class temp_role extends Command {
             name: 'days',
             required: false,
             min: 1,
-            max: tempRole.MAX_TEMP_ROLE_DAYS,
+            max: MAX_TEMP_ROLE_DAYS,
           },
         ],
       },
@@ -34,7 +35,7 @@ export default class temp_role extends Command {
     bot: BaseBot,
   ): Promise<void> {
     try {
-      await tempRole.handleTempRoleCreate(interaction, bot);
+      await handleTempRoleCreate(interaction, bot);
     } catch (error) {
       await replyForError(
         interaction,

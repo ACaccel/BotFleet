@@ -1,9 +1,11 @@
 import { Schema } from 'mongoose';
-import type {
-  ArchiveInboxEntry,
-  ArchiveJob,
-  ArchiveJournal,
-  ArchiveChannel,
+import {
+  ARCHIVE_CHANNEL_ACCESS,
+  ARCHIVE_JOB_COMMANDS,
+  ARCHIVE_JOB_STATUSES,
+  type ArchiveInboxDocument,
+  type ArchiveJob,
+  type ArchiveChannel,
 } from '../../core/archive/types';
 
 const options = (collection: string) => ({
@@ -13,42 +15,53 @@ const options = (collection: string) => ({
   versionKey: false as const,
   suppressReservedKeysWarning: true,
 });
-export const archiveInboxSchema = new Schema<ArchiveInboxEntry>(
+export const archiveInboxSchema = new Schema<ArchiveInboxDocument>(
   {
     eventId: { type: String, required: true, unique: true },
-    kind: { type: String, required: true },
+    kind: { type: String, required: true, enum: ['snapshot', 'delete', 'reaction', 'gap'] },
     messageId: String,
     channelId: String,
     payload: { type: Schema.Types.Mixed, required: true },
     observedAt: { type: Number, required: true },
-    state: { type: String, required: true },
+    state: {
+      type: String,
+      required: true,
+      enum: ['pending', 'processing', 'complete', 'dead'],
+    },
     claimToken: String,
     leaseUntil: Number,
     attempts: { type: Number, required: true },
+    claims: Number,
+    firstFailedAt: Number,
     nextAttemptAt: Number,
     lastError: String,
+    deadAt: Date,
+    tracedRunId: String,
   },
   options('archive_inbox'),
 );
 archiveInboxSchema.index({ state: 1, observedAt: 1 });
+/** Dead letters are kept for inspection, then expire. */
+const ARCHIVE_DEAD_LETTER_TTL_SECONDS = 30 * 24 * 60 * 60;
+archiveInboxSchema.index({ deadAt: 1 }, { expireAfterSeconds: ARCHIVE_DEAD_LETTER_TTL_SECONDS });
 export const archiveJobSchema = new Schema<ArchiveJob & { _id: string }>(
   {
     _id: { type: String, required: true },
     jobId: { type: String, required: true, unique: true },
     requestId: { type: String, required: true, unique: true },
     guildId: { type: String, required: true },
-    command: { type: String, required: true },
+    command: { type: String, required: true, enum: ARCHIVE_JOB_COMMANDS },
     options: { type: Schema.Types.Mixed, required: true },
     runId: String,
-    status: { type: String, required: true },
+    status: { type: String, required: true, enum: ARCHIVE_JOB_STATUSES },
     result: Schema.Types.Mixed,
     cancelRequested: { type: Boolean, default: false },
-    deleteRequestedAt: Number,
+    activeSlot: { type: String, enum: ['full-backup'] },
+    origin: Schema.Types.Mixed,
+    resumedAt: Number,
     createdAt: { type: Number, required: true },
     startedAt: Number,
     finishedAt: Number,
-    acceptedAt: Number,
-    expiresAt: Number,
     claimToken: String,
     leaseUntil: Number,
     notification: Schema.Types.Mixed,
@@ -56,48 +69,21 @@ export const archiveJobSchema = new Schema<ArchiveJob & { _id: string }>(
   options('archive_jobs'),
 );
 archiveJobSchema.index({ status: 1, createdAt: 1 });
-export const archiveJournalSchema = new Schema<ArchiveJournal>(
-  {
-    journalId: { type: String, required: true, unique: true },
-    runId: { type: String, required: true },
-    operationId: { type: String, required: true },
-    sequence: { type: Number, required: true },
-    collection: { type: String, required: true },
-    documentId: Schema.Types.Mixed,
-    before: Schema.Types.Mixed,
-    after: Schema.Types.Mixed,
-    beforeHash: String,
-    afterHash: String,
-    state: String,
-    reason: String,
-    dependencies: [String],
-    createdAt: Number,
-  },
-  options('archive_journals'),
+/** At most one queued or running full backup per guild. */
+archiveJobSchema.index(
+  { activeSlot: 1 },
+  { unique: true, partialFilterExpression: { activeSlot: { $exists: true } } },
 );
-archiveJournalSchema.index({ runId: 1, sequence: 1 }, { unique: true });
-export interface ArchiveRevisionDoc {
-  versionObservationId: string;
-  messageId: string;
-  contentVersionAt: number;
-  contentHash: string;
-  snapshot: Record<string, unknown>;
-}
-export const archiveRevisionSchema = new Schema<ArchiveRevisionDoc>(
-  {
-    messageId: { type: String, required: true },
-    contentVersionAt: { type: Number, required: true },
-    contentHash: { type: String, required: true },
-    versionObservationId: { type: String, required: true },
-    snapshot: { type: Schema.Types.Mixed, required: true },
-  },
-  options('archive_revisions'),
-);
-archiveRevisionSchema.index({ messageId: 1, versionObservationId: 1 }, { unique: true });
+/**
+ * One chunk of a reaction's member list. `emojiKey` is the reaction identity
+ * (`reactionKey`: custom emoji ID or Unicode emoji); `channelId` is the message's
+ * channel, so readers can filter by visibility without loading the message.
+ */
 export interface ArchiveReactionDoc {
   messageId: string;
+  channelId: string;
   emojiKey: string;
-  type: number;
+  type: 0 | 1;
   generation: string;
   chunk: number;
   userIds: string[];
@@ -105,13 +91,18 @@ export interface ArchiveReactionDoc {
 }
 export const archiveReactionSchema = new Schema<ArchiveReactionDoc>(
   {
-    messageId: String,
-    emojiKey: String,
-    type: Number,
-    generation: String,
-    chunk: Number,
-    userIds: { type: [String], validate: (value: string[]) => value.length <= 1000 },
-    observedAt: Number,
+    messageId: { type: String, required: true },
+    channelId: { type: String, required: true },
+    emojiKey: { type: String, required: true },
+    type: { type: Number, required: true, enum: [0, 1] },
+    generation: { type: String, required: true },
+    chunk: { type: Number, required: true, min: 0 },
+    userIds: {
+      type: [String],
+      required: true,
+      validate: (value: string[]) => value.length <= 1000,
+    },
+    observedAt: { type: Number, required: true },
   },
   options('archive_reactions'),
 );
@@ -119,6 +110,8 @@ archiveReactionSchema.index(
   { messageId: 1, emojiKey: 1, type: 1, generation: 1, chunk: 1 },
   { unique: true },
 );
+/** Garbage collection selects old chunks by age, then groups them by message. */
+archiveReactionSchema.index({ observedAt: 1, messageId: 1 });
 export const archiveChannelSchema = new Schema<ArchiveChannel>(
   {
     channelId: { type: String, required: true, unique: true },
@@ -126,8 +119,9 @@ export const archiveChannelSchema = new Schema<ArchiveChannel>(
     type: Number,
     parentId: String,
     observedAt: Number,
-    access: String,
-    checkpoint: Schema.Types.Mixed,
+    access: { type: String, required: true, enum: ARCHIVE_CHANNEL_ACCESS },
+    everyoneCanView: Boolean,
+    checkpoints: Schema.Types.Mixed,
     discovery: Schema.Types.Mixed,
   },
   options('archive_channels'),

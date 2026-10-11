@@ -18,7 +18,7 @@ async function measure(concurrency: number, blocked: boolean) {
     scheduler.observeWait({
       global: false,
       bucketKey: 'synthetic:0',
-      resourceId: '0',
+      channelId: '0',
       deadlineAt: Date.now() + 100,
     });
   try {
@@ -38,7 +38,7 @@ async function measure(concurrency: number, blocked: boolean) {
           }
           guildCompletions[guildId] = (guildCompletions[guildId] ?? 0) + 1;
         },
-        { resourceId, guildId },
+        { resource: { channelId: resourceId }, guildId },
       );
     });
     const liveStart = performance.now();
@@ -48,7 +48,7 @@ async function measure(concurrency: number, blocked: boolean) {
       async () => {
         liveLatencyMs = performance.now() - liveStart;
       },
-      { guildId: 'control', resourceId: 'control' },
+      { guildId: 'control', resource: { channelId: 'control' } },
     );
     await Promise.all([...background, live]);
     const elapsedMs = performance.now() - started;

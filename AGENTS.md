@@ -39,7 +39,8 @@ in strict mode.
 Setup:      bash scripts/setup-env.sh (requires CONDA_EXE or conda on PATH)
 Install:    npm run install-lock       (uses project Conda runtime)
 Dev:        npm run tomori | npm run nijika | npm run konata | npm run gopher | npm run msg-archive
-            (register slash commands: npm run register)
+            (register slash commands: npm run register = every configured bot;
+             npm run register -t <bot> = one bot)
 Test:       npm run test               (subsets: test:unit | test:int | test:contract | test:i18n | test:tools)
 Lint:       npm run lint               (format check: npm run format:check)
 Type-check: npm run typecheck          (tsc -p tsconfig.strict.json)
@@ -69,7 +70,7 @@ Four load-bearing rules; a CI gate or a reviewer will catch violations.
 The full text of each is in `CONTRIBUTING.md`; the recipes under
 `docs/contributing/` walk them through.
 
-1. **No CJK literals in `src/handlers/` or `src/plugins/`.** Use translator keys; add `// i18n-ignore: <reason>` only when the literal is not user-facing.
+1. **No CJK literals in `src/handlers/`, `src/plugins/`, `src/application/`, `src/bot/` or `src/infra/`.** Use translator keys; add `// i18n-ignore: <reason>` only when the literal is not user-facing.
 2. **No `process.env.X` outside `src/core/config/env.ts`.**
 3. **No new handler / plugin without a test.**
 4. **No code change without its documentation.** A change to user-visible behaviour, a config field, a public contract, or a command must update every documentation surface it touches — `docs/architecture.md`, `README.md`, `CONTRIBUTING.md` and the guides under `docs/contributing/`, and the matching `config.example.json` — in the same commit. A missing doc update is a defect, like a missing test. `CHANGELOG.md` is the exception: it is not touched by routine commits and is written in one pass when a release is cut, one entry per notable commit since the last tag (see [`CONTRIBUTING.md`](CONTRIBUTING.md)).

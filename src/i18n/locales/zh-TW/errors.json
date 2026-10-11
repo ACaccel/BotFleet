@@ -23,6 +23,7 @@
     "unavailable": "資料庫暫時無法連線,本指令稍後可重試。",
     "duplicate_key": "這筆資料已經存在,沒辦法重複新增喔,確認一下再試一次吧。",
     "timeout": "資料庫回應有點慢,連線逾時了,稍等一下再重試看看。",
+    "query_timeout": "查詢時間太長,已經停止。請縮小範圍再試一次。",
     "network": "連不上資料庫,可能是網路出狀況,等一下再試試看吧。",
     "validation": "資料格式不太對,沒辦法存進資料庫,檢查一下輸入內容再試一次。",
     "operation_failed": "資料庫操作失敗,請稍後再試。",
@@ -63,5 +64,8 @@
     "login_failed": "登入 Discord 失敗({{clientId}})。",
     "login_no_user": "登入 Discord 後未取得 user({{clientId}})。"
   },
-  "unexpected": "指令執行時發生未預期的錯誤,管理員已收到通知(錯誤編號:{{traceId}})。"
+  "unexpected": "指令執行時發生未預期的錯誤,管理員已收到通知(錯誤編號:{{traceId}})。",
+  "graphics": {
+    "font_missing": "這台主機目前無法產生圖表，請通知管理員。"
+  }
 }

@@ -2,19 +2,18 @@ import type { ChatInputCommandInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '../command';
 
-import { runUserTrafficCommand } from '../traffic-shared/user-traffic-command';
+import { RANK_ROW_LIMIT } from '../traffic-shared/dashboard';
+import { trafficCommandOptions, type TrafficOptionSpec } from '../traffic-shared/options';
+import { buildPersonReport } from '../traffic-shared/person-report';
+import { runTrafficAction } from '../traffic-shared/run';
+
+const OPTIONS: TrafficOptionSpec = { defaultRange: '7d', maxTopN: RANK_ROW_LIMIT };
 
 /**
- * `/traffic user` — a specified target user's message-activity stats over
- * a time window: an overview (total, daily average, share of visible
- * traffic, busiest period, rank among active users), a time-trend line
- * chart, and a channel-distribution bar chart.
- *
- * Privacy is gated by the INVOKER, never the target — see
- * `traffic-shared/user-traffic-command` for the shared body and the full
- * disclosure contract. `visibility` mirrors `/traffic me` (default
- * `ephemeral`): a `public` reply is additionally capped by the command
- * channel's rank.
+ * `/traffic user` — another member's activity, in the layout of `/traffic me`.
+ * Privacy is gated by the INVOKER, never the target: only channels the invoker
+ * may count are counted, and no visible activity (including a target outside
+ * the guild) gives the same neutral no-data answer.
  */
 export default class traffic_user extends Command {
   constructor() {
@@ -22,22 +21,7 @@ export default class traffic_user extends Command {
     this.setConfig({
       name: 'traffic_user',
       category: 'server_activity',
-      options: {
-        user: [{ name: 'user', required: true }],
-        string: [
-          {
-            name: 'visibility',
-            required: false,
-            choices: [{ value: 'ephemeral' }, { value: 'public' }],
-          },
-          {
-            name: 'range',
-            required: false,
-            choices: [{ value: '24h' }, { value: '7d' }, { value: '30d' }],
-          },
-        ],
-        number: [{ name: 'top_n', required: false, min: 1, max: 25 }],
-      },
+      options: trafficCommandOptions(OPTIONS, { user: [{ name: 'user', required: true }] }),
     });
   }
 
@@ -45,19 +29,16 @@ export default class traffic_user extends Command {
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    await runUserTrafficCommand(interaction, bot, {
-      command: 'traffic_user',
-      resolveSubject: (source) => {
-        const target = source.options.getUser('user', true);
-        const targetMember = source.options.getMember('user');
-        return {
-          id: target.id,
-          displayName:
-            targetMember && 'displayName' in targetMember
-              ? targetMember.displayName
-              : target.username,
-        };
-      },
+    const target = interaction.options.getUser('user', true);
+    const targetMember = interaction.options.getMember('user');
+    const displayName =
+      targetMember !== null && 'displayName' in targetMember
+        ? targetMember.displayName
+        : (target.globalName ?? target.username);
+    await runTrafficAction(interaction, bot, {
+      options: OPTIONS,
+      scope: 'visible',
+      build: (context) => buildPersonReport(context, { id: target.id, displayName }),
     });
   }
 }

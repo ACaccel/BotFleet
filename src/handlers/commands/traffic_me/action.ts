@@ -2,17 +2,17 @@ import type { ChatInputCommandInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '../command';
 
-import { runUserTrafficCommand } from '../traffic-shared/user-traffic-command';
+import { RANK_ROW_LIMIT } from '../traffic-shared/dashboard';
+import { trafficCommandOptions, type TrafficOptionSpec } from '../traffic-shared/options';
+import { buildPersonReport } from '../traffic-shared/person-report';
+import { runTrafficAction } from '../traffic-shared/run';
+
+const OPTIONS: TrafficOptionSpec = { defaultRange: '7d', maxTopN: RANK_ROW_LIMIT };
 
 /**
- * `/traffic me` — the invoker's personal message-activity stats over a
- * time window: an overview (total, daily average, share of visible
- * traffic, busiest period, rank among active users), a personal
- * time-trend line chart, and a personal channel-distribution bar chart.
- *
- * The subject is the invoker, so the privacy filter and the counted user
- * coincide. `visibility` mirrors `/traffic overview` (default `ephemeral`); see
- * `traffic-shared/user-traffic-command` for the shared body.
+ * `/traffic me` — the invoker's own activity in the channels they may see:
+ * counts, rank and share, active days, reactions, command use, conversation
+ * partners, channel distribution, and a personal heat map.
  */
 export default class traffic_me extends Command {
   constructor() {
@@ -20,21 +20,7 @@ export default class traffic_me extends Command {
     this.setConfig({
       name: 'traffic_me',
       category: 'server_activity',
-      options: {
-        string: [
-          {
-            name: 'visibility',
-            required: false,
-            choices: [{ value: 'ephemeral' }, { value: 'public' }],
-          },
-          {
-            name: 'range',
-            required: false,
-            choices: [{ value: '24h' }, { value: '7d' }, { value: '30d' }],
-          },
-        ],
-        number: [{ name: 'top_n', required: false, min: 1, max: 25 }],
-      },
+      options: trafficCommandOptions(OPTIONS),
     });
   }
 
@@ -42,12 +28,14 @@ export default class traffic_me extends Command {
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    await runUserTrafficCommand(interaction, bot, {
-      command: 'traffic_me',
-      resolveSubject: (_interaction, invoker) => ({
-        id: invoker.id,
-        displayName: invoker.displayName,
-      }),
+    await runTrafficAction(interaction, bot, {
+      options: OPTIONS,
+      scope: 'visible',
+      build: (context) =>
+        buildPersonReport(context, {
+          id: context.member.id,
+          displayName: context.member.displayName,
+        }),
     });
   }
 }

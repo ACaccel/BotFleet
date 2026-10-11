@@ -16,11 +16,21 @@
  * global commands.
  *
  * Usage:
- *   npm run register -- -t nijika                 # global (default; also prunes guild-scoped commands)
- *   npm run register -- -t nijika --dev-guild ID  # guild-side fast iteration
- *   npm run register -- -t nijika --dry-run       # print resolved command text, register nothing
- *   npm run register -- -t nijika --keep-guild-commands     # global registration without pruning guild commands
- *   npm run register -- -t nijika --cleanup-guild-commands  # only clear guild-scoped commands
+ *   npm run register                                   # every configured bot, global (default)
+ *   npm run register -t nijika                         # one bot, global (default; also prunes guild-scoped commands)
+ *   npm run register -t nijika --dev-guild ID          # one bot, guild-side fast iteration
+ *   npm run register [-t nijika] --dry-run             # print resolved command text, register nothing
+ *   npm run register [-t nijika] --keep-guild-commands # global registration without pruning guild commands
+ *   npm run register [-t nijika] --cleanup-guild-commands # only clear guild-scoped commands
+ *
+ * No `--` separator is needed: npm consumes the flags and exports them as
+ * `npm_config_*`, which `parseRegisterArgs` reads alongside argv. The
+ * older `npm run register -- -t nijika ...` form still works.
+ *
+ * Without `-t`, every bot personality under `src/bot/` that has both
+ * `config.json` and `.env` is registered in turn (others are skipped with
+ * a warning). One bot failing does not stop the rest; the process exits 1
+ * if any bot failed, after a per-bot summary.
  *
  * The default global registration registers the global command set AND clears
  * guild-scoped registrations from every guild, so a stale guild-scoped
@@ -39,10 +49,24 @@ import path from 'path';
 import dotenv from 'dotenv';
 
 import { buildCommandJsonBody, createCommand, localizeCommandConfig } from '@cmd';
-import { createBootstrapLogger, loadEnv } from '@core/config';
+import { createBootstrapLogger, loadEnv, readNpmConfigFlags } from '@core/config';
 import { createDefaultTranslator, isLocale, type Locale, type Translator } from '@core/i18n';
 
 import { resolveLocalesDir } from './bot/locales-dir';
+import {
+  parseRegisterArgs,
+  REGISTER_NPM_FLAGS,
+  REGISTER_USAGE,
+  RegisterUsageError,
+  type RegisterArgs,
+} from './register-args';
+import {
+  BOT_CONFIG_FILE,
+  BOT_ENV_FILE,
+  runForEachBot,
+  scanBotDirectories,
+  type BotDirectoryScan,
+} from './register-batch';
 import { fetchAllUserGuilds } from './register-guilds';
 
 // Register runs before the IoC container is built, so the typed `Logger`
@@ -52,45 +76,23 @@ import { fetchAllUserGuilds } from './register-guilds';
 // `console.*` writes. `fileRouter: false` keeps it console-only: register
 // is a one-shot CLI with no `bot` binding (which the file router
 // requires) and must not create a `logs/<botId>/` tree.
+//
+// Log fields name the bot `target`, not `bot`: the pretty console format
+// hides `bot` (a process-wide binding in a running bot), which would
+// leave an all-bots run's lines unattributed.
 const logger = createBootstrapLogger({ component: 'register' }, { fileRouter: false });
-
-type RegisterArgs = {
-  bot?: string;
-  devGuild?: string;
-  cleanupGuildCommands?: boolean;
-  dryRun?: boolean;
-  keepGuildCommands?: boolean;
-};
 
 type BotConfig = {
   commands?: string[];
   language?: string;
 };
 
-function parseArgs(argv: string[]): RegisterArgs {
-  const out: RegisterArgs = {};
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if ((a === '-b' || a === '--bot' || a === '-t' || a === '--target') && argv[i + 1]) {
-      out.bot = argv[++i];
-    } else if (a === '--dev-guild' && argv[i + 1]) {
-      out.devGuild = argv[++i];
-    } else if (a === '--cleanup-guild-commands') {
-      out.cleanupGuildCommands = true;
-    } else if (a === '--dry-run') {
-      out.dryRun = true;
-    } else if (a === '--keep-guild-commands') {
-      out.keepGuildCommands = true;
-    }
-  }
-
-  return out;
-}
+const BOT_ROOT = path.resolve(__dirname, 'bot');
 
 function resolveBotPaths(botName: string) {
-  const baseDir = path.resolve(__dirname, 'bot', botName);
-  const configPath = path.join(baseDir, 'config.json');
-  const envPath = path.join(baseDir, '.env');
+  const baseDir = path.join(BOT_ROOT, botName);
+  const configPath = path.join(baseDir, BOT_CONFIG_FILE);
+  const envPath = path.join(baseDir, BOT_ENV_FILE);
 
   if (!fs.existsSync(configPath)) {
     throw new Error(`Config file not found: ${configPath}`);
@@ -110,8 +112,15 @@ function loadBotConfig(botName: string): {
 } {
   const { configPath, envPath } = resolveBotPaths(botName);
 
-  dotenv.config({ path: envPath });
-  const env = loadEnv({ exitOnFailure: false, requireDb: false });
+  // Parse the bot's own `.env` instead of loading it into `process.env`:
+  // an all-bots run registers several bots in one process, and dotenv
+  // never overwrites a key already set, so every later bot would
+  // otherwise reuse the first bot's TOKEN / CLIENT_ID.
+  const env = loadEnv({
+    exitOnFailure: false,
+    requireDb: false,
+    source: dotenv.parse(fs.readFileSync(envPath)),
+  });
   const token = env.TOKEN;
   const clientId = env.CLIENT_ID;
 
@@ -172,15 +181,14 @@ async function registerGlobal(botName: string, keepGuildCommands: boolean): Prom
   const translator = await buildRegisterTranslator(language);
   const body = buildCommandsFromConfig(commands, translator);
   if (body.length === 0) {
-    logger.error('No commands to register (after filtering).');
-    process.exit(1);
+    throw new Error(`No commands to register for ${botName} (after filtering).`);
   }
 
   const rest = new REST({ version: '10' }).setToken(token);
   attachRateLimitLogger(rest);
 
   logger.info(
-    { bot: botName, count: body.length, scope: 'global' },
+    { target: botName, count: body.length, scope: 'global' },
     'Registering commands GLOBALLY (visible in every guild after Discord propagation, typically minutes).',
   );
 
@@ -188,7 +196,7 @@ async function registerGlobal(botName: string, keepGuildCommands: boolean): Prom
     body,
   })) as unknown as { id: string }[];
 
-  logger.info({ count: res.length }, 'Successfully registered global command(s).');
+  logger.info({ target: botName, count: res.length }, 'Successfully registered global command(s).');
 
   // Prune any stale guild-scoped registrations so the freshly
   // registered global set is authoritative in every guild — otherwise
@@ -209,14 +217,13 @@ async function registerDevGuild(botName: string, guildId: string): Promise<void>
   const translator = await buildRegisterTranslator(language);
   const body = buildCommandsFromConfig(commands, translator);
   if (body.length === 0) {
-    logger.error('No commands to register (after filtering).');
-    process.exit(1);
+    throw new Error(`No commands to register for ${botName} (after filtering).`);
   }
 
   const rest = new REST({ version: '10' }).setToken(token);
 
   logger.info(
-    { bot: botName, count: body.length, scope: 'guild', guildId },
+    { target: botName, count: body.length, scope: 'guild', guildId },
     'Registering commands to dev guild (guild-scoped — instant propagation).',
   );
 
@@ -240,7 +247,7 @@ async function registerDryRun(botName: string): Promise<void> {
   const body = buildCommandsFromConfig(commands, translator);
 
   logger.info(
-    { bot: botName, count: body.length, language: language ?? '(default)' },
+    { target: botName, count: body.length, language: language ?? '(default)' },
     'Dry run — built command JSON locally; nothing registered with Discord.',
   );
   for (const cmd of body) {
@@ -312,42 +319,77 @@ async function cleanupGuildCommands(botName: string): Promise<void> {
   attachRateLimitLogger(rest);
   await clearAllGuildCommands(rest, clientId);
 
-  logger.info('Cleanup done.');
+  logger.info({ target: botName }, 'Cleanup done.');
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const bot = args.bot;
+function registerBot(botName: string, args: RegisterArgs): Promise<void> {
+  if (args.dryRun) return registerDryRun(botName);
+  if (args.cleanupGuildCommands) return cleanupGuildCommands(botName);
+  if (args.devGuild !== undefined) return registerDevGuild(botName, args.devGuild);
+  return registerGlobal(botName, args.keepGuildCommands);
+}
 
-  if (!bot) {
-    logger.error(
-      'Usage:\n' +
-        '  npm run register -- -t <bot_name>                          # global (default)\n' +
-        '  npm run register -- -t <bot_name> --dev-guild <guild_id>   # guild-side fast iteration\n' +
-        '  npm run register -- -t <bot_name> --dry-run                # print resolved command text, register nothing\n' +
-        '  npm run register -- -t <bot_name> --keep-guild-commands    # global registration WITHOUT pruning guild-scoped commands\n' +
-        '  npm run register -- -t <bot_name> --cleanup-guild-commands # remove legacy guild-scoped commands',
+/** The bots this run covers: the named one, or every configured bot. */
+function selectTargets(args: RegisterArgs, scan: BotDirectoryScan): readonly string[] {
+  if (args.bot !== undefined) return [args.bot];
+
+  if (scan.skipped.length > 0) {
+    logger.warn(
+      { skipped: scan.skipped.map((s) => `${s.bot} (missing ${s.missing.join(', ')})`) },
+      'Skipping bots without config.json and .env.',
     );
-    process.exit(1);
   }
+  logger.info({ bots: scan.configured }, 'No target bot given; registering every configured bot.');
+  return scan.configured;
+}
 
+async function main(): Promise<void> {
+  const scan = scanBotDirectories(BOT_ROOT);
+
+  let args: RegisterArgs;
   try {
-    if (args.dryRun === true) {
-      await registerDryRun(bot);
-    } else if (args.cleanupGuildCommands === true) {
-      await cleanupGuildCommands(bot);
-    } else if (args.devGuild !== undefined) {
-      await registerDevGuild(bot, args.devGuild);
-    } else {
-      await registerGlobal(bot, args.keepGuildCommands === true);
-    }
-  } catch (err) {
-    logger.error(
-      { err: err instanceof Error ? err : new Error(String(err)) },
-      'Register CLI failed.',
+    args = parseRegisterArgs(
+      process.argv.slice(2),
+      readNpmConfigFlags(REGISTER_NPM_FLAGS),
+      scan.known,
     );
-    process.exit(1);
+  } catch (err) {
+    if (!(err instanceof RegisterUsageError)) throw err;
+    logger.error(`${err.message}\n${REGISTER_USAGE}`);
+    process.exitCode = 1;
+    return;
   }
+
+  const targets = selectTargets(args, scan);
+  if (targets.length === 0) {
+    logger.error({ botRoot: BOT_ROOT }, 'No configured bots found to register.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const { outcomes, exitCode } = await runForEachBot(
+    targets,
+    (bot) => registerBot(bot, args),
+    (bot, err) => logger.error({ target: bot, err }, 'Register CLI failed for bot.'),
+  );
+
+  for (const outcome of outcomes) {
+    if (outcome.ok) {
+      logger.info({ target: outcome.bot, result: 'ok' }, 'Register summary.');
+    } else {
+      logger.error(
+        { target: outcome.bot, result: 'failed', reason: outcome.error.message },
+        'Register summary.',
+      );
+    }
+  }
+  process.exitCode = exitCode;
 }
 
-main();
+main().catch((err: unknown) => {
+  logger.error(
+    { err: err instanceof Error ? err : new Error(String(err)) },
+    'Register CLI failed.',
+  );
+  process.exitCode = 1;
+});

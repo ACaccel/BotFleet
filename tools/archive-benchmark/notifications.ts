@@ -6,7 +6,8 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { createConnection } from 'mongoose';
 
 import { createDefaultTranslator } from '../../src/core/i18n';
-import { renderArchiveProgress } from '../../src/core/archive/progress-renderer';
+import type { ArchiveJob } from '../../src/core/archive/types';
+import { renderArchiveBackupPanel } from '../../src/application/archive/panel';
 import { ProgressNotifier, ProgressTracker } from '../../src/plugins/message-backup/flow/progress';
 import { createCpuBatch, processCpuBatch } from './cpu';
 import { summarize } from './metrics';
@@ -29,6 +30,16 @@ export async function benchmarkNotifications(output: string): Promise<void> {
       fallbackLocale: 'en',
     });
     const batch = createCpuBatch(0, 100, 1024);
+    const job: ArchiveJob = {
+      jobId: 'synthetic-job',
+      requestId: 'synthetic',
+      guildId: '1',
+      command: 'full-backup',
+      options: { cutoff: 0 },
+      status: 'running',
+      cancelRequested: false,
+      createdAt: 0,
+    };
     const samples: {
       enabled: boolean;
       elapsedMs: number;
@@ -50,10 +61,15 @@ export async function benchmarkNotifications(output: string): Promise<void> {
               { $set: { result: { progress: snapshot } } },
               { upsert: true },
             );
-            const content = renderArchiveProgress(snapshot, translator, now);
-            if (content.length > 1900)
-              throw new Error('Notification exceeds Discord content budget');
-            bytes += Buffer.byteLength(JSON.stringify({ content, allowedMentions: { parse: [] } }));
+            const panel = renderArchiveBackupPanel(translator, job, snapshot, {
+              now,
+              latest: true,
+            });
+            if ((panel.embeds[0]?.description?.length ?? 0) > 4096)
+              throw new Error('Notification exceeds the Discord embed budget');
+            bytes += Buffer.byteLength(
+              JSON.stringify({ ...panel, allowedMentions: { parse: [] } }),
+            );
             delivered += 1;
           },
           5000,
@@ -106,7 +122,7 @@ export async function benchmarkNotifications(output: string): Promise<void> {
           enabled,
           throughputLossPercent: 100 * (1 - disabled.median / enabled.median),
           scope:
-            '100000 synthetic normalized messages, identical snapshot collection and event-loop yields, actual notifier and English renderer plus isolated Mongo majority/journaled progress writes, 5s cadence over 50s logical clock; first pair warmup excluded. Mock transport encodes payload only; no Discord latency claim.',
+            '100000 synthetic normalized messages, identical snapshot collection and event-loop yields, actual notifier and English full-backup panel renderer plus isolated Mongo majority/journaled progress writes, 5s cadence over 50s logical clock; first pair warmup excluded. Mock transport encodes payload only; no Discord latency claim.',
         },
         null,
         2,

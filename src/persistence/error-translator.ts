@@ -10,6 +10,8 @@
  *
  * Sub-code mapping:
  *   - `DATABASE_DUPLICATE_KEY` — MongoServerError code 11000.
+ *   - `DATABASE_QUERY_TIMEOUT`  — MongoServerError code 50 (`MaxTimeMSExpired`):
+ *     the query ran past its own `maxTimeMS`, so the work is too large.
  *   - `DATABASE_TIMEOUT`        — MongooseError name `MongooseServerSelectionError`,
  *     MongoNetworkTimeoutError, or any err whose message contains
  *     `'timeout'` (case-insensitive).
@@ -29,6 +31,7 @@ interface MongoLikeError {
   readonly name?: string;
   readonly message?: string;
   readonly code?: number | string;
+  readonly codeName?: string;
 }
 
 const classify = (raw: unknown): DatabaseErrorCode => {
@@ -41,6 +44,10 @@ const classify = (raw: unknown): DatabaseErrorCode => {
   // on the wrapped error.
   if (code === 11000 || code === '11000') return 'DATABASE_DUPLICATE_KEY';
   if (name === 'ValidationError' || name === 'CastError') return 'DATABASE_VALIDATION';
+  // Checked before the generic timeout patterns: a query that exceeded its own
+  // time limit is too large, not a connectivity problem worth retrying.
+  if (code === 50 || code === '50' || e.codeName === 'MaxTimeMSExpired')
+    return 'DATABASE_QUERY_TIMEOUT';
   // ServerSelection covers "could not pick a primary in time" — the
   // most common timeout shape from the driver.
   if (
@@ -77,6 +84,8 @@ const i18nKeyFor = (code: DatabaseErrorCode): string => {
       return 'errors:db.duplicate_key';
     case 'DATABASE_TIMEOUT':
       return 'errors:db.timeout';
+    case 'DATABASE_QUERY_TIMEOUT':
+      return 'errors:db.query_timeout';
     case 'DATABASE_NETWORK':
       return 'errors:db.network';
     case 'DATABASE_VALIDATION':

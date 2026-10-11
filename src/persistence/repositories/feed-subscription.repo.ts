@@ -18,7 +18,7 @@
 import type { Types } from 'mongoose';
 import type { DatabaseError } from '../../core/errors/external-service-error';
 import { err, ok, type Result } from '../../core/result';
-import type { GuildConnection } from '../../infra/mongo/connection-manager';
+import type { GuildConnection } from '../connection';
 import { databaseErrorFrom } from '../error-translator';
 import {
   DEFAULT_FEED_MEDIA_FILTER,

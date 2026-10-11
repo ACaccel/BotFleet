@@ -174,6 +174,13 @@ describe('consolidated public registry', () => {
     'thread_manager',
     'traffic_me',
     'traffic_user',
+    'traffic_channel',
+    'traffic_apps',
+    'traffic_emoji',
+    'traffic_sticker',
+    'emoji_frequency',
+    'sticker_frequency',
+    'db_list_message',
   ])('does not publish the retired %s entry', (name) => {
     expect(COMMAND_REGISTRY).not.toHaveProperty(name);
   });

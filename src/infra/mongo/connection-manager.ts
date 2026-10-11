@@ -33,24 +33,15 @@
  *   they target the same physical database, so the failure is the
  *   same failure.
  */
-import mongoose, { type Connection, type Model } from 'mongoose';
+import mongoose, { type Connection } from 'mongoose';
 import { ARCHIVE_PROCESS_ID } from '../archive/owner';
 import type { GuildId } from '../../core/ids';
-import { SCHEMAS, type DocByName, type SchemaName } from '../../persistence/schemas';
+import { SCHEMAS, type SchemaName } from '../../persistence/schemas';
+import type { ArchiveOwner, GuildConnection, GuildModels } from '../../persistence/connection';
 import { DatabaseError } from '../../core/errors/external-service-error';
 import { databaseErrorFrom, isTransient } from '../../persistence/error-translator';
 
-/** Typed model registry for one guild connection. */
-type Models = {
-  readonly [K in SchemaName]: Model<DocByName[K]>;
-};
-
-export interface GuildConnection {
-  readonly guildId: GuildId;
-  readonly connection: Connection;
-  readonly models: Models;
-  readonly archiveOwner?: 'msg-archive';
-}
+export type { GuildConnection } from '../../persistence/connection';
 
 /**
  * Disabled-guild marker. Returned by {@link ConnectionManager.isDisabled}
@@ -138,8 +129,9 @@ export const buildGuildMongoUri = (baseUri: string, guildId: string): string => 
 const isArchiveModel = (name: string): boolean =>
   name === 'Message' || name === 'Fetch' || name.startsWith('Archive');
 
-const buildModels = (connection: Connection): Models => {
-  const models = {} as Record<SchemaName, Model<unknown>>;
+const buildModels = (connection: Connection): GuildModels => {
+  // Each model's document type comes from `DocByName`; the loop sees only the union of schemas.
+  const models: Partial<Record<SchemaName, unknown>> = {};
   for (const name of Object.keys(SCHEMAS) as SchemaName[]) {
     const schema = SCHEMAS[name].clone();
     // Archive schema maintenance belongs to the worker after ownership and
@@ -148,16 +140,16 @@ const buildModels = (connection: Connection): Models => {
       schema.set('autoCreate', false);
       schema.set('autoIndex', false);
     }
-    models[name] = connection.model(name, schema) as Model<unknown>;
+    models[name] = connection.model(name, schema);
   }
-  return models as Models;
+  return models as GuildModels;
 };
 
 /**
  * Run every model's index build, tolerating per-model rejections.
  *
- * Awaiting `m.init()` closes a startup race between
- * `insertManyIgnoringDuplicates` and the auto-built unique index.
+ * Awaiting `m.init()` closes a startup race between the first write and
+ * the auto-built unique indexes.
  *
  * Treating an init failure as fatal would be strictly worse for the
  * operator: a single permission gap or one collection with pre-existing
@@ -168,7 +160,7 @@ const buildModels = (connection: Connection): Models => {
  * the per-model `name` stays in scope on rejection. Stderr keeps this
  * layer free of cross-imports into core/logger.
  */
-const initModelsBestEffort = async (models: Models, guildId: GuildId): Promise<void> => {
+const initModelsBestEffort = async (models: GuildModels, guildId: GuildId): Promise<void> => {
   await Promise.allSettled(
     Object.entries(models)
       .filter(([name]) => !isArchiveModel(name))
@@ -309,7 +301,7 @@ const retryOpen = async (params: {
 export interface ConnectionManager {
   /**
    * Open (or return the cached) connection for `guildId`. The returned
-   * `GuildConnection` carries the strongly-typed `Models` map.
+   * `GuildConnection` carries the strongly-typed `GuildModels` map.
    *
    * Throws a {@link DatabaseError} if the open fails. Transient
    * failures are retried internally before the throw; a guild that
@@ -379,7 +371,7 @@ export class MongoConnectionManager implements ConnectionManager {
     retryPolicy: RetryPolicy = DEFAULT_RETRY_POLICY,
     sleep: SleepFn = realSleep,
     private readonly recoveryIntervalMs: number = DEFAULT_RECOVERY_INTERVAL_MS,
-    private readonly archiveOwner?: 'msg-archive',
+    private readonly archiveOwner?: ArchiveOwner,
   ) {
     validateRecoveryInterval(recoveryIntervalMs);
     this.retryPolicy = retryPolicy;
@@ -672,11 +664,9 @@ export class StaticConnectionManager implements ConnectionManager {
    * Build the guild connection from the externally-managed connection,
    * or delegate to the injected `openOverride` failure hook.
    *
-   * Blocks until every model's declared indexes are present (notably
-   * the unique index on `Message.messageId` that
-   * `insertManyIgnoringDuplicates` depends on). Without this, the first
-   * insert of a suite races the auto-index build and unique constraints
-   * silently do not enforce.
+   * Blocks until every model's declared indexes are present. Without
+   * this, the first insert of a suite races the auto-index build and
+   * unique constraints silently do not enforce.
    */
   private async open(guildId: GuildId): Promise<GuildConnection> {
     const generation = this.generation;

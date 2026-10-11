@@ -38,6 +38,7 @@ import { token, type ServiceToken } from '../core/ioc';
 import type { Logger } from '../core/logger';
 import type { GuildOnboardingPort, PermissionRankPolicy } from '../core/plugin';
 import type { Clock } from '../core/time';
+import type { ArchiveControlFactory } from '../application/archive/control';
 import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { ModelCatalog } from '../infra/llm/models-catalog';
 import type { ConnectionManager } from '../infra/mongo/connection-manager';
@@ -123,6 +124,13 @@ interface Tokens {
    * it. Unbound for bots that do not configure the feature.
    */
   readonly FeedPlatformRegistry: ServiceToken<FeedPlatformRegistry>;
+  /**
+   * Builds one guild's archive control service. Registered only by the
+   * msg-archive composition root, which holds archive ownership; the
+   * `/archive` command and panel buttons read it through
+   * `BaseBot.archiveControlFactory`, and tests substitute a fake.
+   */
+  readonly ArchiveControlFactory: ServiceToken<ArchiveControlFactory>;
 }
 
 export const TOKENS: Tokens = {
@@ -140,4 +148,5 @@ export const TOKENS: Tokens = {
   ModelCatalog: token<ModelCatalog>('ModelCatalog'),
   DefaultModelResolver: token<DefaultModelResolver>('DefaultModelResolver'),
   FeedPlatformRegistry: token<FeedPlatformRegistry>('FeedPlatformRegistry'),
+  ArchiveControlFactory: token<ArchiveControlFactory>('ArchiveControlFactory'),
 };

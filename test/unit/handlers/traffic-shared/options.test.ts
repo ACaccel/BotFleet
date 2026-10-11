@@ -1,13 +1,16 @@
 /**
- * Unit coverage for the option parsing the whole `/traffic` family
- * shares (`/traffic`, `/traffic_me`, `/traffic_user`): defaults, the
- * `visibility` choice, range passthrough / fallback, and `top_n`
- * clamping in both directions plus its floor.
+ * Unit coverage for the options every `/traffic` subcommand shares: the
+ * declarations (range choices, the subcommand's `top_n` ceiling) and the
+ * parsing (defaults per subcommand, unknown values, `top_n` clamping).
  */
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { describe, expect, it } from 'vitest';
 
-import { readTrafficOptions } from '../../../../src/handlers/commands/traffic-shared/options';
+import {
+  readChoice,
+  readTrafficOptions,
+  trafficCommandOptions,
+} from '../../../../src/handlers/commands/traffic-shared/options';
 
 const interactionWith = (
   values: Record<string, string | number>,
@@ -16,32 +19,61 @@ const interactionWith = (
     options: { get: (name: string) => (name in values ? { value: values[name] } : null) },
   }) as unknown as Pick<ChatInputCommandInteraction, 'options'>;
 
+const ACTIVITY = { defaultRange: '7d', maxTopN: 10 } as const;
+const EMOJI = { defaultRange: '30d', maxTopN: 20 } as const;
+
+describe('trafficCommandOptions', () => {
+  it('declares every range, both audiences and the subcommand top_n ceiling', () => {
+    const options = trafficCommandOptions(EMOJI, {
+      string: [{ name: 'order', required: false }],
+    });
+    expect(options.string?.map((o) => o.name)).toEqual(['order', 'range', 'visibility']);
+    expect(options.string?.[1]?.choices?.map((c) => c.value)).toEqual([
+      '24h',
+      '7d',
+      '30d',
+      '90d',
+      '365d',
+    ]);
+    expect(options.number).toEqual([{ name: 'top_n', required: false, min: 1, max: 20 }]);
+  });
+});
+
 describe('readTrafficOptions', () => {
-  it('applies defaults when nothing is supplied', () => {
-    expect(readTrafficOptions(interactionWith({}))).toEqual({
+  it('applies the subcommand defaults when nothing is supplied', () => {
+    expect(readTrafficOptions(interactionWith({}), ACTIVITY)).toEqual({
       visibility: 'ephemeral',
       range: '7d',
       topN: 10,
     });
+    expect(readTrafficOptions(interactionWith({}), EMOJI).range).toBe('30d');
   });
 
-  it('passes a valid visibility / range and clamps top_n', () => {
+  it('passes valid values through and falls back on unknown ones', () => {
     expect(
-      readTrafficOptions(interactionWith({ visibility: 'public', range: '24h', top_n: 99 })),
-    ).toEqual({
-      visibility: 'public',
-      range: '24h',
-      topN: 25,
-    });
-    expect(readTrafficOptions(interactionWith({ top_n: 0 })).topN).toBe(1);
-    // Discord's number option admits decimals; the chart takes a count.
-    expect(readTrafficOptions(interactionWith({ top_n: 7.9 })).topN).toBe(7);
+      readTrafficOptions(interactionWith({ visibility: 'public', range: '365d' }), ACTIVITY),
+    ).toMatchObject({ visibility: 'public', range: '365d' });
+    expect(
+      readTrafficOptions(interactionWith({ visibility: 'loud', range: '2y' }), ACTIVITY),
+    ).toMatchObject({ visibility: 'ephemeral', range: '7d' });
   });
 
-  it('falls back to defaults for unknown visibility / range values', () => {
-    expect(readTrafficOptions(interactionWith({ visibility: 'secret' })).visibility).toBe(
-      'ephemeral',
-    );
-    expect(readTrafficOptions(interactionWith({ range: '1y' })).range).toBe('7d');
+  it.each([
+    [0, 1],
+    [-4, 1],
+    [3.9, 3],
+    [25, 10],
+    [Number.NaN, 10],
+  ])('clamps top_n %p to %p', (raw, expected) => {
+    expect(readTrafficOptions(interactionWith({ top_n: raw }), ACTIVITY).topN).toBe(expected);
+  });
+});
+
+describe('readChoice', () => {
+  it('reads a known choice and falls back otherwise', () => {
+    const values = ['most', 'least'] as const;
+    expect(readChoice(interactionWith({ order: 'least' }), 'order', values, 'most')).toBe('least');
+    expect(readChoice(interactionWith({ order: 'random' }), 'order', values, 'most')).toBe('most');
+    expect(readChoice(interactionWith({}), 'order', values, 'most')).toBe('most');
   });
 });

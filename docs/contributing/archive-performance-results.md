@@ -1,6 +1,190 @@
 # Archive performance evidence
 
+Sections marked historical measured the retired repair workflow (`run.ts`,
+`enrichment.ts` and the repair service, removed after commit `ce876e3`); check out
+that commit to reproduce them. The worker, re-observation, storage, pipeline, REST,
+CPU, notification and statistics probes remain current.
+
+## Throughput hardening, 2026-10-11
+
+Measured with the [worker, re-observation and storage probes](../../tools/archive-benchmark/README.md#worker-re-observation-and-storage-probes)
+before and after each change, applied in the order below on one host. Environment:
+Node 22.13.0, MongoDB 8.2.6 (mongodb-memory-server, standalone), majority/journaled
+writes, 0.25 GiB WiredTiger cache, 12 logical CPUs and about 32 GiB RAM, other
+workloads not controlled. Medians of three runs; single slow runs widened some
+ranges (full backup after C2 6.07–7.54 s and after C4 6.48–8.85 s, periodic pass
+after C3–C5 0.87–1.40 s, live drain after C4 4.08–5.12 s), the others stayed within
+10% of the median.
+
+The worker probe runs the real worker against a synthetic guild of four voice
+channels (2,000 messages in one, 300 in each of the others); 10% of messages carry
+one to three reactions (one in twenty lists 150 users, one in ten has a burst user).
+Every REST request takes 10 ms and requests of one route and channel run one after
+another, as in `@discordjs/rest`. `full` is a confirmed full backup of an empty
+archive (33 history and 698 reaction-list requests), `periodic` the next periodic
+pass with an overlap window covering every message, and `live` 100 MESSAGE_CREATE
+plus 50 MESSAGE_REACTION_ADD packets drained. Concurrency 2.
+
+| After  | Full s | Full DB commands | Periodic s | Periodic REST | Periodic DB commands | Live s | Live REST | Live DB commands |
+| ------ | -----: | ---------------: | ---------: | ------------: | -------------------: | -----: | --------: | ---------------: |
+| Before |   8.41 |            6,802 |       9.25 |           731 |                6,744 |   4.46 |       299 |            2,644 |
+| C6     |   8.08 |            6,538 |       9.01 |           731 |                6,482 |   4.42 |       299 |            2,644 |
+| C7     |   8.28 |            6,541 |       8.89 |           731 |                6,482 |   4.42 |       299 |            2,644 |
+| C2     |   6.13 |            1,505 |       7.13 |           731 |                1,458 |   3.92 |       299 |            1,608 |
+| C3     |   6.37 |            1,508 |       0.95 |            33 |                  216 |   4.05 |       299 |            1,608 |
+| C4     |   6.61 |            1,508 |       0.90 |            33 |                  216 |   4.21 |       299 |            1,608 |
+| C5     |   6.39 |            1,477 |       1.38 |            33 |                  210 |   1.58 |       102 |            1,061 |
+
+After the review fixes the same probe measured 6.31 s for the full backup, 1.22 s for
+the periodic pass and 1.64 s for the live drain, with the same REST requests; the
+live drain issues 1,161 database commands instead of 1,061, one query per creation
+to check for a later event of the same message.
+
+The full backup's 2 s reduction needs no fewer Discord requests: its remaining 6.4 s
+are mostly the roughly 480 reaction-list requests of the largest channel, which the
+SDK runs one at a time.
+
+- **C6, whole-page writer turns.** One writer turn takes the page (up to 500
+  documents and 4 MiB) instead of 25 messages: 3.9% fewer database commands, about
+  4% less time. A turn whose stored images exceed 4 MiB is halved instead of falling
+  back to single messages.
+- **C7, freshness-only updates.** `observedAt` orders observations of the same
+  content version (`isStaleObservation`): a re-observation that skipped raising it
+  would let an older in-flight observation, such as a page read before a reaction
+  count changed back, overwrite newer counts. Skipping the write is therefore unsafe;
+  a write that changes only `observedAt`, `reactionsFreshAt`, `reactionsStaleAt` or
+  `reactionGenerations` without adding a field is now a `$set`/`$unset` under the
+  same full-image fence. On 20,000 stored messages of 1,484 bytes, fenced bulk
+  writes of `observedAt` took 3.66 s (3.43–3.82) as replacements and 3.10 s
+  (3.05–3.11) as `$set`, sending 66.4 MB instead of 35.3 MB (−47%). End to end the
+  command count is unchanged and the time is within noise.
+- **C2, reaction writes.** The snapshot write marks the lists stale, a refresh
+  stages its chunks in one insert and one write publishes every stream with the
+  freshness, replacing a stale write, one find and insert per page, and three writes
+  per stream: database commands fell 77% for the full backup and 78% for the
+  periodic pass, time 26% and 20%.
+- **C3, unchanged lists in periodic passes.** Lists proven current by Gateway
+  continuity are kept: the periodic pass made no reaction-list requests (731 → 33
+  REST requests) and took 0.95 s instead of 7.13 s. Full backups are unaffected.
+- **C4, admission per route and channel.** Within noise for this reaction-bound
+  profile (6.34 s against 6.39 s with one resource per channel, re-measured with
+  `--channel-mutex`). With 50 ms requests and 3% reacted messages, where history
+  pages matter, the full backup took 7.42 s instead of 7.88 s (−5.9%). Reaction
+  lists of one channel still run one at a time: `@discordjs/rest` serializes every
+  route and channel, so admitting them together would only hold admission slots. The
+  two-stream reaction concurrency overlaps one stream's request with the other's
+  staging, which C2 made an in-memory append.
+- **C5, independent inbox loop.** The live drain took 1.58 s instead of 4.21 s:
+  creations need no REST read (150 → 50 message reads) and a reaction event rereads
+  only its list (149 → 52 list requests; two lists span two pages). History pages no
+  longer wait for inbox rounds; an integration test blocks a live read and checks
+  that a two-page source completes meanwhile. The page-boundary wait has no separate
+  timing comparison.
+- **C8, capacity sampling.** On this development host one walk of the project
+  directory (1.27 million files, mostly deployment releases) took 34 s, longer than
+  the 30-second sample age, so every sample was invalid and capacity stayed unknown.
+  The storage probe (100,000 static files beside a live MongoDB data directory, 2 s
+  sample age) shows the effect: before, a walk took 1.89 s (1.80–1.98) and 46
+  reservations in 20 s had 4 capacity failures, 10 waits over 100 ms and a 2.4 s
+  maximum; after, a sample that reuses the stable size takes 1.6 ms (the first one
+  2.0 s), and 791 reservations had no failure and a 3.0 ms maximum. With the old full
+  walk, the non-blocking admission alone still waited up to 1.9 s, and a walk close
+  to the 2 s age still fails the sample (4 failures in a re-run). After review, an
+  aged stable size (ten minutes) is walked again within the next sample instead of
+  in a separate background walk, and on every sample at 90% of the budget.
+  Re-measured: a sample reusing the stable size took 1.7 ms, and 789 reservations
+  had no failure and a 2.3 ms maximum.
+
+### C9, segmenting large channels: cancelled
+
+A channel's history pages and reaction lists each run one request at a time in
+`@discordjs/rest`, so snowflake segments of one channel share both queues. The worker
+probe split the largest channel into adjacent ranges as separate sources, sharing
+its SDK handlers (`shared`, what segments would face) or not (`independent`, an
+unreachable bound), after C2–C8:
+
+| Profile                                | Unsplit s | 2 shared | 4 shared | 2 independent | 4 independent |
+| -------------------------------------- | --------: | -------: | -------: | ------------: | ------------: |
+| 10 ms, 10% reacted, concurrency 2      |      6.37 |     6.46 |     6.46 |          5.13 |          5.17 |
+| 10 ms, 10% reacted, concurrency 4      |      6.89 |     6.13 |     5.98 |          5.08 |          4.38 |
+| 50 ms, 3% reacted, concurrency 4       |      7.66 |     7.27 |     7.11 |          6.14 |          5.14 |
+| 150 ms, 10% reacted, concurrency 4 (a) |     23.17 |    22.44 |    22.23 |         18.90 |         16.99 |
+
+(a) 600 and 3 × 100 messages.
+
+Shared segments gain nothing at the default concurrency and 3–13% at concurrency 4,
+shrinking as request latency grows: they only hide database writes between one
+channel's reaction requests. That does not justify per-segment checkpoints, segment
+completion rules and their interaction with resumable full backups. Overlapping one
+page's reaction refreshes across messages, or a deeper history prefetch, would hide
+the same writes within one source if needed. On this evidence C9 was cancelled
+(2026-10-11): each channel is scanned as one source with one checkpoint per scan
+kind. The probe's `segments` scenario remains to re-evaluate the idea if the REST
+transport stops serializing a route and channel.
+
+## Archive statistics queries, 2026-10-11
+
+`tools/archive-benchmark/stats.ts` measures the read-only `ArchiveStatsRepo` behind
+`/traffic` on deterministic synthetic guilds: 1,102 channels (80 text channels, 900
+threads, 120 forum posts), 3,000 authors with a skewed mix, 15% replies, 12% with
+reactions and membership chunks, custom emoji, stickers, bots and 1% interaction
+records; about 478 bytes per document. Messages are spread evenly over 400 days, so
+a 365-day window plus its previous window scans every document. All 1,102 channels
+are visible (the `$in` list), the time zone is `Asia/Taipei`, and each query has
+one warmup and three measured runs.
+
+Environment: Node 22.13.0, MongoDB 8.2.6 (mongodb-memory-server, standalone), 1 GiB
+WiredTiger cache, 12 logical CPUs and about 32 GiB RAM on a shared host whose other
+workloads were not controlled. Load time: 13.5 s for 1M and 67.5 s for 5M messages.
+
+Medians in seconds (ranges stayed within 3% of the median except the 1M 7d
+`appUsage`, 0.020–0.043 s). `overview` and `member` are single `activity` queries
+with the sections each command needs, previous window included:
+
+| Query            | 1M 7d | 1M 30d | 1M 365d | 5M 7d | 5M 30d | 5M 365d |
+| ---------------- | ----: | -----: | ------: | ----: | -----: | ------: |
+| `overview`       |  0.24 |   0.91 |    6.97 |  0.96 |   4.14 |   32.47 |
+| `member`         |  0.24 |   0.97 |    6.79 |  1.02 |   4.20 |   32.65 |
+| `reactionsGiven` |  0.13 |   0.57 |    6.93 |  0.68 |   2.89 |   36.00 |
+| `appUsage`       |  0.02 |   0.09 |    1.28 |  0.08 |   0.32 |    4.22 |
+| `emojiUsage`     |  0.04 |   0.18 |    2.08 |  0.21 |   0.88 |   11.12 |
+| `stickerUsage`   |  0.02 |   0.09 |    1.00 |  0.10 |   0.42 |    5.50 |
+
+Cost grows with the documents inside the window, not the collection size:
+`overview` and `member` run about 6.5–7 µs per scanned document (5M 365d:
+32.3–32.5 s). `reactionsGiven` scales with the reaction
+lists that contain the member, one `$lookup` each; the synthetic member is in every
+list, a worst case. On a guild with about 1 million member messages a year, every
+365-day query stays below 7 s; at 5 million a year, `overview`, `member` and
+`reactionsGiven` take 32–36 s and `emojiUsage` 11 s. That is inside the 60-second limit but above the
+10-second target, so the daily-statistics fallback remains a separate decision; it
+was not built. The 1M run preceded the explicit index hint; its plan already used
+the time index, which the hint now enforces.
+
+Findings that shaped the implementation:
+
+- The query planner chose `{ channelId, createdTimestamp }` for a 1,100-channel
+  `$in` on the first 5M run. That fetches documents channel by channel across the
+  window: 365-day `overview` took 108 s, and on 3M messages a bare count took 33.6 s
+  instead of 3.1 s on the time index (228 GB read into the 1 GiB cache). The repo now
+  hints `createdTimestamp` when the scope covers more than a quarter of the recorded
+  channels and the compound index for narrower scopes.
+- Each `$facet` sub-pipeline costs about 1 µs per document before its own
+  expressions, and a time zone conversion per document (`$dateTrunc`, `$hour`)
+  costs more than the scan. Statistics sharing a grouping share one facet, and
+  trends, heat maps and active days come from 15-minute UTC groups mapped to local
+  time in the repository (exact for every time zone offset). This cut the 200k
+  `overview` probe from 2.48 s to 1.42 s.
+- Presence tests by BSON comparison (`{ $gt: ['$attachments', []] }`) avoid the
+  per-document cost of `$size` and `$type`.
+- Separate pipelines run in parallel would cut latency to roughly the slowest
+  section (about 0.6 s instead of 1.4 s on the 200k probe) at about 35% more server
+  CPU; the single `$facet` scan was kept.
+
 ## Bounded enrichment batches and atomic empty snapshots, 2026-10-08
+
+> **Historical.** This section measured the retired one-shot repair workflow. The
+> harness, tests and flags it cites exist at commit `ce876e3`, not in the current tree.
 
 A synthetic comparison exercises the real repository snapshot path and repair
 service, including durable journals, conditional target writes, readback and final
@@ -48,6 +232,9 @@ low/moderate advisories and no high/critical advisories. Production deployment i
 separate from this synthetic and local validation.
 
 ## One-shot enrichment query and empty-reaction fix, 2026-10-08
+
+> **Historical.** This section measured the retired one-shot repair workflow. The
+> harness, tests and flags it cites exist at commit `ce876e3`, not in the current tree.
 
 Read-only inspection of the deployed one-shot executor confirmed that its
 conditional replace/delete filter compared the entire document without an
@@ -114,6 +301,9 @@ and no high/critical advisories. GitHub-only checks were not run; no commit, pus
 or production deployment was performed.
 
 ## Component review and relation-query batching, 2026-10-06
+
+> **Historical.** This section measured the retired one-shot repair workflow. The
+> harness, tests and flags it cites exist at commit `ce876e3`, not in the current tree.
 
 The review covers discovery, history reads, normalization, persistence, reaction
 enrichment, repair, verification and notification delivery. It identifies measured
@@ -222,6 +412,9 @@ included; it does not profile every aggregation or isolate journal fsync latency
 
 ## Repair planning comparison
 
+> **Historical.** This section measured the retired one-shot repair workflow. The
+> harness, tests and flags it cites exist at commit `ce876e3`, not in the current tree.
+
 | Dataset                | Original plan             | Final plan          | Median speedup | Find commands, original → final |
 | ---------------------- | ------------------------- | ------------------- | -------------- | ------------------------------- |
 | 100k clean             | 20.351 (20.264–20.353)    | 0.930 (0.913–0.964) | 21.89×         | 100005 → 6                      |
@@ -244,6 +437,9 @@ Final reports identify all five repair implementation modules and reject source
 changes during a measurement.
 
 ## Scale, scenarios and batch sizing
+
+> **Historical.** This section measured the retired one-shot repair workflow. The
+> harness, tests and flags it cites exist at commit `ce876e3`, not in the current tree.
 
 | Clean dataset | Audit                  | Plan                   | Verify                 | Plan peak RSS MiB, Node / mongod |
 | ------------- | ---------------------- | ---------------------- | ---------------------- | -------------------------------- |

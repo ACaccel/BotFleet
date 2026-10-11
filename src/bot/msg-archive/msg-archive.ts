@@ -3,6 +3,9 @@ import type { Client } from 'discord.js';
 import type { Config } from '@bot';
 import { BaseBot } from '@bot';
 import type { ClientEventBridgeSuppression } from '../client-event-bridge';
+import { TOKENS } from '../tokens';
+import { archiveControlFactory } from '../../application/archive/control';
+import { buildArchiveRepos } from '../../persistence/repositories/archive-repos';
 import { createMessageBackupPlugin } from '@plugins';
 
 interface MsgArchiveConfig extends Config {
@@ -26,8 +29,9 @@ const MINUTE_MS = 60 * 1000;
 
 /**
  * MsgArchive composition root. The periodic-backup lifecycle (channel
- * collection, resumable pagination, live capture and submitted repair jobs) lives in {@link createMessageBackupPlugin}. This class
- * registers that plugin and accepts the archive administration command.
+ * collection, resumable pagination, live capture and full-backup jobs) lives in {@link createMessageBackupPlugin}. This class
+ * registers that plugin, binds the archive control factory and accepts the
+ * archive administration command.
  * Reactions and guildCreate onboarding remain suppressed through the
  * `eventBridgeSuppression` hook.
  */
@@ -44,6 +48,10 @@ export class MsgArchive extends BaseBot<MsgArchiveConfig> {
       commands: ['archive'],
     });
     const intervalMinutes = this.config.backup_interval_minutes;
+    // Archive control is meaningful only where archive ownership lives.
+    this.container.registerSingleton(TOKENS.ArchiveControlFactory, () =>
+      archiveControlFactory(buildArchiveRepos),
+    );
     this.use(
       createMessageBackupPlugin({
         backupServers: this.config.backup_server,

@@ -1,7 +1,7 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
-import * as giveaway from '../../../plugins/giveaway/internal';
+import { handleGiveawayDeletePrompt } from '../giveaway-shared/delete';
 
 export default class giveaway_delete extends Command {
   constructor() {
@@ -19,6 +19,6 @@ export default class giveaway_delete extends Command {
     // Instead of asking for a message id, present the guild's active
     // giveaways as a select menu; the `giveaway_delete` select
     // handler performs the deletion on selection.
-    await giveaway.handleGiveawayDeletePrompt(interaction, bot);
+    await handleGiveawayDeletePrompt(interaction, bot);
   }
 }

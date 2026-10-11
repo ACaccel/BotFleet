@@ -8,16 +8,74 @@ import globals from 'globals';
  * Flat config (ESLint v9). Lints the whole `src/`, `scripts/`, `test/`
  * and `tools/` trees (see the `lint` script). Stylistic rules are
  * `warn`; correctness and architecture rules — raw `process.env`
- * access, explicit `any`, import cycles, and the IoC service-locator
- * guard — are `error`.
+ * access, explicit `any`, import cycles, the IoC service-locator
+ * guard, layer boundaries and raw MongoDB access — are `error`.
  */
 
+/** The only `src/bot` modules a plugin may import; see the plugin block below. */
+const BOT_IMPORT_MESSAGE =
+  'Plugins may import only src/bot/tokens and src/bot/guild-registry from src/bot: not BaseBot, a personality composition root (src/bot/<name>/**) or another composition-root module. Resolve dependencies through the plugin context.';
+
+/** IoC container imports; see the service-locator guard below. */
+const IOC_IMPORTS = ['**/core/ioc', '**/core/ioc/*', '@core/ioc', '@core/ioc/*'];
+const IOC_IMPORT_PATTERN = {
+  group: IOC_IMPORTS,
+  message:
+    'IoC container imports are restricted to composition roots (src/bot/**) and tests. Receive dependencies via constructor parameters instead.',
+};
+
 /**
- * Shared message for a plugin-layer import that reaches into a
- * personality composition root.
+ * Import groups naming each application layer, for the layer-boundary rules
+ * (docs/architecture.md, "Layers and boundaries"). Path aliases are listed
+ * with the relative forms so neither spelling slips through.
  */
-const PERSONALITY_IMPORT_MESSAGE =
-  'Plugins must not import a personality composition root (src/bot/<name>/**). The contracts a plugin may consume are src/bot/tokens and src/bot/guild-registry.';
+const LAYER_IMPORTS = {
+  persistence: ['**/persistence', '**/persistence/**'],
+  application: ['**/application', '**/application/**'],
+  infra: ['**/infra', '**/infra/**'],
+  handlers: [
+    '**/handlers',
+    '**/handlers/**',
+    '@cmd',
+    '@button',
+    '@modal',
+    '@select-menu',
+    '@reaction',
+  ],
+  plugins: ['**/plugins', '**/plugins/**', '@plugins'],
+  bot: ['**/bot', '**/bot/**', '@bot'],
+};
+const layerImportPattern = (layers, message) => ({
+  group: layers.flatMap((layer) => LAYER_IMPORTS[layer]),
+  message,
+});
+
+/** `no-restricted-syntax` selectors that keep raw `process.env` reads in core/config. */
+const PROCESS_ENV_SELECTORS = [
+  {
+    selector: "MemberExpression[object.object.name='process'][object.property.name='env']",
+    message:
+      'Direct process.env access is banned. Import the typed Env from "@core/config" / "src/core/config" instead.',
+  },
+  {
+    selector: "MemberExpression[object.name='process'][property.name='env']",
+    message:
+      'Direct process.env access is banned. Import the typed Env from "@core/config" / "src/core/config" instead.',
+  },
+];
+const RAW_COLLECTION_MESSAGE =
+  'Raw MongoDB access belongs in a src/persistence repository; add a repository method instead.';
+/** Driver collections by name (`connection.collection('archive_jobs')`, `db.collection(name)`). */
+const RAW_COLLECTION_SELECTOR = {
+  selector: "CallExpression[callee.property.name='collection']",
+  message: RAW_COLLECTION_MESSAGE,
+};
+/** Mongoose models of a guild connection (`conn.models.ArchiveJob`). */
+const GUILD_MODELS_SELECTOR = {
+  selector:
+    "MemberExpression[object.property.name='models'], MemberExpression[object.name='models']",
+  message: RAW_COLLECTION_MESSAGE,
+};
 
 export default tseslint.config(
   {
@@ -97,18 +155,32 @@ export default tseslint.config(
     files: ['src/**/*.ts', 'test/**/*.ts', 'tools/**/*.ts'],
     ignores: ['src/core/config/**'],
     rules: {
+      'no-restricted-syntax': ['error', ...PROCESS_ENV_SELECTORS],
+    },
+  },
+  // Raw MongoDB access lives in `src/persistence/` repositories: no other
+  // layer opens a collection by name.
+  // `infra/mongo` owns connection setup and builds the typed model map.
+  // ESLint replaces a rule's options per matching block, so these blocks
+  // repeat the process.env selectors above.
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/core/config/**', 'src/persistence/**', 'src/infra/mongo/**'],
+    rules: {
+      'no-restricted-syntax': ['error', ...PROCESS_ENV_SELECTORS, RAW_COLLECTION_SELECTOR],
+    },
+  },
+  // Handlers, plugins and application services do not reach guild models
+  // either; `infra/llm` has unrelated SDK `models` members, so this
+  // narrower selector applies to those layers only.
+  {
+    files: ['src/handlers/**/*.ts', 'src/plugins/**/*.ts', 'src/application/**/*.ts'],
+    rules: {
       'no-restricted-syntax': [
         'error',
-        {
-          selector: "MemberExpression[object.object.name='process'][object.property.name='env']",
-          message:
-            'Direct process.env access is banned. Import the typed Env from "@core/config" / "src/core/config" instead.',
-        },
-        {
-          selector: "MemberExpression[object.name='process'][property.name='env']",
-          message:
-            'Direct process.env access is banned. Import the typed Env from "@core/config" / "src/core/config" instead.',
-        },
+        ...PROCESS_ENV_SELECTORS,
+        RAW_COLLECTION_SELECTOR,
+        GUILD_MODELS_SELECTOR,
       ],
     },
   },
@@ -117,24 +189,116 @@ export default tseslint.config(
   // may import it. Application / domain / interface / persistence / infra
   // layers receive dependencies via constructor parameters from their
   // composition root.
+  //
+  // Layer boundaries (docs/architecture.md, "Layers and boundaries") ride
+  // in the same rule, because ESLint replaces a rule's options per
+  // matching block rather than merging them:
+  //   - core depends on nothing above it;
+  //   - persistence depends only on core;
+  //   - infra (adapters) depends only on core and persistence;
+  //   - application (feature services shared by handlers and plugins)
+  //     depends on core, persistence and infra, never on an entry layer or
+  //     a composition root;
+  //   - handlers may not import plugins (the reverse is the plugin block
+  //     below), and take `BaseBot` as a type only.
   {
-    files: [
-      'src/application/**/*.ts',
-      'src/domain/**/*.ts',
-      'src/i18n/**/*.ts',
-      'src/persistence/**/*.ts',
-      'src/infra/**/*.ts',
-      'src/handlers/**/*.ts',
-    ],
+    files: ['src/core/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
+            layerImportPattern(
+              ['persistence', 'infra', 'application', 'handlers', 'plugins', 'bot'],
+              'core is the innermost layer and may not import persistence, infra, application, handlers, plugins or bot.',
+            ),
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/i18n/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [IOC_IMPORT_PATTERN] }],
+    },
+  },
+  {
+    files: ['src/persistence/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            IOC_IMPORT_PATTERN,
+            layerImportPattern(
+              ['infra', 'application', 'handlers', 'plugins', 'bot'],
+              'persistence depends only on core: connection contracts live in src/persistence/connection.ts, and infra builds them.',
+            ),
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/infra/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            IOC_IMPORT_PATTERN,
+            layerImportPattern(
+              ['application', 'handlers', 'plugins', 'bot'],
+              'infra holds adapters and depends only on core and persistence; feature services belong in src/application/.',
+            ),
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/application/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            IOC_IMPORT_PATTERN,
+            layerImportPattern(
+              ['handlers', 'plugins', 'bot'],
+              'application services may not import handlers, plugins or a composition root; declare a narrow port (see src/application/guild-lookup.ts) and let the caller pass its implementation.',
+            ),
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/handlers/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            IOC_IMPORT_PATTERN,
+            layerImportPattern(
+              ['plugins'],
+              'Handlers must not import from the plugin layer; move code both need to src/application/.',
+            ),
+          ],
+        },
+      ],
+      // Handlers receive `BaseBot` at dispatch; a value import would let a
+      // handler reach into the composition root.
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
             {
-              group: ['**/core/ioc', '**/core/ioc/*', '@core/ioc', '@core/ioc/*'],
-              message:
-                'IoC container imports are restricted to composition roots (src/bot/**) and tests. Receive dependencies via constructor parameters instead.',
+              regex: '^(?:@bot|(?:\\.\\./)+bot(?:/.*)?)$',
+              allowTypeImports: true,
+              message: 'Handlers may import BaseBot and other src/bot contracts as types only.',
             },
           ],
         },
@@ -148,11 +312,11 @@ export default tseslint.config(
   // because they name concrete `infra` / `persistence` types, which
   // `core/` may not depend on.
   //
-  // A personality composition root (`src/bot/<name>/**`) is off-limits:
-  // it assembles plugins, so a plugin importing one would close the
-  // loop. Kept as a separate block (rather than merged with the layered
-  // service-locator guard above) so the error messages can point plugin
-  // authors at the correct alternative path.
+  // Everything else in `src/bot` is off-limits: a personality root
+  // assembles plugins, so a plugin importing one would close the loop, and
+  // `BaseBot` is the handlers' host object. Kept as a separate block
+  // (rather than merged with the layered service-locator guard above) so
+  // the error messages can point plugin authors at the correct path.
   {
     files: ['src/plugins/**/*.ts'],
     rules: {
@@ -161,24 +325,27 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['**/core/ioc', '**/core/ioc/*', '@core/ioc', '@core/ioc/*'],
+              group: IOC_IMPORTS,
               message:
                 'Plugins must import TOKENS from src/bot/tokens, not core/ioc; the container itself is composition-root-only.',
             },
             {
-              group: ['**/bot/*/*'],
-              message: PERSONALITY_IMPORT_MESSAGE,
+              // Allow-list: `BaseBot`, a personality root and every other
+              // composition-root module are off-limits. A gitignore negation
+              // cannot re-admit a file under an excluded directory, so the two
+              // contract modules are carved out by regex.
+              regex: '^(?:@bot|(?:\\.\\./)+bot(?:/(?!(?:tokens|guild-registry)$).*)?)$',
+              message: BOT_IMPORT_MESSAGE,
             },
             {
               // `handlers` and `plugins` are sibling layers (see
-              // docs/architecture.md §1); neither may depend on the
-              // other. Shared Discord-boundary utilities — option
-              // reading, error-to-reply mapping, the bounded HTTP
-              // client — live in `infra/`, which both may import.
+              // docs/architecture.md, "Layers and boundaries"); neither may
+              // depend on the other. Shared adapters live in `infra/` and
+              // shared feature services in `application/`; both layers may
+              // import either.
               //
-              // The `../` depths are spelled out so a plugin's own
-              // sibling `./handlers.ts` (the interaction bodies a
-              // plugin legitimately owns) is not caught.
+              // The `../` depths are spelled out so only the handler layer
+              // matches, not a module named `handlers` inside a plugin.
               group: [
                 '../handlers',
                 '../handlers/**',
@@ -195,7 +362,7 @@ export default tseslint.config(
                 '@reaction',
               ],
               message:
-                'Plugins must not import from the handler layer; use the shared utilities in src/infra/ instead.',
+                'Plugins must not import from the handler layer; move shared code to src/application/ or src/infra/.',
             },
           ],
         },

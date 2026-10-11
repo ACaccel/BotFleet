@@ -4,8 +4,8 @@ import path from 'node:path';
 
 /**
  * The project ESLint config must block any `core/ioc` import and any
- * personality-composition-root import from inside `src/plugins/**`,
- * while admitting the two composition-root contract modules plugins
+ * personality-composition-root or `BaseBot` import from inside
+ * `src/plugins/**`, while admitting the two composition-root contract modules plugins
  * legitimately consume (`src/bot/tokens`, `src/bot/guild-registry`). We
  * exercise every side via ESLint's programmatic API against virtual
  * files that live under the real `src/plugins/` path (so the file-glob
@@ -58,12 +58,23 @@ describe('plugin import-boundary ESLint rules', () => {
     expect(await restrictedMessages(GUILD_REGISTRY_SOURCE)).toHaveLength(0);
   });
 
-  it('accepts the `BaseBot` type import the command-path bridges need', async () => {
-    // A plugin that also owns slash commands is entered from the handler
-    // layer, which arrives holding a `BaseBot` — see `docs/architecture.md`
-    // §2 Plugin contract. That type edge terminates in each plugin's
-    // `internal/handlers.ts` + `internal/deps-from-bot.ts`; the runtime
-    // container and the personality roots stay unreachable (above).
-    expect(await restrictedMessages(BASE_BOT_SOURCE)).toHaveLength(0);
+  it.each([
+    ['the msg-archive personality root', '../../bot/msg-archive'],
+    ['a composition-root module', '../../bot/guild-db-connector'],
+    ['BaseBot by path', '../../bot'],
+    ['BaseBot by alias', '@bot'],
+  ])('flags %s: only tokens and guild-registry are allowed', async (_case, specifier) => {
+    const messages = await restrictedMessages(
+      `import type * as bot from '${specifier}';\nexport type B = typeof bot;\n`,
+    );
+    expect(messages).toEqual([expect.stringMatching(/may import only src\/bot\/tokens/)]);
+  });
+
+  it('flags a `BaseBot` import: plugins take dependencies from their context', async () => {
+    // The interaction bodies that once bridged `BaseBot` into plugin code
+    // now live in the handler layer, next to their `deps-from-bot.ts`.
+    const messages = await restrictedMessages(BASE_BOT_SOURCE);
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages[0]).toMatch(/BaseBot/);
   });
 });

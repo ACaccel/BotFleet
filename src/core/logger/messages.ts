@@ -117,6 +117,18 @@ export const ops = {
     uriMissing: (): string => `ops:guild_db.uri_missing | No MongoDB URI.`,
     poolStart: (): string => `ops:guild_db.pool_start | Connecting to MongoDB...`,
   },
+  graphics: {
+    /**
+     * A remote picture (custom emoji, sticker, avatar) could not be drawn, so
+     * the image shows a placeholder. Rate-limited per host; `suppressed` counts
+     * the failures since the previous line.
+     */
+    imageDownloadFailed: (host: string, code: string, suppressed: number): string =>
+      `ops:graphics.image_download_failed | ${host} (${code}); ${suppressed} more since the last report.`,
+    /** The colour emoji font is missing or unusable; Unicode emoji are left out of images. */
+    emojiFontUnavailable: (): string =>
+      `ops:graphics.emoji_font_unavailable | colour emoji font unavailable; images omit Unicode emoji.`,
+  },
   router: {
     replySkipped: (code: number | string): string =>
       `ops:router.reply_skipped | discord reply skipped (expired interaction, code=${code}).`,

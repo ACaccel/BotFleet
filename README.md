@@ -46,12 +46,13 @@ placeholder entries. Create `src/bot/nijika/.env` with `TOKEN`, `CLIENT_ID`,
 and feature requirements. Keep both local files out of version control.
 
 ```bash
-npm run register -- -t nijika --dry-run
-npm run register -- -t nijika
+npm run register -t nijika --dry-run
+npm run register -t nijika
 npm run nijika
 ```
 
 Registration updates Discord's global commands and **prunes guild-scoped commands**.
+`npm run register` without `-t` registers every bot that has both `config.json` and `.env`.
 Use the [local setup guide](docs/contributing/local-setup.md) for test-guild
 registration, Git hooks and the development loop.
 
@@ -87,52 +88,33 @@ services. Deployment does not register commands.
 ### Message archival
 
 [msg-archive](docs/message-archive.md) exclusively captures and reconciles guild
-messages, observed edits/deletions and complete normal/burst reaction memberships.
-New archive records store attachment metadata without downloading files; existing
+messages, observed edits (up to 50 previous versions per message), deletions and
+complete normal/burst reaction memberships. Archive records store attachment
+metadata and unsigned CDN locations without downloading files; existing
 event-deletion attachment archives remain unchanged. Bot/webhook source allowlists
-default to empty. The worker supports bounded scans, progress/ETA and reviewed,
-resumable database repair through [Discord archive controls](docs/message-archive.md#discord-controls). Periodic
-scans default to disabled; enable them per guild with
-[`/archive schedule enable minutes:60`](docs/message-archive.md#periodic-schedule)
-after initial repair to set the interval and enable backup together.
+default to empty; an unlisted bot's interaction replies keep only an interaction
+record for command statistics. Administrators in msg-archive's `admin` list control it through
+[`/archive`](docs/message-archive.md#discord-controls) in each guild's debug channel:
 
-Start a [one-shot backup](docs/message-archive.md#one-shot-repair) with
-`/archive backup`: review the change summary, confirm the backup, then accept its
-verified result. A public status card refreshes every ten seconds and offers
-**View details** and cooperative stopping. Pages use at most five buttons and no
-select menus. Lists show two entries per page with item buttons, refresh,
-next-page controls and **Delete all jobs** or **Delete all plans**. List, item and confirmation navigation stays in the clicked
-message, so separate panels do not overwrite each other. Small plans show concrete changes; larger plans show grouped
-impacts with source examples. Eligible deletion and rollback appear directly on
-the item panel; running jobs must stop before deletion. Apply, resume and acceptance
-open their confirmation directly. Whole-list deletion opens an
-[all-pages review](docs/message-archive.md#bulk-deletion) before confirmation;
-running jobs stop cooperatively. Unused, never-applied or fully rolled-back plans
-without conflicts or recovery journals can be deleted; plans with remaining
-applied changes or active work remain protected.
-Active-only filters are omitted.
-`/archive schedule` manages automatic scans. Deleting control records preserves
-archived messages.
-Selected plans show the associated backup progress above their summary, with
-**Update progress** and **Pause backup** controls. Pausing preserves completed
-work; eligible backups resume through the same plan.
+- `/archive backup` starts a [full backup](docs/message-archive.md#full-backup) after
+  one confirmation. It uses a fixed cutoff and per-channel checkpoints, can be
+  stopped and resumed, continues after a restart, and completes with known gaps
+  listed. A public panel follows its progress every ten seconds.
+- `/archive status` shows the full backup, periodic backup, coverage, live capture
+  and capacity in one panel, with gap details and recent records.
+- `/archive schedule [enabled] [minutes]` shows or changes periodic backup, which
+  defaults to disabled. Periodic passes are incremental, pause while a full backup
+  runs, and post to the debug channel only after three consecutive failures and on
+  recovery.
 
 Archive work uses bounded batches and history prefetch with durable checkpoints.
-One-shot conditional writes use indexed identity lookup; both one-shot and periodic
-scans combine trusted empty reaction publication with snapshot writes. Bounded
-journal/write batches retain conflict checks, cancellation and rollback.
-Shared [progress reports](docs/message-archive.md#progress-and-access) distinguish
-content updates, legacy format upgrades, completed reaction lists and coverage gaps.
-They separate saved checkpoints from notification delivery and show recent throughput
-without counting restored progress as new work. Partial one-shot results
-identify stopped work and direct users to review the existing run before resuming.
-Routine cards include one current-activity line with the source, processing step
-and available page or reaction membership counts, refreshed every ten seconds.
-They show the next action without duplicate counters. Repeating saved schedule settings does not restart
-or postpone backup.
-Developer performance
-measurements and their limits are recorded in the
-[benchmark report](docs/contributing/archive-performance-results.md).
+One message whose reaction list cannot be confirmed is marked stale instead of
+failing its page. Developer performance measurements and their limits are recorded
+in the [benchmark report](docs/contributing/archive-performance-results.md).
+
+Any bot can enable the read-only `/traffic` reports on the archive: `overview`,
+`channel`, `me`, `user`, `apps`, `emoji` and `sticker`, each a dashboard image with a
+text summary (see [activity reports](docs/message-archive.md#activity-reports)).
 
 Related slash commands are grouped under `/feed`, `/reply`, `/activity`,
 `/giveaway`, `/ai`, `/thread`, and `/traffic`. Use `/help` for executable paths;

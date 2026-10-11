@@ -1,7 +1,14 @@
 /**
- * Startup-time configuration is missing or malformed. Always fail-fast:
- * the process should exit ≠ 0 so the supervisor restarts and ops sees
- * the failure immediately. Never thrown from a runtime hot path.
+ * The deployment is misconfigured: configuration is missing or malformed,
+ * or the host lacks something the code requires (such as the canvas font).
+ *
+ * Startup validation raises it fail-fast: the process exits ≠ 0 so the
+ * supervisor restarts and ops sees the failure immediately. Host checks run
+ * at setup and release preparation too (`ensureCanvasFont`). A fault only a
+ * feature in use can observe — the font when a chart first renders, the
+ * archive settings an `/archive` interaction re-reads — is raised by that
+ * feature; the interaction boundary logs it and answers with a trace ID.
+ * Never retried: retrying cannot fix the deployment.
  */
 import { DomainError, type DomainErrorInit } from './domain-error';
 
