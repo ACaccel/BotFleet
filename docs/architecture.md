@@ -252,12 +252,14 @@ Start approvals persist in `archive_control_confirmations`, bound to the operato
 channel and message for five minutes, and a replay returns the job it already
 created. The worker runs the job as its own full scan with per-channel checkpoints
 kept apart from periodic ones (`archive_channels.checkpoints`), so neither kind
-resets the other. A queued backup preempts a periodic pass at a safe boundary and
-periodic passes wait until it ends. Stop requests are polled at scan boundaries at
-most every 250 ms; shutdown leaves the job running and startup queues it again with
-its cutoff and checkpoints. A completed backup settles Gateway continuity like a
-full periodic run, against the origin recorded at its first start. The terminal
-state is written with bounded retries before the slot is released, then shown. Job
+resets the other, and dispatches sources largest first by estimated work
+(`flow/source-work.ts`; see [full backup](message-archive.md#full-backup)). A queued
+backup preempts a periodic pass at a safe boundary and periodic passes wait until it
+ends. Stop requests are polled at scan boundaries at most every 250 ms; shutdown
+leaves the job running and startup queues it again with its cutoff and checkpoints.
+A completed backup settles Gateway continuity like a full periodic run, against the
+origin recorded at its first start. The terminal state is written with bounded
+retries before the slot is released, then shown. Job
 and periodic-pass records are pruned to the ten newest finished ones, never an
 active backup, the newest complete one or the newest resumable one.
 

@@ -236,6 +236,61 @@ describe('msg-archive full backup', () => {
       }
     }));
 
+  it('scans the source with the most stored work first', async () =>
+    withFreshConnection(async (connection) => {
+      const rooms = ['10', '20', '30'].map((id) => ({
+        id,
+        name: `room-${id}`,
+        type: ChannelType.GuildText,
+        parentId: null,
+      }));
+      vi.mocked(collectChannels).mockResolvedValue({
+        channels: rooms,
+        liveChannelIds: new Set(rooms.map(({ id }) => id)),
+        gaps: [],
+        complete: true,
+        locations: rooms.map(({ id, name }) => ({ id, name, type: ChannelType.GuildText })),
+      } as unknown as Awaited<ReturnType<typeof collectChannels>>);
+      // Discovery order is 10, 20, 30; the archive holds most for 30, then 20.
+      const stored = (id: number, channelId: string, reactions = 0) => ({
+        _id: String(id),
+        schemaVersion: 3,
+        channelId,
+        createdTimestamp: Date.parse('2020-01-01T00:00:00Z') + id,
+        observedAt: 1,
+        ...(reactions === 0 ? {} : { reactions: [{ emoji: { name: 'x' }, count: reactions }] }),
+      });
+      await connection
+        .collection<StoredMessage>('messages')
+        .insertMany([
+          stored(1, '20'),
+          stored(2, '20'),
+          stored(3, '30', 1),
+          stored(4, '30', 1),
+          stored(5, '30', 1),
+        ]);
+      const { worker, get } = fixture(new StaticConnectionManager(connection), {
+        config: archiveRuntimeSchema.parse({ concurrency: 1 }),
+      });
+      get.mockImplementation(async () => []);
+      try {
+        await worker.initialize('1');
+        const job = await confirmBackup(connection);
+        await worker.pollJobs('1');
+        expect((await jobOf(connection, job.jobId))?.status).toBe('complete');
+        const history = (get.mock.calls as unknown as [string][])
+          .map(([route]) => route)
+          .filter((route) => /^\/channels\/\d+\/messages$/.test(route));
+        expect(history).toEqual([
+          '/channels/30/messages',
+          '/channels/20/messages',
+          '/channels/10/messages',
+        ]);
+      } finally {
+        await worker.stop();
+      }
+    }));
+
   it('stops cooperatively and resumes with the same cutoff and checkpoints', async () =>
     withFreshConnection(async (connection) => {
       inventory();

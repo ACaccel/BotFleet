@@ -23,6 +23,7 @@ import {
   type ScanRunnerDependencies,
 } from './scan-contract';
 import { inventoriedChannel, pageStatistics, revalidatedChannel } from './scan-records';
+import { FullBackupSourceOrder } from './source-order';
 import {
   ArchiveScanInterruptedError,
   mutateArchive,
@@ -53,6 +54,8 @@ export class ScanPass {
   private pauseReason: string | undefined;
   private readonly jobCancellation: ArchiveJobCancellation | undefined;
   private readonly progress: ProgressTracker;
+  /** Full backups dispatch the largest sources first; periodic passes keep discovery order. */
+  private readonly sourceOrder: FullBackupSourceOrder | undefined;
   private gapVersion = 0;
   private channels = new Map<string, ArchiveChannel>();
   private readonly priors = new Map<string, PeriodicHistory>();
@@ -114,6 +117,14 @@ export class ScanPass {
             runId,
           }));
     state.progress = this.progress;
+    this.sourceOrder =
+      mode.kind === 'full-backup'
+        ? new FullBackupSourceOrder(state.repos.messages, ctx.options.logger, {
+            guildId: this.guildId,
+            runId,
+            cutoff,
+          })
+        : undefined;
   }
 
   public async run(): Promise<ArchiveScanResult> {
@@ -173,7 +184,7 @@ export class ScanPass {
   }
 
   private hooks(guild: Guild, knownChannelIds: readonly string[]): HistoryHooks {
-    const { coverage, progress } = this;
+    const { coverage, progress, sourceOrder } = this;
     return {
       runId: this.request.runId,
       cutoff: this.request.cutoff,
@@ -214,6 +225,9 @@ export class ScanPass {
       revalidated: (channelId, access, channel, reason) =>
         this.revalidated(channelId, access, channel, reason),
       discovered: (ids) => this.discoveredSources(ids),
+      ...(sourceOrder === undefined
+        ? {}
+        : { order: (channels) => sourceOrder.order(channels, this.channels, this.signal) }),
       load: (channelId) => this.load(channelId),
       checkpoint: (channel, checkpoint) => this.saveCheckpoint(channel, checkpoint),
       // Live events are reduced by the guild's inbox loop; pages never wait for it.

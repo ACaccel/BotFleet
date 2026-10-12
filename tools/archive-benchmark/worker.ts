@@ -24,6 +24,7 @@ import { archiveRuntimeSchema } from '../../src/plugins/message-backup/config';
 import { ArchiveGatewayDecoder } from '../../src/plugins/message-backup/runtime/gateway-event';
 import { ArchiveWorker } from '../../src/plugins/message-backup/runtime/worker';
 import { ArchiveScheduler } from '../../src/plugins/message-backup/flow/scheduler';
+import { FullBackupSourceOrder } from '../../src/plugins/message-backup/runtime/source-order';
 import type { ArchiveReactionDoc } from '../../src/persistence/schemas/archive.schema';
 import {
   FakeDiscordRest,
@@ -42,6 +43,8 @@ import { DatabaseMetrics, summarize } from './metrics';
  * requests per SDK handler like `@discordjs/rest`. Scenarios:
  *
  * - `full`: a confirmed full backup of an empty archive.
+ * - `rescan`: a second full backup over the archive the first one stored, which
+ *   orders its sources by stored work.
  * - `periodic`: the next periodic pass, whose overlap window revisits every message.
  * - `live`: MESSAGE_CREATE and MESSAGE_REACTION_ADD packets decoded and drained.
  * - `segments`: the largest channel split into adjacent snowflake ranges that share
@@ -62,7 +65,16 @@ interface ProbeOptions {
   readonly scenarios: ReadonlySet<string>;
   /** Comparison only: admit one request per channel, whatever its route. */
   readonly channelMutex: boolean;
+  /** The large channel is discovered last instead of first. */
+  readonly largestLast: boolean;
+  /** Comparison only: full backups keep discovery order. */
+  readonly discoveryOrder: boolean;
 }
+
+/** Restores discovery order for comparison: full backups scan sources as discovered. */
+const useDiscoveryOrder = (): void => {
+  FullBackupSourceOrder.prototype.order = async (channels) => channels;
+};
 
 /**
  * Restores the earlier admission rule for comparison: every request of a channel
@@ -120,24 +132,22 @@ interface Dataset {
 }
 
 /**
- * One large channel and several small ones. `segments` > 1 splits the large channel
+ * One large channel and several small ones, in discovery (channel ID) order; the
+ * large one is first unless `largestLast`. `segments` > 1 splits the large channel
  * into that many channels of adjacent ID ranges; `shared` keeps them on the large
  * channel's SDK handlers.
  */
 const dataset = (options: ProbeOptions, endAt: number, segments = 1, shared = true): Dataset => {
-  const layout = [
-    { id: channelId(0), messages: options.largest },
-    ...Array.from({ length: options.smallChannels }, (_, index) => ({
-      id: channelId(index + 1),
-      messages: options.small,
-    })),
-  ];
+  const smalls = Array.from({ length: options.smallChannels }, () => options.small);
+  const layout = (
+    options.largestLast ? [...smalls, options.largest] : [options.largest, ...smalls]
+  ).map((messages, index) => ({ id: channelId(index), messages }));
   const messages = fakeMessages({ channels: layout, reactionRate: options.reactionRate, endAt });
   const channels = new Map<string, FakeChannel>();
   for (const [index, entry] of layout.entries())
     channels.set(entry.id, { id: entry.id, name: `voice-${index}`, bucketId: entry.id });
   if (segments <= 1) return { channels, messages };
-  const largest = layout[0]!.id;
+  const largest = layout[options.largestLast ? layout.length - 1 : 0]!.id;
   const ids = Array.from(
     { length: segments },
     (_, index) => `8${String(index + 1).padStart(17, '0')}`,
@@ -343,7 +353,12 @@ async function main(output: string, options: ProbeOptions): Promise<void> {
       await connection.asPromise();
       return connection;
     };
-    const lifecycle: Record<string, Measurement[]> = { full: [], periodic: [], live: [] };
+    const lifecycle: Record<string, Measurement[]> = {
+      full: [],
+      periodic: [],
+      live: [],
+      rescan: [],
+    };
     if (['full', 'periodic', 'live'].some((name) => options.scenarios.has(name))) {
       for (let run = 0; run < options.runs; run += 1) {
         const connection = await open();
@@ -407,6 +422,23 @@ async function main(output: string, options: ProbeOptions): Promise<void> {
         }
       }
     }
+    if (options.scenarios.has('rescan'))
+      for (let run = 0; run < options.runs; run += 1) {
+        const connection = await open();
+        const data = dataset(options, Date.now() - 60_000);
+        const harness = new Harness(connection, data, options);
+        try {
+          await harness.worker.initialize('1');
+          await harness.fullBackup();
+          lifecycle['rescan']!.push(await harness.measure(() => harness.fullBackup()));
+          const reacted = data.messages.filter((message) => message.reactions.length > 0);
+          await harness.verifyReactions(sampleOf(reacted, 60).map((message) => message.id));
+        } finally {
+          await harness.stop();
+          await connection.dropDatabase();
+          await connection.close();
+        }
+      }
     const summary = (samples: readonly Measurement[]) =>
       samples.length < 3
         ? undefined
@@ -490,8 +522,11 @@ if (require.main === module) {
     segments: flag('segments', '1,2,4').split(',').map(Number),
     scenarios: new Set(flag('scenario', 'full,periodic,live').split(',')),
     channelMutex: process.argv.includes('--channel-mutex'),
+    largestLast: process.argv.includes('--largest-last'),
+    discoveryOrder: process.argv.includes('--discovery-order'),
   };
   if (options.channelMutex) useChannelMutex();
+  if (options.discoveryOrder) useDiscoveryOrder();
   void main(resolve(output), options).catch((error: unknown) => {
     process.stderr.write(`Worker benchmark failed: ${String(error)}\n`);
     process.exitCode = 1;

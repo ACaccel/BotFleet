@@ -5,6 +5,49 @@ Sections marked historical measured the retired repair workflow (`run.ts`,
 that commit to reproduce them. The worker, re-observation, storage, pipeline, REST,
 CPU, notification and statistics probes remain current.
 
+## Full backup source order, 2026-10-12
+
+Production logs of a full backup at 32 readers showed its last ~17 channels running
+for hours at about 5 messages per second each while most readers sat idle: sources
+were dispatched in discovery order, so the largest could start late and finish
+alone, each held to one request at a time per route by `@discordjs/rest`. Full
+backups now dispatch sources largest first by estimated requests
+([full backup](../message-archive.md#full-backup)).
+
+The [worker probe](../../tools/archive-benchmark/README.md#worker-re-observation-and-storage-probes)
+`rescan` scenario measures a second full backup over the archive the first stored,
+with the large channel discovered last
+(`--scenario rescan --reaction-rate 1 --small-channels 8 --small 300 --largest 1000 --concurrency 4 --largest-last`;
+`--discovery-order` restores discovery order). 3,400 messages, 43 history and 7,776
+reaction-list requests at 10 ms each; same environment as below, with the production
+full backup running on the host (load average about 1); medians of three runs with
+ranges, every run verified against the source:
+
+| Order     |       Full backup s |
+| --------- | ------------------: |
+| Discovery | 42.75 (42.72–42.78) |
+| Largest   | 27.21 (27.08–27.31) |
+
+36% less time with the same requests: the large channel's roughly 2,300 serialized
+reaction reads start at once instead of after the small channels.
+
+The stored estimate's cost, on synthetic archives of 637-byte messages in 961
+channels with 12% reacted (MongoDB 8.2.6, 1 GiB WiredTiger cache, same host;
+first run after loading; three repeats were 2–16% faster):
+
+| Messages | Reaction lists (collection scan) s | Message counts (covered index scan) s |
+| -------: | ---------------------------------: | ------------------------------------: |
+|       1M |                               0.98 |                                  0.34 |
+|       5M |                               4.59 |                                  1.77 |
+
+A `$switch` over 32 resumed sources inside the same group cost three times as much
+(1M: 2.43 s and 1.11 s), so resumed sources are recounted in a second aggregation
+bounded by the compound index (5-second limit, at most 500 sources). A cold cache on a larger archive can exceed the
+20-second limit of the reaction-list estimate; the 10-second message count follows,
+then discovery alone. Periodic passes keep discovery order: their work is the
+window since the previous pass, which stored totals do not measure, and an
+aggregation per pass would add seconds to every pass.
+
 ## Reaction lane and reader limit, 2026-10-12
 
 Production logs of a full backup at concurrency 8 showed 5–8 byte reservations

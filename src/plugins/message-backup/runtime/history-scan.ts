@@ -77,6 +77,14 @@ export interface HistoryHooks {
   readonly failed?: (reason: string) => void;
   readonly phase?: (phase: ArchivePhase) => void;
   readonly discovered?: (channelIds: readonly string[]) => void;
+  /**
+   * Orders one sweep's pending sources before dispatch; without it they run in
+   * discovery order. A rejection, or a result that is not a permutation of its
+   * input, keeps discovery order.
+   */
+  readonly order?: (
+    channels: readonly GuildBasedChannel[],
+  ) => Promise<readonly GuildBasedChannel[]>;
   readonly progress: (
     channelId: string,
     delta: number,
@@ -105,6 +113,28 @@ export const incrementalLowerBound = (
   const overlapMs = overlapMinutes * 60_000;
   const watermarkAt = Number(BigInt(watermark) >> 22n) + 1420070400000;
   return snowflakeAt(Math.min(watermarkAt, rescanFrom ?? watermarkAt) - overlapMs);
+};
+
+/** One sweep's sources in the order `hooks.order` gives, else in discovery order. */
+const orderSources = async (
+  channels: readonly GuildBasedChannel[],
+  hooks: Pick<HistoryHooks, 'order' | 'signal'>,
+  logger: Logger,
+): Promise<readonly GuildBasedChannel[]> => {
+  if (hooks.order === undefined || hooks.signal.aborted) return channels;
+  try {
+    const ordered = await hooks.order(channels);
+    const ids = new Set(ordered.map((channel) => channel.id));
+    if (ordered.length === channels.length && channels.every((channel) => ids.has(channel.id)))
+      return ordered;
+    logger.warn(
+      { sources: channels.length, ordered: ordered.length },
+      'Archive source order dropped or repeated sources; keeping discovery order',
+    );
+  } catch (error) {
+    logger.warn({ err: error }, 'Archive source order failed; keeping discovery order');
+  }
+  return channels;
 };
 
 /** Backward pages use a fixed upper bound; live arrivals cannot extend the pass. */
@@ -389,16 +419,17 @@ export const scanArchiveHistory = async (
       }
     }
     hooks.discovered?.([...discoveredChannels.keys()]);
-    hooks.phase?.('history');
-    const pending = [...discoveredChannels.values()].filter(
+    const unfinished = [...discoveredChannels.values()].filter(
       (channel) => !completed.has(channel.id),
-    );
+    ) as GuildBasedChannel[];
+    const pending = await orderSources(unfinished, hooks, logger);
+    hooks.phase?.('history');
     await mapArchiveChannels(
       pending,
       async (channel) => {
         if (hooks.signal.aborted) return;
         try {
-          await scan(channel as GuildBasedChannel);
+          await scan(channel);
           completed.add(channel.id);
           result.channels += 1;
         } catch (error) {

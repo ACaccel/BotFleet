@@ -403,3 +403,61 @@ describe('speculative page barriers', () => {
     expect(f.get).not.toHaveBeenCalled();
   });
 });
+
+describe('history scan source order', () => {
+  it('dispatches each sweep in the order hook returns, without the sources it completed', async () => {
+    const f = fixture(['10', '20', '30']);
+    vi.mocked(collectChannels)
+      .mockResolvedValueOnce({
+        channels: [channel('10'), channel('20'), channel('30')],
+        gaps: [],
+        liveChannelIds: new Set(['10', '20', '30']),
+      } as any)
+      .mockResolvedValueOnce({
+        channels: [channel('10'), channel('20'), channel('30'), channel('40')],
+        gaps: [],
+        liveChannelIds: new Set(['10', '20', '30', '40']),
+      } as any);
+    const order = vi.fn(async (channels: readonly { id: string }[]) => [...channels].reverse());
+    f.hooks.order = order as unknown as HistoryHooks['order'];
+    await f.run();
+    expect(order.mock.calls.map(([channels]) => channels.map(({ id }) => id))).toEqual([
+      ['10', '20', '30'],
+      ['40'],
+    ]);
+    const routes = (f.get.mock.calls as unknown as [string][]).map(([route]) => route);
+    expect(routes).toEqual([
+      '/channels/30/messages',
+      '/channels/20/messages',
+      '/channels/10/messages',
+      '/channels/40/messages',
+    ]);
+  });
+
+  it('keeps discovery order when the order hook rejects or drops a source', async () => {
+    for (const order of [
+      async () => {
+        throw new Error('estimate failed');
+      },
+      async (channels: readonly { id: string }[]) => channels.slice(1).reverse(),
+      async (channels: readonly { id: string }[]) => [channels[1], channels[1], channels[0]],
+    ]) {
+      const f = fixture(['10', '20', '30']);
+      const warn = vi.fn();
+      f.hooks.order = order as unknown as HistoryHooks['order'];
+      await scanArchiveHistory(
+        { id: 'guild' } as Guild,
+        f.client,
+        { warn } as unknown as Logger,
+        f.hooks,
+      );
+      const routes = (f.get.mock.calls as unknown as [string][]).map(([route]) => route);
+      expect(routes.slice(0, 3)).toEqual([
+        '/channels/10/messages',
+        '/channels/20/messages',
+        '/channels/30/messages',
+      ]);
+      expect(warn).toHaveBeenCalled();
+    }
+  });
+});

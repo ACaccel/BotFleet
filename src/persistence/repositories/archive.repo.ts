@@ -78,6 +78,31 @@ export interface ArchiveRepo {
   findMessage(messageId: string): Promise<ArchiveMessage | null>;
   /** Distinct channel IDs `messages` holds. */
   messageChannelIds(): Promise<string[]>;
+  /** Stored history per channel, the work a full scan of it repeats (see `StoredSourceWorkQuery`). */
+  storedSourceWork(query: StoredSourceWorkQuery): Promise<StoredSourceWork[]>;
+}
+/** Which stored messages `storedSourceWork` counts, and how. */
+export interface StoredSourceWorkQuery {
+  /** Only messages created before this time count (a scan's cutoff). */
+  readonly before: number;
+  /**
+   * Counts only these channels, each below its own bound (capped by `before`): the
+   * messages resumed sources have yet to scan. Absent: every channel.
+   */
+  readonly sources?: ReadonlyMap<string, number>;
+  /**
+   * Also sum reaction lists, and skip deleted messages, which Discord no longer
+   * returns. Costlier: message counts alone include deleted messages.
+   */
+  readonly reactions: boolean;
+  readonly maxTimeMs: number;
+  readonly signal?: AbortSignal;
+}
+/** One channel's stored history: messages, and reaction lists when they were summed. */
+export interface StoredSourceWork {
+  readonly channelId: string;
+  readonly messages: number;
+  readonly reactionLists?: number;
 }
 export class MongoArchiveRepo implements ArchiveRepo {
   public constructor(
@@ -322,6 +347,56 @@ export class MongoArchiveRepo implements ArchiveRepo {
       (id): id is string => typeof id === 'string',
     );
   }
+  /**
+   * One aggregation over `messages`. Without reactions it reads only the compound
+   * index (a covered scan). With reactions, every channel is counted by a scan in
+   * natural order, which reads less than fetching every document through an index;
+   * named sources are read through the index within their bounds.
+   */
+  public async storedSourceWork(query: StoredSourceWorkQuery): Promise<StoredSourceWork[]> {
+    const index = { channelId: 1, createdTimestamp: 1 };
+    const live = query.reactions ? { deletedAt: { $exists: false } } : {};
+    const sources = query.sources === undefined ? undefined : [...query.sources];
+    if (sources?.length === 0) return [];
+    // Every channel's cutoff is tested in the group rather than a `$match`: a range
+    // on the index's second field alone makes the planner fetch every document.
+    const pipeline =
+      sources === undefined
+        ? [
+            ...(query.reactions ? [{ $match: live }] : []),
+            sourceGroup(query.reactions, { $lt: ['$createdTimestamp', query.before] }),
+          ]
+        : [
+            {
+              $match: {
+                $or: sources.map(([channelId, before]) => ({
+                  channelId,
+                  createdTimestamp: { $lt: Math.min(before, query.before) },
+                })),
+                ...live,
+              },
+            },
+            sourceGroup(query.reactions),
+          ];
+    const rows = await this.messages()
+      .aggregate<SourceTallyRow>([...pipeline, { $match: { messages: { $gt: 0 } } }], {
+        maxTimeMS: query.maxTimeMs,
+        hint: query.reactions && sources === undefined ? { $natural: 1 } : index,
+        ...(query.signal === undefined ? {} : { signal: query.signal }),
+      })
+      .toArray();
+    return rows.flatMap((row) =>
+      typeof row._id === 'string'
+        ? [
+            {
+              channelId: row._id,
+              messages: row.messages,
+              ...(row.reactionLists === undefined ? {} : { reactionLists: row.reactionLists }),
+            },
+          ]
+        : [],
+    );
+  }
   private messages(): mongo.Collection<ArchiveMessageDocument> {
     return archiveMessages(this.conn);
   }
@@ -388,6 +463,30 @@ export class MongoArchiveRepo implements ArchiveRepo {
       : 'updated';
   }
 }
+/** A `storedSourceWork` group row, shaped by `sourceGroup`. */
+interface SourceTallyRow {
+  readonly _id: unknown;
+  readonly messages: number;
+  readonly reactionLists?: number;
+}
+/** Messages per channel (those `counted` selects), and reaction lists when asked. */
+const sourceGroup = (reactions: boolean, counted?: mongo.Document): mongo.Document => {
+  const selected = (value: unknown): unknown =>
+    counted === undefined ? value : { $cond: [counted, value, 0] };
+  return {
+    $group: {
+      _id: '$channelId',
+      messages: { $sum: selected(1) },
+      ...(reactions
+        ? {
+            reactionLists: {
+              $sum: selected({ $cond: [{ $isArray: '$reactions' }, { $size: '$reactions' }, 0] }),
+            },
+          }
+        : {}),
+    },
+  };
+};
 /**
  * `message` with its reaction lists marked stale at `at`, or `undefined` when there
  * is nothing to mark: no refresh follows, the mark is already as late, or the

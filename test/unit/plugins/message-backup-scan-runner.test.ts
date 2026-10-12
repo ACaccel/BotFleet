@@ -7,10 +7,16 @@ import type {
   ArchiveHistoryCheckpoint,
   ArchiveInboxEntry,
 } from '../../../src/core/archive/types';
+import { snowflakeTimestamp } from '../../../src/core/archive/normalize';
+import { historyBefore } from '../../../src/plugins/message-backup/flow/history-boundary';
 import { createLogger } from '../../../src/core/logger';
 import type { ArchiveChannelRepo } from '../../../src/persistence/repositories/archive-channel.repo';
 import type { ArchiveInboxBacklog } from '../../../src/persistence/repositories/archive-inbox.repo';
 import type { ArchiveWriterRepos } from '../../../src/persistence/repositories/archive-repos';
+import type {
+  StoredSourceWork,
+  StoredSourceWorkQuery,
+} from '../../../src/persistence/repositories/archive.repo';
 import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
 import { ArchiveRestTelemetry } from '../../../src/plugins/message-backup/flow/rest-telemetry';
 import { ArchiveScheduler } from '../../../src/plugins/message-backup/flow/scheduler';
@@ -99,6 +105,8 @@ interface FakeStores {
   deadLetters: Pick<ArchiveInboxEntry, 'channelId'>[];
   stopRequested: boolean;
   messageChannelIds: string[];
+  storedWork: StoredSourceWork[];
+  storedQueries: StoredSourceWorkQuery[];
 }
 
 const CUTOFF = Date.parse('2026-01-01T00:00:00Z');
@@ -131,11 +139,19 @@ const setup = () => {
     deadLetters: [],
     stopRequested: false,
     messageChannelIds: [],
+    storedWork: [],
+    storedQueries: [],
   };
   // Only the reads a scan makes; the other repository methods are never reached.
   const repos = {
     channels: stores.channels,
-    messages: { messageChannelIds: async () => stores.messageChannelIds },
+    messages: {
+      messageChannelIds: async () => stores.messageChannelIds,
+      storedSourceWork: async (query: StoredSourceWorkQuery) => {
+        stores.storedQueries.push(query);
+        return stores.storedWork;
+      },
+    },
     inbox: {
       inboxBacklog: async () => stores.backlog,
       tracedDeadLetters: async () => stores.deadLetters,
@@ -280,6 +296,41 @@ describe('ScanRunner', () => {
     const stored = stores.channels.channels.get('10');
     expect(stored?.checkpoints?.periodic).toEqual(periodic);
     expect(stored?.checkpoints?.['full-backup']).toMatchObject({ runId: 'full:1' });
+  });
+
+  it('orders a full backup by stored work and leaves periodic discovery order alone', async () => {
+    const { stores, scan } = setup();
+    stores.storedWork = [{ channelId: '20', messages: 500 }];
+    const sources = ['10', '20'].map((id) => ({ ...channel, id }) as GuildBasedChannel);
+    const orders: (string[] | undefined)[] = [];
+    history(async (hooks) => {
+      orders.push((await hooks.order?.(sources))?.map(({ id }) => id));
+    });
+    await scan(PERIODIC);
+    await scan(FULL_BACKUP);
+    expect(orders).toEqual([undefined, ['20', '10']]);
+    expect(stores.storedQueries[0]).toMatchObject({ before: CUTOFF });
+  });
+
+  it('recounts a resumed full backup source below its own cursor', async () => {
+    const { stores, scan } = setup();
+    const cursor = historyBefore(new Date(CUTOFF - 86_400_000));
+    await stores.channels.upsertChannel(
+      readable('readable', {
+        checkpoints: {
+          'full-backup': checkpoint('full:1', { complete: false, before: cursor, pageSequence: 2 }),
+        },
+      }),
+    );
+    stores.storedWork = [{ channelId: '10', messages: 500 }];
+    history(async (hooks) => {
+      await hooks.order?.([channel]);
+    });
+    await scan(FULL_BACKUP);
+    expect(stores.storedQueries.map(({ sources }) => sources)).toEqual([
+      undefined,
+      new Map([['10', snowflakeTimestamp(cursor)]]),
+    ]);
   });
 
   it('restores the progress of a resumed run from its checkpoints', async () => {

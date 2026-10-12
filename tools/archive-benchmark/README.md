@@ -69,13 +69,16 @@ an empty archive; `periodic` runs the next periodic pass, whose overlap window
 (`overlap_minutes: 1440`) revisits every message; `live` decodes MESSAGE_CREATE
 and MESSAGE_REACTION_ADD packets and drains them; `segments` splits the largest
 channel into adjacent snowflake ranges that share its SDK handlers (`shared`) or not
-(`independent`), the measurement behind cancelling channel segmentation (C9). Each
-scenario verifies stored reaction lists against the source.
+(`independent`), the measurement behind cancelling channel segmentation (C9); `rescan`
+runs a full backup, then measures a second one over the stored archive, which orders
+its sources by stored work. Each scenario verifies stored reaction lists against the
+source.
 Sizes: `--largest` (2000) and `--small` (300) messages in one large and
 `--small-channels` (3) small channels, `--reaction-rate` (0.1), `--concurrency`
 (2), `--runs` (3), `--live-creates` (100), `--live-reactions` (50), `--segments`
-(`1,2,4`). `--channel-mutex` restores one admission resource per channel for
-comparison.
+(`1,2,4`). `--largest-last` discovers the large channel last instead of first.
+`--channel-mutex` restores one admission resource per channel and
+`--discovery-order` restores discovery-order full backups, for comparison.
 
 `reobserve.ts` times the same fenced write of `observedAt` on 20,000 stored messages
 as a replacement and as a `$set` in 100-document bulk writes, then the repository's

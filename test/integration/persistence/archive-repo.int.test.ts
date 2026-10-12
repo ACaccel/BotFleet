@@ -1158,3 +1158,128 @@ describe('Mongo archive durability', () => {
     });
   });
 });
+
+describe('Mongo archive stored source work', () => {
+  const at = Date.parse('2024-01-01T00:00:00Z');
+  /** A stored message of `channelId`, `minutes` after `at`, with `reactions` reaction lists. */
+  const storedMessage = (
+    id: number,
+    channelId: string,
+    minutes: number,
+    reactions = 0,
+    deleted = false,
+  ) => ({
+    _id: String(id),
+    schemaVersion: 3,
+    channelId,
+    createdTimestamp: at + minutes * 60_000,
+    observedAt: at,
+    ...(reactions === 0
+      ? {}
+      : {
+          reactions: Array.from({ length: reactions }, (_, index) => ({
+            emoji: { name: `e${index}` },
+            count: 1,
+          })),
+        }),
+    ...(deleted ? { deletedAt: at } : {}),
+  });
+  const seed = async (connection: Db) => {
+    const { conn, repo } = await openRepo(connection);
+    await conn.models.Message.createIndexes();
+    await messages(connection).insertMany([
+      storedMessage(1, '10', 0, 2),
+      storedMessage(2, '10', 1),
+      storedMessage(3, '10', 2, 1),
+      storedMessage(4, '10', 3, 5, true),
+      // After the cutoff: live capture, not part of the scan.
+      storedMessage(5, '10', 120, 9),
+      storedMessage(6, '20', 0),
+      storedMessage(7, '20', 1, 1),
+      storedMessage(8, '30', 90, 1),
+    ] as never);
+    return repo;
+  };
+  const cutoff = at + 60 * 60_000;
+  const byChannel = (rows: readonly { channelId: string }[]) =>
+    [...rows].sort((left, right) => left.channelId.localeCompare(right.channelId));
+
+  it('counts stored messages and reaction lists before the cutoff, skipping deletions', async () =>
+    withFreshConnection(async (connection) => {
+      const repo = await seed(connection);
+      // Channel 30 holds only messages after the cutoff.
+      expect(
+        byChannel(
+          await repo.storedSourceWork({ before: cutoff, reactions: true, maxTimeMs: 5000 }),
+        ),
+      ).toEqual([
+        { channelId: '10', messages: 3, reactionLists: 3 },
+        { channelId: '20', messages: 2, reactionLists: 1 },
+      ]);
+      expect(
+        byChannel(
+          await repo.storedSourceWork({ before: cutoff, reactions: false, maxTimeMs: 5000 }),
+        ),
+      ).toEqual([
+        { channelId: '10', messages: 4 },
+        { channelId: '20', messages: 2 },
+      ]);
+    }));
+
+  it('counts named sources only below their own bounds, capped by the cutoff', async () =>
+    withFreshConnection(async (connection) => {
+      const repo = await seed(connection);
+      const count = (sources: Map<string, number>, reactions: boolean) =>
+        repo.storedSourceWork({ before: cutoff, sources, reactions, maxTimeMs: 5000 });
+      const earlier = new Map([['10', at + 90_000]]);
+      expect(await count(earlier, true)).toEqual([
+        { channelId: '10', messages: 2, reactionLists: 2 },
+      ]);
+      expect(await count(earlier, false)).toEqual([{ channelId: '10', messages: 2 }]);
+      // A bound past the cutoff counts up to the cutoff; deletions stay skipped.
+      const later = new Map([
+        ['10', at + 200 * 60_000],
+        ['30', at + 200 * 60_000],
+      ]);
+      expect(await count(later, true)).toEqual([
+        { channelId: '10', messages: 3, reactionLists: 3 },
+      ]);
+      expect(await count(later, false)).toEqual([{ channelId: '10', messages: 4 }]);
+      expect(await count(new Map(), true)).toEqual([]);
+    }));
+
+  it('counts messages from the compound index alone', async () =>
+    withFreshConnection(async (connection) => {
+      const repo = await seed(connection);
+      const aggregate = vi.spyOn(mongo.Collection.prototype, 'aggregate');
+      let calls: typeof aggregate.mock.calls = [];
+      try {
+        for (const sources of [undefined, new Map([['10', at + 90_000]])])
+          await repo.storedSourceWork({
+            before: cutoff,
+            ...(sources === undefined ? {} : { sources }),
+            reactions: false,
+            maxTimeMs: 5000,
+          });
+        calls = [...aggregate.mock.calls];
+      } finally {
+        aggregate.mockRestore();
+      }
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      for (const [pipeline, options] of calls) {
+        const plan = JSON.stringify(
+          await messages(connection)
+            .aggregate(pipeline as mongo.Document[], { ...options, explain: 'executionStats' })
+            .toArray(),
+        );
+        const counts = (field: string) =>
+          [...plan.matchAll(new RegExp(`"${field}":(\\d+)`, 'g'))].map(([, value]) =>
+            Number(value),
+          );
+        // Covered: index keys are read, no document is.
+        expect(counts('totalKeysExamined').some((value) => value > 0)).toBe(true);
+        expect(counts('totalDocsExamined')).not.toHaveLength(0);
+        expect(counts('totalDocsExamined').every((value) => value === 0)).toBe(true);
+      }
+    }));
+});

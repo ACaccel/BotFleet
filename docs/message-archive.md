@@ -618,6 +618,31 @@ periodic passes. The worker runs it as its own full scan of every readable chann
 up to that cutoff, with complete reaction memberships, and records per-channel
 checkpoints separately from periodic ones, so neither kind resets the other.
 
+- **Order.** Sources are scanned largest first, so the largest channels start at
+  once instead of finishing alone at the end of the run. A source's work is
+  estimated in Discord requests, one per 100 messages plus one per reaction list:
+  - from the archive when the source has stored messages before the cutoff. Each
+    start or resume of the backup reads this estimate once, before its first source:
+    one aggregation over `messages`, and one more over the indexed range of each
+    source the run left unfinished, which counts only what it has yet to scan.
+    Stored counts are a lower bound until a full scan of the source has completed,
+    so a larger estimate below replaces them;
+  - otherwise from a thread's message count, or from the time between the
+    channel's creation and its last message (about one message an hour).
+    Discovery estimates get the archive's reaction lists per message.
+
+  Sources without an estimate go last, sources the run already finished after them,
+  and equal estimates keep the older channel first. The first aggregation sums
+  reaction lists and skips deleted messages within 20 seconds; if it fails or runs
+  out of time, a message count from the index alone (deleted messages included)
+  gets 10 seconds, then discovery alone decides. A lost database connection or a
+  stop skips straight to discovery, and a failed recount of unfinished sources
+  keeps their whole stored counts. The estimate never stops the backup; it delays
+  its first source by its own duration. The worker logs
+  `Archive stored source estimate` once per start and
+  `Archive full backup source order` for each discovery sweep. Periodic passes keep
+  discovery order.
+
 - **One at a time.** A guild has at most one queued or running full backup. A queued
   full backup preempts a periodic pass at its next safe boundary, and periodic passes
   wait until the backup ends; live capture continues throughout.
