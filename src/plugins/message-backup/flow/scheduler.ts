@@ -1,5 +1,9 @@
 import { ArchiveBackpressureError } from '../../../core/archive/errors';
-import { ARCHIVE_LIMITS, archiveConcurrencySchema } from '../../../core/archive/limits';
+import {
+  ARCHIVE_LIMITS,
+  archiveConcurrencySchema,
+  archiveQueueLimit,
+} from '../../../core/archive/limits';
 import type { ArchiveRestWait } from './rest-telemetry';
 
 type ArchivePriority = 'live' | 'history' | 'enrichment';
@@ -18,6 +22,7 @@ interface ScheduleOptions {
 }
 interface SchedulerOptions {
   concurrency?: number;
+  /** Defaults to `archiveQueueLimit` of the current concurrency. */
   maxQueued?: number;
 }
 interface Work {
@@ -65,7 +70,7 @@ const routeKey = (route: ArchiveRoute, channelId: string): string => `${route}\u
 /** Admission only: Discord's shared SDK REST manager owns route/global waits and transport retries. */
 export class ArchiveScheduler {
   private concurrency: number;
-  private readonly maxQueued: number;
+  private readonly queueLimit: number | undefined;
   private readonly queue: Work[] = [];
   private readonly pending = new Map<string, Promise<unknown>>();
   private readonly cancellationScopes = new WeakMap<AbortSignal, number>();
@@ -93,9 +98,12 @@ export class ArchiveScheduler {
 
   constructor(options: SchedulerOptions = {}) {
     this.concurrency = options.concurrency ?? ARCHIVE_LIMITS.concurrency.default;
-    this.maxQueued = options.maxQueued ?? 128;
+    this.queueLimit = options.maxQueued;
     this.validateConcurrency(this.concurrency);
-    if (!Number.isInteger(this.maxQueued) || this.maxQueued < 1)
+    if (
+      this.queueLimit !== undefined &&
+      (!Number.isInteger(this.queueLimit) || this.queueLimit < 1)
+    )
       throw new Error('invalid-archive-queue-limit');
   }
 
@@ -117,7 +125,8 @@ export class ArchiveScheduler {
     // Only consumers with the same cancellation authority share an in-flight page.
     const shared = this.pending.get(identity);
     if (shared !== undefined) return shared as Promise<T>;
-    if (this.queue.length >= this.maxQueued + (priority === 'live' ? 1 : 0))
+    const maxQueued = this.queueLimit ?? archiveQueueLimit(this.concurrency);
+    if (this.queue.length >= maxQueued + (priority === 'live' ? 1 : 0))
       return Promise.reject(new ArchiveBackpressureError('archive-read-queue-full'));
     let work: Work;
     const result = new Promise<T>((resolve, reject) => {

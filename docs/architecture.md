@@ -336,9 +336,10 @@ reaction generations. History and reaction queues share a 64 MiB logical staging
 budget with a reserved reaction lane; this is not a hard limit on V8/SDK transient
 allocations or process RSS. Oversized pages produce partial coverage instead of
 silently advancing a checkpoint.
-Requests initially reserve their maximum allowed payload. Validated history pages
-shrink that reservation to twice their encoded size; reaction pages discard user
-profiles and retain only bounded ID arrays before storage. This releases unused
+History requests initially reserve their maximum allowed payload and reaction
+requests a page estimate, which a larger response grows before staging. Validated
+history pages shrink that reservation to twice their encoded size; reaction pages
+discard user profiles and retain only bounded ID arrays before storage. This releases unused
 logical capacity without changing checkpoint or complete-generation requirements.
 Channel discovery uses one fresh SDK inventory, with a raw fallback only for SDK
 failure or unsupported channel types, and propagates scan cancellation and concurrency.

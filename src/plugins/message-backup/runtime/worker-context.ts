@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Client } from 'discord.js';
+import { ARCHIVE_LIMITS, archiveQueueLimit } from '../../../core/archive/limits';
 import type { ArchiveContinuityBreak } from '../../../core/archive/types';
 import type { ArchiveProgressSnapshot } from '../../../core/archive/progress';
 import type { ArchivePolicy } from '../../../core/archive/policy';
@@ -169,7 +170,7 @@ export class ArchiveWorkerContext {
   /** Capture stops here; continuity is never confirmed past it. */
   public stoppedAt: number | undefined;
   public performanceReportedAt = 0;
-  public readonly pipelineBudget = new ArchivePipelineBudget();
+  public readonly pipelineBudget: ArchivePipelineBudget;
   public readonly durations: ArchiveWorkerDurations = {
     ownerRenewalMs: 0,
     checkpointMs: 0,
@@ -194,6 +195,10 @@ export class ArchiveWorkerContext {
     public readonly initialize: (guildId: string) => Promise<ArchiveGuildState>,
   ) {
     this.policyHash = createHash('sha256').update(JSON.stringify(options.policy)).digest('hex');
+    this.pipelineBudget = new ArchivePipelineBudget(
+      ARCHIVE_LIMITS.pipelineBytes,
+      archiveQueueLimit(options.config.concurrency),
+    );
   }
 }
 

@@ -197,7 +197,7 @@ for accepted structures and limits.
 
 | Field                            | Default         | Purpose                                                         |
 | -------------------------------- | --------------- | --------------------------------------------------------------- |
-| `concurrency`                    | `2`             | Background readers, range 1–8                                   |
+| `concurrency`                    | `2`             | Background readers, range 1–32                                  |
 | `progress_interval_seconds`      | `10`            | Fixed ten-second full-backup panel cadence; only `10` accepted  |
 | `overlap_minutes`                | `60`            | Incremental overlap before watermarks and Gateway downtime      |
 | `job_poll_seconds`               | `5`             | Full-backup job polling and the idle inbox loop's recheck       |
@@ -217,7 +217,13 @@ are re-measured every ten minutes (see [capacity](message-archive.md#status-pane
 The worker saves its latest host measurement for `/archive status`.
 
 Concurrency and notification cadence share validators across startup, scheduling,
-notifications and deploy preparation. Internal batches normally stop at 500 documents
+notifications and deploy preparation. Concurrency does not bound memory or Discord
+load: the staging budget below caps in-flight reads and staged pages at any setting,
+and the shared SDK REST manager paces every request under Discord's limits. Queued
+reads and byte reservations are bounded at 16 per reader (at least 128), the same
+headroom the previous maximum of 8 had. Before raising it, check the
+[performance log](message-archive.md#backup-throughput) for which
+limit is waiting. Internal batches normally stop at 500 documents
 or 4 MiB. A single larger message image uses its own batch up to the existing
 15 MiB safety limit; it is never truncated. History/reaction staging shares a 64 MiB owner budget. These bounds are
 implementation limits, not additional configuration fields. CPU worker offloading

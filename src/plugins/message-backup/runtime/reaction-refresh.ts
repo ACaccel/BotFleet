@@ -216,6 +216,9 @@ export class ReactionRefresher {
         channelId: snapshot.channelId,
         messageId: snapshot._id,
         streams,
+        // `@discordjs/rest` runs every reaction read of a channel on one handler, one
+        // after another, so a second stream only overlaps staging with the next read;
+        // more streams would add no parallel requests.
         concurrency: Math.min(2, this.ctx.options.config.concurrency),
         pipelineBudget: this.ctx.pipelineBudget,
         signal,

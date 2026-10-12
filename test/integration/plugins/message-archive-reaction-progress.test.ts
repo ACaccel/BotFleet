@@ -879,4 +879,45 @@ describe('reaction identity and job progress integration', () => {
         await f.worker.stop();
       }
     }));
+
+  it.each([
+    { padding: 1024 * 1024, stale: false },
+    { padding: ARCHIVE_LIMITS.batchBytes, stale: true },
+  ])(
+    'publishes a reaction page above its reservation and leaves only an oversized one stale ($padding bytes)',
+    async ({ padding, stale }) =>
+      withFreshConnection(async (connection) => {
+        const f = fixture(new StaticConnectionManager(connection));
+        const get = f.get.getMockImplementation()!;
+        f.get.mockImplementation(async (route, options) => {
+          const page = await get(route, options);
+          return route.includes('/reactions/') && Array.isArray(page)
+            ? page.map((user, index) =>
+                index === 0 ? { ...user, banner: 'x'.repeat(padding) } : user,
+              )
+            : page;
+        });
+        try {
+          await f.worker.periodic('1');
+          const run = await connection.collection('archive_periodic_runs').findOne({});
+          const current = await connection
+            .collection<StoredMessage>('messages')
+            .findOne({ _id: '101' });
+          // A6: a failure confined to one message never fails its page.
+          expect(run?.['status']).toBe('complete');
+          if (stale) {
+            expect(current?.reactionsStaleAt).toEqual(expect.any(Number));
+            expect(current?.reactionGenerations ?? {}).toEqual({});
+          } else {
+            expect(current).not.toHaveProperty('reactionsStaleAt');
+            expect(Object.keys(current?.reactionGenerations ?? {}).sort()).toEqual([
+              '50:0',
+              '50:1',
+            ]);
+          }
+        } finally {
+          await f.worker.stop();
+        }
+      }),
+  );
 });

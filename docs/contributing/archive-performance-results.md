@@ -5,6 +5,46 @@ Sections marked historical measured the retired repair workflow (`run.ts`,
 that commit to reproduce them. The worker, re-observation, storage, pipeline, REST,
 CPU, notification and statistics probes remain current.
 
+## Reaction lane and reader limit, 2026-10-12
+
+Production logs of a full backup at concurrency 8 showed 5–8 byte reservations
+always waiting and `queueWaitMs` climbing while only about 12 MiB of the 64 MiB
+budget was reserved: about 8 MiB of reactions plus a few shrunk history pages. Each
+reaction read reserved the 4 MiB page maximum, so the 8 MiB reaction lane admitted
+two reads for the whole worker, and channel readers waited on membership lists
+instead of Discord.
+
+A reaction read now reserves 256 KiB. A list page holds at most 100 users; a user
+with every field Discord returns at its longest encodes to about 1.3 KB, so a page
+is about 130 KB, and the estimate keeps twice that. A larger response grows its
+reservation before staging (pages above 4 MiB are still rejected and leave the
+message stale), so the lane's 8 MiB remains the logical ceiling and now admits 32
+reads. A grower gives back its bytes while it waits and is admitted ahead of new
+requests, so growers cannot deadlock or starve.
+
+Per-message reaction streams stay at two. `@discordjs/rest` keys a handler by the
+bucket hash of `/channels/:id/messages/:id/reactions/:reaction` and the channel,
+so every reaction read of a channel, across messages and emoji, runs one after
+another; a second stream only overlaps staging with the next read. Parallel reaction
+reads come from different channels, that is from more readers, which is why the
+reader maximum was raised from 8 to 32 with queue bounds of 16 per reader.
+
+Measured with the [worker probe](../../tools/archive-benchmark/README.md#worker-re-observation-and-storage-probes)
+(`--scenario full --reaction-rate 1 --small-channels 8 --small 300 --largest 1000 --runs 3`):
+nine voice channels, 3,400 messages, every message reacted, 43 history and 7,776
+reaction-list requests at 10 ms each, under the same environment as below. The
+production worker ran on the same host (load average under 1). Medians of three
+runs with ranges; every run verified the stored lists against the source.
+
+| Concurrency | 4 MiB reservation, s | 256 KiB reservation, s |
+| ----------: | -------------------: | ---------------------: |
+|           2 |  53.91 (53.76–54.68) |    48.10 (47.70–48.53) |
+|           8 |  52.26 (52.21–52.53) |    27.05 (26.89–27.09) |
+
+Before the change, four times the readers gained 3%; after it, 44%. The mock does
+not reproduce Discord's route or global limits, which bound real gains; watch
+`rateLimits` in the performance log when raising concurrency.
+
 ## Throughput hardening, 2026-10-11
 
 Measured with the [worker, re-observation and storage probes](../../tools/archive-benchmark/README.md#worker-re-observation-and-storage-probes)
@@ -502,7 +542,9 @@ comparison, not a different data consumer.
 
 The 200 requests/s mock ceiling has a 470 ms request-service lower bound for 94
 requests. Increasing concurrency beyond saturation gives no useful quota gain.
-Retain default 2 and maximum 8; evidence does not justify 12/16. Staged history
+Retain default 2 and maximum 8; evidence does not justify 12/16. (The operator
+maximum was later raised to 32 with queue bounds scaled per reader; the byte budget
+still caps in-flight reads. See [archive runtime](../configuration.md#archive-runtime).) Staged history
 reservations peaked at 56 MiB inside the shared 64 MiB budget, with 8 MiB reserved
 for reactions. These logical limits exclude temporary SDK/V8 allocation and are
 not process-RSS limits. Oversized history pages remain partial without premature

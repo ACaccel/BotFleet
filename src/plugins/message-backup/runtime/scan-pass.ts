@@ -7,6 +7,7 @@ import type {
 } from '../../../core/archive/types';
 import { continuityFullChannelIds } from '../../../core/archive/continuity';
 import type { DiscoveryGap, DiscoveryLocation } from '../flow/discovery';
+import { archivePerformanceLog } from '../flow/performance-log';
 import { estimatePeriodicWork, updatePeriodicHistory } from '../flow/periodic-estimate';
 import { ProgressTracker } from '../flow/progress';
 import { ArchiveObservationScope } from './dirty-tracker';
@@ -420,7 +421,11 @@ export class ScanPass {
     if (Date.now() - ctx.performanceReportedAt >= 30_000) {
       ctx.performanceReportedAt = Date.now();
       ctx.options.logger.info(
-        { pipeline: ctx.pipelineBudget.snapshot() },
+        archivePerformanceLog(
+          ctx.pipelineBudget.snapshot(),
+          ctx.telemetry.snapshot(),
+          ctx.scheduler.snapshot(),
+        ),
         'Archive pipeline performance',
       );
     }

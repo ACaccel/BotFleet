@@ -4,7 +4,7 @@ import { parseArchiveSettings } from '../../../src/plugins/message-backup/config
 
 describe('deployment bot configuration preflight', () => {
   it('uses startup bounds for archive concurrency and notification intervals', () => {
-    for (const concurrency of [1, 2, 8]) {
+    for (const concurrency of [1, 2, 8, 32]) {
       for (const interval of [10]) {
         const runtime = { concurrency, progress_interval_seconds: interval };
         expect(() =>
@@ -19,7 +19,7 @@ describe('deployment bot configuration preflight', () => {
       }
     }
     for (const runtime of [
-      { concurrency: 9 },
+      { concurrency: 33 },
       { concurrency: 0 },
       { progress_interval_seconds: 4 },
       { progress_interval_seconds: 5 },

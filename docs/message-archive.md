@@ -468,10 +468,37 @@ replayed on resume and may count as unchanged.
 Increasing concurrency does not repair an unindexed database query or bypass
 Discord quotas. Membership requests, permissions and live inbox work still affect
 duration. Use source checkpoints and inbox age alongside totals; synthetic query
-speedups are not a prediction of end-to-end backup duration. Numeric pipeline
-diagnostics are logged at most once per 30 seconds on saved checkpoints: fetch,
-normalization, full-page writes, reactions and checkpoints. Timings overlap, so do
-not sum stages as wall time.
+speedups are not a prediction of end-to-end backup duration.
+
+`Archive pipeline performance` is logged at most once per 30 seconds on saved
+checkpoints, and the same fields close `Archive worker performance` at shutdown.
+Values are cumulative since the worker started, and no field nests deeper than the
+log scrubber's limit (`stages.fetch.count`):
+
+- `pipeline`: the 64 MiB staging budget, reserved and waiting per lane
+  (`historyReservedBytes`, `reactionReservedBytes`, `historyWaiting`,
+  `reactionWaiting`), its peak and total `queueWaitMs`. A history read reserves its
+  8 MiB maximum until it returns, so at most seven are in flight. A reaction read
+  reserves a 256 KiB page estimate and grows it if the response is larger, so the
+  8 MiB reaction lane admits 32 reads at once.
+- `stages`: `count`, `durationMs` and `bytes` for `fetch`, `normalize`
+  (normalization), `write` (full-page writes), `reactions` (membership refresh),
+  `checkpoint` and `process` (consuming a page). Timings overlap, so do not sum
+  stages as wall time.
+- `scheduler`: requests running and queued for admission, and channel routes held by an
+  announced wait.
+- `rateLimits`: 429 responses by Discord scope (`global429`, `route429`,
+  `shared429`, `unknown429`), SDK rate-limit waits (`waitEvents`, `waitMs`, split into
+  `globalWaitMs` and `routeWaitMs`) and `invalidLast10Minutes`, the 401, 403 and
+  non-shared 429 responses that count toward Discord's invalid-request limit.
+
+`@discordjs/rest` runs every reaction read of a channel one after another, so a
+message refreshes at most two lists at once (one overlaps staging with the other's
+read), and parallel reaction reads come from other channels being read. Raise
+`archive_runtime.concurrency` only while `scheduler.queued` grows and the pipeline
+lanes have room. Persistent `reactionWaiting` means the reaction lane, not the reader
+count, limits throughput; growing `globalWaitMs` or `global429` means Discord's limit
+does.
 
 ## Progress
 

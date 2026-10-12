@@ -2,6 +2,7 @@ import { asGuildId } from '../../../core/ids';
 import { beginArchiveContinuity } from '../../../core/archive/continuity';
 import { ArchivePerformanceSampler } from '../../../core/archive/performance';
 import { ARCHIVE_PROCESS_ID } from '../../../infra/archive/owner';
+import { archivePerformanceLog } from '../flow/performance-log';
 import { ArchiveRestTelemetry } from '../flow/rest-telemetry';
 import { ArchiveScheduler } from '../flow/scheduler';
 import { GatewayCapture } from './capture';
@@ -304,7 +305,11 @@ export class ArchiveWorker {
     this.options.logger.info(
       {
         process: this.performanceSampler.stop(),
-        pipeline: this.ctx.pipelineBudget.snapshot(),
+        ...archivePerformanceLog(
+          this.ctx.pipelineBudget.snapshot(),
+          this.ctx.telemetry.snapshot(),
+          this.ctx.scheduler.snapshot(),
+        ),
         durations: this.ctx.durations,
         writers: [...this.ctx.states.values()].map((state) => ({
           guildId: String(state.conn.guildId),

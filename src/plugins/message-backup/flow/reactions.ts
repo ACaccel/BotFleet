@@ -93,10 +93,11 @@ export async function fetchReactionMemberships(
           if (cancelled()) throw new Error('reaction-fetch-cancelled');
           if (!options.isCurrent()) throw new Error('reaction-changed-during-fetch');
           const release = await pipeline.reserve(
-            ARCHIVE_LIMITS.batchBytes,
+            ARCHIVE_LIMITS.reactionPageBytes,
             options.signal,
             'reactions',
           );
+          let reserved = ARCHIVE_LIMITS.reactionPageBytes;
           const started = Date.now();
           let bytes = 0;
           try {
@@ -129,6 +130,10 @@ export async function fetchReactionMemberships(
             const pageLength = raw.length;
             bytes = Buffer.byteLength(JSON.stringify(raw), 'utf8');
             if (bytes > ARCHIVE_LIMITS.batchBytes) throw new Error('reaction-page-too-large');
+            if (bytes > reserved) {
+              await release.grow(bytes, options.signal);
+              reserved = bytes;
+            }
             // Retain only IDs, never the full user payload, across a storage await.
             const ids = [
               ...new Set(
@@ -146,10 +151,7 @@ export async function fetchReactionMemberships(
             if (pageLength > 0 && fresh.length === 0) throw new Error('reaction-cursor-stalled');
             // User profiles are no longer retained, so staging holds only bounded ID arrays.
             release.shrink(
-              Math.min(
-                ARCHIVE_LIMITS.batchBytes,
-                Math.max(1, Buffer.byteLength(JSON.stringify(fresh), 'utf8') * 2),
-              ),
+              Math.min(reserved, Math.max(1, Buffer.byteLength(JSON.stringify(fresh), 'utf8') * 2)),
             );
             if (fresh.length > 0) {
               if (cancelled() || !options.isCurrent())

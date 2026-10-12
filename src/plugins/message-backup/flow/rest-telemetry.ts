@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { APIRequest, RateLimitData, ResponseLike, REST } from 'discord.js';
 import { archiveRouteOf, type ArchiveRoute } from './scheduler';
 
-interface RestTelemetrySnapshot {
+export interface RestTelemetrySnapshot {
   observedAt: number;
   responses: number;
   statuses: Record<string, number>;
