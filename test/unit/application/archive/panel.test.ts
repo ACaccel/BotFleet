@@ -135,6 +135,7 @@ describe('archive panels', () => {
     expect(body).toContain('涵蓋範圍');
     expect(body).not.toContain('截止時間');
     expect(body).toContain('已執行 3 小時 0 分');
+    expect(body).not.toContain('開始於');
   });
 
   it('shows the current page, stop control and failure reason', async () => {

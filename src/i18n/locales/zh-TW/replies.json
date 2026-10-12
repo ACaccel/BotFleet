@@ -631,7 +631,7 @@
     "backup_messages": "**訊息** {{scanned}} 已掃描 · {{written}} 已寫入 · {{unchanged}} 未變更",
     "backup_reactions": "**Reaction** {{completed}}的名單已完成 · {{stale}} 則未完成",
     "backup_speed": "**速度** 約 {{rate}} 則／秒",
-    "backup_timing": "**涵蓋範圍** {{cutoff}} 以前的訊息 · 已執行 {{elapsed}}（開始於 {{started}}）· 更新於 {{updated}}",
+    "backup_timing": "**涵蓋範圍** {{cutoff}} 以前的訊息 · 已執行 {{elapsed}} · 更新於 {{updated}}",
     "backup_failure": "**原因** {{reason}}",
     "reason_permission": "權限不足",
     "reason_discovery": "頻道探索未完成",

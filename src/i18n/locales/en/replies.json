@@ -631,7 +631,7 @@
     "backup_messages": "**Messages** {{scanned}} scanned · {{written}} written · {{unchanged}} unchanged",
     "backup_reactions": "**Reactions** lists complete for {{completed}} · {{stale}} incomplete",
     "backup_speed": "**Speed** about {{rate}} messages/s",
-    "backup_timing": "**Covers** messages before {{cutoff}} · running {{elapsed}} (started {{started}}) · updated {{updated}}",
+    "backup_timing": "**Covers** messages before {{cutoff}} · running {{elapsed}} · updated {{updated}}",
     "backup_failure": "**Reason** {{reason}}",
     "reason_permission": "missing permissions",
     "reason_discovery": "channel discovery incomplete",

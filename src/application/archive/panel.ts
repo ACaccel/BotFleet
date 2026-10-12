@@ -173,7 +173,6 @@ const archiveBackupLines = (
         t,
         Math.max(0, (job.finishedAt ?? now) - (job.startedAt ?? job.createdAt)),
       ),
-      started: archiveTime(job.startedAt ?? job.createdAt),
       updated: archiveTime(job.finishedAt ?? now, 'T'),
     }),
     ...(state === 'failed'
