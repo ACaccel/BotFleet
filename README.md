@@ -113,8 +113,8 @@ failing its page. Developer performance measurements and their limits are record
 in the [benchmark report](docs/contributing/archive-performance-results.md).
 
 Any bot can enable the read-only `/traffic` reports on the archive: `overview`,
-`channel`, `me`, `user`, `apps`, `emoji` and `sticker`, each a dashboard image with a
-text summary (see [activity reports](docs/message-archive.md#activity-reports)).
+`channel`, `me`, `user`, `apps`, `emoji` and `sticker`, each one embed with a
+landscape dashboard image (see [activity reports](docs/message-archive.md#activity-reports)).
 
 Related slash commands are grouped under `/feed`, `/reply`, `/activity`,
 `/giveaway`, `/ai`, `/thread`, and `/traffic`. Use `/help` for executable paths;

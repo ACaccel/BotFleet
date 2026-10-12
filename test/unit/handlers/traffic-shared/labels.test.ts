@@ -1,7 +1,7 @@
 /**
  * Unit coverage for the `/traffic` time frame and labels: window lengths and
  * granularity per range, local date spans in the host zone, axis labels, the
- * zone caption and the signed change.
+ * zone caption and the relative change.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -10,7 +10,6 @@ import {
   bucketLabel,
   localDateTime,
   percentChange,
-  signedPercent,
   trendLabels,
   weekdayOf,
   windowSpan,
@@ -104,10 +103,9 @@ describe('labels', () => {
     expect(zoneLabel('UTC', NOW)).toBe('UTC');
   });
 
-  it('signs the change and has none without a previous value', () => {
-    expect(signedPercent(percentChange(12_345, 11_410) ?? 0)).toBe('+8.2%');
-    expect(signedPercent(percentChange(4_210, 4_340) ?? 0)).toBe('-3.0%');
-    expect(signedPercent(0)).toBe('0.0%');
+  it('measures the relative change and has none without a previous value', () => {
+    expect(percentChange(12_345, 11_410)).toBeCloseTo(8.19, 2);
+    expect(percentChange(4_210, 4_340)).toBeCloseTo(-3.0, 1);
     expect(percentChange(5, 0)).toBeUndefined();
   });
 });

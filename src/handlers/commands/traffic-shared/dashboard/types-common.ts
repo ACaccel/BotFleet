@@ -62,7 +62,10 @@ export interface TrendSection {
   /** Gray previous-period line, aligned bucket-by-bucket with `current`. */
   readonly previous?: { readonly label: string; readonly values: readonly number[] };
   readonly xLabels: readonly string[];
-  /** Draw every n-th x label (the last one is always drawn). Auto when omitted. */
+  /**
+   * Draw every n-th x label (the last one is always drawn). Auto when omitted;
+   * labels are thinned further when they would not fit the chart width.
+   */
   readonly xLabelEvery?: number;
 }
 

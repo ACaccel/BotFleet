@@ -86,7 +86,7 @@ export const buildAllowedChannelSet = (input: VisibilityFilterInput): ReadonlySe
   });
 };
 
-/** The invoker's visible channels and whether the archive is still being rebuilt. */
+/** The archive's channel records and the invoker's visible channels among them. */
 export const loadVisibleScope = async (
   repos: Repos,
   input: Omit<Parameters<typeof buildAllowedChannelSet>[0], 'records'>,
@@ -95,20 +95,14 @@ export const loadVisibleScope = async (
       readonly ok: true;
       readonly records: readonly ArchiveChannelInfo[];
       readonly visible: ReadonlySet<string>;
-      readonly rebuilding: boolean;
     }
   | { readonly ok: false; readonly error: DatabaseError }
 > => {
-  const [records, completed] = await Promise.all([
-    repos.archiveStats.listChannels(),
-    repos.archiveStats.fullBackupCompleted(),
-  ]);
+  const records = await repos.archiveStats.listChannels();
   if (!records.ok) return records;
-  if (!completed.ok) return completed;
   return {
     ok: true,
     records: records.value,
     visible: buildAllowedChannelSet({ ...input, records: records.value }),
-    rebuilding: !completed.value,
   };
 };

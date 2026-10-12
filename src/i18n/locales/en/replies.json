@@ -247,8 +247,6 @@
     "active_members": "Members",
     "active_channels": "Channels",
     "delta_previous": "prev {{number}}",
-    "summary_delta": " (vs previous {{change}})",
-    "summary_delta_none": " (no previous data)",
     "trend": {
       "hour": "Messages per hour",
       "day": "Messages per day",
@@ -323,50 +321,32 @@
     "active_days": "Active days",
     "active_days_unit_one": "/ {{number}} day",
     "active_days_unit_other": "/ {{number}} days",
-    "longest_streak_one": "Longest streak {{number}} day",
-    "longest_streak_other": "Longest streak {{number}} days",
-    "reactions_received": "Reactions received",
+    "longest_streak_one": "Streak {{number}} day",
+    "longest_streak_other": "Streak {{number}} days",
+    "reactions_received": "Reactions in",
     "reactions_received_top_one": "Most {{emoji}} {{number}}",
     "reactions_received_top_other": "Most {{emoji}} {{number}}",
-    "reactions_given": "Reactions given",
+    "reactions_given": "Reactions out",
     "reactions_given_top_one": "Most {{emoji}} {{number}}",
     "reactions_given_top_other": "Most {{emoji}} {{number}}",
-    "command_uses": "Commands used",
+    "command_uses": "Commands",
     "partners_title": "Partners · top {{n}}",
     "partners_reply": "Replies",
     "partners_mention": "Mentions",
     "person_channels_title": "Channels · top {{n}}",
     "overview": {
-      "title": "{{guild}} · Server activity",
-      "summary": "{{range}} · {{dates}}  Messages **{{number}}**{{delta}}"
+      "title": "{{guild}} · Server activity · {{range}}"
     },
     "channel": {
-      "title": "#{{channel}} · {{range}}",
-      "summary": "{{dates}}{{threads}}  Messages **{{number}}**{{delta}}",
-      "with_threads": " · with threads"
+      "title": "#{{channel}}{{threads}} · Channel activity · {{range}}",
+      "with_threads": " (with threads)"
     },
     "person": {
-      "title": "{{user}} · Personal activity",
-      "summary": "{{range}} · {{dates}}  Messages **{{number}}**{{delta}} · Rank **{{rank}}**"
-    },
-    "notes": {
-      "reactions": "Reaction counts are the last observed values",
-      "rebuild": "Statistics stay incomplete until the first full backup completes",
-      "retention": "Retention: share of the previous period's active members still active; returning and new: active now but silent in the previous period",
-      "channel_fold": "Channels: threads count toward their channel; forum posts are listed on their own",
-      "person_channel_fold": "Channels: threads count toward their channel; forum posts are listed on their own",
-      "breakdown": "Channel and threads lists the channel itself and the threads under it",
-      "partners": "Conversation partners: replies and mentions in both directions, not counting the automatic mention of a reply",
-      "apps_public": "Only interactions that left a public reply are counted; command names are not recorded",
-      "apps_users": "Members are counted once; per-app member counts add up to more than the total",
-      "apps_since": "The first interaction record in this range is from {{date}}; earlier periods have no data",
-      "emoji_scope": "Only this server's custom emoji; message text and reactions are counted separately",
-      "emoji_reactions": "Reactions are the last observed values; animated emoji are marked GIF",
-      "sticker_scope": "Only this server's stickers, not Discord's default stickers"
+      "title": "{{user}} · Personal activity · {{range}}"
     },
     "hot": {
-      "title_one": "Top message · {{count}}",
-      "title_other": "Top messages · {{count}}",
+      "heading_one": "**Top message · {{count}}**",
+      "heading_other": "**Top messages · {{count}}**",
       "spoiler": "(spoiler)",
       "images_one": "image",
       "images_other": "{{count}} images",
@@ -385,7 +365,6 @@
     },
     "apps": {
       "title": "App usage · {{range}}",
-      "summary": "{{dates}}  Interactions **{{uses}}** · Members **{{users}}** · Apps **{{apps}}**",
       "uses": "Interactions",
       "members": "Members",
       "apps": "Apps",
@@ -413,8 +392,7 @@
       }
     },
     "app": {
-      "title": "{{app}} · {{range}}",
-      "summary": "{{dates}}  Interactions **{{uses}}** · Share of all **{{share}}**"
+      "title": "{{app}} · App usage · {{range}}"
     },
     "order": {
       "most": "most first",
@@ -427,13 +405,8 @@
     "zero_uses": "Unused",
     "unused_total_one": "{{number}} in total",
     "unused_total_other": "{{number}} in total",
-    "uses_count_one": "**{{number}}** use",
-    "uses_count_other": "**{{number}}** uses",
     "emoji": {
       "title": "Emoji usage · {{range}} · {{order}}",
-      "summary": "{{dates}}  {{items}} · {{uses}}",
-      "server_count_one": "**{{number}}** server emoji",
-      "server_count_other": "**{{number}}** server emoji",
       "server": "Server emoji",
       "total": "Total uses",
       "content": "Text",
@@ -446,9 +419,6 @@
     },
     "sticker": {
       "title": "Sticker usage · {{range}} · {{order}}",
-      "summary": "{{dates}}  {{items}} · {{uses}}",
-      "server_count_one": "**{{number}}** server sticker",
-      "server_count_other": "**{{number}}** server stickers",
       "server": "Server stickers",
       "total": "Total uses",
       "ranking_title": "Ranking",

@@ -1,72 +1,23 @@
 /**
- * KPI tiles: the hero tile (big value, period delta, secondary metrics)
- * and rows of small stat tiles with flexible widths.
+ * KPI tiles: the hero tile with its tile rows, and rows of small stat
+ * tiles with flexible widths. In a narrow column the hero's metrics move
+ * out of the hero into a tile row of their own.
  */
 import { roundRect } from '../canvas-primitives';
-import { spacer, type Block, type Ctx } from './layout';
-import { triangle } from './shapes';
+import { heroTile, type HeroLayout } from './hero';
+import { spacer, type Block, type Column, type Ctx } from './layout';
 import { drawFitted, drawRich, drawText, fitText, textWidth } from './text';
-import { COLOR, INNER_WIDTH, PAD } from './theme';
-import type { Delta, HeroTile, StatTile } from './types-common';
+import { COLOR } from './theme';
+import type { HeroTile, StatTile } from './types-common';
 
-const HERO_HEIGHT = 76;
 const TILE_HEIGHT = 70;
 const TILE_GAP = 8;
 
 const MIN_FLEX = 0.25;
 
-const DELTA_COLOR: Readonly<Record<Delta['direction'], string>> = {
-  up: COLOR.up,
-  down: COLOR.down,
-  flat: COLOR.muted,
-};
-
 /** A missing, non-finite, or tiny weight must not collapse a tile to nothing. */
 const flexOf = (tile: StatTile): number =>
   tile.flex === undefined || !Number.isFinite(tile.flex) ? 1 : Math.max(MIN_FLEX, tile.flex);
-
-/** Draw the delta block at (x, y); returns its width. */
-const drawDelta = (ctx: Ctx, delta: Delta, x: number, y: number): number => {
-  const color = DELTA_COLOR[delta.direction];
-  let tx = x;
-  if (delta.direction !== 'flat') {
-    ctx.fillStyle = color;
-    triangle(ctx, x + 6, y + 42, 12, delta.direction === 'up');
-    tx += 15;
-  }
-  drawText(ctx, delta.text, tx, y + 42, { size: 15, color, bold: true });
-  drawText(ctx, delta.sub, x, y + 60, { size: 12, color: COLOR.muted });
-  return Math.max(tx - x + textWidth(ctx, delta.text, 15), textWidth(ctx, delta.sub, 12));
-};
-
-export const heroTile = (hero: HeroTile): Block => ({
-  height: HERO_HEIGHT,
-  draw: (ctx, y) => {
-    const x = PAD;
-    const right = x + INNER_WIDTH - 14;
-    roundRect(ctx, x, y, INNER_WIDTH, HERO_HEIGHT, 8);
-    ctx.fillStyle = COLOR.tile;
-    ctx.fill();
-    drawText(ctx, hero.label, x + 14, y + 18, { size: 13, color: COLOR.muted });
-    const value = fitText(ctx, hero.value, INNER_WIDTH * 0.4, 32);
-    drawText(ctx, value, x + 14, y + 47, { size: 32, color: COLOR.ink, bold: true });
-    let leftEnd = x + 14 + textWidth(ctx, value, 32);
-    if (hero.delta !== undefined) leftEnd += 12 + drawDelta(ctx, hero.delta, leftEnd + 12, y);
-    const count = Math.max(1, hero.metrics.length);
-    const start = Math.max(leftEnd + 24, x + INNER_WIDTH * 0.42);
-    const step = Math.min((right - start) / count, INNER_WIDTH * 0.23);
-    hero.metrics.forEach((metric, i) => {
-      const cx = start + i * step;
-      const maxW = step - 8;
-      drawFitted(ctx, metric.label, cx, y + 26, maxW, { size: 13, color: COLOR.muted });
-      const shown = fitText(ctx, metric.value, maxW, 20);
-      drawText(ctx, shown, cx, y + 50, { size: 20, color: COLOR.ink, bold: true });
-      if (metric.unit === undefined) return;
-      const ux = cx + textWidth(ctx, shown, 20) + 4;
-      drawFitted(ctx, metric.unit, ux, y + 52, cx + maxW - ux, { size: 13, color: COLOR.body });
-    });
-  },
-});
 
 const drawTile = (ctx: Ctx, tile: StatTile, x: number, y: number, w: number): void => {
   roundRect(ctx, x, y, w, TILE_HEIGHT, 8);
@@ -86,14 +37,14 @@ const drawTile = (ctx: Ctx, tile: StatTile, x: number, y: number, w: number): vo
   }
 };
 
-/** One row of stat tiles sharing the inner width by their `flex` weights. */
-export const tileRow = (tiles: readonly StatTile[]): Block => ({
+/** One row of stat tiles sharing the column width by their `flex` weights. */
+const tileRow = (tiles: readonly StatTile[], col: Column): Block => ({
   height: TILE_HEIGHT,
   draw: (ctx, y) => {
     if (tiles.length === 0) return;
-    const avail = INNER_WIDTH - (tiles.length - 1) * TILE_GAP;
+    const avail = col.w - (tiles.length - 1) * TILE_GAP;
     const flexSum = tiles.reduce((sum, t) => sum + flexOf(t), 0);
-    let cx = PAD;
+    let cx = col.x;
     for (const tile of tiles) {
       const w = (avail * flexOf(tile)) / flexSum;
       drawTile(ctx, tile, cx, y, w);
@@ -102,8 +53,50 @@ export const tileRow = (tiles: readonly StatTile[]): Block => ({
   },
 });
 
-/** Hero tile followed by tile rows, separated by the tight tile gap. */
-export const kpiBlocks = (hero: HeroTile, rows: readonly (readonly StatTile[])[]): Block[] => [
-  heroTile(hero),
-  ...rows.filter((row) => row.length > 0).flatMap((row) => [spacer(TILE_GAP), tileRow(row)]),
-];
+/**
+ * Hero tile followed by tile rows, separated by the tight tile gap. With
+ * the `stacked` layout the hero's metrics form the first tile row.
+ */
+export const kpiBlocks = (
+  hero: HeroTile,
+  rows: readonly (readonly StatTile[])[],
+  col: Column,
+  layout: HeroLayout = 'inline',
+): Block[] => {
+  const metricRow: StatTile[] =
+    layout === 'stacked'
+      ? hero.metrics.map((m) => ({
+          label: m.label,
+          value: m.value,
+          ...(m.unit === undefined ? {} : { unit: m.unit }),
+        }))
+      : [];
+  return [
+    heroTile(hero, col, layout),
+    ...[metricRow, ...rows]
+      .filter((row) => row.length > 0)
+      .flatMap((row) => [spacer(TILE_GAP), tileRow(row, col)]),
+  ];
+};
+
+/** Most tiles a narrow column fits in one row. */
+const TILES_PER_ROW = 3;
+
+/**
+ * Flat tiles wrapped into rows of at most three, the fuller rows last
+ * (five tiles make rows of two and three), separated by the tile gap.
+ */
+export const tileRows = (tiles: readonly StatTile[], col: Column): Block[] => {
+  const count = Math.ceil(tiles.length / TILES_PER_ROW);
+  const rows: StatTile[][] = [];
+  let start = 0;
+  for (let r = 0; r < count; r++) {
+    const size =
+      Math.floor((tiles.length * (r + 1)) / count) - Math.floor((tiles.length * r) / count);
+    rows.push(tiles.slice(start, start + size));
+    start += size;
+  }
+  return rows.flatMap((row, i) =>
+    i === 0 ? [tileRow(row, col)] : [spacer(TILE_GAP), tileRow(row, col)],
+  );
+};

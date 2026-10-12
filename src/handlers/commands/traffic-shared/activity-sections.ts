@@ -25,34 +25,23 @@ import type { TFn } from './types';
 const K = 'replies:traffic';
 
 /** The busiest trend bucket: a day (with weekday), an hour for `24h`, a week for `365d`. */
-export const busiestTile = (
-  t: TFn,
-  period: Period,
-  buckets: readonly TrendBucket[],
-  flex?: number,
-): StatTile => {
+export const busiestTile = (t: TFn, period: Period, buckets: readonly TrendBucket[]): StatTile => {
   const top = buckets.reduce<TrendBucket | undefined>(
     (best, bucket) => (best === undefined || bucket.messages > best.messages ? bucket : best),
     undefined,
   );
-  const weight = flex === undefined ? {} : { flex };
-  if (top === undefined || top.messages === 0)
-    return { label: t(`${K}.busiest`), value: '—', ...weight };
+  if (top === undefined || top.messages === 0) return { label: t(`${K}.busiest`), value: '—' };
   const weekday = weekdayLabels(t)[weekdayOf(top.key)] ?? '';
   const sub =
     period.granularity === 'day'
       ? tCount(t, `${K}.busiest_day_sub`, top.messages, { weekday })
       : tCount(t, `${K}.busiest_${period.granularity}_sub`, top.messages);
   const value = period.granularity === 'hour' ? bucketLabel(top.key, 'hour') : monthDay(top.key);
-  return { label: t(`${K}.busiest`), value, sub, ...weight };
+  return { label: t(`${K}.busiest`), value, sub };
 };
 
-/** Retention and returning tiles; `flex` weights follow the approved layouts. */
-export const retentionTiles = (
-  t: TFn,
-  retention: RetentionStats,
-  flex: readonly [retained: number, returning: number] = [1.45, 1.1],
-): StatTile[] => [
+/** Retention and returning tiles, one tile row of the narrow summary column. */
+export const retentionTiles = (t: TFn, retention: RetentionStats): StatTile[] => [
   {
     label: t(`${K}.retention`),
     value:
@@ -62,7 +51,7 @@ export const retentionTiles = (
     sub: tCount(t, `${K}.retention_sub`, retention.previousMembers, {
       retained: formatCount(retention.retained),
     }),
-    flex: flex[0],
+    flex: 1.2,
   },
   {
     label: t(`${K}.returning`),
@@ -70,7 +59,6 @@ export const retentionTiles = (
     sub: t(`${K}.returning_sub`, {
       percent: formatPercent(retention.returningOrNew, retention.currentMembers),
     }),
-    flex: flex[1],
   },
 ];
 

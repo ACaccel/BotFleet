@@ -11,7 +11,6 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   formatCount,
   renderAppsDashboard,
-  renderChannelDashboard,
   renderEmojiDashboard,
   renderOverviewDashboard,
   renderPersonDashboard,
@@ -21,14 +20,22 @@ import {
 } from '../../../../src/handlers/commands/traffic-shared/dashboard';
 import { textWidth } from '../../../../src/handlers/commands/traffic-shared/dashboard/text';
 import { ROW_HEIGHT } from '../../../../src/handlers/commands/traffic-shared/dashboard/bars';
+import { unusedBlocks } from '../../../../src/handlers/commands/traffic-shared/dashboard/chips';
+import { renderColumns } from '../../../../src/handlers/commands/traffic-shared/dashboard/columns';
+import {
+  TITLE_HEIGHT,
+  type Column,
+  type Ctx,
+  type Section,
+} from '../../../../src/handlers/commands/traffic-shared/dashboard/layout';
+import { rankingList } from '../../../../src/handlers/commands/traffic-shared/dashboard/ranking-lists';
 import {
   COLOR,
   COLUMN_GAP,
-  HALF_WIDTH,
-  INNER_WIDTH,
   PAD,
   SCALE,
 } from '../../../../src/handlers/commands/traffic-shared/dashboard/theme';
+import { trendBlocks } from '../../../../src/handlers/commands/traffic-shared/dashboard/trend';
 import { ensureCanvasFont } from '../../../../src/infra/graphics/canvas-font';
 import * as fixtures from './dashboard-fixtures';
 
@@ -93,6 +100,10 @@ const countColorIn = async (
 };
 
 const brokenImage = (): Image => new Image();
+
+/** A one-column canvas of `width` holding `sections`, so a block sits at a known spot. */
+const single = (width: number, sections: (col: Column, measure: Ctx) => readonly Section[]) =>
+  renderColumns([{ width, sections }]);
 
 describe('preloaded images', () => {
   const emojiWith = (image: () => Image | null): Buffer => {
@@ -197,17 +208,21 @@ describe('colour-coded marks', () => {
     const { previous: _previous, ...noPrevious } = base.trend;
     const withPrevious = renderOverviewDashboard(base);
     expect(await countColor(withPrevious, COLOR.previous)).toBeGreaterThan(200);
-    // Trend title row: below the hero (76), tile gap (8), tile row (70), and section gap (22).
-    const titleY = PAD + 76 + 8 + 70 + 22;
-    const titleBand = {
-      x0: 0,
-      x1: withPrevious.readUInt32BE(16),
-      y0: titleY * SCALE,
-      y1: (titleY + 26) * SCALE,
-    };
-    expect(await countColorIn(withPrevious, COLOR.previous, titleBand)).toBeGreaterThan(10);
     const without = renderOverviewDashboard({ ...base, trend: noPrevious });
     expect(await countColor(without, COLOR.previous)).toBe(0);
+    // In a wide column the legend shares the title row.
+    const trend = (t: typeof base.trend) =>
+      single(560, (col, measure) => [trendBlocks(measure, t, col)]);
+    const titleBand = (png: Buffer) => ({
+      x0: 0,
+      x1: png.readUInt32BE(16),
+      y0: PAD * SCALE,
+      y1: (PAD + TITLE_HEIGHT) * SCALE,
+    });
+    const legend = trend(base.trend);
+    expect(await countColorIn(legend, COLOR.previous, titleBand(legend))).toBeGreaterThan(10);
+    const none = trend(noPrevious);
+    expect(await countColorIn(none, COLOR.previous, titleBand(none))).toBe(0);
   });
 
   it('colours the hero delta by direction and omits the triangle when flat', async () => {
@@ -254,65 +269,58 @@ describe('colour-coded marks', () => {
 
 describe('unranked lists', () => {
   it('draws nothing in the rank-number column of an unranked list', async () => {
-    // Without a heatmap the paired rankings are the last section: ten rows
-    // and a note right above the 14 px bottom padding. Empty names leave
-    // the rank numbers as the only marks at the column's left edge.
-    const { heatmap: _heatmap, ...base } = fixtures.channel();
+    // Empty names leave the rank numbers as the only marks at the list's left edge.
+    const base = fixtures.channel();
     const render = (ranked: boolean): Buffer => {
       const rows = base.breakdown.rows.map((r) => ({ ...r, name: '' }));
-      return renderChannelDashboard({ ...base, breakdown: { ...base.breakdown, rows, ranked } });
+      const column = { ...base.breakdown, rows, ranked };
+      return single(268, (col) => [rankingList(column, col)]);
     };
-    const x = PAD + HALF_WIDTH + COLUMN_GAP;
-    const band = (png: Buffer) => {
-      const listBottom = png.readUInt32BE(20) / SCALE - 14 - 22;
-      return {
-        x0: x * SCALE,
-        x1: (x + 8) * SCALE,
-        y0: (listBottom - 10 * ROW_HEIGHT) * SCALE,
-        y1: listBottom * SCALE,
-      };
+    const listTop = PAD + TITLE_HEIGHT;
+    const band = {
+      x0: PAD * SCALE,
+      x1: (PAD + 8) * SCALE,
+      y0: listTop * SCALE,
+      y1: (listTop + 10 * ROW_HEIGHT) * SCALE,
     };
-    const ranked = render(true);
-    const plain = render(false);
-    const area = (png: Buffer): number => {
-      const b = band(png);
-      return (b.x1 - b.x0) * (b.y1 - b.y0);
-    };
+    const area = (band.x1 - band.x0) * (band.y1 - band.y0);
     const inked = async (png: Buffer): Promise<number> =>
-      area(png) - (await countColorIn(png, COLOR.embedBg, band(png)));
+      area - (await countColorIn(png, COLOR.embedBg, band));
+    const ranked = render(true);
     expect(await inked(ranked)).toBeGreaterThan(100);
-    expect(await countColorIn(ranked, COLOR.muted, band(ranked))).toBeGreaterThan(0);
-    expect(await inked(plain)).toBe(0);
+    expect(await countColorIn(ranked, COLOR.muted, band)).toBeGreaterThan(0);
+    expect(await inked(render(false))).toBe(0);
   });
 });
 
 describe('unused chips', () => {
-  it('truncates a name wider than the row so the chip stays inside the content width', async () => {
-    const base = fixtures.emoji();
-    const unused = base.unused;
+  it('truncates a name wider than the column so the chip stays inside it', async () => {
+    const unused = fixtures.emoji().unused;
     if (unused === undefined) throw new Error('fixture needs an unused section');
-    const png = renderEmojiDashboard({
-      ...base,
-      unused: { ...unused, names: [`:${'very_long_unused_name_'.repeat(8)}:`] },
-    });
-    const height = png.readUInt32BE(20);
-    // The single chip row sits right above the 14 px bottom padding.
+    const width = 256;
+    const section = { ...unused, names: [`:${'very_long_unused_name_'.repeat(8)}:`] };
+    const png = single(width, (col, measure) => [unusedBlocks(measure, section, col, 4)]);
+    // The single chip row sits right under the section title.
     const band = {
       x0: 0,
       x1: png.readUInt32BE(16),
-      y0: height - 36 * SCALE,
-      y1: height - 14 * SCALE,
+      y0: (PAD + TITLE_HEIGHT) * SCALE,
+      y1: (PAD + TITLE_HEIGHT + 22) * SCALE,
     };
     const right = await rightmost(png, COLOR.tile, band);
-    expect(right).toBeGreaterThan((PAD + INNER_WIDTH - 20) * SCALE);
-    expect(right).toBeLessThan((PAD + INNER_WIDTH) * SCALE);
+    expect(right).toBeGreaterThan((PAD + width - 20) * SCALE);
+    expect(right).toBeLessThan((PAD + width) * SCALE);
   });
 });
 
 describe('animated emoji tag', () => {
   beforeAll(() => ensureCanvasFont());
 
-  const single = (animated: boolean): Buffer => {
+  /** Private emoji layout, mirrored: the ranking column follows the 256 px summary column. */
+  const RANKING_X = PAD + 256 + 24;
+  const RANKING_WIDTH = 620;
+
+  const onlyRow = (animated: boolean): Buffer => {
     const base = fixtures.emoji();
     const [row] = fixtures.emojiRows(1);
     if (row === undefined) throw new Error('fixture needs a row');
@@ -328,11 +336,13 @@ describe('animated emoji tag', () => {
     if (row === undefined) throw new Error('fixture needs a row');
     const ctx = createCanvas(1, 1).getContext('2d');
     const totalW = textWidth(ctx, formatCount(row.inContent + row.inReactions), 14);
-    // The tag box is COLOR.base; the first row spans the 46 px under the title.
-    const band = { x0: 0, x1: (PAD + HALF_WIDTH) * SCALE, y0: 0, y1: (16 + 26 + 50) * SCALE };
-    const tagRight = await rightmost(single(true), COLOR.base, band);
+    // The tag box is COLOR.base; the first row spans the 46 px under the title,
+    // in the left half of the ranking column.
+    const halfRight = RANKING_X + (RANKING_WIDTH - COLUMN_GAP) / 2;
+    const band = { x0: 0, x1: halfRight * SCALE, y0: 0, y1: (PAD + 26 + 50) * SCALE };
+    const tagRight = await rightmost(onlyRow(true), COLOR.base, band);
     expect(tagRight).toBeGreaterThan(0);
-    expect(tagRight).toBeLessThanOrEqual((PAD + HALF_WIDTH - totalW - 4) * SCALE);
-    expect(await rightmost(single(false), COLOR.base, band)).toBe(-1);
+    expect(tagRight).toBeLessThanOrEqual((halfRight - totalW - 4) * SCALE);
+    expect(await rightmost(onlyRow(false), COLOR.base, band)).toBe(-1);
   });
 });

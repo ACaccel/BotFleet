@@ -1,16 +1,14 @@
 /**
  * Sections of the `/traffic apps` dashboards: the interaction types (commands,
- * components, modals) in the segment colour order the dashboards use, the use
- * trend against the previous period, and the note naming the first record.
+ * components, modals) in the segment colour order the dashboards use, and the
+ * use trend against the previous period.
  */
 import type { AppUsageStats } from '../../../persistence/repositories/archive-stats.types';
 
 import { formatCount, formatPercent, type BarRow, type TrendSection } from './dashboard';
-import { localDate, trendLabels, windowSpan } from './labels';
+import { trendLabels, windowSpan } from './labels';
 import type { Period } from './period';
 import type { TFn } from './types';
-
-const DAY_MS = 86_400_000;
 
 const K = 'replies:traffic.apps.type';
 const R = 'replies:traffic';
@@ -64,9 +62,3 @@ export const usageTrend = (
     ),
   };
 };
-
-/** Names the first record when the window starts before the archive has any. */
-export const sinceNote = (t: TFn, period: Period, usage: AppUsageStats): string =>
-  usage.firstRecordAt !== undefined && usage.firstRecordAt - period.window.startMs > DAY_MS
-    ? t(`${R}.notes.apps_since`, { date: localDate(usage.firstRecordAt, period.timeZone) })
-    : '';

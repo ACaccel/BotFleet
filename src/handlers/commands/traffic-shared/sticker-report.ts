@@ -7,7 +7,7 @@ import { StickerFormatType } from 'discord.js';
 
 import { tCount } from './activity-common';
 import { STICKER_RANK_LIMIT, formatCount, renderStickerDashboard } from './dashboard';
-import { rangeLabel, windowSpan } from './labels';
+import { rangeLabel } from './labels';
 import { dashboardReply } from './reply';
 import { failed, type TrafficContext, type TrafficOutcome } from './run';
 import { countTile, rankUsage, UNUSED_CHIP_LIMIT, type UsageOrder } from './usage-ranking';
@@ -83,12 +83,6 @@ export const buildStickerReport = async (
       range: rangeLabel(t, period.range),
       order: t(`${K}.order.${order}`),
     }),
-    summary: t(`${K}.sticker.summary`, {
-      dates: windowSpan(period.window, period.range, period.timeZone),
-      items: tCount(t, `${K}.sticker.server_count`, rows.length),
-      uses: tCount(t, `${K}.uses_count`, totalUses),
-    }),
-    notes: [t(`${K}.notes.sticker_scope`)],
     image,
   });
 };

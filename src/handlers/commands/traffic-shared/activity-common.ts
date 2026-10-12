@@ -1,6 +1,6 @@
 /**
  * Pieces every activity report shares: plural-aware counts, the hero tile with
- * its change against the previous period, the summary delta, and the trend.
+ * its change against the previous period, and the trend.
  */
 import type { TrendBucket } from '../../../persistence/repositories/archive-stats.types';
 
@@ -11,9 +11,8 @@ import {
   type HeroTile,
   type TrendSection,
 } from './dashboard';
-import { percentChange, signedPercent, trendLabels, windowSpan } from './labels';
+import { percentChange, trendLabels, windowSpan } from './labels';
 import type { Period } from './period';
-import type { TrafficContext } from './run';
 import type { TFn } from './types';
 
 const K = 'replies:traffic';
@@ -47,14 +46,6 @@ export const heroOf = (
   metrics,
 });
 
-/** `(vs previous +8.2%)` after a summary count. */
-export const summaryDelta = (t: TFn, current: number, previous: number): string => {
-  const change = percentChange(current, previous);
-  return change === undefined
-    ? t(`${K}.summary_delta_none`)
-    : t(`${K}.summary_delta`, { change: signedPercent(change) });
-};
-
 export const dailyAverage = (t: TFn, total: number, period: Period): HeroMetric => ({
   label: t(`${K}.daily_average`),
   value: formatCount(total / period.days),
@@ -86,7 +77,3 @@ export const trendOf = (
     period.granularity,
   ),
 });
-
-/** The D8 note that statistics stay incomplete until a full backup completes. */
-export const rebuildNote = (context: Pick<TrafficContext, 'rebuilding' | 't'>): string =>
-  context.rebuilding ? context.t(`${K}.notes.rebuild`) : '';

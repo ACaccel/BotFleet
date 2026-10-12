@@ -1,6 +1,6 @@
 /**
  * Every `replies:traffic.*` string the `/traffic` subcommands render resolves
- * in both locales with every placeholder filled. The handler suites run an
+ * in both locales with every placeholder filled, and each report is one embed. The handler suites run an
  * echo translator, so a catalog typo or a missing plural form would otherwise
  * reach a member as a raw key.
  */
@@ -48,6 +48,12 @@ describe.each(['en', 'zh-TW'] as const)('/traffic catalog in %s', (locale) => {
       const { interaction, replies } = fakeInteraction(options);
       await new Traffic().execute(interaction, fakeBot(fakeStatsRepo(), t));
       expect(replies, options.subcommand).toHaveLength(1);
+      if (replies[0]?.embeds === undefined) continue;
+      expect(replies[0].embeds, options.subcommand).toHaveLength(1);
+      const embed = replies[0].embeds[0]?.toJSON() as { description?: string } | undefined;
+      // The top-messages text opens with a bold heading line.
+      if (options.subcommand === 'overview')
+        expect(embed?.description?.split('\n')[0]).toMatch(/^\*\*[^*]+\*\*$/);
     }
     for (const options of [{ subcommand: 'overview' }, { subcommand: 'me' }] as const) {
       const { interaction } = fakeInteraction(options);

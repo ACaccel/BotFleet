@@ -79,7 +79,6 @@ export interface AppsDashboard {
   readonly hero: HeroTile;
   readonly ranking: AppRanking;
   readonly trend: TrendSection;
-  /** Laid out as two five-row columns. */
   readonly members: RankingColumn;
 }
 
@@ -107,7 +106,7 @@ export interface EmojiRanking {
   readonly reactionLabel: string;
   /** Chip text for animated emoji, e.g. `GIF`. */
   readonly animatedTag: string;
-  /** Up to `EMOJI_RANK_LIMIT` rows, drawn as two columns. */
+  /** Up to `EMOJI_RANK_LIMIT` rows, split evenly into two halves. */
   readonly rows: readonly EmojiRankRow[];
   readonly note?: string;
 }

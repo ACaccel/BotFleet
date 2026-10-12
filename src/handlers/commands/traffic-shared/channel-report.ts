@@ -7,13 +7,13 @@
 import { bucketKeysOf, THREAD_CHANNEL_TYPES } from '../../../core/archive/stats';
 import type { ActivityHeatmap } from '../../../persistence/repositories/archive-stats.types';
 
-import { dailyAverage, heroOf, rebuildNote, summaryDelta, trendOf } from './activity-common';
+import { dailyAverage, heroOf, trendOf } from './activity-common';
 import { busiestTile, heatmapOf, retentionTiles } from './activity-sections';
 import { formatCount, renderChannelDashboard, type RankingColumn } from './dashboard';
-import { rangeLabel, weekdayLabels, weekdayOf, windowSpan } from './labels';
+import { rangeLabel, weekdayLabels, weekdayOf } from './labels';
 import { channelName, channelRecordsOf } from './names';
 import type { Period } from './period';
-import { channelColumn, channelRow, memberColumn, topMessagesEmbed } from './rankings';
+import { channelColumn, channelRow, memberColumn, topMessagesText } from './rankings';
 import { dashboardReply } from './reply';
 import { failed, type TrafficContext, type TrafficOutcome } from './run';
 import { contentSection, serverInteractions } from './server-sections';
@@ -104,12 +104,7 @@ export const buildChannelReport = async (
       dailyAverage(t, summary.messages, period),
       { label: t(`${K}.active_members`), value: formatCount(summary.activeMembers) },
     ]),
-    tileRows: [
-      [
-        ...retentionTiles(t, report.retention, [1.2, 1]),
-        busiestTile(t, period, report.trend.current),
-      ],
-    ],
+    tileRows: [retentionTiles(t, report.retention), [busiestTile(t, period, report.trend.current)]],
     trend: trendOf(t, period, report.trend.current, report.trend.previous),
     interactions: await serverInteractions(context, summary, report.reactions),
     content: contentSection(t, summary),
@@ -117,22 +112,14 @@ export const buildChannelReport = async (
     breakdown,
     ...(heatmap === undefined ? {} : { heatmap }),
   });
-  const hot = topMessagesEmbed(context, report.topMessages);
+  const hot = topMessagesText(context, report.topMessages);
   return dashboardReply({
-    title: t(`${K}.channel.title`, { channel: name, range: rangeLabel(t, period.range) }),
-    summary: t(`${K}.channel.summary`, {
-      dates: windowSpan(period.window, period.range, period.timeZone),
+    title: t(`${K}.channel.title`, {
+      channel: name,
       threads: threads.length > 0 ? t(`${K}.channel.with_threads`) : '',
-      number: formatCount(summary.messages),
-      delta: summaryDelta(t, summary.messages, previous),
+      range: rangeLabel(t, period.range),
     }),
-    notes: [
-      t(`${K}.notes.reactions`),
-      t(`${K}.notes.retention`),
-      showBreakdown ? t(`${K}.notes.breakdown`) : '',
-      rebuildNote(context),
-    ],
     image,
-    ...(hot === undefined ? {} : { extra: [hot] }),
+    ...(hot === undefined ? {} : { description: hot }),
   });
 };

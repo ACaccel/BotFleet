@@ -14,7 +14,7 @@ import {
   type EmojiRankRow,
 } from './dashboard';
 import { customEmojiLabel, customEmojiUrl } from './emoji-art';
-import { rangeLabel, windowSpan } from './labels';
+import { rangeLabel } from './labels';
 import { dashboardReply } from './reply';
 import { failed, type TrafficContext, type TrafficOutcome } from './run';
 import { countTile, rankUsage, UNUSED_CHIP_LIMIT, type UsageOrder } from './usage-ranking';
@@ -116,12 +116,6 @@ export const buildEmojiReport = async (
       range: rangeLabel(t, period.range),
       order: t(`${K}.order.${filters.order}`),
     }),
-    summary: t(`${K}.emoji.summary`, {
-      dates: windowSpan(period.window, period.range, period.timeZone),
-      items: tCount(t, `${K}.emoji.server_count`, rows.length),
-      uses: tCount(t, `${K}.uses_count`, uses),
-    }),
-    notes: [t(`${K}.notes.emoji_scope`), t(`${K}.notes.emoji_reactions`)],
     image,
   });
 };

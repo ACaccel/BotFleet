@@ -1,18 +1,21 @@
 /**
  * Period trend: the current series as a blue line over a light area wash,
  * the previous period as a gray line, hairline gridlines, and direct
- * labels on the peak and the quietest non-zero bucket.
+ * labels on the peak and the quietest non-zero bucket. X labels are
+ * thinned until they fit the column without overlapping.
  */
-import { sectionTitle, type Block, type Ctx } from './layout';
+import { sectionTitle, type Block, type Column, type Ctx } from './layout';
 import { hline } from './shapes';
 import { drawText, textWidth } from './text';
-import { COLOR, INNER_WIDTH, PAD, formatCount, withAlpha } from './theme';
+import { COLOR, formatCount, withAlpha } from './theme';
 import { dashboardTicks, extremes } from './scale';
 import type { TrendSection } from './types-common';
 
 const TICK_SIZE = 12;
 const LABEL_SIZE = 13;
 const DENSE_POINTS = 8;
+/** Least room between two x labels; narrower columns draw fewer labels. */
+const LABEL_GAP = 10;
 
 const strokeSeries = (
   ctx: Ctx,
@@ -33,15 +36,15 @@ const strokeSeries = (
   ctx.stroke();
 };
 
-const drawChart = (ctx: Ctx, trend: TrendSection, y: number, h: number): void => {
-  const x = PAD;
+const drawChart = (ctx: Ctx, trend: TrendSection, col: Column, y: number, h: number): void => {
+  const { x, w } = col;
   const cur = trend.current;
   const n = cur.length;
   const prev = (trend.previous?.values ?? []).slice(0, n);
   const { niceMax, ticks } = dashboardTicks(Math.max(0, ...cur, ...prev));
   const tickW = Math.max(...ticks.map((t) => textWidth(ctx, formatCount(t), TICK_SIZE)));
   const left = x + tickW + 8;
-  const right = x + INNER_WIDTH - 4;
+  const right = x + w - 4;
   const bottom = y + h - 20;
   const plotTop = y + 18;
   const inset = n <= DENSE_POINTS ? 14 : 6;
@@ -90,20 +93,35 @@ const drawChart = (ctx: Ctx, trend: TrendSection, y: number, h: number): void =>
   if (hi >= 0) annotate(hi, false);
   if (lo >= 0 && lo !== hi) annotate(lo, true);
 
-  const every = Math.max(1, trend.xLabelEvery ?? (n <= DENSE_POINTS ? 1 : Math.ceil((n - 1) / 4)));
-  trend.xLabels.slice(0, n).forEach((label, i) => {
+  const shown = trend.xLabels.slice(0, n);
+  const labelW = Math.max(0, ...shown.map((label) => textWidth(ctx, label, TICK_SIZE)));
+  const fitting = Math.max(1, Math.floor((right - left) / (labelW + LABEL_GAP)));
+  const preferred = trend.xLabelEvery ?? (n <= DENSE_POINTS ? 1 : Math.ceil((n - 1) / 4));
+  const every = Math.max(1, preferred, Math.ceil(n / fitting));
+  shown.forEach((label, i) => {
     const last = i === n - 1;
     if (!last && (i % every !== 0 || n - 1 - i < every * 0.6)) return;
     const half = textWidth(ctx, label, TICK_SIZE) / 2;
-    const lx = Math.min(Math.max(xOf(i), x + half), x + INNER_WIDTH - half);
+    const lx = Math.min(Math.max(xOf(i), x + half), x + w - half);
     const style = { size: TICK_SIZE, color: COLOR.muted, align: 'center' } as const;
     drawText(ctx, label, lx, bottom + 12, style);
   });
 };
 
-/** Section title with the current / previous legend, followed by the chart. */
-export const trendBlocks = (trend: TrendSection, chartHeight = 112): Block[] => [
-  sectionTitle(trend.title, {
+/** Default chart height under the title, in logical pixels. */
+export const TREND_CHART_HEIGHT = 112;
+
+/**
+ * Section title with the current / previous legend, followed by the chart.
+ * The legend wraps under the title when the column is too narrow for both.
+ */
+export const trendBlocks = (
+  measure: Ctx,
+  trend: TrendSection,
+  col: Column,
+  chartHeight = TREND_CHART_HEIGHT,
+): Block[] => [
+  sectionTitle(measure, col, trend.title, {
     legend: [
       { name: trend.currentLabel, color: COLOR.current, kind: 'line' },
       ...(trend.previous === undefined
@@ -111,5 +129,5 @@ export const trendBlocks = (trend: TrendSection, chartHeight = 112): Block[] => 
         : [{ name: trend.previous.label, color: COLOR.previous, kind: 'line' as const }]),
     ],
   }),
-  { height: chartHeight, draw: (ctx, y) => drawChart(ctx, trend, y, chartHeight) },
+  { height: chartHeight, draw: (ctx, y) => drawChart(ctx, trend, col, y, chartHeight) },
 ];

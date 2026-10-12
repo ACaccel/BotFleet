@@ -507,17 +507,20 @@ it.
 
 `/traffic` reads the archive through the read-only statistics reader, so any bot can
 enable it; only msg-archive writes. Every subcommand defers its reply and sends one
-embed with a title, a one-line selectable summary, data-limit notes and a dashboard
-image.
+embed: a title naming the report and its range (for example "<server> · Server
+activity · Last 7 days") and a landscape dashboard image of about 16:9, laid out in
+two or three columns and taller only when a column's content needs it. `overview` and
+`channel` also list the top 3 messages in the embed text, under a bold heading;
+Discord shows that text above the image. The reply has no summary line and no footer.
 
-| Subcommand                                    | Shows                                                                                                                                                                                                                                                                                                       |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `overview`                                    | Messages with the change against the previous period, daily average, active members and channels, retention, returning and new members, top member share, busiest day, trend, interactions, content types, member and channel rankings, weekday × hour heat map, and a second embed with the top 3 messages |
-| `channel channel:<channel> [include_threads]` | The same for one channel (text, announcement, forum, media, voice or stage chat, or a thread), with the threads under it by default; the right ranking lists the channel and its threads, or weekday averages when there are none                                                                           |
-| `me`, `user user:<member>`                    | One member: rank, share of visible traffic, active days and longest streak, reactions received and given, commands used, mentions and replies, content, conversation partners, channel distribution and a personal heat map                                                                                 |
-| `apps [app]`                                  | Interactions per application split into commands, components and modals, the trend, and the most active members; `app` drills into one bot                                                                                                                                                                  |
-| `emoji [order] [kind] [source]`               | Use of the guild's current custom emoji in text and reactions, matched by ID, with unused emoji listed                                                                                                                                                                                                      |
-| `sticker [order]`                             | Use of the guild's current stickers, matched by ID, with unused stickers listed                                                                                                                                                                                                                             |
+| Subcommand                                    | Shows                                                                                                                                                                                                                                                                                                     |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `overview`                                    | Messages with the change against the previous period, daily average, active members and channels, retention, returning and new members, top member share, busiest day, trend, interactions, content types, member and channel rankings, weekday × hour heat map, and the top 3 messages in the embed text |
+| `channel channel:<channel> [include_threads]` | The same for one channel (text, announcement, forum, media, voice or stage chat, or a thread), with the threads under it by default; the right ranking lists the channel and its threads, or weekday averages when there are none                                                                         |
+| `me`, `user user:<member>`                    | One member: rank, share of visible traffic, active days and longest streak, reactions received and given, commands used, mentions and replies, content, conversation partners, channel distribution and a personal heat map                                                                               |
+| `apps [app]`                                  | Interactions per application split into commands, components and modals, the trend, and the most active members; `app` drills into one bot                                                                                                                                                                |
+| `emoji [order] [kind] [source]`               | Use of the guild's current custom emoji in text and reactions, matched by ID, with unused emoji listed                                                                                                                                                                                                    |
+| `sticker [order]`                             | Use of the guild's current stickers, matched by ID, with unused stickers listed                                                                                                                                                                                                                           |
 
 Shared options: `range` (`24h`, `7d`, `30d`, `90d`, `365d`; default `7d`, `30d` for
 emoji and stickers), `visibility` (`ephemeral` by default, or `public`), and `top_n`
@@ -525,7 +528,8 @@ emoji and stickers), `visibility` (`ephemeral` by default, or `public`), and `to
 rolling window; the other ranges are whole local days ending today, so `7d` shows
 seven daily points with today last, compared with the same span one range earlier.
 Trends are hourly for `24h`, weekly for `365d` and daily otherwise; trends, heat
-maps and day labels use the bot host's time zone. `24h` omits the heat map. A member
+maps and day labels use the bot host's time zone. `24h` omits the heat map and widens
+the dashboard's other columns to fill its place. A member
 runs one report at a time, and a server runs one `90d` or `365d` report at a time;
 a request beyond that gets a private "busy" reply.
 
@@ -549,11 +553,11 @@ links escaped, mentions and custom emoji as plain names, spoilers hidden, and a
 placeholder such as "(2 images)" for a message without text; the jump link is in the
 embed text.
 
-Limits noted in each reply: reaction counts are the last observed values; command use
-covers only interactions that left a public reply and has no data before the rebuilt
-archive. Until the first full backup completes, the activity reports (`overview`,
-`channel`, `me`, `user`) also note that their statistics are incomplete. A query
-over 60 seconds stops and asks for a smaller range. Custom emoji, sticker and bot
+Data limits, not repeated in the replies: reaction counts are the last observed
+values; command use covers only interactions that left a public reply and has no data
+before the rebuilt archive; until the first full backup completes, the activity
+reports (`overview`, `channel`, `me`, `user`) are incomplete. A query over 60 seconds
+stops and asks for a smaller range. Custom emoji, sticker and bot
 pictures come from the Discord CDN with a five-second timeout and a placeholder when
 a download fails; Unicode emoji use the colour emoji font.
 

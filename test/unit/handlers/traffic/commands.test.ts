@@ -4,8 +4,9 @@
  * downloads are stubbed to fail, so every reply also proves a missing picture
  * never fails the image.
  *
- * Pinned contracts: the reply is deferred before any query; one embed carries
- * the dashboard PNG (overview and channel add the top-messages embed); member
+ * Pinned contracts: the reply is deferred before any query; it is one embed with
+ * the report title and the dashboard PNG, no summary line and no footer, and
+ * only overview and channel put the top messages in the embed text; member
  * statistics only count the invoker's visible channels while emoji and stickers
  * count every channel; `/traffic channel` answers a hidden channel exactly like
  * a missing one, and the `public` ceiling applies; a query timeout asks for a
@@ -64,13 +65,35 @@ const run = async (
 const embedText = (reply: Reply | undefined): string =>
   JSON.stringify((reply?.embeds ?? []).map((embed) => embed.toJSON()));
 
-const expectDashboard = (reply: Reply | undefined, embeds: number): void => {
+interface EmbedShape {
+  readonly title?: string;
+  readonly description?: string;
+  readonly footer?: unknown;
+  readonly image?: { url: string };
+}
+
+const embedOf = (reply: Reply | undefined): EmbedShape | undefined =>
+  reply?.embeds?.[0]?.toJSON() as EmbedShape | undefined;
+
+const HOT_HEADING = 'replies:traffic.hot.heading';
+
+/** One embed: title, image, no footer; the top messages are its text when `hot`. */
+const expectDashboard = (reply: Reply | undefined, hot: boolean): void => {
   expect(reply?.content).toBeUndefined();
-  expect(reply?.embeds).toHaveLength(embeds);
-  const first = reply?.embeds?.[0]?.toJSON() as { image?: { url: string } } | undefined;
+  expect(reply?.embeds).toHaveLength(1);
+  const embed = embedOf(reply);
   const file = reply?.files?.[0];
   expect(reply?.files).toHaveLength(1);
-  expect(first?.image?.url).toBe(`attachment://${String(file?.name)}`);
+  expect(embed?.image?.url).toBe(`attachment://${String(file?.name)}`);
+  expect(embed?.title).toMatch(/^replies:traffic\.[a-z]+\.title$/);
+  expect(embed?.footer).toBeUndefined();
+  if (hot) {
+    const [heading, ...lines] = (embed?.description ?? '').split('\n');
+    expect(heading).toBe(HOT_HEADING);
+    expect(lines.length).toBeGreaterThan(0);
+  } else {
+    expect(embed?.description).toBeUndefined();
+  }
   expect((reply as { allowedMentions?: unknown } | undefined)?.allowedMentions).toEqual({
     parse: [],
   });
@@ -79,25 +102,25 @@ const expectDashboard = (reply: Reply | undefined, embeds: number): void => {
 
 describe('/traffic subcommands', () => {
   it.each([
-    ['overview', { subcommand: 'overview' }, 2],
-    ['channel', { subcommand: 'channel', channel: 'c1' }, 2],
+    ['overview', { subcommand: 'overview' }, true],
+    ['channel', { subcommand: 'channel', channel: 'c1' }, true],
     [
       'channel without threads',
       { subcommand: 'channel', channel: 'c2', values: { range: '30d' } },
-      2,
+      true,
     ],
-    ['me', { subcommand: 'me', values: { range: '24h' } }, 1],
-    ['user', { subcommand: 'user', values: { range: '365d' } }, 1],
-    ['apps', { subcommand: 'apps' }, 1],
-    ['apps for one app', { subcommand: 'apps', app: 'bot-a' }, 1],
-    ['emoji', { subcommand: 'emoji' }, 1],
-    ['sticker', { subcommand: 'sticker', values: { range: '90d' } }, 1],
-  ] as const)('%s defers first and replies with the dashboard', async (_, options, embeds) => {
+    ['me', { subcommand: 'me', values: { range: '24h' } }, false],
+    ['user', { subcommand: 'user', values: { range: '365d' } }, false],
+    ['apps', { subcommand: 'apps' }, false],
+    ['apps for one app', { subcommand: 'apps', app: 'bot-a' }, false],
+    ['emoji', { subcommand: 'emoji' }, false],
+    ['sticker', { subcommand: 'sticker', values: { range: '90d' } }, false],
+  ] as const)('%s defers first and replies with the dashboard', async (_, options, hot) => {
     const { replies, order } = await run(options);
     expect(order[0]).toBe('defer');
     expect(order.length).toBeGreaterThan(1);
     expect(replies).toHaveLength(1);
-    expectDashboard(replies[0], embeds);
+    expectDashboard(replies[0], hot);
     expect(embedText(replies[0])).not.toMatch(/delet/i);
   });
 
@@ -148,7 +171,7 @@ describe('/traffic subcommands', () => {
   it('caps a public reply by the command channel rank', async () => {
     const guild = fakeGuild({ invokerRoles: ['staff'] });
     const privately = await run({ subcommand: 'channel', channel: 'secret', guild });
-    expectDashboard(privately.replies[0], 2);
+    expectDashboard(privately.replies[0], true);
     const publicly = await run({
       subcommand: 'channel',
       channel: 'secret',
@@ -200,7 +223,7 @@ describe('/traffic subcommands', () => {
   it('reads apps from interaction records only', async () => {
     const { order } = await run({ subcommand: 'apps' });
     expect(new Set(order.filter((step) => step !== 'defer'))).toEqual(
-      new Set(['listChannels', 'fullBackupCompleted', 'appUsage']),
+      new Set(['listChannels', 'appUsage']),
     );
   });
 
@@ -258,17 +281,34 @@ describe('/traffic subcommands', () => {
     expect(excluded).not.toContain('a1');
   });
 
-  it('notes incomplete statistics only while no full backup has completed', async () => {
-    const footer = (reply: Reply | undefined): string =>
-      String((reply?.embeds?.[0]?.toJSON() as { footer?: { text?: string } }).footer?.text);
-    for (const subcommand of ['overview', 'me']) {
-      const rebuilding = await run({ subcommand }, fakeStatsRepo({ rebuilding: true }));
-      expect(footer(rebuilding.replies[0])).toContain('replies:traffic.notes.rebuild');
-      const done = await run({ subcommand });
-      expect(footer(done.replies[0])).not.toContain('replies:traffic.notes.rebuild');
+  it('titles each report with its range and leaves out any summary or notes', async () => {
+    const seen: { key: string; params?: Record<string, unknown> }[] = [];
+    const t = (key: string, params?: Record<string, unknown>) => {
+      seen.push({ key, ...(params === undefined ? {} : { params }) });
+      return key;
+    };
+    const cases = [
+      [{ subcommand: 'overview' }, 'overview'],
+      [{ subcommand: 'channel', channel: 'c1' }, 'channel'],
+      [{ subcommand: 'me' }, 'person'],
+      [{ subcommand: 'apps' }, 'apps'],
+      [{ subcommand: 'apps', app: 'bot-a' }, 'app'],
+      [{ subcommand: 'emoji' }, 'emoji'],
+      [{ subcommand: 'sticker' }, 'sticker'],
+    ] as const;
+    for (const [options, report] of cases) {
+      seen.length = 0;
+      const { replies } = await run(options, fakeStatsRepo(), t);
+      expect(embedOf(replies[0])?.title).toBe(`replies:traffic.${report}.title`);
+      const title = seen.find((call) => call.key === `replies:traffic.${report}.title`);
+      expect(title?.params?.range, report).toBe(
+        'replies:traffic.range.' + (report === 'emoji' || report === 'sticker' ? '30d' : '7d'),
+      );
+      expect(
+        seen.some((call) => /\.(summary|notes)\b/.test(call.key)),
+        report,
+      ).toBe(false);
     }
-    const emoji = await run({ subcommand: 'emoji' }, fakeStatsRepo({ rebuilding: true }));
-    expect(footer(emoji.replies[0])).not.toContain('replies:traffic.notes.rebuild');
   });
 
   it('names only visible channels in message previews', async () => {
@@ -306,9 +346,9 @@ describe('/traffic subcommands', () => {
     const otherShort = fakeInteraction({ subcommand: 'overview' });
     (otherShort.interaction.user as { id: string }).id = 'a1';
     await new Traffic().execute(otherShort.interaction, fakeBot(fakeStatsRepo()));
-    expectDashboard(otherShort.replies[0], 2);
+    expectDashboard(otherShort.replies[0], true);
     releaseFirst?.();
-    expectDashboard((await first).replies[0], 2);
-    expectDashboard((await run({ subcommand: 'me' })).replies[0], 1);
+    expectDashboard((await first).replies[0], true);
+    expectDashboard((await run({ subcommand: 'me' })).replies[0], false);
   });
 });

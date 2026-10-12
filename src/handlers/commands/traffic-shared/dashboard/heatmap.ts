@@ -1,11 +1,15 @@
 /**
  * Weekday x hour activity heatmap on a sequential one-hue ramp, with an
- * hour axis, a less-to-more legend, and the peak cell caption.
+ * hour axis, a less-to-more legend, and the peak cell caption. The caption
+ * sits right-aligned on the legend line when both fit the column, and on
+ * its own line under the legend otherwise; the legend's ramp swatches
+ * narrow before its text is cut.
  */
 import { roundRect } from '../canvas-primitives';
-import { sectionTitle, type Block, type Ctx } from './layout';
+import { drawLegendRow, legendGeometry } from './heatmap-legend';
+import { sectionTitle, type Block, type Column, type Ctx } from './layout';
 import { drawFitted, drawText, textWidth } from './text';
-import { COLOR, INNER_WIDTH, PAD, formatCount, rampColor } from './theme';
+import { COLOR, rampColor } from './theme';
 import type { HeatmapSection } from './types-common';
 
 const DAYS = 7;
@@ -16,7 +20,11 @@ const SIZE = 12;
 const GAP = 2;
 const AXIS_HEIGHT = 20;
 const LEGEND_HEIGHT = 24;
+/** Extra height when the peak caption takes its own line. */
+export const PEAK_LINE_HEIGHT = 18;
 const GRID_HEIGHT = DAYS * CELL_HEIGHT + AXIS_HEIGHT + LEGEND_HEIGHT;
+/** Room kept between the legend and an inline peak caption. */
+const CAPTION_GAP = 16;
 
 const assertShape = (section: HeatmapSection): void => {
   const valid =
@@ -40,57 +48,64 @@ const peakCell = (
   return peak;
 };
 
-const drawLegendRow = (ctx: Ctx, section: HeatmapSection, max: number, y: number): void => {
-  const muted = { size: SIZE, color: COLOR.muted };
-  let lx = PAD;
-  drawText(ctx, section.lessLabel, lx, y, muted);
-  lx += textWidth(ctx, section.lessLabel, SIZE) + 6;
-  for (let i = 0; i < 6; i++) {
-    roundRect(ctx, lx, y - 6, 18, 12, 2);
-    ctx.fillStyle = rampColor(i / 5);
-    ctx.fill();
-    lx += 20;
-  }
-  drawText(ctx, section.moreLabel(formatCount(max)), lx + 4, y, muted);
-};
-
-const drawGrid = (ctx: Ctx, section: HeatmapSection, y: number): void => {
-  const cellW = (INNER_WIDTH - ROW_LABEL_WIDTH) / HOURS;
+const drawGrid = (
+  ctx: Ctx,
+  section: HeatmapSection,
+  col: Column,
+  y: number,
+  captionOwnLine: boolean,
+): void => {
+  const cellW = (col.w - ROW_LABEL_WIDTH) / HOURS;
   const peak = peakCell(section.grid);
   const scale = Math.max(1, peak.max);
+  const left = col.x + ROW_LABEL_WIDTH;
   section.grid.forEach((row, day) => {
     const cy = y + day * CELL_HEIGHT;
     const label = section.weekdayLabels[day] ?? '';
     const labelStyle = { size: SIZE, color: COLOR.muted };
-    drawFitted(ctx, label, PAD, cy + CELL_HEIGHT / 2, ROW_LABEL_WIDTH - 4, labelStyle);
+    drawFitted(ctx, label, col.x, cy + CELL_HEIGHT / 2, ROW_LABEL_WIDTH - 4, labelStyle);
     row.forEach((v, hour) => {
-      roundRect(ctx, PAD + ROW_LABEL_WIDTH + hour * cellW, cy, cellW - GAP, CELL_HEIGHT - GAP, 2);
+      roundRect(ctx, left + hour * cellW, cy, cellW - GAP, CELL_HEIGHT - GAP, 2);
       ctx.fillStyle = rampColor(Math.max(0, v) / scale);
       ctx.fill();
     });
   });
   const axisY = y + DAYS * CELL_HEIGHT + 10;
   for (let hour = 0; hour < HOURS; hour += 3) {
-    const hx = PAD + ROW_LABEL_WIDTH + hour * cellW + (cellW - GAP) / 2;
+    const hx = left + hour * cellW + (cellW - GAP) / 2;
     drawText(ctx, String(hour), hx, axisY, { size: SIZE, color: COLOR.muted, align: 'center' });
   }
   const legendY = y + DAYS * CELL_HEIGHT + AXIS_HEIGHT + 12;
-  drawLegendRow(ctx, section, peak.max, legendY);
-  if (peak.max > 0) {
-    const caption = section.peakLabel(section.weekdayLabels[peak.day] ?? '', peak.hour);
-    const style = { size: SIZE, color: COLOR.body, align: 'right' } as const;
-    drawText(ctx, caption, PAD + INNER_WIDTH, legendY, style);
-  }
+  const { swatch } = legendGeometry(ctx, section, peak.max, col.w);
+  drawLegendRow(ctx, section, peak.max, col, legendY, swatch);
+  if (peak.max === 0) return;
+  const caption = section.peakLabel(section.weekdayLabels[peak.day] ?? '', peak.hour);
+  const style = { size: SIZE, color: COLOR.body } as const;
+  if (captionOwnLine) drawFitted(ctx, caption, col.x, legendY + PEAK_LINE_HEIGHT + 2, col.w, style);
+  else drawText(ctx, caption, col.x + col.w, legendY, { ...style, align: 'right' });
+};
+
+/** Whether the peak caption needs its own line in this column. */
+const captionNeedsLine = (measure: Ctx, section: HeatmapSection, col: Column): boolean => {
+  const peak = peakCell(section.grid);
+  if (peak.max === 0) return false;
+  const caption = section.peakLabel(section.weekdayLabels[peak.day] ?? '', peak.hour);
+  const legend = legendGeometry(measure, section, peak.max, col.w);
+  return legend.width + CAPTION_GAP + textWidth(measure, caption, SIZE) > col.w;
 };
 
 /**
  * Section title plus the heatmap.
  * @throws {RangeError} When the grid is not 7 x 24 or there are not seven weekday labels.
  */
-export const heatmapBlocks = (section: HeatmapSection): Block[] => {
+export const heatmapBlocks = (measure: Ctx, section: HeatmapSection, col: Column): Block[] => {
   assertShape(section);
+  const ownLine = captionNeedsLine(measure, section, col);
   return [
-    sectionTitle(section.title),
-    { height: GRID_HEIGHT, draw: (ctx, y) => drawGrid(ctx, section, y) },
+    sectionTitle(measure, col, section.title),
+    {
+      height: GRID_HEIGHT + (ownLine ? PEAK_LINE_HEIGHT : 0),
+      draw: (ctx, y) => drawGrid(ctx, section, col, y, ownLine),
+    },
   ];
 };

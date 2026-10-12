@@ -139,8 +139,6 @@ interface FakeStatsOptions {
   /** Messages the summary reports; 0 makes every report answer "no data". */
   readonly messages?: number;
   readonly appUses?: number;
-  /** No full backup has completed yet (the rebuild note shows). */
-  readonly rebuilding?: boolean;
   /** Replaces the text of the top message. */
   readonly hotContent?: string;
 }
@@ -329,7 +327,7 @@ export const fakeStatsRepo = (
   };
   const readers: Pick<
     ArchiveStatsRepo,
-    'reactionsGiven' | 'emojiUsage' | 'stickerUsage' | 'listChannels' | 'fullBackupCompleted'
+    'reactionsGiven' | 'emojiUsage' | 'stickerUsage' | 'listChannels'
   > = {
     reactionsGiven: async (_w, _u, scope) => {
       calls.push({ method: 'reactionsGiven', channelIds: scope.channelIds });
@@ -353,9 +351,8 @@ export const fakeStatsRepo = (
       return ok(ids.map((stickerId, i) => ({ stickerId, uses: i % 5 === 4 ? 0 : 92 - i * 7 })));
     },
     listChannels: async () => ok(CHANNEL_RECORDS),
-    fullBackupCompleted: async () => ok(options.rebuilding !== true),
   };
-  // The single-purpose methods are not used by the commands; only `activity` is.
+  // The single-purpose methods (and `fullBackupCompleted`) are not used by the commands.
   return { calls, activity, appUsage, ...readers } as unknown as ArchiveStatsRepo & {
     readonly calls: StatsCall[];
   };

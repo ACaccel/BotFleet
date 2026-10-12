@@ -83,6 +83,8 @@ export const drawRankBars = (
 export interface BarOptions {
   readonly rowHeight?: number;
   readonly colorFor?: (index: number) => string;
+  /** Largest share of the width the labels may take (default 0.5). */
+  readonly labelShare?: number;
 }
 
 /** Labelled bars without rank numbers (content composition, interaction types). */
@@ -98,7 +100,7 @@ export const drawBars = (
   const rowH = options.rowHeight ?? ROW_HEIGHT;
   const labelW = Math.min(
     Math.max(...rows.map((r) => textWidth(ctx, r.label, SIZE))) + 12,
-    w * LABEL_SHARE,
+    w * (options.labelShare ?? LABEL_SHARE),
   );
   const values = rows.map((r) => r.valueText ?? formatCount(r.value));
   const valW = Math.max(...values.map((t) => textWidth(ctx, t, SIZE))) + 8;

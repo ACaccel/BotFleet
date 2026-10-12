@@ -57,10 +57,6 @@ export const localDateTime = (timestampMs: number, timeZone: string): string => 
   return `${monthDay(slot.dayKey)} ${String(slot.hour).padStart(2, '0')}:${minute}`;
 };
 
-/** Local `MM/DD` of a timestamp. */
-export const localDate = (timestampMs: number, timeZone: string): string =>
-  monthDay(localSlotOf(timestampMs, timeZone).dayKey);
-
 /**
  * The window's local dates: `09/10 – 10/09`, with times for `24h` and years for
  * `365d`.
@@ -92,9 +88,3 @@ export const zoneLabel = (timeZone: string, atMs: number): string => {
 /** Relative change in percent, or `undefined` without a previous value. */
 export const percentChange = (current: number, previous: number): number | undefined =>
   previous > 0 ? ((current - previous) / previous) * 100 : undefined;
-
-/** `+8.2%`, `-3.0%` or `0.0%`. */
-export const signedPercent = (change: number): string => {
-  const rounded = Math.round(change * 10) / 10;
-  return `${rounded > 0 ? '+' : ''}${rounded.toFixed(1)}%`;
-};

@@ -4,18 +4,10 @@
  * someone who is not in the guild, gets the same neutral no-data answer, so the
  * reply reveals neither restricted channels nor membership.
  */
-
-import {
-  dailyAverage,
-  heroOf,
-  rebuildNote,
-  summaryDelta,
-  tCount,
-  trendOf,
-} from './activity-common';
+import { dailyAverage, heroOf, tCount, trendOf } from './activity-common';
 import { busiestTile, heatmapOf } from './activity-sections';
 import { formatCount, formatPercent, renderPersonDashboard } from './dashboard';
-import { rangeLabel, windowSpan } from './labels';
+import { rangeLabel } from './labels';
 import { cachedBotIds, channelRecordsOf } from './names';
 import { personSections, type PersonData } from './person-sections';
 import { channelColumn, channelRow } from './rankings';
@@ -113,20 +105,10 @@ export const buildPersonReport = async (
     ...(heatmap === undefined ? {} : { heatmap }),
   });
   return dashboardReply({
-    title: t(`${K}.person.title`, { user: subject.displayName }),
-    summary: t(`${K}.person.summary`, {
+    title: t(`${K}.person.title`, {
+      user: subject.displayName,
       range: rangeLabel(t, period.range),
-      dates: windowSpan(period.window, period.range, period.timeZone),
-      number: formatCount(summary.messages),
-      delta: summaryDelta(t, summary.messages, previous),
-      rank: rank === null ? '—' : formatCount(rank),
     }),
-    notes: [
-      t(`${K}.notes.reactions`),
-      t(`${K}.notes.partners`),
-      t(`${K}.notes.person_channel_fold`),
-      rebuildNote(context),
-    ],
     image,
   });
 };

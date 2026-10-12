@@ -1,14 +1,14 @@
 /**
- * Layout of the /traffic dashboard renderers: every dashboard renders at
- * the fixed width and a content-driven height that grows and shrinks by
- * exactly the section it gains or loses; ranked lists cap at their limit;
- * optional and empty sections collapse; long text truncates inside its
- * column; and malformed heatmaps are rejected.
+ * Layout of the /traffic dashboard renderers: every dashboard renders as
+ * landscape columns at a fixed width and about 16:9, taller only when a
+ * column's content needs it; ranked lists cap at their limit; the 24h
+ * layout (no heatmap) keeps the canvas size; optional and empty sections
+ * collapse without failing; long text truncates inside its column; and
+ * malformed heatmaps are rejected.
  */
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  DASHBOARD_WIDTH_PX,
   EMOJI_RANK_LIMIT,
   RANK_ROW_LIMIT,
   STICKER_RANK_LIMIT,
@@ -23,19 +23,19 @@ import {
   type TrendSection,
 } from '../../../../src/handlers/commands/traffic-shared/dashboard';
 import { ROW_HEIGHT } from '../../../../src/handlers/commands/traffic-shared/dashboard/bars';
-import { TITLE_HEIGHT } from '../../../../src/handlers/commands/traffic-shared/dashboard/layout';
+import { canvasWidth } from '../../../../src/handlers/commands/traffic-shared/dashboard/columns';
 import { SCALE } from '../../../../src/handlers/commands/traffic-shared/dashboard/theme';
 import * as fixtures from './dashboard-fixtures';
 
-/** Private layout constants, mirrored in logical pixels. */
-const SECTION_GAP = 22; // layout.ts
-const TILE_GAP = 8; // tiles.ts
-const TILE_HEIGHT = 70; // tiles.ts
-const HEATMAP_GRID_HEIGHT = 7 * 15 + 20 + 24; // heatmap.ts GRID_HEIGHT
-const EMOJI_ROW_HEIGHT = 46; // emoji.ts
-const STICKER_GRID_HEIGHT = 3 * (138 + 8) - 8; // sticker.ts, three full card rows
-const CHIP_HEIGHT = 22; // chips.ts
-const CHIP_ROW_STEP = 28; // chips.ts
+/** Private column widths, mirrored in logical pixels. */
+const WIDTHS = {
+  overview: [256, 336, 268], // activity.ts SERVER_LAYOUT
+  person: [300, 330, 268], // activity.ts PERSON_LAYOUT
+  apps: [420, 440], // apps.ts
+  appSingle: [420, 420], // apps.ts
+  emoji: [256, 620], // emoji.ts
+  sticker: [310, 4 * 130 + 3 * 8], // sticker.ts
+} as const;
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -45,30 +45,55 @@ const size = (png: Buffer): { width: number; height: number } => {
 };
 const heightOf = (png: Buffer): number => size(png).height;
 const px = (logical: number): number => logical * SCALE;
+const withoutHeatmap = <T extends { heatmap?: unknown }>(data: T): Omit<T, 'heatmap'> => {
+  const { heatmap: _omitted, ...rest } = data;
+  return rest;
+};
 
 describe('dashboard renderers', () => {
-  /** Expected logical heights of the fixtures, from the layout constants. */
-  const cases: readonly [string, () => Buffer, number][] = [
-    ['overview', () => renderOverviewDashboard(fixtures.overview()), 1011],
-    ['channel', () => renderChannelDashboard(fixtures.channel()), 1011],
-    ['person', () => renderPersonDashboard(fixtures.person()), 1107],
-    ['apps', () => renderAppsDashboard(fixtures.apps()), 744],
-    ['apps single', () => renderAppSingleDashboard(fixtures.appSingle()), 779],
-    ['emoji', () => renderEmojiDashboard(fixtures.emoji()), 732],
-    ['sticker', () => renderStickerDashboard(fixtures.sticker()), 648],
+  const cases: readonly [string, () => Buffer, readonly number[]][] = [
+    ['overview', () => renderOverviewDashboard(fixtures.overview()), WIDTHS.overview],
+    ['channel', () => renderChannelDashboard(fixtures.channel()), WIDTHS.overview],
+    ['person', () => renderPersonDashboard(fixtures.person()), WIDTHS.person],
+    ['apps', () => renderAppsDashboard(fixtures.apps()), WIDTHS.apps],
+    ['apps single', () => renderAppSingleDashboard(fixtures.appSingle()), WIDTHS.appSingle],
+    ['emoji', () => renderEmojiDashboard(fixtures.emoji()), WIDTHS.emoji],
+    ['sticker', () => renderStickerDashboard(fixtures.sticker()), WIDTHS.sticker],
   ];
 
-  it.each(cases)('renders %s at the fixed width and its content height', (_, render, logical) => {
+  it.each(cases)('renders %s as a landscape image of about 16:9', (_, render, widths) => {
     const { width, height } = size(render());
-    expect(width).toBe(DASHBOARD_WIDTH_PX);
-    expect(Math.abs(height - px(logical))).toBeLessThanOrEqual(px(logical) * 0.05);
+    expect(width).toBe(px(canvasWidth(widths)));
+    const ratio = width / height;
+    expect(ratio).toBeLessThanOrEqual(16 / 9 + 0.01);
+    expect(ratio).toBeGreaterThan(1.6);
   });
 
-  it('omits the heatmap section when it is not provided (24h range)', () => {
-    const { heatmap: _omitted, ...withoutHeatmap } = fixtures.overview();
-    const full = heightOf(renderOverviewDashboard(fixtures.overview()));
-    const short = heightOf(renderOverviewDashboard(withoutHeatmap));
-    expect(full - short).toBe(px(SECTION_GAP + TITLE_HEIGHT + HEATMAP_GRID_HEIGHT));
+  it.each([
+    ['overview', () => renderOverviewDashboard(withoutHeatmap(fixtures.overview()))],
+    ['channel', () => renderChannelDashboard(withoutHeatmap(fixtures.channel()))],
+    ['person', () => renderPersonDashboard(withoutHeatmap(fixtures.person()))],
+    ['apps single', () => renderAppSingleDashboard(withoutHeatmap(fixtures.appSingle()))],
+  ] as const)('keeps the %s canvas size when the heatmap is omitted (24h)', (name, render) => {
+    const full = cases.find(([n]) => n === name)?.[1];
+    if (full === undefined) throw new Error(`no case ${name}`);
+    const short = render();
+    expect(size(short)).toEqual(size(full()));
+    expect(short.equals(full())).toBe(false);
+  });
+
+  it('grows past 16:9 by exactly the rows a column gains once it is the tallest', () => {
+    const withContent = (n: number): number => {
+      const base = fixtures.overview();
+      const rows = Array.from({ length: n }, (_, i) => ({ label: `c${i}`, value: 100 - i }));
+      return heightOf(renderOverviewDashboard({ ...base, content: { ...base.content, rows } }));
+    };
+    const floor = withContent(6);
+    expect(withContent(7)).toBe(floor);
+    // Ten content rows make the middle column taller than the 16:9 floor.
+    const tall = withContent(10);
+    expect(tall).toBeGreaterThan(floor);
+    expect(withContent(11) - tall).toBe(px(ROW_HEIGHT));
   });
 
   const capCases: readonly [string, (n: number) => Buffer, number][] = [
@@ -78,6 +103,15 @@ describe('dashboard renderers', () => {
         const base = fixtures.overview();
         const rows = fixtures.rankRows('m', n);
         return renderOverviewDashboard({ ...base, members: { ...base.members, rows } });
+      },
+      RANK_ROW_LIMIT,
+    ],
+    [
+      'paired 24h rankings',
+      (n) => {
+        const base = withoutHeatmap(fixtures.overview());
+        const rows = fixtures.rankRows('c', n);
+        return renderOverviewDashboard({ ...base, channels: { ...base.channels, rows } });
       },
       RANK_ROW_LIMIT,
     ],
@@ -123,20 +157,6 @@ describe('dashboard renderers', () => {
     const atLimit = render(limit);
     expect(render(limit + 7).equals(atLimit)).toBe(true);
     expect(render(limit - 1).equals(atLimit)).toBe(false);
-  });
-
-  it('keeps paired ranking columns at the height of the longer one', () => {
-    const base = fixtures.overview();
-    const shortLeft = { ...base, members: { ...base.members, rows: fixtures.rankRows('m', 3) } };
-    const bothShort = {
-      ...shortLeft,
-      channels: { ...base.channels, rows: fixtures.rankRows('c', 3) },
-    };
-    const full = heightOf(renderOverviewDashboard(base));
-    expect(heightOf(renderOverviewDashboard(shortLeft))).toBe(full);
-    expect(full - heightOf(renderOverviewDashboard(bothShort))).toBe(
-      px((RANK_ROW_LIMIT - 3) * ROW_HEIGHT),
-    );
   });
 
   it('draws a ranking without rank numbers when it is not ranked', () => {
@@ -185,101 +205,94 @@ describe('dashboard renderers', () => {
   it('clamps tile flex weights so a tile never collapses', () => {
     const withFlex = (flex: readonly (number | undefined)[]): Buffer => {
       const base = fixtures.overview();
-      const row = (base.tileRows[0] ?? []).map((t, i) => ({ ...t, flex: flex[i] }));
-      return renderOverviewDashboard({ ...base, tileRows: [row] });
+      const [first = [], ...rest] = base.tileRows;
+      const row = first.map((t, i) => ({ ...t, flex: flex[i] }));
+      return renderOverviewDashboard({ ...base, tileRows: [row, ...rest] });
     };
-    const plain = withFlex([undefined, undefined, undefined, undefined]);
-    expect(withFlex([Number.NaN, Number.POSITIVE_INFINITY, 1, 1]).equals(plain)).toBe(true);
-    expect(withFlex([-3, 0, 1, 1]).equals(withFlex([0.25, 0.25, 1, 1]))).toBe(true);
-    expect(withFlex([0.25, 0.25, 1, 1]).equals(plain)).toBe(false);
+    const plain = withFlex([undefined, undefined]);
+    expect(withFlex([Number.NaN, Number.POSITIVE_INFINITY]).equals(plain)).toBe(true);
+    expect(withFlex([-3, 1]).equals(withFlex([0.25, 1]))).toBe(true);
+    expect(withFlex([0.25, 1]).equals(plain)).toBe(false);
   });
 });
 
 describe('empty and optional sections', () => {
-  const overviewHeight = (patch: Partial<ReturnType<typeof fixtures.overview>> = {}): number =>
-    heightOf(renderOverviewDashboard({ ...fixtures.overview(), ...patch }));
   const trendOf = (patch: Partial<TrendSection>): TrendSection => ({
     ...fixtures.trend(7),
     ...patch,
   });
 
-  it('keeps the trend chart height for empty, single-point, and previous-less series', () => {
-    const full = overviewHeight();
-    const empty = trendOf({ current: [], previous: undefined, xLabels: [] });
-    const single = trendOf({ current: [42], previous: undefined, xLabels: ['D1'] });
+  it('renders empty, single-point, and previous-less trends at the same size', () => {
+    const render = (trend: TrendSection): Buffer =>
+      renderOverviewDashboard({ ...fixtures.overview(), trend });
+    const full = size(render(trendOf({})));
+    const empty = render(trendOf({ current: [], previous: undefined, xLabels: [] }));
+    const single = render(trendOf({ current: [42], previous: undefined, xLabels: ['D1'] }));
     const { previous: _previous, ...noPrevious } = trendOf({});
-    expect(overviewHeight({ trend: empty })).toBe(full);
-    expect(overviewHeight({ trend: single })).toBe(full);
-    expect(overviewHeight({ trend: noPrevious })).toBe(full);
-    const emptyPng = renderOverviewDashboard({ ...fixtures.overview(), trend: empty });
-    const singlePng = renderOverviewDashboard({ ...fixtures.overview(), trend: single });
-    expect(singlePng.equals(emptyPng)).toBe(false);
+    expect(size(empty)).toEqual(full);
+    expect(size(single)).toEqual(full);
+    expect(size(render(noPrevious))).toEqual(full);
+    expect(single.equals(empty)).toBe(false);
   });
 
-  it('shrinks paired rankings to a single row when both are empty', () => {
+  it('renders empty rankings, content and tiles without changing the canvas size', () => {
     const base = fixtures.overview();
-    const empty = {
+    const full = size(renderOverviewDashboard(base));
+    const emptied = renderOverviewDashboard({
+      ...base,
+      tileRows: [[], []],
+      content: { ...base.content, rows: [] },
+      members: { ...base.members, rows: [] },
+      channels: { ...base.channels, rows: [] },
+    });
+    expect(size(emptied)).toEqual(full);
+    const pair = withoutHeatmap(base);
+    const emptyPair = {
+      ...pair,
       members: { ...base.members, rows: [] },
       channels: { ...base.channels, rows: [] },
     };
-    expect(overviewHeight() - overviewHeight(empty)).toBe(px((RANK_ROW_LIMIT - 1) * ROW_HEIGHT));
-  });
-
-  it('sizes the detail pair by its longer column when content rows are empty', () => {
-    const base = fixtures.overview();
-    // Six content rows beside five interaction rows; dropping content leaves five.
-    expect(overviewHeight() - overviewHeight({ content: { ...base.content, rows: [] } })).toBe(
-      px(ROW_HEIGHT),
-    );
-  });
-
-  it('keeps the heatmap height for an all-zero grid', () => {
-    expect(overviewHeight({ heatmap: fixtures.heatmap(fixtures.fakeGrid(0)) })).toBe(
-      overviewHeight(),
-    );
+    expect(size(renderOverviewDashboard(emptyPair))).toEqual(full);
   });
 
   it('drops empty tile rows under the hero', () => {
-    const full = overviewHeight();
-    expect(full - overviewHeight({ tileRows: [] })).toBe(px(TILE_GAP + TILE_HEIGHT));
-    expect(overviewHeight({ tileRows: [[]] })).toBe(overviewHeight({ tileRows: [] }));
+    const base = fixtures.overview();
+    expect(
+      renderOverviewDashboard({ ...base, tileRows: [[], []] }).equals(
+        renderOverviewDashboard({ ...base, tileRows: [] }),
+      ),
+    ).toBe(true);
   });
 
-  it('collapses an empty emoji ranking to one row and drops empty tiles', () => {
-    const base = fixtures.emoji();
-    const full = heightOf(renderEmojiDashboard(base));
-    const noRows = { ...base, ranking: { ...base.ranking, rows: [] } };
-    expect(full - heightOf(renderEmojiDashboard(noRows))).toBe(
-      px((RANK_ROW_LIMIT - 1) * EMOJI_ROW_HEIGHT),
-    );
-    expect(full - heightOf(renderEmojiDashboard({ ...base, tiles: [] }))).toBe(
-      px(TILE_HEIGHT + SECTION_GAP),
-    );
+  it('renders emoji and sticker dashboards without rows, tiles, or unused chips', () => {
+    const emoji = fixtures.emoji();
+    const sticker = fixtures.sticker();
+    const emojiSize = size(renderEmojiDashboard(emoji)).width;
+    const stickerSize = size(renderStickerDashboard(sticker)).width;
+    const bareEmoji = renderEmojiDashboard({
+      tiles: [],
+      ranking: { ...emoji.ranking, rows: [], note: undefined },
+    });
+    const bareSticker = renderStickerDashboard({
+      tiles: [],
+      ranking: { ...sticker.ranking, rows: [], note: undefined },
+    });
+    expect(size(bareEmoji).width).toBe(emojiSize);
+    expect(size(bareSticker).width).toBe(stickerSize);
   });
 
-  it('collapses an empty sticker grid and drops empty tiles', () => {
-    const base = fixtures.sticker();
-    const full = heightOf(renderStickerDashboard(base));
-    const noRows = { ...base, ranking: { ...base.ranking, rows: [] } };
-    expect(full - heightOf(renderStickerDashboard(noRows))).toBe(px(STICKER_GRID_HEIGHT));
-    expect(full - heightOf(renderStickerDashboard({ ...base, tiles: [] }))).toBe(
-      px(TILE_HEIGHT + SECTION_GAP),
-    );
-  });
-
-  it('draws only the unused title when no names are given, and wraps chips by rows', () => {
+  it('caps unused chips at their rows with a trailing ellipsis chip', () => {
     const base = fixtures.emoji();
     const unused = base.unused;
     if (unused === undefined) throw new Error('fixture needs an unused section');
-    const withNames = (names: readonly string[]): number =>
-      heightOf(renderEmojiDashboard({ ...base, unused: { ...unused, names } }));
-    const none = heightOf(renderEmojiDashboard({ ...base, unused: undefined }));
-    expect(withNames([]) - none).toBe(px(SECTION_GAP + TITLE_HEIGHT));
-    const oneRow = withNames([':a:', ':b:']);
-    expect(oneRow - none).toBe(px(SECTION_GAP + TITLE_HEIGHT + CHIP_HEIGHT));
-    const wrapped = withNames(Array.from({ length: 40 }, (_, i) => `:unused_${i}:`));
-    expect(wrapped).toBeGreaterThan(oneRow);
-    expect((wrapped - oneRow) % px(CHIP_ROW_STEP)).toBe(0);
+    const render = (count: number): Buffer =>
+      renderEmojiDashboard({
+        ...base,
+        unused: { ...unused, names: Array.from({ length: count }, (_, i) => `:unused_${i}:`) },
+      });
+    const many = render(80);
+    expect(render(120).equals(many)).toBe(true);
+    expect(heightOf(many)).toBe(heightOf(render(2)));
   });
 });
 
@@ -302,7 +315,7 @@ describe('text truncation', () => {
    */
   const cases: readonly [string, (text: string) => Buffer, string][] = [
     [
-      'person partner name (narrow left column)',
+      'person partner name (middle column)',
       (text) => {
         const base = fixtures.person();
         const rows = base.partners.rows.map((r, i) => (i === 0 ? { ...r, name: text } : r));
@@ -356,7 +369,7 @@ describe('text truncation', () => {
         );
         return renderEmojiDashboard({ ...base, ranking: { ...base.ranking, rows } });
       },
-      ':a_long_emoji_label_x:',
+      ':a_long_emoji_label_for_the_wide_half_x:',
     ],
     [
       'heatmap weekday label',
@@ -367,6 +380,17 @@ describe('text truncation', () => {
         return renderOverviewDashboard({ ...base, heatmap: { ...section, weekdayLabels } });
       },
       'Wednesday-long',
+    ],
+    [
+      'heatmap peak caption on its own line',
+      (text) => {
+        const base = fixtures.overview();
+        return renderOverviewDashboard({
+          ...base,
+          heatmap: { ...fixtures.heatmap(), peakLabel: () => text },
+        });
+      },
+      'Peak caption long enough to overflow the column x',
     ],
     ['stat tile label', lastTile((label) => ({ label })), 'a-long-stat-tile-label'],
     ['stat tile value', lastTile((value) => ({ value })), '1,234,567,890'],
@@ -403,20 +427,22 @@ describe('text truncation', () => {
       'a-long-forum-tag-x',
     ],
     [
-      'ranking column title (narrow left column)',
+      'ranking column title (middle column)',
       (text) => {
         const base = fixtures.overview();
         return renderOverviewDashboard({ ...base, members: { ...base.members, title: text } });
       },
-      'a-long-ranking-column-title-xyz',
+      'a-long-ranking-column-title-that-overflows-the-middle-column',
     ],
     [
-      'full-width section title',
+      'column-wide section title',
       (text) => {
         const base = fixtures.sticker();
-        return renderStickerDashboard({ ...base, ranking: { ...base.ranking, title: text } });
+        const unused = base.unused;
+        if (unused === undefined) throw new Error('fixture needs an unused section');
+        return renderStickerDashboard({ ...base, unused: { ...unused, title: text } });
       },
-      'a-section-title-long-enough-to-overflow-the-full-inner-width-of-a-dashboard',
+      'a-section-title-long-enough-to-overflow-the-summary-column-width',
     ],
     [
       'app users caption',
@@ -447,7 +473,7 @@ describe('text truncation', () => {
           ranking: { ...base.ranking, countCaption: () => text },
         });
       },
-      'uses, a long caption',
+      'uses, a long caption that overflows',
     ],
     [
       'key-value label beside a wide value',

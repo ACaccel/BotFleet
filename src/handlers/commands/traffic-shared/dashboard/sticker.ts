@@ -1,15 +1,17 @@
 /**
- * Server-sticker dashboard: summary tiles, a grid of ranked sticker cards
- * (art, name, count with share, usage bar relative to the top sticker),
- * and the chips of stickers nobody used.
+ * Server-sticker dashboard in two landscape columns: the summary tiles
+ * above the chips of stickers nobody used, beside a grid of ranked sticker
+ * cards (art, name, count with share, usage bar relative to the top
+ * sticker).
  */
 import { roundRect } from '../canvas-primitives';
 import { drawArt } from './art';
 import { unusedBlocks } from './chips';
-import { renderBlocks, sectionTitle, withGaps, type Block, type Ctx } from './layout';
+import { renderColumns } from './columns';
+import { sectionTitle, type Block, type Column, type Ctx } from './layout';
 import { drawFitted, drawText, fitText, textWidth } from './text';
-import { COLOR, INNER_WIDTH, PAD, formatCount, formatPercent } from './theme';
-import { tileRow } from './tiles';
+import { COLOR, formatCount, formatPercent } from './theme';
+import { tileRows } from './tiles';
 import type { StickerDashboard, StickerRanking, StickerRankRow } from './types';
 
 const COLUMNS = 4;
@@ -17,8 +19,12 @@ const COLUMNS = 4;
 export const STICKER_RANK_LIMIT = COLUMNS * 3;
 
 const GAP = 8;
-const CARD_WIDTH = (INNER_WIDTH - GAP * (COLUMNS - 1)) / COLUMNS;
+const CARD_WIDTH = 130;
 const CARD_HEIGHT = 138;
+const SUMMARY_WIDTH = 310;
+const GRID_WIDTH = COLUMNS * CARD_WIDTH + GAP * (COLUMNS - 1);
+/** Chip rows that keep the summary column no taller than a full grid. */
+const UNUSED_ROWS = 11;
 const ART_SIZE = 70;
 const NOTE_HEIGHT = 22;
 
@@ -71,7 +77,7 @@ const drawCard = (
   ctx.fill();
 };
 
-const rankingBlocks = (ranking: StickerRanking): Block[] => {
+const rankingBlocks = (measure: Ctx, ranking: StickerRanking, col: Column): Block[] => {
   const rows = ranking.rows.slice(0, STICKER_RANK_LIMIT);
   const gridRows = Math.ceil(rows.length / COLUMNS);
   const gridH = gridRows === 0 ? 0 : gridRows * (CARD_HEIGHT + GAP) - GAP;
@@ -82,27 +88,32 @@ const rankingBlocks = (ranking: StickerRanking): Block[] => {
     max: Math.max(1, ...rows.map((r) => r.count)),
   };
   return [
-    sectionTitle(ranking.title),
+    sectionTitle(measure, col, ranking.title),
     {
       height: gridH + noteH,
       draw: (ctx, y) => {
         rows.forEach((row, i) => {
-          const cx = PAD + (i % COLUMNS) * (CARD_WIDTH + GAP);
+          const cx = col.x + (i % COLUMNS) * (CARD_WIDTH + GAP);
           const cy = y + Math.floor(i / COLUMNS) * (CARD_HEIGHT + GAP);
           drawCard(ctx, row, i + 1, card, cx, cy);
         });
         if (ranking.note === undefined) return;
-        drawText(ctx, ranking.note, PAD, y + gridH + 15, { size: 12, color: COLOR.muted });
+        drawText(ctx, ranking.note, col.x, y + gridH + 15, { size: 12, color: COLOR.muted });
       },
     },
   ];
 };
 
 export const renderStickerDashboard = (data: StickerDashboard): Buffer =>
-  renderBlocks((measure) =>
-    withGaps([
-      data.tiles.length > 0 ? tileRow(data.tiles) : undefined,
-      rankingBlocks(data.ranking),
-      data.unused === undefined ? undefined : unusedBlocks(measure, data.unused),
-    ]),
-  );
+  renderColumns([
+    {
+      width: SUMMARY_WIDTH,
+      sections: (col, measure) => [
+        data.tiles.length > 0 ? tileRows(data.tiles, col) : undefined,
+        data.unused === undefined
+          ? undefined
+          : unusedBlocks(measure, data.unused, col, UNUSED_ROWS),
+      ],
+    },
+    { width: GRID_WIDTH, sections: (col, measure) => [rankingBlocks(measure, data.ranking, col)] },
+  ]);

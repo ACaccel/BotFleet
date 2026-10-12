@@ -1,6 +1,6 @@
 /**
  * Fake view models for the /traffic dashboard renderer tests, shaped
- * after the approved style-B mockups. Every export is a factory that
+ * after the approved landscape mockups. Every export is a factory that
  * returns fresh objects. Labels are Traditional Chinese like the
  * production translator output, so the fixtures also exercise the CJK
  * font path.
@@ -84,10 +84,12 @@ export const rankRows = (prefix: string, n: number): RankRow[] =>
 const activityBase = (): Omit<ActivityDashboardBase, 'hero'> => ({
   tileRows: [
     [
-      { label: '成員留存', value: '72%', sub: '前期 198 人中 143 人', flex: 1.45 },
-      { label: '回流與新成員', value: '70', sub: '佔活躍成員 33%', flex: 1.1 },
+      { label: '成員留存', value: '72%', sub: '前期 198 人中 143 人', flex: 1.2 },
+      { label: '回流與新成員', value: '70', sub: '佔活躍成員 33%' },
+    ],
+    [
       { label: '最活躍成員佔比', value: '6.1%', sub: '阿華 753 則', flex: 1.1 },
-      { label: '最忙', value: '10/08', sub: '週四 · 2,108 則', flex: 1.2 },
+      { label: '最忙', value: '10/08', sub: '週四 · 2,108 則' },
     ],
   ],
   trend: trend(7),
@@ -143,7 +145,7 @@ export const channel = (): ChannelDashboard => {
   return {
     ...base,
     hero: { ...hero('4,210', 'down'), metrics: heroMetrics().slice(0, 2) },
-    tileRows: [(base.tileRows[0] ?? []).slice(0, 3)],
+    tileRows: [base.tileRows[0] ?? [], (base.tileRows[1] ?? []).slice(1)],
     trend: trend(30),
     members: { title: '成員排行 · 前 10', rows: rankRows('成員', 10) },
     breakdown: {
@@ -167,9 +169,9 @@ export const person = (): PersonDashboard => ({
       {
         label: '收到 reaction',
         value: '1,402',
-        sub: ['最常收到 ', { image: null, fallback: ':joy:' }, ' 210'],
+        sub: ['最多 ', { image: null, fallback: ':joy:' }, ' 210'],
       },
-      { label: '給出 reaction', value: '936', sub: '最常用 :thumbsup: 300' },
+      { label: '給出 reaction', value: '936', sub: '最多 :thumbsup: 300' },
       { label: '使用指令', value: '33' },
     ],
   ],

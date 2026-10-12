@@ -1,7 +1,8 @@
 /**
- * The style-B reply: one embed carrying a title, a one-line selectable summary,
- * the data-limit notes as its footer, and the dashboard image attached to it.
- * Overview and channel reports add a second embed for the top messages.
+ * The `/traffic` reply: one embed with the report title and the landscape
+ * dashboard image. Overview and channel reports put the top messages in the
+ * embed text, where their jump links stay clickable and their previews
+ * selectable; Discord draws the image under that text.
  */
 import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
 
@@ -16,31 +17,21 @@ const clip = (text: string, limit: number): string =>
 
 export interface DashboardReply {
   readonly title: string;
-  readonly summary: string;
-  readonly notes: readonly string[];
   readonly image: Buffer;
-  /** Embeds after the dashboard, e.g. the top messages. */
-  readonly extra?: readonly EmbedBuilder[];
+  /** Embed text above the image, e.g. the top messages. */
+  readonly description?: string;
 }
 
 export const dashboardReply = (reply: DashboardReply): TrafficOutcome => {
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLOR)
     .setTitle(clip(reply.title, TITLE_LIMIT))
-    .setDescription(reply.summary)
     .setImage(`attachment://${DASHBOARD_FILE}`);
-  const notes = reply.notes.filter((note) => note.length > 0);
-  if (notes.length > 0) embed.setFooter({ text: notes.join('\n') });
+  if (reply.description !== undefined && reply.description.length > 0)
+    embed.setDescription(reply.description);
   return {
     kind: 'reply',
-    embeds: [embed, ...(reply.extra ?? [])],
+    embeds: [embed],
     files: [new AttachmentBuilder(reply.image, { name: DASHBOARD_FILE })],
   };
 };
-
-/** A secondary embed in the dashboard's colour. */
-export const secondaryEmbed = (title: string, description: string): EmbedBuilder =>
-  new EmbedBuilder()
-    .setColor(EMBED_COLOR)
-    .setTitle(clip(title, TITLE_LIMIT))
-    .setDescription(description);

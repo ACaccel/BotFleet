@@ -74,6 +74,17 @@ export interface LegendItem {
   readonly kind: 'line' | 'swatch';
 }
 
+const keyWidth = (item: LegendItem): number => (item.kind === 'swatch' ? 16 : 22);
+const ITEM_GAP = 16;
+
+/** Width `drawLegend` draws for `items`, without the trailing gap. */
+export const legendWidth = (ctx: Ctx, items: readonly LegendItem[], size: number): number =>
+  items.reduce(
+    (sum, item, i) =>
+      sum + keyWidth(item) + textWidth(ctx, item.name, size) + (i > 0 ? ITEM_GAP : 0),
+    0,
+  );
+
 /** Legend keys (short lines or square swatches) with their names. */
 export const drawLegend = (
   ctx: Ctx,
@@ -88,7 +99,6 @@ export const drawLegend = (
       roundRect(ctx, cx, y - 5, 10, 10, 2);
       ctx.fillStyle = item.color;
       ctx.fill();
-      cx += 16;
     } else {
       ctx.strokeStyle = item.color;
       ctx.lineWidth = 2;
@@ -97,10 +107,10 @@ export const drawLegend = (
       ctx.moveTo(cx, y);
       ctx.lineTo(cx + 16, y);
       ctx.stroke();
-      cx += 22;
     }
+    cx += keyWidth(item);
     drawText(ctx, item.name, cx, y, { size, color: COLOR.body });
-    cx += textWidth(ctx, item.name, size) + 16;
+    cx += textWidth(ctx, item.name, size) + ITEM_GAP;
   }
 };
 

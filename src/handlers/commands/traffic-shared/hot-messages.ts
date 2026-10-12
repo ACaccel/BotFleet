@@ -1,6 +1,7 @@
 /**
- * The top-messages embed under the overview and channel dashboards. Embed text
- * keeps the jump links clickable and the previews selectable.
+ * The top-messages text of the overview and channel replies: a bold heading
+ * and two lines per message, placed in the embed text so the jump links stay
+ * clickable and the previews selectable.
  *
  * A preview is the start of the current text, made inert: spoilers are hidden,
  * user, role and channel mentions become plain `@name` / `#name`, custom emoji
@@ -9,7 +10,7 @@
  * included) is escaped so nothing in it formats, links or pings. A message
  * without text names what it carries instead (pictures, files, a sticker).
  */
-import { escapeMarkdown, type EmbedBuilder } from 'discord.js';
+import { escapeMarkdown } from 'discord.js';
 
 import { VOICE_MESSAGE_FLAG } from '../../../core/archive/stats';
 import type { TopReactedMessage } from '../../../persistence/repositories/archive-stats.types';
@@ -17,7 +18,6 @@ import type { TopReactedMessage } from '../../../persistence/repositories/archiv
 import { formatCount } from './dashboard';
 import { emojiMarkdown } from './emoji-art';
 import { localDateTime } from './labels';
-import { secondaryEmbed } from './reply';
 import type { TFn } from './types';
 
 export const PREVIEW_LENGTH = 30;
@@ -111,8 +111,8 @@ export interface HotMessagesInput {
   readonly t: TFn;
 }
 
-/** The second embed, or `undefined` when no message in range has a reaction. */
-export const hotMessagesEmbed = (input: HotMessagesInput): EmbedBuilder | undefined => {
+/** The heading and message lines, or `undefined` when no message in range has a reaction. */
+export const hotMessagesText = (input: HotMessagesInput): string | undefined => {
   const { t } = input;
   if (input.messages.length === 0) return undefined;
   const lines = input.messages.flatMap((message, i) => {
@@ -136,8 +136,5 @@ export const hotMessagesEmbed = (input: HotMessagesInput): EmbedBuilder | undefi
       }),
     ];
   });
-  return secondaryEmbed(
-    t('replies:traffic.hot.title', { count: input.messages.length }),
-    lines.join('\n'),
-  );
+  return [t('replies:traffic.hot.heading', { count: input.messages.length }), ...lines].join('\n');
 };

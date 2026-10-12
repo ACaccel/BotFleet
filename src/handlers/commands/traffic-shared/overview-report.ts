@@ -3,19 +3,12 @@
  * from one archive scan. Text-channel threads fold into their channel in the
  * channel ranking; forum posts stand alone.
  */
-import {
-  dailyAverage,
-  heroOf,
-  rebuildNote,
-  summaryDelta,
-  tCount,
-  trendOf,
-} from './activity-common';
+import { dailyAverage, heroOf, tCount, trendOf } from './activity-common';
 import { busiestTile, heatmapOf, retentionTiles } from './activity-sections';
 import { formatCount, formatPercent, renderOverviewDashboard, type StatTile } from './dashboard';
-import { rangeLabel, windowSpan } from './labels';
+import { rangeLabel } from './labels';
 import { channelRecordsOf, memberName } from './names';
-import { channelColumn, channelRow, memberColumn, topMessagesEmbed } from './rankings';
+import { channelColumn, channelRow, memberColumn, topMessagesText } from './rankings';
 import { dashboardReply } from './reply';
 import { failed, type TrafficContext, type TrafficOutcome } from './run';
 import { contentSection, serverInteractions } from './server-sections';
@@ -69,11 +62,8 @@ export const buildOverviewReport = async (context: TrafficContext): Promise<Traf
       { label: t(`${K}.active_channels`), value: formatCount(summary.activeChannels) },
     ]),
     tileRows: [
-      [
-        ...retentionTiles(t, report.retention),
-        topShare,
-        busiestTile(t, period, report.trend.current, 1.2),
-      ],
+      retentionTiles(t, report.retention),
+      [topShare, busiestTile(t, period, report.trend.current)],
     ],
     trend: trendOf(t, period, report.trend.current, report.trend.previous),
     interactions: await serverInteractions(context, summary, report.reactions),
@@ -84,22 +74,10 @@ export const buildOverviewReport = async (context: TrafficContext): Promise<Traf
     ),
     ...(heatmap === undefined ? {} : { heatmap }),
   });
-  const hot = topMessagesEmbed(context, report.topMessages);
+  const hot = topMessagesText(context, report.topMessages);
   return dashboardReply({
-    title: t(`${K}.overview.title`, { guild: guild.name }),
-    summary: t(`${K}.overview.summary`, {
-      range: rangeLabel(t, period.range),
-      dates: windowSpan(period.window, period.range, period.timeZone),
-      number: formatCount(summary.messages),
-      delta: summaryDelta(t, summary.messages, previous),
-    }),
-    notes: [
-      t(`${K}.notes.reactions`),
-      t(`${K}.notes.retention`),
-      t(`${K}.notes.channel_fold`),
-      rebuildNote(context),
-    ],
+    title: t(`${K}.overview.title`, { guild: guild.name, range: rangeLabel(t, period.range) }),
     image,
-    ...(hot === undefined ? {} : { extra: [hot] }),
+    ...(hot === undefined ? {} : { description: hot }),
   });
 };

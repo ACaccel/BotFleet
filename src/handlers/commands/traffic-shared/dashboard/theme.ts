@@ -3,17 +3,16 @@
  * images. Colours follow the Discord dark surfaces plus a dataviz palette
  * validated against the embed background; geometry is in logical pixels
  * and every canvas is rendered at `SCALE`x for a crisp image in Discord.
+ * Widths belong to columns (`columns.ts`), not to the theme.
  */
 
-/** Logical canvas width; the PNG is `DASHBOARD_WIDTH_PX` wide. */
-export const LOGICAL_WIDTH = 520;
+/** Device pixels per logical pixel. */
 export const SCALE = 2;
-export const DASHBOARD_WIDTH_PX = LOGICAL_WIDTH * SCALE;
 
+/** Canvas padding around the columns. */
 export const PAD = 16;
-export const INNER_WIDTH = LOGICAL_WIDTH - 2 * PAD;
+/** Gap between the two halves of a paired section inside one column. */
 export const COLUMN_GAP = 20;
-export const HALF_WIDTH = (INNER_WIDTH - COLUMN_GAP) / 2;
 
 /** Ranked lists never show more rows than this per column. */
 export const RANK_ROW_LIMIT = 10;

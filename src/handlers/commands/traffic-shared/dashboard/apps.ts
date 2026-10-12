@@ -1,34 +1,19 @@
 /**
  * Application-usage dashboards: every app ranked with a per-type stacked
  * bar, and the single-app drill-down with its interaction-type split and
- * heatmap. Both end with the most active members as a folded top 10.
+ * heatmap. Both show the most active members as a top 10.
  */
 import { stripEmoji } from '../canvas-primitives';
 import { drawBars } from './bars';
 import { heatmapBlocks } from './heatmap';
 import { drawImageFit, isDrawable } from './image';
-import {
-  TITLE_HEIGHT,
-  drawTitle,
-  renderBlocks,
-  sectionTitle,
-  withGaps,
-  type Block,
-  type Ctx,
-} from './layout';
-import { foldedRanking } from './sections';
+import { renderColumns } from './columns';
+import { TITLE_HEIGHT, drawTitle, sectionTitle, type Block, type Column, type Ctx } from './layout';
+import { foldedRanking, rankingList } from './ranking-lists';
 import { hline, segmentTotal, stackedBar, swatchLegend } from './shapes';
 import { drawFitted, drawText, fitText, textWidth } from './text';
-import {
-  COLOR,
-  INNER_WIDTH,
-  PAD,
-  RANK_ROW_LIMIT,
-  avatarColorFor,
-  formatCount,
-  segmentColor,
-} from './theme';
-import { heroTile } from './tiles';
+import { COLOR, RANK_ROW_LIMIT, avatarColorFor, formatCount, segmentColor } from './theme';
+import { heroTile } from './hero';
 import { trendBlocks } from './trend';
 import type { AppRanking, AppRow, AppSingleDashboard, AppsDashboard } from './types';
 import type { BarRow, TitledRows } from './types-common';
@@ -56,12 +41,12 @@ const drawAvatar = (ctx: Ctx, app: AppRow, cx: number, cy: number): void => {
   ctx.restore();
 };
 
-const drawAppRows = (ctx: Ctx, y: number, apps: readonly AppRow[]): void => {
-  const x = PAD;
-  const right = x + INNER_WIDTH;
+const drawAppRows = (ctx: Ctx, col: Column, y: number, apps: readonly AppRow[]): void => {
+  const { x, w } = col;
+  const right = x + w;
   const max = Math.max(1, ...apps.map(appTotal));
   const breakdownW = Math.max(120, ...apps.map((a) => textWidth(ctx, a.breakdown, 12)));
-  const barMax = Math.max(40, INNER_WIDTH - BAR_LEFT - breakdownW - 12);
+  const barMax = Math.max(40, w - BAR_LEFT - breakdownW - 12);
   apps.forEach((app, i) => {
     const top = y + i * APP_ROW_HEIGHT;
     const l1 = top + 13;
@@ -78,48 +63,86 @@ const drawAppRows = (ctx: Ctx, y: number, apps: readonly AppRow[]): void => {
     const nameMax = totalRight - textWidth(ctx, total, 15) - 12 - (x + BAR_LEFT);
     drawFitted(ctx, app.name, x + BAR_LEFT, l1, nameMax, { size: 14, color: COLOR.ink });
     stackedBar(ctx, x + BAR_LEFT, l2 - 4, (appTotal(app) / max) * barMax, 8, app.segments);
-    const breakdown = fitText(ctx, app.breakdown, breakdownW, 12);
+    const breakdown = fitText(ctx, app.breakdown, w - BAR_LEFT - barMax - 12, 12);
     drawText(ctx, breakdown, right, l2, { size: 12, color: COLOR.muted, align: 'right' });
   });
 };
 
-const appRanking = (ranking: AppRanking): Block[] => {
+const appRanking = (measure: Ctx, ranking: AppRanking, col: Column): Block[] => {
   const apps = ranking.rows.slice(0, RANK_ROW_LIMIT);
+  const legend = swatchLegend(ranking.legend);
   return [
-    sectionTitle(ranking.title, { legend: swatchLegend(ranking.legend), legendSize: 12 }),
-    { height: 4 + apps.length * APP_ROW_HEIGHT, draw: (ctx, y) => drawAppRows(ctx, y + 4, apps) },
+    sectionTitle(measure, col, ranking.title, { legend, legendSize: 12 }),
+    {
+      height: 4 + apps.length * APP_ROW_HEIGHT,
+      draw: (ctx, y) => drawAppRows(ctx, col, y + 4, apps),
+    },
   ];
 };
 
-const typeBars = (types: TitledRows<BarRow>): Block => ({
+const typeBars = (types: TitledRows<BarRow>, col: Column): Block => ({
   height: TITLE_HEIGHT + types.rows.length * TYPE_ROW_HEIGHT,
   draw: (ctx, y) => {
-    drawTitle(ctx, types.title, PAD, y, INNER_WIDTH);
-    drawBars(ctx, PAD, y + TITLE_HEIGHT, INNER_WIDTH, types.rows, {
+    drawTitle(ctx, types.title, col.x, y, col.w);
+    drawBars(ctx, col.x, y + TITLE_HEIGHT, col.w, types.rows, {
       rowHeight: TYPE_ROW_HEIGHT,
       colorFor: segmentColor,
     });
   },
 });
 
-export const renderAppsDashboard = (data: AppsDashboard): Buffer =>
-  renderBlocks(() =>
-    withGaps([
-      heroTile(data.hero),
-      appRanking(data.ranking),
-      trendBlocks(data.trend, APP_TREND_HEIGHT),
-      foldedRanking(data.members),
-    ]),
-  );
+/** Both apps dashboards use two wide columns. */
+const SUMMARY_WIDTH = 420;
+const RANKING_WIDTH = 440;
 
-/** @throws {RangeError} When `data.heatmap` is not a 7 x 24 grid with seven weekday labels. */
-export const renderAppSingleDashboard = (data: AppSingleDashboard): Buffer =>
-  renderBlocks(() =>
-    withGaps([
-      heroTile(data.hero),
-      typeBars(data.types),
-      trendBlocks(data.trend, APP_TREND_HEIGHT),
-      foldedRanking(data.members),
-      data.heatmap === undefined ? undefined : heatmapBlocks(data.heatmap),
-    ]),
-  );
+/**
+ * Two columns: the hero, the trend (which grows to fill the column) and
+ * the top members folded into two halves, beside every app with its
+ * per-type split bar.
+ */
+export const renderAppsDashboard = (data: AppsDashboard): Buffer =>
+  renderColumns([
+    {
+      width: SUMMARY_WIDTH,
+      grows: true,
+      sections: (col, measure, extra) => [
+        heroTile(data.hero, col),
+        trendBlocks(measure, data.trend, col, APP_TREND_HEIGHT + extra),
+        foldedRanking(data.members, col),
+      ],
+    },
+    {
+      width: RANKING_WIDTH,
+      sections: (col, measure) => [appRanking(measure, data.ranking, col)],
+    },
+  ]);
+
+/**
+ * Two columns: the hero, the interaction types and the trend (which grows
+ * to fill the column) beside the top members and the heatmap. Without a
+ * heatmap (24h) the interaction types move above the members to keep the
+ * columns balanced.
+ * @throws {RangeError} When `data.heatmap` is not a 7 x 24 grid with seven weekday labels.
+ */
+export const renderAppSingleDashboard = (data: AppSingleDashboard): Buffer => {
+  const { heatmap } = data;
+  return renderColumns([
+    {
+      width: SUMMARY_WIDTH,
+      grows: true,
+      sections: (col, measure, extra) => [
+        heroTile(data.hero, col),
+        heatmap === undefined ? undefined : typeBars(data.types, col),
+        trendBlocks(measure, data.trend, col, APP_TREND_HEIGHT + extra),
+      ],
+    },
+    {
+      width: SUMMARY_WIDTH,
+      sections: (col, measure) => [
+        heatmap === undefined ? typeBars(data.types, col) : undefined,
+        rankingList(data.members, col),
+        heatmap === undefined ? undefined : heatmapBlocks(measure, heatmap, col),
+      ],
+    },
+  ]);
+};

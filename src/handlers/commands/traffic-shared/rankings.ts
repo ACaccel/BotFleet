@@ -1,10 +1,8 @@
 /**
  * Ranking columns and named rows shared by the activity reports: members,
- * channels (with forum posts tagged by their forum), and the top-messages embed
+ * channels (with forum posts tagged by their forum), and the top-messages text
  * wiring that resolves names from the live guild and the archive records.
  */
-import type { EmbedBuilder } from 'discord.js';
-
 import type {
   AuthorRanking,
   ChannelRanking,
@@ -13,7 +11,7 @@ import type {
 
 import { restNote } from './activity-sections';
 import type { RankingColumn, RankRow } from './dashboard';
-import { hotMessagesEmbed, type MentionNames } from './hot-messages';
+import { hotMessagesText, type MentionNames } from './hot-messages';
 import { channelName, channelRecordsOf, memberName, type ChannelRecords } from './names';
 import type { TrafficContext } from './run';
 
@@ -102,13 +100,13 @@ const mentionNames = (context: TrafficContext, records: ChannelRecords): Mention
   };
 };
 
-export const topMessagesEmbed = (
+export const topMessagesText = (
   context: TrafficContext,
   messages: readonly TopReactedMessage[],
-): EmbedBuilder | undefined => {
+): string | undefined => {
   const records = channelRecordsOf(context.records);
   const unknown = context.t(`${K}.unknown_member`);
-  return hotMessagesEmbed({
+  return hotMessagesText({
     messages,
     guildId: context.guild.id,
     names: mentionNames(context, records),

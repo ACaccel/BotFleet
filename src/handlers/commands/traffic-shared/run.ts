@@ -46,8 +46,6 @@ export interface TrafficContext {
   /** `archive_channels` records; empty for subcommands that count every channel. */
   readonly records: readonly ArchiveChannelInfo[];
   readonly images: RemoteImageLoader;
-  /** No full backup has completed yet, so member statistics are incomplete. */
-  readonly rebuilding: boolean;
 }
 
 export type TrafficOutcome =
@@ -103,11 +101,7 @@ export const runTrafficAction = async (
     }
     const repos = lookup.repos;
     const member = await guild.members.fetch(interaction.user.id);
-    let scoped: Pick<TrafficContext, 'records' | 'visible' | 'rebuilding'> = {
-      records: [],
-      visible: new Set(),
-      rebuilding: false,
-    };
+    let scoped: Pick<TrafficContext, 'records' | 'visible'> = { records: [], visible: new Set() };
     if (spec.scope === 'visible') {
       const result = await loadVisibleScope(repos, {
         guild,
@@ -117,7 +111,7 @@ export const runTrafficAction = async (
         commandChannelId: interaction.channelId,
       });
       if (!result.ok) throw result.error;
-      scoped = { records: result.records, visible: result.visible, rebuilding: result.rebuilding };
+      scoped = { records: result.records, visible: result.visible };
     }
     warnOnceWithoutEmojiFont(bot.logger);
     const outcome = await spec.build({

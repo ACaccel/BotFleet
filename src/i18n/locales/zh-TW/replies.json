@@ -247,8 +247,6 @@
     "active_members": "活躍成員",
     "active_channels": "活躍頻道",
     "delta_previous": "較前期 {{number}}",
-    "summary_delta": "（較前期 {{change}}）",
-    "summary_delta_none": "（前期沒有資料）",
     "trend": {
       "hour": "每小時訊息",
       "day": "每日訊息",
@@ -326,47 +324,29 @@
     "longest_streak_one": "最長連續 {{number}} 天",
     "longest_streak_other": "最長連續 {{number}} 天",
     "reactions_received": "收到 reaction",
-    "reactions_received_top_one": "最常收到 {{emoji}} {{number}}",
-    "reactions_received_top_other": "最常收到 {{emoji}} {{number}}",
+    "reactions_received_top_one": "最多 {{emoji}} {{number}}",
+    "reactions_received_top_other": "最多 {{emoji}} {{number}}",
     "reactions_given": "給出 reaction",
-    "reactions_given_top_one": "最常用 {{emoji}} {{number}}",
-    "reactions_given_top_other": "最常用 {{emoji}} {{number}}",
+    "reactions_given_top_one": "最多 {{emoji}} {{number}}",
+    "reactions_given_top_other": "最多 {{emoji}} {{number}}",
     "command_uses": "使用指令",
     "partners_title": "最常互動的成員 · 前 {{n}}",
     "partners_reply": "回覆往來",
     "partners_mention": "提及往來",
     "person_channels_title": "頻道分布 · 前 {{n}}",
     "overview": {
-      "title": "{{guild}} · 流量總覽",
-      "summary": "{{range}} · {{dates}}　訊息 **{{number}}**{{delta}}"
+      "title": "{{guild}} · 流量總覽 · {{range}}"
     },
     "channel": {
-      "title": "#{{channel}} · {{range}}",
-      "summary": "{{dates}}{{threads}}　訊息 **{{number}}**{{delta}}",
-      "with_threads": " · 含討論串"
+      "title": "#{{channel}}{{threads}} · 頻道流量 · {{range}}",
+      "with_threads": "（含討論串）"
     },
     "person": {
-      "title": "{{user}} · 個人流量",
-      "summary": "{{range}} · {{dates}}　訊息 **{{number}}**{{delta}}· 第 **{{rank}}** 名"
-    },
-    "notes": {
-      "reactions": "reaction 數為最後觀察值",
-      "rebuild": "完整備份完成前，統計資料不完整",
-      "retention": "成員留存：前期活躍成員中本期仍活躍的比例；回流與新成員：本期活躍、前期未發言的成員",
-      "channel_fold": "頻道排行：討論串併入所屬頻道，論壇貼文單獨列出",
-      "person_channel_fold": "頻道分布：討論串併入所屬頻道，論壇貼文單獨列出",
-      "breakdown": "頻道與討論串排行包含此頻道本身與其下的討論串",
-      "partners": "最常互動為雙方回覆與提及次數合計，不含回覆自動帶入的提及",
-      "apps_public": "只統計留下公開回覆的互動；不含指令名稱",
-      "apps_users": "使用成員為去重後人數，各應用程式人數相加會大於總數",
-      "apps_since": "此範圍的第一筆互動紀錄在 {{date}}，更早的期間沒有資料",
-      "emoji_scope": "只統計此伺服器的自訂表情；內文與 reaction 分開計算",
-      "emoji_reactions": "reaction 為最後觀察值；動態表情標示 GIF",
-      "sticker_scope": "只統計此伺服器的自訂貼圖，不含預設貼圖"
+      "title": "{{user}} · 個人流量 · {{range}}"
     },
     "hot": {
-      "title_one": "熱門訊息 · 前 {{count}}",
-      "title_other": "熱門訊息 · 前 {{count}}",
+      "heading_one": "**熱門訊息 · 前 {{count}}**",
+      "heading_other": "**熱門訊息 · 前 {{count}}**",
       "spoiler": "（防雷內容）",
       "images_one": "圖片",
       "images_other": "圖片 {{count}} 張",
@@ -385,7 +365,6 @@
     },
     "apps": {
       "title": "應用程式使用 · {{range}}",
-      "summary": "{{dates}}　互動 **{{uses}}** · 使用成員 **{{users}}** · 應用程式 **{{apps}}**",
       "uses": "互動",
       "members": "使用成員",
       "apps": "應用程式",
@@ -413,8 +392,7 @@
       }
     },
     "app": {
-      "title": "{{app}} · {{range}}",
-      "summary": "{{dates}}　互動 **{{uses}}** · 佔全部互動 **{{share}}**"
+      "title": "{{app}} · 應用程式使用 · {{range}}"
     },
     "order": {
       "most": "由多到少",
@@ -427,13 +405,8 @@
     "zero_uses": "0 次",
     "unused_total_one": "共 {{number}} 個",
     "unused_total_other": "共 {{number}} 個",
-    "uses_count_one": "總使用 **{{number}}** 次",
-    "uses_count_other": "總使用 **{{number}}** 次",
     "emoji": {
       "title": "表情使用 · {{range}} · {{order}}",
-      "summary": "{{dates}}　{{items}} · {{uses}}",
-      "server_count_one": "伺服器表情 **{{number}}** 個",
-      "server_count_other": "伺服器表情 **{{number}}** 個",
       "server": "伺服器表情",
       "total": "總使用",
       "content": "內文",
@@ -446,9 +419,6 @@
     },
     "sticker": {
       "title": "貼圖使用 · {{range}} · {{order}}",
-      "summary": "{{dates}}　{{items}} · {{uses}}",
-      "server_count_one": "伺服器貼圖 **{{number}}** 個",
-      "server_count_other": "伺服器貼圖 **{{number}}** 個",
       "server": "伺服器貼圖",
       "total": "總使用",
       "ranking_title": "使用排行",

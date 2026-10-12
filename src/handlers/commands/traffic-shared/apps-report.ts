@@ -11,7 +11,7 @@ import type { AppUsageStats } from '../../../persistence/repositories/archive-st
 
 import { heroOf, tCount } from './activity-common';
 import { heatmapOf } from './activity-sections';
-import { appBreakdown, appTypeLegend, appTypeRows, sinceNote, usageTrend } from './apps-sections';
+import { appBreakdown, appTypeLegend, appTypeRows, usageTrend } from './apps-sections';
 import {
   formatCount,
   formatPercent,
@@ -20,7 +20,7 @@ import {
   type AppRow,
   type RankingColumn,
 } from './dashboard';
-import { rangeLabel, windowSpan } from './labels';
+import { rangeLabel } from './labels';
 import { memberName, resolveUserNames } from './names';
 import { dashboardReply } from './reply';
 import { failed, type TrafficContext, type TrafficOutcome } from './run';
@@ -84,12 +84,10 @@ export const buildAppsReport = async (
   const usage = current.value;
   if (usage.uses === 0) return { kind: 'notice', key: `${K}.apps_no_data` };
   const before = previous.value;
-  const dates = windowSpan(period.window, period.range, period.timeZone);
   const range = rangeLabel(t, period.range);
   const users = { label: t(`${K}.apps.members`), value: formatCount(usage.users) };
   const hero = (metrics: { label: string; value: string }[]) =>
     heroOf(t, usage.uses, before.uses, metrics, t(`${K}.apps.uses`));
-  const notes = [t(`${K}.notes.apps_public`), sinceNote(t, period, usage)];
   const members = await membersColumn(context, usage);
 
   if (applicationId !== undefined && all?.ok === true) {
@@ -110,12 +108,7 @@ export const buildAppsReport = async (
       members,
       ...(appHeatmap === undefined ? {} : { heatmap: appHeatmap }),
     });
-    return dashboardReply({
-      title: t(`${K}.app.title`, { app: name, range }),
-      summary: t(`${K}.app.summary`, { dates, uses: formatCount(usage.uses), share }),
-      notes,
-      image,
-    });
+    return dashboardReply({ title: t(`${K}.app.title`, { app: name, range }), image });
   }
 
   const unknown = t(`${K}.unknown_member`);
@@ -134,15 +127,5 @@ export const buildAppsReport = async (
     trend: usageTrend(t, period, usage, before),
     members,
   });
-  return dashboardReply({
-    title: t(`${K}.apps.title`, { range }),
-    summary: t(`${K}.apps.summary`, {
-      dates,
-      uses: formatCount(usage.uses),
-      users: formatCount(usage.users),
-      apps: formatCount(usage.apps.length),
-    }),
-    notes: [...notes, t(`${K}.notes.apps_users`)],
-    image,
-  });
+  return dashboardReply({ title: t(`${K}.apps.title`, { range }), image });
 };

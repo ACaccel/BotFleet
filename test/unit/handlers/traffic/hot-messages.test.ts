@@ -1,14 +1,14 @@
 /**
- * Unit coverage for the top-messages embed: the preview is cut to 30
+ * Unit coverage for the top-messages text: the preview is cut to 30
  * characters, inert (markdown and masked links escaped, mentions and custom
  * emoji turned into plain text, spoilers hidden), and a message without text
- * names what it carries. The embed lists each message with its jump link and
- * reaction counts, and nothing else.
+ * names what it carries. The text is a heading line, then each message with
+ * its jump link and reaction counts, and nothing else.
  */
 import { describe, expect, it } from 'vitest';
 
 import {
-  hotMessagesEmbed,
+  hotMessagesText,
   messagePreview,
   PREVIEW_LENGTH,
   type MentionNames,
@@ -111,10 +111,10 @@ describe('messagePreview', () => {
   });
 });
 
-describe('hotMessagesEmbed', () => {
+describe('hotMessagesText', () => {
   it('is omitted when no message has a reaction', () => {
     expect(
-      hotMessagesEmbed({
+      hotMessagesText({
         messages: [],
         guildId: 'g',
         names,
@@ -125,8 +125,8 @@ describe('hotMessagesEmbed', () => {
     ).toBeUndefined();
   });
 
-  it('lists each message with its jump link, author, channel and top reactions', () => {
-    const embed = hotMessagesEmbed({
+  it('lists each message under the heading with its jump link, author, channel and top reactions', () => {
+    const text = hotMessagesText({
       messages: [
         message({
           reactions: [
@@ -144,8 +144,10 @@ describe('hotMessagesEmbed', () => {
       timeZone: 'UTC',
       t,
     });
-    const description = embed?.toJSON().description ?? '';
-    const [line, meta] = description.split('\n');
+    const description = text ?? '';
+    const [heading, line, meta, ...rest] = description.split('\n');
+    expect(heading).toBe('[replies:traffic.hot.heading|{"count":1}]');
+    expect(rest).toEqual([]);
     expect(line).toContain('"url":"https://discord.com/channels/g1/222/m1"');
     expect(meta).toContain('"author":"Alice\\\\_\\\\*"');
     expect(meta).toContain('"channel":"#general"');
