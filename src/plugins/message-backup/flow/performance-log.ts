@@ -13,6 +13,8 @@ export interface ArchivePerformanceLog {
     readonly background: number;
     readonly waitingResources: number;
     readonly globalWait: boolean;
+    /** Present while invalid requests throttle background reads (see `ARCHIVE_INVALID_REQUESTS`). */
+    readonly backgroundLimit?: number;
   };
   /** 429 responses by Discord scope (`user` is the per-route limit) and SDK queue-delay waits. */
   readonly rateLimits: {
@@ -51,6 +53,9 @@ export const archivePerformanceLog = (
       background: scheduler.background,
       waitingResources: scheduler.waitingResources,
       globalWait: scheduler.globalWaitUntil !== undefined,
+      ...(scheduler.backgroundLimit === undefined
+        ? {}
+        : { backgroundLimit: scheduler.backgroundLimit }),
     },
     rateLimits: {
       responses: rest.responses,
@@ -66,3 +71,42 @@ export const archivePerformanceLog = (
     },
   };
 };
+
+/** Counters of one archive serial writer (see `ArchiveSerialWriter.snapshot`). */
+export interface ArchiveWriterCounters {
+  readonly pending: number;
+  readonly peakPending: number;
+  readonly completed: number;
+  readonly failed: number;
+  readonly queueWaitMs: number;
+  readonly operationMs: number;
+  readonly drainMs: number;
+}
+type Prefixed<P extends string> = {
+  readonly [K in keyof ArchiveWriterCounters as `${P}${Capitalize<K>}`]: number;
+};
+export type ArchiveWriterPerformanceLog = { readonly guildId: string } & Prefixed<'writer'> &
+  Prefixed<'inboxWriter'>;
+
+const prefixed = <P extends string>(prefix: P, counters: ArchiveWriterCounters): Prefixed<P> =>
+  Object.fromEntries(
+    Object.entries(counters).map(([key, value]) => [
+      `${prefix}${key.charAt(0).toUpperCase()}${key.slice(1)}`,
+      value,
+    ]),
+  ) as Prefixed<P>;
+
+/**
+ * One guild's writer counters in `Archive worker performance`, flattened
+ * (`writers[0].writerPending`, `writers[0].inboxWriterPending`) so they stay above
+ * the logger scrubber's depth limit.
+ */
+export const archiveWriterPerformanceLog = (
+  guildId: string,
+  writer: ArchiveWriterCounters,
+  inboxWriter: ArchiveWriterCounters,
+): ArchiveWriterPerformanceLog => ({
+  guildId,
+  ...prefixed('writer', writer),
+  ...prefixed('inboxWriter', inboxWriter),
+});

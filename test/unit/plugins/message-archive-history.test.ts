@@ -9,6 +9,7 @@ import {
 } from '../../../src/plugins/message-backup/runtime/history-scan';
 import { historyBefore } from '../../../src/plugins/message-backup/flow/history-boundary';
 import { ArchivePipelineBudget } from '../../../src/plugins/message-backup/flow/pipeline';
+import { ArchiveBackpressureError, ArchiveCapacityError } from '../../../src/core/archive/errors';
 
 vi.mock('../../../src/plugins/message-backup/internal/collect-channels', () => ({
   collectChannels: vi.fn(),
@@ -22,7 +23,7 @@ function fixture(ids = ['10']) {
     gaps: [],
     liveChannelIds: new Set(ids),
   } as any);
-  const get = vi.fn(async () => [] as Record<string, unknown>[]);
+  const get = vi.fn(async (_route: string) => [] as Record<string, unknown>[]);
   const client = {
     rest: { get },
     channels: { fetch: vi.fn(async () => null) },
@@ -46,8 +47,10 @@ function fixture(ids = ['10']) {
     request: async (_key, read) => read(),
     progress,
   };
-  const run = () => scanArchiveHistory({ id: 'guild' } as Guild, client, {} as Logger, hooks);
-  return { run, hooks, get, consume, progress, checkpoints, signal, client };
+  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  const run = () =>
+    scanArchiveHistory({ id: 'guild' } as Guild, client, logger as unknown as Logger, hooks);
+  return { run, hooks, get, consume, progress, checkpoints, signal, client, logger };
 }
 
 describe('shared bounded history scan', () => {
@@ -82,7 +85,9 @@ describe('shared bounded history scan', () => {
     f.get.mockResolvedValue([{ id: '101' }]);
     f.consume.mockRejectedValue(new Error('membership not complete'));
     const result = await f.run();
-    expect(result.issues).toContain('10: Error: membership not complete');
+    expect(result.issues).toEqual([
+      expect.stringMatching(/^10: Error: membership not complete \[trace [0-9a-f]{8}\]$/),
+    ]);
     expect(f.checkpoints.get('10')?.complete).toBe(false);
     expect(f.checkpoints.get('10')?.before).toBe(historyBefore(new Date(f.hooks.cutoff)));
     expect(f.progress).not.toHaveBeenCalled();
@@ -459,5 +464,260 @@ describe('history scan source order', () => {
       ]);
       expect(warn).toHaveBeenCalled();
     }
+  });
+});
+
+describe('failed source handling', () => {
+  const unavailable = () => Object.assign(new Error('Service Unavailable'), { status: 503 });
+  const routes = (get: { mock: { calls: unknown[][] } }) =>
+    (get.mock.calls as unknown as [string][]).map(([route]) => route);
+  const quickRetry = { attempts: 3, baseMs: 5, maxMs: 20 };
+
+  it('logs a failed source with its step and a trace ID', async () => {
+    const f = fixture();
+    f.get.mockResolvedValue([{ id: '101' }]);
+    f.consume.mockRejectedValue(new Error('membership not complete'));
+    await f.run();
+    expect(f.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        guildId: 'guild',
+        channelId: '10',
+        step: 'processing',
+        failure: 'defect',
+        traceId: expect.stringMatching(/^[0-9a-f]{8}$/),
+        err: expect.any(Error),
+      }),
+      'Archive source failed',
+    );
+    expect(f.logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('retries a transient failure in the same sweep while other sources keep the worker', async () => {
+    const f = fixture(['10', '20']);
+    f.hooks.sourceRetry = quickRetry;
+    let failed = false;
+    f.get.mockImplementation(async (route: string) => {
+      if (route === '/channels/10/messages' && !failed) {
+        failed = true;
+        throw unavailable();
+      }
+      return [{ id: '101' }];
+    });
+    const result = await f.run();
+    // One reader: source 20 runs while 10 waits, and 10 completes before the sweep ends.
+    expect(routes(f.get)).toEqual([
+      '/channels/10/messages',
+      '/channels/20/messages',
+      '/channels/10/messages',
+    ]);
+    expect(result.channels).toBe(2);
+    expect(result.issues).toEqual([]);
+    expect(f.checkpoints.get('10')?.complete).toBe(true);
+    const warned = f.logger.warn.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(warned).toMatchObject({
+      channelId: '10',
+      step: 'fetching',
+      failure: 'transient',
+      attempt: 1,
+      retryInMs: 5,
+    });
+    expect(f.logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ channelId: '10', attempts: 2, traceId: warned.traceId }),
+      'Archive source recovered after a failed attempt',
+    );
+  });
+
+  it('retries a backpressure failure from the page consumer', async () => {
+    const f = fixture();
+    f.hooks.sourceRetry = quickRetry;
+    f.get.mockResolvedValue([{ id: '101' }]);
+    f.consume.mockRejectedValueOnce(new ArchiveBackpressureError('archive-pipeline-queue-full'));
+    const failed = vi.fn();
+    f.hooks.failed = failed;
+    const result = await f.run();
+    expect(result.issues).toEqual([]);
+    expect(f.checkpoints.get('10')?.complete).toBe(true);
+    // The failed page is fetched again from the unchanged checkpoint.
+    expect(f.get).toHaveBeenCalledTimes(2);
+    expect(f.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ channelId: '10', failure: 'transient', retryInMs: 5 }),
+      'Archive source failed; retrying from its checkpoint',
+    );
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it('fails a source that keeps failing transiently after the attempt budget of each sweep', async () => {
+    const f = fixture();
+    f.hooks.sourceRetry = quickRetry;
+    const failed = vi.fn();
+    f.hooks.failed = failed;
+    f.get.mockRejectedValue(unavailable());
+    const result = await f.run();
+    // Three attempts in discovery and three in verification.
+    expect(f.get).toHaveBeenCalledTimes(6);
+    expect(f.checkpoints.get('10')?.complete).toBe(false);
+    expect(f.logger.warn).toHaveBeenCalledTimes(4);
+    expect(f.logger.error).toHaveBeenCalledTimes(2);
+    expect(f.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ channelId: '10', failure: 'transient', sweepAttempt: 3 }),
+      'Archive source failed',
+    );
+    expect(failed).toHaveBeenCalledTimes(2);
+    const traceIds = new Set(
+      [...f.logger.warn.mock.calls, ...f.logger.error.mock.calls].map(
+        ([fields]) => (fields as { traceId: string }).traceId,
+      ),
+    );
+    expect(traceIds.size).toBe(1);
+    // The issue names the trace of its log lines.
+    expect(result.issues).toEqual([`10: Error: Service Unavailable [trace ${[...traceIds][0]}]`]);
+  });
+
+  it('does not retry a defect in the same sweep, and drops its issue once verification completes it', async () => {
+    const f = fixture();
+    f.hooks.sourceRetry = quickRetry;
+    f.get.mockResolvedValueOnce([{ id: '101' }, { id: '101' }]).mockResolvedValue([{ id: '101' }]);
+    const result = await f.run();
+    expect(f.get).toHaveBeenCalledTimes(2);
+    expect(result.channels).toBe(1);
+    expect(result.issues).toEqual([]);
+    expect(f.checkpoints.get('10')?.complete).toBe(true);
+  });
+
+  it('drops a source waiting for its retry when the scan stops', async () => {
+    const f = fixture(['10', '20']);
+    f.hooks.sourceRetry = { attempts: 5, baseMs: 60_000, maxMs: 60_000 };
+    f.get.mockImplementation(async (route: string) => {
+      if (route === '/channels/10/messages') throw unavailable();
+      f.signal.abort();
+      return [{ id: '101' }];
+    });
+    const started = Date.now();
+    const result = await f.run();
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(routes(f.get).filter((route) => route.includes('/10/'))).toHaveLength(1);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^10: Error: Service Unavailable \[trace /)]),
+    );
+    expect(f.logger.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps a blocking issue without a trace for a source interrupted by a stop', async () => {
+    const f = fixture();
+    f.get.mockImplementation(async () => {
+      f.signal.abort();
+      throw new Error('Archive scan cancelled');
+    });
+    const failed = vi.fn();
+    f.hooks.failed = failed;
+    const result = await f.run();
+    expect(result.issues).toEqual(['10: Error: Archive scan cancelled']);
+    expect(failed).toHaveBeenCalledWith('Error: Archive scan cancelled');
+    expect(f.logger.warn).not.toHaveBeenCalled();
+    expect(f.logger.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the issue of a source that never completes while another source recovers', async () => {
+    const f = fixture(['10', '20']);
+    f.hooks.concurrency = 2;
+    f.hooks.sourceRetry = quickRetry;
+    let reads10 = 0;
+    f.get.mockImplementation(async (route: string) => {
+      if (route === '/channels/10/messages') {
+        reads10 += 1;
+        return [{ id: '101' }, { id: '101' }];
+      }
+      // 20 completes only after 10 failed in the verification sweep, its last attempt.
+      if (reads10 < 2) throw Object.assign(new Error('Service Unavailable'), { status: 503 });
+      return [{ id: '201' }];
+    });
+    const result = await f.run();
+    expect(reads10).toBe(2);
+    expect(result.issues).toEqual([
+      expect.stringMatching(/^10: Error: Duplicate history message id \[trace /),
+    ]);
+    expect(result.channels).toBe(1);
+    expect(f.checkpoints.get('20')?.complete).toBe(true);
+    expect(f.checkpoints.get('10')?.complete).toBe(false);
+  });
+
+  it.each([
+    {
+      failure: 'capacity',
+      error: () => new ArchiveCapacityError('Archive backfill paused: storage headroom exhausted'),
+    },
+    {
+      failure: 'inaccessible',
+      error: () => Object.assign(new Error('Missing Access'), { code: 50001, status: 403 }),
+    },
+  ])('does not retry a $failure failure in the same sweep', async ({ failure, error }) => {
+    const f = fixture();
+    f.hooks.sourceRetry = quickRetry;
+    f.get.mockRejectedValue(error());
+    await f.run();
+    // Once per sweep: discovery and verification.
+    expect(f.get).toHaveBeenCalledTimes(2);
+    expect(f.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ failure, sweepAttempt: 1 }),
+      'Archive source failed',
+    );
+    expect(f.logger.warn.mock.calls.some(([fields]) => 'retryInMs' in (fields as object))).toBe(
+      false,
+    );
+  });
+
+  it('turns a lost source into a known gap once verification confirms it', async () => {
+    const f = fixture();
+    vi.mocked(collectChannels)
+      .mockResolvedValueOnce({
+        channels: [channel('10')],
+        gaps: [],
+        liveChannelIds: new Set(['10']),
+      } as any)
+      .mockResolvedValueOnce({
+        channels: [],
+        locations: [{ id: '10', type: ChannelType.GuildText }],
+        gaps: [{ pass: 'history', channelId: '10', reason: 'missing-view-channel' }],
+      } as any);
+    f.get.mockRejectedValue(
+      Object.assign(new Error('Missing Access'), { code: 50001, status: 403 }),
+    );
+    const result = await f.run();
+    expect(result.issues).toEqual([]);
+    expect(result.gaps).toEqual(['10: missing-view-channel']);
+  });
+
+  it('keeps a lost source blocking when verification still reads it', async () => {
+    const f = fixture();
+    vi.mocked(collectChannels).mockResolvedValue({
+      channels: [channel('10')],
+      gaps: [
+        { pass: 'private', channelId: '10', reason: 'DiscordAPIError[50001]', forbidden: true },
+      ],
+      liveChannelIds: new Set(['10']),
+    } as any);
+    f.get.mockRejectedValue(
+      Object.assign(new Error('Missing Access'), { code: 50001, status: 403 }),
+    );
+    const result = await f.run();
+    expect(result.issues).toEqual([expect.stringMatching(/^10: Error: Missing Access \[trace /)]);
+  });
+
+  it('turns a deleted source into a known deletion once verification confirms it', async () => {
+    const f = fixture();
+    f.hooks.knownChannelIds = ['10'];
+    vi.mocked(collectChannels)
+      .mockResolvedValueOnce({
+        channels: [channel('10')],
+        gaps: [],
+        liveChannelIds: new Set(['10']),
+      } as any)
+      .mockResolvedValueOnce({ channels: [], gaps: [], liveChannelIds: new Set() } as any);
+    vi.mocked(f.client.channels.fetch).mockRejectedValue({ code: 10003, status: 404 });
+    f.get.mockRejectedValue(
+      Object.assign(new Error('Unknown Channel'), { code: 10003, status: 404 }),
+    );
+    const result = await f.run();
+    expect(result.issues).toEqual([]);
   });
 });

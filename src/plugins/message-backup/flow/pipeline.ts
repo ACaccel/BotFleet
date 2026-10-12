@@ -1,3 +1,4 @@
+import { ArchiveBackpressureError } from '../../../core/archive/errors';
 import { ARCHIVE_LIMITS } from '../../../core/archive/limits';
 
 /** Stages the owner records; their timings overlap, so they never sum to wall time. */
@@ -58,6 +59,9 @@ export interface PipelineSnapshot {
   readonly historyWaiting: number;
   readonly reactionWaiting: number;
   readonly queueWaitMs: number;
+  /** Reservations grown past their estimate, and how many of those had to wait for room. */
+  readonly grown: number;
+  readonly grownWaited: number;
   readonly stages: Readonly<Record<PipelineStage, PipelineStageTotals>>;
 }
 
@@ -70,6 +74,8 @@ export class ArchivePipelineBudget {
   private readonly reactionCapacity: number;
   private peak = 0;
   private queueWaitMs = 0;
+  private grown = 0;
+  private grownWaited = 0;
   private readonly waiting: Waiter[] = [];
   private readonly stages = Object.fromEntries(
     ARCHIVE_PIPELINE_STAGES.map((stage) => [stage, { count: 0, durationMs: 0, bytes: 0 }]),
@@ -100,7 +106,7 @@ export class ArchivePipelineBudget {
       return Promise.reject(new Error('archive-pipeline-item-too-large'));
     if (signal?.aborted) return Promise.reject(new Error('archive-pipeline-cancelled'));
     if (this.waiting.length >= this.maxWaiting)
-      return Promise.reject(new Error('archive-pipeline-queue-full'));
+      return Promise.reject(new ArchiveBackpressureError('archive-pipeline-queue-full'));
     return new Promise((resolve, reject) =>
       this.enqueue({
         bytes,
@@ -134,6 +140,8 @@ export class ArchivePipelineBudget {
       historyWaiting: this.waiting.filter((item) => item.lane === 'history').length,
       reactionWaiting: this.waiting.filter((item) => item.lane === 'reactions').length,
       queueWaitMs: this.queueWaitMs,
+      grown: this.grown,
+      grownWaited: this.grownWaited,
       stages: structuredClone(this.stages),
     };
   }
@@ -207,12 +215,14 @@ export class ArchivePipelineBudget {
       return Promise.reject(new Error('archive-pipeline-item-too-large'));
     if (bytes <= holding.bytes) return Promise.resolve();
     if (signal?.aborted) return Promise.reject(new Error('archive-pipeline-cancelled'));
+    this.grown += 1;
     const growerWaiting = this.waiting.some((item) => item.urgent && item.lane === lane);
     if (!growerWaiting && this.reservedIn(lane) - holding.bytes + bytes <= this.capacityOf(lane)) {
       this.take(lane, bytes - holding.bytes);
       holding.bytes = bytes;
       return Promise.resolve();
     }
+    this.grownWaited += 1;
     const held = holding.bytes;
     holding.bytes = 0;
     return new Promise((resolve, reject) => {

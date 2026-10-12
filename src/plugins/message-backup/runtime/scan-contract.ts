@@ -72,9 +72,14 @@ export const readCheckpoint = (
   kind: ArchiveScanKind,
 ): ArchiveHistoryCheckpoint | undefined => channel?.checkpoints?.[kind];
 
+/** The trace suffix a failed source's issue carries (see `scanArchiveHistory`). */
+const traceSuffix = / \[trace [0-9a-f]+\]$/;
+
 /** Classifies a blocking failure or gap reason for progress and pass health. */
-export const archiveGapReason = (reason: string): ArchiveGapReason =>
-  permissionReason.test(reason)
+export const archiveGapReason = (issue: string): ArchiveGapReason => {
+  // A trace ID's hex digits must not read as a status code.
+  const reason = issue.replace(traceSuffix, '');
+  return permissionReason.test(reason)
     ? 'permission'
     : /capacity|storage|budget/i.test(reason)
       ? 'capacity'
@@ -83,3 +88,4 @@ export const archiveGapReason = (reason: string): ArchiveGapReason =>
         : /thread|discovery|inventory|gap/i.test(reason)
           ? 'discovery'
           : 'other';
+};

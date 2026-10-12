@@ -21,6 +21,17 @@ export interface ReactionRefreshOptions {
   /** The snapshot write or the live event already marked the lists stale. */
   readonly staleMarked?: boolean;
   readonly scope?: ReactionRefreshScope;
+  /**
+   * Reports membership progress to the history source that owns the refresh, which
+   * clears its activity when the source ends. Live and inbox refreshes own no
+   * source activity and report nothing.
+   */
+  readonly onActivity?: (counts: ReactionActivityCounts) => void;
+}
+/** Membership staged so far by one refresh. */
+interface ReactionActivityCounts {
+  readonly reactionUsers: number;
+  readonly reactionPages: number;
 }
 /** A raw reaction with its identity (see `reactionKey`). */
 export interface RawReaction {

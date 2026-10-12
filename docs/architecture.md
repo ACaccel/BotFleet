@@ -255,8 +255,16 @@ kept apart from periodic ones (`archive_channels.checkpoints`), so neither kind
 resets the other, and dispatches sources largest first by estimated work
 (`flow/source-work.ts`; see [full backup](message-archive.md#full-backup)). A queued
 backup preempts a periodic pass at a safe boundary and periodic passes wait until it
-ends. Stop requests are polled at scan boundaries at most every 250 ms; shutdown
-leaves the job running and startup queues it again with its cutoff and checkpoints.
+ends. Stop requests are polled at scan boundaries at most every 250 ms; a failed
+lookup counts as no stop and is asked again at a later boundary (programmer errors
+still fail it). Shutdown leaves
+the job running and startup queues it again with its cutoff and checkpoints. A
+source that fails transiently (Discord 5xx, 429 or timeouts, database timeouts or
+network errors, a full in-process queue) runs again from its checkpoint in the same
+sweep after a bounded backoff, behind the sources still waiting, so a retry never
+holds a reader; other failures end the source for the sweep. Blocking issues are
+kept per source, and a source that later completes drops its own
+(`runtime/history-scan.ts`, `runtime/source-failure.ts`).
 A completed backup settles Gateway continuity like a full periodic run, against the
 origin recorded at its first start. The terminal state is written with bounded
 retries before the slot is released, then shown. Job
@@ -269,7 +277,9 @@ panel message, through a per-guild publisher the plugin injects, and leaves it a
 handler edits of one message share an in-process lock. Periodic passes publish
 nothing: three consecutive failures raise one notice stored in `archive_schedule`,
 and the next complete pass raises one recovered notice, each delivered once across
-restarts. The worker persists its latest host storage sample for status; message
+restarts. Discord's invalid-request count gets the same treatment in its own
+`archive_schedule` document: one warning per episode and one recovery (see
+[invalid-request protection](message-archive.md#invalid-request-protection)). The worker persists its latest host storage sample for status; message
 backup size comes from MongoDB collection statistics. Background samples walk the
 MongoDB data directory each time and reuse the size of the project, runtime and
 additional roots for ten minutes (never at 90% of the budget); writers do not wait
@@ -330,7 +340,11 @@ they are older than a day.
 The shared SDK REST manager owns transport retries and quotas. The owner scheduler
 adds bounded, fair admission across guilds and reserves live capacity; announced
 local waits can release admission capacity for other resources, while global waits
-pause new requests. Admission runs at most one request per route and channel, the
+pause new requests. While Discord's invalid-request count is high the owner caps
+background (history and enrichment) admission below the concurrency. Gateway capture
+and live message reads are never capped; reaction-list reconciliation of live events
+shares the background cap, since its reads can produce invalid requests too
+(`flow/invalid-request-guard.ts`, `runtime/invalid-request-monitor.ts`). Admission runs at most one request per route and channel, the
 unit `@discordjs/rest` serializes, so a channel's history pages, message reads and
 reaction lists proceed in parallel. Each channel retains its ordered cursor with at
 most one speculative next page. Checkpoints advance only after message writes and complete

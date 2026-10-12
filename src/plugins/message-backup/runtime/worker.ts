@@ -2,7 +2,7 @@ import { asGuildId } from '../../../core/ids';
 import { beginArchiveContinuity } from '../../../core/archive/continuity';
 import { ArchivePerformanceSampler } from '../../../core/archive/performance';
 import { ARCHIVE_PROCESS_ID } from '../../../infra/archive/owner';
-import { archivePerformanceLog } from '../flow/performance-log';
+import { archivePerformanceLog, archiveWriterPerformanceLog } from '../flow/performance-log';
 import { ArchiveRestTelemetry } from '../flow/rest-telemetry';
 import { ArchiveScheduler } from '../flow/scheduler';
 import { GatewayCapture } from './capture';
@@ -11,6 +11,7 @@ import { GatewayContinuity } from './continuity';
 import { ArchiveDirtyTracker } from './dirty-tracker';
 import type { ArchiveGatewayEvent } from './gateway-event';
 import { ArchiveInboxReducer } from './inbox-reducer';
+import { ArchiveInvalidRequestMonitor } from './invalid-request-monitor';
 import { HistoryIngestor } from './ingestor';
 import { JobRunner } from './job-runner';
 import { NotificationRecovery } from './notification-recovery';
@@ -55,6 +56,7 @@ export class ArchiveWorker {
   private readonly progress: ProgressPublisher;
   private readonly periodicRunner: PeriodicRunner;
   private readonly jobs: JobRunner;
+  private readonly invalidRequests: ArchiveInvalidRequestMonitor;
 
   public constructor(private readonly options: ArchiveWorkerOptions) {
     this.performanceSampler.start();
@@ -115,7 +117,14 @@ export class ArchiveWorker {
       notifications,
     });
     this.storageReporter = new ArchiveStorageReporter(ctx);
+    this.invalidRequests = new ArchiveInvalidRequestMonitor(
+      ctx,
+      notifications,
+      Date.now,
+      options.invalidRequestCheckMs,
+    );
     if (typeof options.client.rest.on === 'function') telemetry.attach(options.client.rest);
+    this.invalidRequests.start();
   }
 
   public async initialize(guildId: string): Promise<ArchiveGuildState> {
@@ -276,6 +285,7 @@ export class ArchiveWorker {
       this.continuity.confirmContinuity(guildId, state);
       state.signal.abort();
     }
+    void this.invalidRequests.stop();
     this.ctx.scheduler.stop();
   }
 
@@ -292,6 +302,7 @@ export class ArchiveWorker {
       ),
     );
     await this.storageReporter.stop();
+    await this.invalidRequests.stop();
     for (const state of this.ctx.states.values()) {
       await this.progress.close(state);
       await state.inbox.writer.stop();
@@ -311,11 +322,13 @@ export class ArchiveWorker {
           this.ctx.scheduler.snapshot(),
         ),
         durations: this.ctx.durations,
-        writers: [...this.ctx.states.values()].map((state) => ({
-          guildId: String(state.conn.guildId),
-          writer: state.writer.snapshot(),
-          inboxWriter: state.inbox.writer.snapshot(),
-        })),
+        writers: [...this.ctx.states.values()].map((state) =>
+          archiveWriterPerformanceLog(
+            String(state.conn.guildId),
+            state.writer.snapshot(),
+            state.inbox.writer.snapshot(),
+          ),
+        ),
       },
       'Archive worker performance',
     );

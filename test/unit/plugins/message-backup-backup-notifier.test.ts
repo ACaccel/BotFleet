@@ -46,7 +46,7 @@ describe('periodic health notices', () => {
       await deliverArchiveScheduleNotice(target.schedule, channel(send), translator, NOW),
     ).toEqual({ kind: 'sent' });
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ allowedMentions: { parse: [] } }));
-    expect(target.markNoticeDelivered).toHaveBeenCalledWith(7);
+    expect(target.markNoticeDelivered).toHaveBeenCalledWith(7, 'schedule');
   });
 
   it('defers a failed send with a capped, growing backoff', async () => {
@@ -55,10 +55,10 @@ describe('periodic health notices', () => {
     expect(
       await deliverArchiveScheduleNotice(first.schedule, channel(send), translator, NOW),
     ).toMatchObject({ kind: 'deferred', retryAt: NOW + 60_000 });
-    expect(first.deferNotice).toHaveBeenCalledWith(7, 1, NOW + 60_000);
+    expect(first.deferNotice).toHaveBeenCalledWith(7, 1, NOW + 60_000, 'schedule');
     const late = store(failing({ attempts: 9 }));
     await deliverArchiveScheduleNotice(late.schedule, channel(send), translator, NOW);
-    expect(late.deferNotice).toHaveBeenCalledWith(7, 10, NOW + 3_600_000);
+    expect(late.deferNotice).toHaveBeenCalledWith(7, 10, NOW + 3_600_000, 'schedule');
     expect(first.markNoticeDelivered).not.toHaveBeenCalled();
   });
 
@@ -70,7 +70,7 @@ describe('periodic health notices', () => {
       expect(
         (await deliverArchiveScheduleNotice(target.schedule, channel(send), translator, NOW)).kind,
       ).toBe('abandoned');
-      expect(target.abandonNotice).toHaveBeenCalledWith(7);
+      expect(target.abandonNotice).toHaveBeenCalledWith(7, 'schedule');
       expect(target.deferNotice).not.toHaveBeenCalled();
     },
   );

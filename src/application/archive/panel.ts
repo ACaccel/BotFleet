@@ -15,7 +15,11 @@ import {
   type ArchivePeriodicRecord,
 } from '../../core/archive/types';
 import type { ArchiveActivityStep, ArchiveProgressSnapshot } from '../../core/archive/progress';
-import type { ArchiveScheduleNotice } from '../../core/archive/schedule';
+import type {
+  ArchiveInvalidRequestNotice,
+  ArchiveScheduleNotice,
+} from '../../core/archive/schedule';
+import { ARCHIVE_INVALID_REQUESTS } from '../../core/archive/limits';
 import { archivePanelId, type ArchivePanelAction, type ArchivePanelOrigin } from './panel-ids';
 import {
   ARCHIVE_COLORS,
@@ -450,6 +454,38 @@ export const renderArchiveScheduleNotice = (
       : {
           title: t.t('replies:archive.notice_recovered_title'),
           description: t.t('replies:archive.notice_recovered_body'),
+          color: ARCHIVE_COLORS.complete,
+        },
+  ],
+  components: [],
+});
+
+/** The debug-channel notice of a high, or recovered, Discord invalid-request count. */
+export const renderArchiveInvalidRequestNotice = (
+  t: ArchiveText,
+  notice: ArchiveInvalidRequestNotice,
+): ArchivePanel => ({
+  embeds: [
+    notice.kind === 'invalid-requests'
+      ? {
+          title: t.t('replies:archive.notice_invalid_title'),
+          description: [
+            t.t('replies:archive.notice_invalid_count', {
+              count: archiveNumber(notice.count),
+              limit: archiveNumber(ARCHIVE_INVALID_REQUESTS.banLimit),
+            }),
+            t.t('replies:archive.notice_invalid_body', {
+              limit: archiveNumber(ARCHIVE_INVALID_REQUESTS.banLimit),
+              recovery: archiveNumber(ARCHIVE_INVALID_REQUESTS.recovery),
+            }),
+          ].join('\n'),
+          color: ARCHIVE_COLORS.failed,
+        }
+      : {
+          title: t.t('replies:archive.notice_invalid_recovered_title'),
+          description: t.t('replies:archive.notice_invalid_recovered_body', {
+            recovery: archiveNumber(ARCHIVE_INVALID_REQUESTS.recovery),
+          }),
           color: ARCHIVE_COLORS.complete,
         },
   ],

@@ -1,4 +1,7 @@
+import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
+import { ARCHIVE_INVALID_REQUESTS } from '../../../src/core/archive/limits';
+import { ArchiveInvalidRequestMonitor } from '../../../src/plugins/message-backup/runtime/invalid-request-monitor';
 import { ArchiveWorker } from '../../../src/plugins/message-backup/runtime/worker';
 import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
 import { ArchivePolicySchema } from '../../../src/core/archive/policy';
@@ -65,5 +68,47 @@ describe('capture admission scope', () => {
     });
     expect(initialize).not.toHaveBeenCalled();
     await worker.stop();
+  });
+});
+
+describe('invalid-request protection wiring', () => {
+  it('checks the shared REST count from start to stop and slows background reads', async () => {
+    const rest = new EventEmitter();
+    const logger = createLogger({ level: 'silent', pretty: false });
+    const warn = vi.spyOn(logger, 'warn');
+    const check = vi.spyOn(ArchiveInvalidRequestMonitor.prototype, 'check');
+    const worker = new ArchiveWorker({
+      client: { rest },
+      logger,
+      guildIds: ['1'],
+      config: archiveRuntimeSchema.parse({ concurrency: 8 }),
+      policy: ArchivePolicySchema.parse({ guildIds: ['1'] }),
+      invalidRequestCheckMs: 10,
+    } as unknown as ConstructorParameters<typeof ArchiveWorker>[0]);
+    try {
+      const forbidden = { status: 403, headers: { get: () => null } };
+      for (let index = 0; index < ARCHIVE_INVALID_REQUESTS.warning; index += 1)
+        rest.emit('response', {}, forbidden);
+      await vi.waitFor(() =>
+        expect(warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            invalidLast10Minutes: ARCHIVE_INVALID_REQUESTS.warning,
+            level: 'warning',
+            backgroundLimit: 4,
+          }),
+          'Archive invalid Discord requests high; slowing background reads',
+        ),
+      );
+      await worker.stop();
+      const checks = check.mock.calls.length;
+      expect(checks).toBeGreaterThan(0);
+      // Stopped: no further checks, and the REST listener is gone.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(check.mock.calls.length).toBe(checks);
+      expect(rest.listenerCount('response')).toBe(0);
+    } finally {
+      await worker.stop();
+      check.mockRestore();
+    }
   });
 });

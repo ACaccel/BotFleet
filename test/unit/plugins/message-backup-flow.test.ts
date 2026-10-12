@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ArchiveScheduler,
   mapArchiveChannels,
+  runArchiveSources,
 } from '../../../src/plugins/message-backup/flow/scheduler';
 import {
   KnownPhaseEstimator,
@@ -45,7 +46,134 @@ it('bounds independent workers and preserves result ordering', async () => {
   expect(result).toEqual([2, 4, 6, 8]);
   expect(peak).toBe(2);
 });
+describe('retrying source runner', () => {
+  it('runs a retried source again at the tail without holding a worker', async () => {
+    const runs: string[] = [];
+    let failedOnce = false;
+    await runArchiveSources(
+      ['a', 'b', 'c'],
+      async (value) => {
+        runs.push(value);
+        if (value === 'a' && !failedOnce) {
+          failedOnce = true;
+          return 1;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return undefined;
+      },
+      1,
+    );
+    expect(runs).toEqual(['a', 'b', 'c', 'a']);
+  });
+
+  it('waits for a pending retry once every other source is done', async () => {
+    const runs: string[] = [];
+    await runArchiveSources(
+      ['a', 'b'],
+      async (value) => {
+        runs.push(value);
+        return runs.filter((run) => run === value).length < 3 ? 2 : undefined;
+      },
+      2,
+    );
+    expect(runs.filter((run) => run === 'a')).toHaveLength(3);
+    expect(runs.filter((run) => run === 'b')).toHaveLength(3);
+  });
+
+  it('drops waiting retries on abort and validates concurrency', async () => {
+    const controller = new AbortController();
+    const worker = vi.fn(async () => {
+      controller.abort();
+      return 60_000;
+    });
+    const started = Date.now();
+    await runArchiveSources(['a'], worker, 1, controller.signal);
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(worker).toHaveBeenCalledTimes(1);
+    await expect(runArchiveSources(['a'], worker, 0)).rejects.toThrow(
+      'invalid-archive-concurrency',
+    );
+  });
+
+  it('drops a retry scheduled while a worker waits for another', async () => {
+    const controller = new AbortController();
+    const runs: string[] = [];
+    const run = runArchiveSources(
+      ['a', 'b'],
+      async (value) => {
+        runs.push(value);
+        if (value === 'b') await new Promise((resolve) => setTimeout(resolve, 5));
+        return 60_000;
+      },
+      2,
+      controller.signal,
+    );
+    await vi.waitFor(() => expect(runs).toHaveLength(2));
+    controller.abort();
+    await run;
+    expect(runs).toEqual(['a', 'b']);
+  });
+});
+
+describe('worker failure settlement', () => {
+  const failFirst = async (
+    run: (values: string[], worker: (value: string) => Promise<undefined>) => Promise<unknown>,
+  ) => {
+    const events: string[] = [];
+    const slow = deferred<void>();
+    const outcome = run(['a', 'b', 'c', 'd'], async (value) => {
+      events.push(`start:${value}`);
+      if (value === 'a') throw new Error('a failed');
+      if (value === 'b') await slow.promise;
+      events.push(`end:${value}`);
+      return undefined;
+    }).then(
+      () => 'resolved',
+      (error: Error) => error.message,
+    );
+    let settled = false;
+    void outcome.then(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(events).toContain('start:b'));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    // The failure waits for the source still running.
+    expect(settled).toBe(false);
+    slow.resolve();
+    expect(await outcome).toBe('a failed');
+    return events;
+  };
+
+  it('settles running sources before rethrowing and dispatches no more', async () => {
+    const events = await failFirst((values, worker) => runArchiveSources(values, worker, 2));
+    expect(events).toEqual(['start:a', 'start:b', 'end:b']);
+  });
+
+  it('settles running channels before rethrowing and dispatches no more', async () => {
+    const events = await failFirst((values, worker) => mapArchiveChannels(values, worker, 2));
+    expect(events).toEqual(['start:a', 'start:b', 'end:b']);
+  });
+});
+
 describe('REST admission scheduler', () => {
+  it('keeps announced route waits for every read its queue can hold', () => {
+    const wait = (index: number) => ({
+      channelId: String(index),
+      route: 'messages' as const,
+      bucketKey: `bucket-${index}`,
+      global: false,
+      deadlineAt: Date.now() + 60_000,
+    });
+    const scaled = new ArchiveScheduler({ concurrency: 32 });
+    for (let index = 0; index < 300; index += 1) scaled.observeWait(wait(index));
+    expect(scaled.snapshot().waitingResources).toBe(300);
+    const explicit = new ArchiveScheduler({ concurrency: 32, maxQueued: 4 });
+    for (let index = 0; index < 10; index += 1) explicit.observeWait(wait(index));
+    expect(explicit.snapshot().waitingResources).toBe(4);
+    scaled.stop();
+    explicit.stop();
+  });
+
   it('shares same-generation reads, reserves a live slot and bounds queued work', async () => {
     const scheduler = new ArchiveScheduler({ concurrency: 1, maxQueued: 1 });
     const first = deferred<number>();

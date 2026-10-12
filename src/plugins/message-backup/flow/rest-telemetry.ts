@@ -131,6 +131,13 @@ export class ArchiveRestTelemetry {
       this.invalidSeconds.set(second, (this.invalidSeconds.get(second) ?? 0) + 1);
     }
   }
+  /** Invalid responses (see `response`) in the last ten minutes. */
+  invalidLast10Minutes(): number {
+    this.prune();
+    let total = 0;
+    for (const count of this.invalidSeconds.values()) total += count;
+    return total;
+  }
   snapshot(): RestTelemetrySnapshot {
     this.prune();
     return {
@@ -143,10 +150,7 @@ export class ArchiveRestTelemetry {
       announcedGlobalWaitMs: this.announcedGlobalWaitMs,
       announcedLocalWaitMs: this.announcedLocalWaitMs,
       observerFailures: this.observerFailures,
-      invalidResponsesLast10Minutes: [...this.invalidSeconds.values()].reduce(
-        (sum, count) => sum + count,
-        0,
-      ),
+      invalidResponsesLast10Minutes: this.invalidLast10Minutes(),
       ipScope: 'this-rest-manager-only',
       bucketWaits: [...this.buckets].map(([key, value]) => ({ key, ...value })),
     };

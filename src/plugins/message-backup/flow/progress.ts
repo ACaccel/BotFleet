@@ -11,6 +11,7 @@ import type {
 import { safeArchiveName, sanitizeArchiveProgress } from '../../../core/archive/progress';
 import { archiveNotificationSecondsSchema } from '../../../core/archive/limits';
 import type { ArchivePhase } from '../../../core/archive/progress';
+import type { Logger } from '../../../core/logger';
 export type { ArchivePhase } from '../../../core/archive/progress';
 type ProgressState = ArchiveProgressState;
 type PhaseProgress = ArchivePhaseProgress & { rates: number[] };
@@ -41,8 +42,14 @@ interface ProgressOptions {
   jobId?: string;
   runId?: string;
   scanId?: string;
+  /** Reports activity entries evicted at the active-source bound. */
+  logger?: Pick<Logger, 'warn'>;
 }
 const phases: ArchivePhase[] = ['discovery', 'history', 'reactions', 'verification'];
+/** Activity entries kept at once; readers are at most 32, so more means a leaked entry. */
+const ACTIVITY_BOUND = 64;
+/** Minimum interval between two logs of evicted activity entries. */
+const EVICTION_LOG_MS = 60_000;
 
 /** Only acknowledged work counts as complete. Persist checkpoint with the owning job's durable writes. */
 export class ProgressTracker {
@@ -53,6 +60,9 @@ export class ProgressTracker {
   private currentPhaseEstimate: RemainingEstimate | undefined;
   private readonly identity: Pick<ArchiveProgressSnapshot, 'work' | 'jobId' | 'runId' | 'scanId'>;
   private readonly activities = new Map<string, ArchiveActivity>();
+  private readonly logger: Pick<Logger, 'warn'> | undefined;
+  private evictedActivities = 0;
+  private evictionLoggedAt = Number.NEGATIVE_INFINITY;
   private readonly scopeGaps = new Map<string, ArchiveScopeGap>();
   private readonly completedSources = new Set<string>();
   private sourceTotal = 0;
@@ -79,6 +89,7 @@ export class ProgressTracker {
 
   constructor(options: ProgressOptions) {
     this.clock = options.clock ?? Date.now;
+    this.logger = options.logger;
     this.identity = {
       work: options.work ?? 'periodic',
       jobId: options.jobId,
@@ -323,8 +334,7 @@ export class ProgressTracker {
       return;
     }
     const previous = this.activities.get(sourceId);
-    if (previous === undefined && this.activities.size >= 64)
-      throw new Error('Archive active-source bound exceeded');
+    if (previous === undefined && this.activities.size >= ACTIVITY_BOUND) this.evictActivity();
     const step = update.step ?? previous?.step ?? 'processing';
     this.activities.set(sourceId, {
       ...previous,
@@ -344,6 +354,37 @@ export class ProgressTracker {
         : { reactionUsers: undefined, reactionPages: undefined }),
     });
   }
+  /**
+   * Makes room at the bound by dropping the least recently updated entry, preferring
+   * one only waiting; a source still working reports again and reappears. Progress
+   * display must never fail the work it describes.
+   */
+  private evictActivity(): void {
+    const staler = (left: ArchiveActivity, right: ArchiveActivity): boolean =>
+      (left.step === 'waiting') !== (right.step === 'waiting')
+        ? left.step === 'waiting'
+        : left.updatedAt < right.updatedAt;
+    let evicted: ArchiveActivity | undefined;
+    for (const activity of this.activities.values())
+      if (evicted === undefined || staler(activity, evicted)) evicted = activity;
+    if (evicted === undefined) return;
+    this.activities.delete(evicted.sourceId);
+    this.evictedActivities += 1;
+    const now = this.clock();
+    if (now - this.evictionLoggedAt >= EVICTION_LOG_MS || now < this.evictionLoggedAt) {
+      this.evictionLoggedAt = now;
+      this.logger?.warn(
+        {
+          ...this.identity,
+          bound: ACTIVITY_BOUND,
+          evictedSourceId: evicted.sourceId,
+          evictedStep: evicted.step,
+          evictedActivities: this.evictedActivities,
+        },
+        'Archive progress activity bound reached; evicted the stalest entry',
+      );
+    }
+  }
   activityDetails(): ArchiveActivity[] {
     return [...this.activities.values()].sort(
       (a, b) => a.startedAt - b.startedAt || a.sourceId.localeCompare(b.sourceId),
@@ -357,11 +398,11 @@ export class ProgressTracker {
     this.sourceTotal = total;
   }
   completeSource(sourceId: string): void {
+    this.activities.delete(sourceId);
     if (this.completedSources.has(sourceId)) return;
     if (this.completedSources.size >= 100000)
       throw new Error('Archive completed-source bound exceeded');
     this.completedSources.add(sourceId);
-    this.activities.delete(sourceId);
     this.lastProgressAt = this.clock();
   }
   gap(gap: ArchiveScopeGap): void {

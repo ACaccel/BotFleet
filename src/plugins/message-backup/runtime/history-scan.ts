@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Routes, type Client, type Guild, type GuildBasedChannel } from 'discord.js';
 import {
   historyPermissionGap,
@@ -11,12 +12,18 @@ import {
 } from '../flow/discovery';
 import type { ArchivePhase } from '../flow/progress';
 import { historyBefore } from '../flow/history-boundary';
-import { mapArchiveChannels } from '../flow/scheduler';
+import { runArchiveSources } from '../flow/scheduler';
 import type { ArchiveHistoryCheckpoint as HistoryCheckpoint } from '../../../core/archive/types';
 import type { Logger } from '../../../core/logger';
 import { collectChannels } from '../internal/collect-channels';
 import { ARCHIVE_LIMITS } from '../../../core/archive/limits';
 import { ArchivePipelineBudget, type PipelineSnapshot } from '../flow/pipeline';
+import {
+  ARCHIVE_SOURCE_RETRY,
+  archiveSourceRetryDelay,
+  classifyArchiveSourceFailure,
+  type ArchiveSourceRetryPolicy,
+} from './source-failure';
 
 interface HistoryActivity {
   readonly step: 'fetching' | 'processing' | 'writing' | 'reactions' | 'checkpoint';
@@ -52,6 +59,8 @@ export interface HistoryHooks {
   readonly pipelineBudget?: ArchivePipelineBudget;
   /** Developer comparisons may disable speculation without changing the durable consumer. */
   readonly prefetch?: boolean;
+  /** In-sweep retries of transiently failing sources; tests shorten the waits. */
+  readonly sourceRetry?: ArchiveSourceRetryPolicy;
   readonly onPipeline?: (snapshot: PipelineSnapshot) => void;
   readonly onActivity?: (channelId: string, activity: HistoryActivity | undefined) => void;
   readonly completed?: (channelId: string, checkpoint: HistoryCheckpoint) => void;
@@ -149,7 +158,42 @@ export const scanArchiveHistory = async (
   const completed = new Set<string>();
   const knownIds = new Set(hooks.knownChannelIds ?? []);
   const pipeline = hooks.pipelineBudget ?? new ArchivePipelineBudget();
-  const scan = async (channel: GuildBasedChannel): Promise<void> => {
+  const retry = hooks.sourceRetry ?? ARCHIVE_SOURCE_RETRY;
+  /**
+   * Blocking failures of one source that its later completion resolves (a failed
+   * scan or revalidation), keyed by source; other issues stay in `result.issues`.
+   */
+  const sourceIssues = new Map<string, Set<string>>();
+  const sourceIssue = (channelId: string, issue: string): void => {
+    const issues = sourceIssues.get(channelId) ?? new Set<string>();
+    issues.add(issue);
+    sourceIssues.set(channelId, issues);
+  };
+  /** Sources whose last failure was a lost access or a deletion. */
+  const inaccessible = new Set<string>();
+  /**
+   * A source that failed because its access was lost or it was deleted, and that a
+   * later inventory confirms as a permission gap or deletion, is a known gap: its
+   * failure no longer blocks the run.
+   */
+  const confirmGap = (channelId: string): void => {
+    if (!inaccessible.delete(channelId)) return;
+    sourceIssues.delete(channelId);
+  };
+  /** Failed attempts and the trace ID of each failing source, kept across sweeps. */
+  const failures = new Map<string, { attempts: number; traceId: string }>();
+  /** Failed attempts per source in the current sweep, bounded by `retry.attempts`. */
+  let sweepFailures = new Map<string, number>();
+  /** The step a source last reached, reported when it fails. */
+  type SourceStep = HistoryActivity['step'] | 'loading';
+  const scan = async (
+    channel: GuildBasedChannel,
+    position: { step: SourceStep },
+  ): Promise<void> => {
+    const report = (activity: HistoryActivity): void => {
+      position.step = activity.step;
+      hooks.onActivity?.(channel.id, activity);
+    };
     if (hooks.signal.aborted) throw new Error('Archive scan cancelled');
     const previous = await hooks.load(channel.id);
     let checkpoint: HistoryCheckpoint =
@@ -182,6 +226,7 @@ export const scanArchiveHistory = async (
       hooks.completed?.(channel.id, checkpoint);
       return;
     }
+    position.step = 'checkpoint';
     await hooks.checkpoint(channel, checkpoint);
     const local = new AbortController();
     const abort = (): void => local.abort();
@@ -252,7 +297,7 @@ export const scanArchiveHistory = async (
       await hooks.afterPage();
       for (;;) {
         if (local.signal.aborted) throw new Error('Archive scan cancelled');
-        hooks.onActivity?.(channel.id, { step: 'fetching', scanned: checkpoint.scanned ?? 0 });
+        report({ step: 'fetching', scanned: checkpoint.scanned ?? 0 });
         const fetched = await (prefetched ?? fetch(checkpoint.before));
         prefetched = undefined;
         if (fetched.page === undefined) throw fetched.error;
@@ -260,7 +305,7 @@ export const scanArchiveHistory = async (
         const { messages, oldest, done } = held;
         // Its predecessor bound is known, but the next page remains speculative until this barrier.
         if (!done && !local.signal.aborted && hooks.prefetch !== false) prefetched = fetch(oldest);
-        hooks.onActivity?.(channel.id, {
+        report({
           step: 'processing',
           pageProcessed: 0,
           pageTotal: messages.length,
@@ -282,7 +327,7 @@ export const scanArchiveHistory = async (
             if (local.signal.aborted) throw new Error('Archive scan cancelled');
             if ((await hooks.consume(raw, channel)) !== false) admitted += 1;
             committed += 1;
-            hooks.onActivity?.(channel.id, {
+            report({
               step: 'processing',
               pageProcessed: committed,
               pageTotal: messages.length,
@@ -307,7 +352,7 @@ export const scanArchiveHistory = async (
           pageSequence: (checkpoint.pageSequence ?? 0) + 1,
           ...(latest === undefined ? {} : { latest }),
         };
-        hooks.onActivity?.(channel.id, {
+        report({
           step: 'checkpoint',
           pageProcessed: committed,
           pageTotal: messages.length,
@@ -340,6 +385,59 @@ export const scanArchiveHistory = async (
       hooks.onPipeline?.(pipeline.snapshot());
     }
   };
+  /**
+   * Records a failed source attempt and returns the wait before its next attempt, or
+   * `undefined` when it does not run again in this sweep. Transient failures run
+   * again from the source's checkpoint, behind the sources still waiting; the
+   * verification sweep retries a source that exhausted them.
+   */
+  const failSource = (
+    channel: GuildBasedChannel,
+    step: SourceStep,
+    error: unknown,
+  ): number | undefined => {
+    const reason = String(error);
+    const kind = classifyArchiveSourceFailure(error, hooks.signal);
+    if (kind === 'stopped') {
+      // An interrupted source stays uncovered: the issue keeps a pause or preemption
+      // partial (a stop or shutdown ends the run cancelled regardless).
+      sourceIssue(channel.id, `${channel.id}: ${reason}`);
+      hooks.failed?.(reason);
+      return undefined;
+    }
+    const previous = failures.get(channel.id);
+    const attempts = (previous?.attempts ?? 0) + 1;
+    const traceId = previous?.traceId ?? randomUUID().slice(0, 8);
+    failures.set(channel.id, { attempts, traceId });
+    sourceIssue(channel.id, `${channel.id}: ${reason} [trace ${traceId}]`);
+    if (kind === 'inaccessible') inaccessible.add(channel.id);
+    else inaccessible.delete(channel.id);
+    const sweepAttempts = (sweepFailures.get(channel.id) ?? 0) + 1;
+    sweepFailures.set(channel.id, sweepAttempts);
+    const retryInMs =
+      kind === 'transient' && sweepAttempts < retry.attempts
+        ? archiveSourceRetryDelay(sweepAttempts, retry)
+        : undefined;
+    const fields = {
+      guildId: guild.id,
+      channelId: channel.id,
+      step,
+      failure: kind,
+      attempt: attempts,
+      sweepAttempt: sweepAttempts,
+      maxSweepAttempts: retry.attempts,
+      traceId,
+      err: error,
+      ...(retryInMs === undefined ? {} : { retryInMs }),
+    };
+    if (retryInMs !== undefined)
+      logger.warn(fields, 'Archive source failed; retrying from its checkpoint');
+    else if (kind === 'capacity' || kind === 'inaccessible')
+      logger.warn(fields, 'Archive source failed');
+    else logger.error(fields, 'Archive source failed');
+    if (retryInMs === undefined) hooks.failed?.(reason);
+    return retryInMs;
+  };
   // A final inventory catches threads created or revealed during a long pass.
   for (let sweep = 0; sweep < 2; sweep += 1) {
     try {
@@ -356,10 +454,15 @@ export const scanArchiveHistory = async (
       signal: hooks.signal,
     });
     const gaps = inventory.gaps ?? [];
-    for (const gap of gaps)
+    const readable = new Set(inventory.channels.map((channel) => channel.id));
+    for (const gap of gaps) {
       (isKnownDiscoveryGap(gap) ? result.gaps : result.issues).push(
         gap.channelId === undefined ? gap.reason : `${gap.channelId}: ${gap.reason}`,
       );
+      // A gap of a source the inventory still reads concerns its threads, not the source.
+      if (isKnownDiscoveryGap(gap) && gap.channelId !== undefined && !readable.has(gap.channelId))
+        confirmGap(gap.channelId);
+    }
     const locationMap = new Map<string, DiscoveryLocation>(
       inventory.channels.map((channel) => [
         channel.id,
@@ -397,7 +500,10 @@ export const scanArchiveHistory = async (
         }
         const reason = historyPermissionGap(channel);
         if (reason !== undefined) {
-          (isPermissionGap(reason) ? result.gaps : result.issues).push(`${channelId}: ${reason}`);
+          if (isPermissionGap(reason)) {
+            result.gaps.push(`${channelId}: ${reason}`);
+            confirmGap(channelId);
+          } else sourceIssue(channelId, `${channelId}: ${reason}`);
           await hooks.revalidated?.(channelId, 'denied', channel, reason);
           continue;
         }
@@ -409,12 +515,16 @@ export const scanArchiveHistory = async (
         const code = (error as { code?: unknown } | null)?.code;
         if (code === 10003) {
           knownIds.delete(channelId);
+          confirmGap(channelId);
           await hooks.revalidated?.(channelId, 'deleted', undefined, 'discord-unknown-channel');
           continue;
         }
         const denied = isForbiddenDiscordError(error);
         const reason = String(error);
-        (denied ? result.gaps : result.issues).push(`${channelId}: ${reason}`);
+        if (denied) {
+          result.gaps.push(`${channelId}: ${reason}`);
+          confirmGap(channelId);
+        } else sourceIssue(channelId, `${channelId}: ${reason}`);
         await hooks.revalidated?.(channelId, denied ? 'denied' : 'unknown', undefined, reason);
       }
     }
@@ -423,26 +533,45 @@ export const scanArchiveHistory = async (
       (channel) => !completed.has(channel.id),
     ) as GuildBasedChannel[];
     const pending = await orderSources(unfinished, hooks, logger);
+    sweepFailures = new Map();
     hooks.phase?.('history');
-    await mapArchiveChannels(
+    await runArchiveSources(
       pending,
       async (channel) => {
-        if (hooks.signal.aborted) return;
+        if (hooks.signal.aborted) return undefined;
+        const position: { step: SourceStep } = { step: 'loading' };
         try {
-          await scan(channel);
+          await scan(channel, position);
           completed.add(channel.id);
           result.channels += 1;
+          sourceIssues.delete(channel.id);
+          inaccessible.delete(channel.id);
+          const failed = failures.get(channel.id);
+          if (failed !== undefined)
+            logger.info(
+              {
+                guildId: guild.id,
+                channelId: channel.id,
+                attempts: failed.attempts + 1,
+                traceId: failed.traceId,
+              },
+              'Archive source recovered after a failed attempt',
+            );
+          failures.delete(channel.id);
+          return undefined;
         } catch (error) {
-          result.issues.push(`${channel.id}: ${String(error)}`);
-          hooks.failed?.(String(error));
+          return failSource(channel, position.step, error);
         }
       },
       hooks.concurrency,
+      hooks.signal,
     );
     if (hooks.signal.aborted) break;
   }
   hooks.phase?.('verification');
-  result.issues = [...new Set(result.issues)];
+  result.issues = [
+    ...new Set([...result.issues, ...[...sourceIssues.values()].flatMap((issues) => [...issues])]),
+  ];
   result.gaps = [...new Set(result.gaps)];
   return result;
 };

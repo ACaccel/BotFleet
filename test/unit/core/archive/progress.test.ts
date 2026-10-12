@@ -144,11 +144,50 @@ describe('truthful bounded archive progress', () => {
       expect(activity[key]).toBeUndefined();
   });
 
-  it('fails explicitly at bounded metadata limits rather than silently undercounting', () => {
+  it('evicts the stalest activity at the bound and logs it instead of failing the source', () => {
+    let now = 6000;
+    const warn = vi.fn();
+    const progress = new ProgressTracker({
+      cutoff: new Date(1000),
+      startedAt: 1000,
+      work: 'full-backup',
+      jobId: '1:job',
+      runId: 'run',
+      clock: () => now,
+      logger: { warn },
+    });
+    for (let i = 0; i < 64; i += 1) {
+      now = 6000 + i;
+      progress.activity(String(i), { step: i === 30 ? 'waiting' : 'processing' });
+    }
+    // A running source refreshes its entry; it stays newest.
+    progress.activity('0', { step: 'fetching' });
+    expect(() => progress.activity('64', { step: 'processing' })).not.toThrow();
+    expect(() => progress.activity('65', { step: 'processing' })).not.toThrow();
+    const ids = progress.activityDetails().map((activity) => activity.sourceId);
+    expect(ids).toHaveLength(64);
+    // The waiting entry goes first, then the least recently updated one.
+    expect(ids).not.toContain('30');
+    expect(ids).not.toContain('1');
+    expect(ids).toEqual(expect.arrayContaining(['0', '2', '64', '65']));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatchObject({
+      bound: 64,
+      evictedSourceId: '30',
+      evictedActivities: 1,
+    });
+  });
+
+  it('clears the activity of a source reported again after it completed', () => {
     const progress = tracker();
-    for (let i = 0; i < 64; i += 1) progress.activity(String(i), { step: 'processing' });
-    expect(() => progress.activity('65', { step: 'processing' })).toThrow('bound exceeded');
-    expect(progress.snapshot().activityCount).toBe(64);
+    progress.activity('10', { step: 'processing' });
+    progress.completeSource('10');
+    progress.activity('10', { step: 'reactions' });
+    progress.completeSource('10');
+    expect(progress.snapshot()).toMatchObject({
+      activityCount: 0,
+      sources: { completed: 1 },
+    });
   });
 });
 

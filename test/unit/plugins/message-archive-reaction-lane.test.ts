@@ -120,7 +120,11 @@ describe('pipeline reservation growth', () => {
     const release = await budget.reserve(4);
     await release.grow(3);
     await release.grow(10);
-    expect(budget.snapshot().historyReservedBytes).toBe(10);
+    expect(budget.snapshot()).toMatchObject({
+      historyReservedBytes: 10,
+      grown: 1,
+      grownWaited: 0,
+    });
     await expect(release.grow(15)).rejects.toThrow('archive-pipeline-item-too-large');
     release.shrink(2);
     expect(budget.snapshot().reservedBytes).toBe(2);
@@ -145,7 +149,11 @@ describe('pipeline reservation growth', () => {
     expect(late).toBe(false);
     second();
     await grown;
-    expect(budget.snapshot().historyReservedBytes).toBe(12);
+    expect(budget.snapshot()).toMatchObject({
+      historyReservedBytes: 12,
+      grown: 1,
+      grownWaited: 1,
+    });
     first();
     (await newer)();
     expect(budget.snapshot().reservedBytes).toBe(0);

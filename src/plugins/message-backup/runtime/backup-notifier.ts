@@ -4,9 +4,12 @@ import type { ArchiveProgressSnapshot } from '../../../core/archive/progress';
 import type { ArchiveControlRepo } from '../../../persistence/repositories/archive-control.repo';
 import type { ArchiveScheduleRepo } from '../../../persistence/repositories/archive-schedule.repo';
 import type { ArchiveText } from '../../../application/archive/panel-format';
+import type { ArchiveNoticeSlot } from '../../../core/archive/schedule';
 import {
   renderArchiveBackupPanel,
+  renderArchiveInvalidRequestNotice,
   renderArchiveScheduleNotice,
+  type ArchivePanel,
 } from '../../../application/archive/panel';
 import { withArchivePublicMessageLock } from '../../../application/archive/public-message';
 
@@ -114,28 +117,64 @@ export const archiveBackupNotifiers =
   (jobs) =>
     new ArchiveBackupNotifier({ client, translator, jobs });
 
-/** What happened to the pending periodic-health notice. */
+/** What happened to the pending debug-channel notice. */
 export type ArchiveNoticeDelivery =
   | { readonly kind: 'none' }
   | { readonly kind: 'sent' }
   | { readonly kind: 'deferred'; readonly error: unknown; readonly retryAt: number }
   | { readonly kind: 'abandoned'; readonly error: unknown };
 
+/** The stored notice of a slot and how it renders. */
+const pendingNotice = async (
+  schedule: ArchiveScheduleRepo,
+  slot: ArchiveNoticeSlot,
+  translator: ArchiveText,
+): Promise<
+  | {
+      readonly notice: {
+        readonly createdAt: number;
+        readonly deliveredAt?: number;
+        readonly abandonedAt?: number;
+        readonly attempts?: number;
+        readonly retryAt?: number;
+      };
+      readonly render: () => ArchivePanel;
+    }
+  | undefined
+> => {
+  if (slot === 'schedule') {
+    const current = await schedule.read();
+    const notice = current.notice;
+    return notice === undefined
+      ? undefined
+      : {
+          notice,
+          render: () => renderArchiveScheduleNotice(translator, notice, current.nextRunAt),
+        };
+  }
+  const notice = (await schedule.readInvalidRequests()).notice;
+  return notice === undefined
+    ? undefined
+    : { notice, render: () => renderArchiveInvalidRequestNotice(translator, notice) };
+};
+
 /**
- * Sends a pending periodic-health notice to the debug channel. Delivery is at
- * least once: a crash between the send and its record can repeat it. A failed
- * send waits with a capped backoff; a permanent refusal is recorded and never
- * retried.
+ * Sends a slot's pending notice (periodic health by default) to the debug channel.
+ * Delivery is at least once: a crash between the send and its record can repeat
+ * it. A failed send waits with a capped backoff; a permanent refusal is recorded
+ * and never retried.
  */
 export const deliverArchiveScheduleNotice = async (
   schedule: ArchiveScheduleRepo,
   channel: SendableChannels | undefined,
   translator: ArchiveText,
   now = Date.now(),
+  slot: ArchiveNoticeSlot = 'schedule',
 ): Promise<ArchiveNoticeDelivery> => {
-  const current = await schedule.read();
-  const notice = current.notice;
+  const pending = await pendingNotice(schedule, slot, translator);
+  const notice = pending?.notice;
   if (
+    pending === undefined ||
     notice === undefined ||
     notice.deliveredAt !== undefined ||
     notice.abandonedAt !== undefined ||
@@ -143,20 +182,20 @@ export const deliverArchiveScheduleNotice = async (
     channel === undefined
   )
     return { kind: 'none' };
-  const panel = renderArchiveScheduleNotice(translator, notice, current.nextRunAt);
+  const panel = pending.render();
   try {
     await channel.send({ embeds: panel.embeds, allowedMentions: { parse: [] } });
   } catch (error) {
     if (isPermanentDiscordFailure(error)) {
-      await schedule.abandonNotice(notice.createdAt);
+      await schedule.abandonNotice(notice.createdAt, slot);
       return { kind: 'abandoned', error };
     }
     const attempts = (notice.attempts ?? 0) + 1;
     const retryAt =
       now + Math.min(NOTICE_RETRY_MAX_MS, NOTICE_RETRY_BASE_MS * 2 ** Math.min(attempts - 1, 6));
-    await schedule.deferNotice(notice.createdAt, attempts, retryAt);
+    await schedule.deferNotice(notice.createdAt, attempts, retryAt, slot);
     return { kind: 'deferred', error, retryAt };
   }
-  await schedule.markNoticeDelivered(notice.createdAt);
+  await schedule.markNoticeDelivered(notice.createdAt, slot);
   return { kind: 'sent' };
 };

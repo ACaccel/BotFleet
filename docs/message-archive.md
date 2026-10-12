@@ -480,17 +480,28 @@ log scrubber's limit (`stages.fetch.count`):
   `reactionWaiting`), its peak and total `queueWaitMs`. A history read reserves its
   8 MiB maximum until it returns, so at most fourteen are in flight. A reaction read
   reserves a 256 KiB page estimate and grows it if the response is larger, so the
-  16 MiB reaction lane admits 64 reads at once.
+  16 MiB reaction lane admits 64 reads at once; the lane caps reads by that
+  estimate, not by their true size. `grown` counts responses that exceeded their
+  estimate and `grownWaited` those that had to wait for room; a growing `grown`
+  means the estimate is too small for this guild. A full reservation queue refuses
+  new reads with a backpressure error, which retries the source.
 - `stages`: `count`, `durationMs` and `bytes` for `fetch`, `normalize`
   (normalization), `write` (full-page writes), `reactions` (membership refresh),
   `checkpoint` and `process` (consuming a page). Timings overlap, so do not sum
   stages as wall time.
-- `scheduler`: requests running and queued for admission, and channel routes held by an
-  announced wait.
+- `scheduler`: requests running and queued for admission, channel routes held by an
+  announced wait, and `backgroundLimit` while
+  [invalid-request protection](#invalid-request-protection) slows background reads.
 - `rateLimits`: 429 responses by Discord scope (`global429`, `route429`,
   `shared429`, `unknown429`), SDK rate-limit waits (`waitEvents`, `waitMs`, split into
   `globalWaitMs` and `routeWaitMs`) and `invalidLast10Minutes`, the 401, 403 and
   non-shared 429 responses that count toward Discord's invalid-request limit.
+
+At shutdown `Archive worker performance` adds `process`, `durations` and one
+`writers` entry per guild: `guildId` and flat `writer*` and `inboxWriter*` counters
+(`writerPending`, `writerPeakPending`, `writerCompleted`, `writerFailed`,
+`writerQueueWaitMs`, `writerOperationMs`, `writerDrainMs`, and the same for
+`inboxWriter`).
 
 `@discordjs/rest` runs every reaction read of a channel one after another, so a
 message refreshes at most two lists at once (one overlaps staging with the other's
@@ -499,6 +510,35 @@ read), and parallel reaction reads come from other channels being read. Raise
 lanes have room. Persistent `reactionWaiting` means the reaction lane, not the reader
 count, limits throughput; growing `globalWaitMs` or `global429` means Discord's limit
 does.
+
+### Invalid-request protection
+
+Discord bans the bot's IP for about an hour (a Cloudflare ban) after 10,000 invalid
+requests in ten minutes: 401, 403, and 429 except those with
+`X-RateLimit-Scope: shared`. `rateLimits.invalidLast10Minutes` counts them for this
+process's REST manager; other processes on the same IP are not included. The worker
+checks the count every five seconds against fixed thresholds
+(`ARCHIVE_INVALID_REQUESTS` in `src/core/archive/limits.ts`):
+
+| Count in ten minutes     | Effect                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 1,000 or more (warning)  | Background reads (history pages, reaction lists) run at half of `archive_runtime.concurrency`; one notice; `warn` log         |
+| 5,000 or more (critical) | One background read at a time; `error` log                                                                                    |
+| below 200 (recovery)     | The limit doubles every 30 seconds until lifted; `info` log. Between 200 and 1,000 an episode in progress stays at half speed |
+
+Gateway capture and live message reads are never capped; reaction-list
+reconciliation of live events shares the background cap, since its reads can
+produce invalid requests too. The first warning of an
+episode posts one notice to each archived guild's debug channel; a later critical
+level does not post again. Once the count stays below 200 for a whole ten-minute
+window of the running process, one recovery notice follows, but only after the
+warning was delivered (or refused permanently), so it never replaces an unsent
+warning. Both are stored in
+`archive_schedule` (document `invalid-requests`) and delivered like the
+[periodic-health notices](#periodic-schedule): a restart neither repeats the warning
+nor drops the recovery, and a failed send is retried. Investigate the cause (a lost
+permission answered with 403, a revoked token, repeated 429s) before raising
+concurrency again.
 
 ## Progress
 
@@ -511,7 +551,12 @@ Progress uses a shared versioned model, saved with the full-backup job
 is read through its versioned schema: older versions are upgraded, and one of an
 unknown version or without a known phase and state is ignored. Activity lines show
 real fetches, message batches, reaction pages and checkpoints; there is no simulated
-movement, so a slow request can keep the same activity until it returns. Recent
+movement, so a slow request can keep the same activity until it returns. Only the
+scan's own sources report activity; reaction refreshes of live events and the inbox
+do not. At most 64 activity lines are kept: a new one beyond that replaces the least
+recently updated (a waiting one first) and logs
+`Archive progress activity bound reached; evicted the stalest entry` at most once a
+minute. Recent
 speed uses only newly acknowledged history pages in this process, with at least two
 samples one second apart within a 60-second window, and disappears after 30 seconds
 without a new checkpoint; restored counts never inflate it. The reaction count is
@@ -648,6 +693,11 @@ checkpoints separately from periodic ones, so neither kind resets the other.
   wait until the backup ends; live capture continues throughout.
 - **Stop and resume.** **Stop** is cooperative: the current page reaches a safe
   boundary, checkpoints and archived messages stay, and the backup ends **Stopped**.
+  If reading the stop request fails (for example a database timeout), the boundary
+  passes as not stopped, the worker logs
+  `Archive job stop lookup failed; continuing until the next boundary` at most once a
+  minute, and the next boundary at least 250 ms later asks again. A programmer error
+  in the lookup still fails the source.
   **Resume** queues the same job again with its original cutoff and checkpoints.
   Only the newest full backup can resume; starting over creates a new job and leaves
   the old one as a final record.
@@ -656,12 +706,36 @@ checkpoints separately from periodic ones, so neither kind resets the other.
   requested before the restart ends it **Stopped** instead. A guild in capture-only
   mode (its message indexes need maintenance) ends a claimed backup **Failed** with
   `structural-maintenance-required` instead of scanning.
+- **Failed sources.** A source whose scan fails is logged with `guildId`,
+  `channelId`, the `step` it reached (`loading`, `fetching`, `processing`,
+  `checkpoint`), the failure class, its attempt and a `traceId` shared by every
+  attempt of that source. Transient failures (Discord 5xx, 429 or timeouts, an
+  aborted request that no stop caused, database timeouts or network errors, a full
+  in-process queue) are logged at `warn` as
+  `Archive source failed; retrying from its checkpoint` and the source runs again
+  from its last checkpoint in the same sweep, waiting 5, 10, 20 and 40 seconds (up to
+  five attempts, at most two minutes apart). While it waits, its reader takes other
+  sources; the retry joins the end of the sources still waiting. A source that
+  exhausts its attempts, or fails for any other reason (an invalid response, a
+  programmer error), is logged at `error` as `Archive source failed`; access losses
+  and storage pressure are logged at `warn`. Such a source is tried again in the
+  verification sweep with a new attempt budget. A recovered source logs
+  `Archive source recovered after a failed attempt` with the same `traceId`. A stop,
+  pause or shutdown drops waiting retries. Periodic passes handle failed sources the
+  same way. The source's entry in `result.issues` ends with `[trace <traceId>]`, so
+  it leads to these log lines. A source that failed because its access was lost or
+  it was deleted, and that the verification sweep then records as a permission gap
+  or deletion, becomes a known gap instead of a blocking failure. A source
+  interrupted by a stop, pause or preemption keeps a blocking issue without a trace:
+  a stop still ends **Stopped**, and a pause leaves the run partial.
 - **Completion.** Known gaps (channels the bot cannot read, unsupported types) do not
   block completion: the job ends `complete` and lists them in `result.gaps`. The
   result records the cutoff, scanned and written counts, the gaps and the messages
   whose reaction lists stayed incomplete. Blocking failures (a channel scan error, a
   storage pause, a Gateway gap during the scan, live events before the cutoff still
   unwritten) end it **Failed** with a reason category; resume after fixing the cause.
+  A source's failures stop blocking once the source completes, in a retry or in the
+  verification sweep, so a run that covers every source ends `complete`.
   A storage pause is never treated as a stop.
 - **Reactions.** When one message's reaction list cannot be confirmed for a reason
   of its own (it keeps changing, stays incomplete, or the message is gone), only that

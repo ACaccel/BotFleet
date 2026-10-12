@@ -11,6 +11,7 @@ import {
   renderArchiveBackupPanel,
   renderArchiveConfirmPanel,
   renderArchiveGapPage,
+  renderArchiveInvalidRequestNotice,
   renderArchiveRecords,
   renderArchiveScheduleNotice,
   type ArchivePanel,
@@ -240,6 +241,20 @@ describe('archive panels', () => {
         expectLocalized(notice);
         expect(notice.components).toEqual([]);
       }
+      const invalid = renderArchiveInvalidRequestNotice(t, {
+        kind: 'invalid-requests',
+        count: 1234,
+        createdAt: 1,
+      });
+      expectLocalized(invalid);
+      expect(invalid.embeds[0]?.description).toContain('1,234');
+      expect(invalid.embeds[0]?.description).toContain('10,000');
+      const recovered = renderArchiveInvalidRequestNotice(t, {
+        kind: 'invalid-requests-recovered',
+        createdAt: 2,
+      });
+      expectLocalized(recovered);
+      expect(recovered.embeds[0]?.description).toContain('200');
     },
   );
 

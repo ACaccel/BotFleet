@@ -1,3 +1,4 @@
+import type { IngestOptions } from '../../../src/plugins/message-backup/runtime/ingestor';
 import type { GuildBasedChannel } from 'discord.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ArchivePolicySchema } from '../../../src/core/archive/policy';
@@ -455,6 +456,65 @@ describe('ScanRunner', () => {
     expect(state.signal.signal.aborted).toBe(false);
     history(async () => undefined);
     expect((await scan(PERIODIC)).status).toBe('complete');
+  });
+
+  it('passes every waiting boundary when a stop lookup fails, then honours a later stop', async () => {
+    const { stores, state, scan } = setup();
+    const getJob = vi.spyOn(state.repos.jobs, 'getJob');
+    getJob.mockRejectedValueOnce(new Error('database timeout'));
+    let boundaries: unknown[] = [];
+    let later: unknown;
+    history(async (hooks) => {
+      boundaries = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          hooks.afterPage().then(
+            () => 'passed',
+            (error) => error,
+          ),
+        ),
+      );
+      stores.stopRequested = true;
+      // A failed lookup still counts toward the 250 ms throttle.
+      await new Promise((resolve) => setTimeout(resolve, 260));
+      later = await hooks.afterPage().catch((error: unknown) => error);
+    });
+    const result = await scan(FULL_BACKUP);
+    expect(boundaries).toEqual(['passed', 'passed', 'passed', 'passed']);
+    expect(later).toMatchObject({ name: 'ArchiveJobStoppedError' });
+    expect(getJob).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe('cancelled');
+  });
+
+  it('reports reaction activity of a per-message ingest to the scan source until it completes', async () => {
+    const { state, deps, scan } = setup();
+    const ingest = deps.ingestor.ingest as unknown as {
+      mockImplementation(
+        run: (state: unknown, raw: unknown, options?: IngestOptions) => Promise<boolean>,
+      ): void;
+    };
+    ingest.mockImplementation(async (_state, _raw, options) => {
+      options?.onReactionActivity?.({ reactionUsers: 2, reactionPages: 1 });
+      return true;
+    });
+    let during: unknown;
+    let after: unknown;
+    history(async (hooks) => {
+      await hooks.consume({ id: '101' }, channel);
+      during = state.progress?.activityDetails();
+      hooks.completed?.('10', checkpoint(hooks.runId));
+      after = state.progress?.activityDetails();
+    });
+    await scan(FULL_BACKUP);
+    expect(during).toEqual([
+      expect.objectContaining({
+        sourceId: '10',
+        step: 'reactions',
+        reactionUsers: 2,
+        reactionPages: 1,
+        provisional: true,
+      }),
+    ]);
+    expect(after).toEqual([]);
   });
 
   it('ends cancelled when the worker shuts down during the scan', async () => {

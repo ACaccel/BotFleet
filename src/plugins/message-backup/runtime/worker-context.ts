@@ -50,6 +50,10 @@ export interface ArchiveWorkerOptions {
   writerRepos: ArchiveWriterReposFactory;
   /** First wait between terminal-write retries (doubling); tests shorten it. */
   terminalRetryBaseMs?: number;
+  /** First wait between in-sweep retries of a failing source (doubling); tests shorten it. */
+  sourceRetryBaseMs?: number;
+  /** Interval between invalid-request checks (see `ARCHIVE_INVALID_REQUESTS`); tests shorten it. */
+  invalidRequestCheckMs?: number;
   /**
    * Whether each guild reduces its inbox in a background loop (default). Tests that
    * drain explicitly turn it off.

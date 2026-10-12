@@ -122,6 +122,8 @@ const fixture = (
     backupNotifiers: archiveBackupNotifiers(client, translator),
     archiveRepos: buildArchiveRepos,
     writerRepos: buildArchiveWriterRepos,
+    // Sources failing transiently retry in the same sweep; keep the waits short.
+    sourceRetryBaseMs: 1,
     ...extra,
   });
   return { worker, get, patch, send, logger, client };
@@ -697,6 +699,33 @@ describe('msg-archive full backup', () => {
           result: { reason: 'capacity' },
         });
         expect(paused?.activeSlot).toBeUndefined();
+      } finally {
+        await worker.stop();
+      }
+    }));
+
+  it('retries a transiently failing source in the same sweep and completes the backup', async () =>
+    withFreshConnection(async (connection) => {
+      inventory();
+      const { worker, get } = fixture(new StaticConnectionManager(connection));
+      let failures = 0;
+      get.mockImplementation(async (route: string) => {
+        if (route.endsWith('/messages') && failures < 2) {
+          failures += 1;
+          throw Object.assign(new Error('Service Unavailable'), { status: 503 });
+        }
+        return route.endsWith('/messages') ? [message('101')] : message('101');
+      });
+      try {
+        await worker.initialize('1');
+        const job = await confirmBackup(connection);
+        await worker.pollJobs('1');
+        expect(failures).toBe(2);
+        expect(await jobOf(connection, job.jobId)).toMatchObject({
+          status: 'complete',
+          result: { issues: [] },
+        });
+        expect(await fullCheckpoint(connection)).toMatchObject({ complete: true });
       } finally {
         await worker.stop();
       }

@@ -1,5 +1,7 @@
 import type { Connection } from 'mongoose';
 import type {
+  ArchiveInvalidRequestAlert,
+  ArchiveNoticeSlot,
   ArchivePassHealth,
   ArchiveSchedule,
   ArchiveScheduleChange,
@@ -9,6 +11,16 @@ import type {
 const ARCHIVE_FAILURE_ALERT_THRESHOLD = 3;
 
 type ScheduleDocument = ArchiveSchedule & { _id: string };
+/**
+ * The invalid-request episode is its own document, so its notice never displaces a
+ * periodic-health notice and raising it never creates the schedule record.
+ */
+type InvalidRequestDocument = ArchiveInvalidRequestAlert & { _id: 'invalid-requests' };
+const INVALID_REQUESTS_ID = 'invalid-requests';
+const noticeFilter = (slot: ArchiveNoticeSlot, createdAt: number) => ({
+  _id: slot === 'schedule' ? 'current' : INVALID_REQUESTS_ID,
+  'notice.createdAt': createdAt,
+});
 
 /** Schedule settings, pass claims and the periodic-health notice of one guild. */
 export interface ArchiveScheduleRepo {
@@ -17,9 +29,26 @@ export interface ArchiveScheduleRepo {
   recover(): Promise<void>;
   start(): Promise<ArchiveSchedule | null>;
   finish(revision: number, retryDelayMs?: number, health?: ArchivePassHealth): Promise<void>;
-  markNoticeDelivered(createdAt: number): Promise<void>;
-  deferNotice(createdAt: number, attempts: number, retryAt: number): Promise<void>;
-  abandonNotice(createdAt: number): Promise<void>;
+  markNoticeDelivered(createdAt: number, slot?: ArchiveNoticeSlot): Promise<void>;
+  deferNotice(
+    createdAt: number,
+    attempts: number,
+    retryAt: number,
+    slot?: ArchiveNoticeSlot,
+  ): Promise<void>;
+  abandonNotice(createdAt: number, slot?: ArchiveNoticeSlot): Promise<void>;
+  readInvalidRequests(): Promise<ArchiveInvalidRequestAlert>;
+  /**
+   * Raises the episode's warning unless one is already raised, or its recovery
+   * when one is. `raised`: the notice is stored and pending; `unchanged`: the
+   * episode already is in that state; `waiting`: the warning is not delivered or
+   * abandoned yet, so the recovery must wait and not replace it.
+   */
+  raiseInvalidRequestNotice(
+    change:
+      | { readonly kind: 'invalid-requests'; readonly count: number }
+      | { readonly kind: 'invalid-requests-recovered' },
+  ): Promise<'raised' | 'unchanged' | 'waiting'>;
 }
 
 /**
@@ -210,26 +239,86 @@ export class MongoArchiveScheduleRepo implements ArchiveScheduleRepo {
   }
 
   /** Marks a notice delivered; a newer notice raised meanwhile stays pending. */
-  public async markNoticeDelivered(createdAt: number): Promise<void> {
-    await this.collection().updateOne(
-      { _id: 'current', 'notice.createdAt': createdAt },
-      { $set: { 'notice.deliveredAt': Date.now() } },
-    );
+  public async markNoticeDelivered(
+    createdAt: number,
+    slot: ArchiveNoticeSlot = 'schedule',
+  ): Promise<void> {
+    await this.collection().updateOne(noticeFilter(slot, createdAt), {
+      $set: { 'notice.deliveredAt': Date.now() },
+    });
   }
 
   /** Records a failed send; the next attempt waits until `retryAt`. */
-  public async deferNotice(createdAt: number, attempts: number, retryAt: number): Promise<void> {
-    await this.collection().updateOne(
-      { _id: 'current', 'notice.createdAt': createdAt },
-      { $set: { 'notice.attempts': attempts, 'notice.retryAt': retryAt } },
-    );
+  public async deferNotice(
+    createdAt: number,
+    attempts: number,
+    retryAt: number,
+    slot: ArchiveNoticeSlot = 'schedule',
+  ): Promise<void> {
+    await this.collection().updateOne(noticeFilter(slot, createdAt), {
+      $set: { 'notice.attempts': attempts, 'notice.retryAt': retryAt },
+    });
   }
 
   /** Stops retrying a notice Discord refused permanently. */
-  public async abandonNotice(createdAt: number): Promise<void> {
-    await this.collection().updateOne(
-      { _id: 'current', 'notice.createdAt': createdAt },
-      { $set: { 'notice.abandonedAt': Date.now() } },
+  public async abandonNotice(
+    createdAt: number,
+    slot: ArchiveNoticeSlot = 'schedule',
+  ): Promise<void> {
+    await this.collection().updateOne(noticeFilter(slot, createdAt), {
+      $set: { 'notice.abandonedAt': Date.now() },
+    });
+  }
+
+  private invalidRequests() {
+    return this.connection.collection<InvalidRequestDocument>('archive_schedule');
+  }
+
+  public async readInvalidRequests(): Promise<ArchiveInvalidRequestAlert> {
+    const stored = await this.invalidRequests().findOne({ _id: INVALID_REQUESTS_ID });
+    if (stored === null) return { alerted: false };
+    const { _id: _ignored, ...alert } = stored;
+    return alert;
+  }
+
+  public async raiseInvalidRequestNotice(
+    change:
+      | { readonly kind: 'invalid-requests'; readonly count: number }
+      | { readonly kind: 'invalid-requests-recovered' },
+  ): Promise<'raised' | 'unchanged' | 'waiting'> {
+    const raising = change.kind === 'invalid-requests';
+    const notice = { $set: { alerted: raising, notice: { ...change, createdAt: Date.now() } } };
+    if (raising) {
+      // The conditional filter makes raising idempotent across workers and restarts;
+      // only a first warning creates the document. A new warning may replace an
+      // unsent recovery: the episode it reports is the current state.
+      const result = await this.invalidRequests()
+        .updateOne({ _id: INVALID_REQUESTS_ID, alerted: { $ne: true } }, notice, {
+          upsert: true,
+        })
+        .catch((error: unknown) => {
+          // A concurrent first warning inserted the document; this one is a duplicate.
+          if ((error as { code?: unknown } | null)?.code === 11000) return undefined;
+          throw error;
+        });
+      return result !== undefined && (result.modifiedCount > 0 || result.upsertedCount > 0)
+        ? 'raised'
+        : 'unchanged';
+    }
+    // A recovery never replaces a warning that has not reached Discord yet.
+    const result = await this.invalidRequests().updateOne(
+      {
+        _id: INVALID_REQUESTS_ID,
+        alerted: true,
+        $or: [
+          { 'notice.kind': { $ne: 'invalid-requests' } },
+          { 'notice.deliveredAt': { $exists: true } },
+          { 'notice.abandonedAt': { $exists: true } },
+        ],
+      },
+      notice,
     );
+    if (result.modifiedCount > 0) return 'raised';
+    return (await this.readInvalidRequests()).alerted ? 'waiting' : 'unchanged';
   }
 }

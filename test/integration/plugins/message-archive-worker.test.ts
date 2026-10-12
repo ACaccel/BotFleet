@@ -633,9 +633,11 @@ describe('msg-archive worker integration', () => {
     withFreshConnection(async (connection) => {
       const manager = new StaticConnectionManager(connection);
       const first = fixture(manager);
-      vi.mocked(first.client.rest.get).mockRejectedValueOnce(
-        new Error('temporary history failure'),
-      );
+      // Fails the source in both sweeps: a verification sweep that completes it would
+      // clear its issue and complete the run.
+      vi.mocked(first.client.rest.get)
+        .mockRejectedValueOnce(new Error('temporary history failure'))
+        .mockRejectedValueOnce(new Error('temporary history failure'));
       await first.worker.periodic('1');
       const interrupted = await connection.collection('archive_periodic_runs').findOne({});
       expect(interrupted).toMatchObject({ status: 'partial', full: true });

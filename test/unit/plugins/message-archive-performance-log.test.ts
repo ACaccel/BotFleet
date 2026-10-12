@@ -9,6 +9,7 @@ import {
 import { scrubForLog } from '../../../src/core/logger/scrub-for-log';
 import {
   archivePerformanceLog,
+  archiveWriterPerformanceLog,
   type ArchivePerformanceLog,
 } from '../../../src/plugins/message-backup/flow/performance-log';
 import {
@@ -17,6 +18,7 @@ import {
 } from '../../../src/plugins/message-backup/flow/pipeline';
 import { ArchiveRestTelemetry } from '../../../src/plugins/message-backup/flow/rest-telemetry';
 import { ArchiveScheduler } from '../../../src/plugins/message-backup/flow/scheduler';
+import { ArchiveSerialWriter } from '../../../src/plugins/message-backup/runtime/serial-writer';
 
 /** Every leaf of a scrubbed log object, with its dotted path. */
 const leaves = (value: unknown, path = ''): [string, unknown][] =>
@@ -147,11 +149,60 @@ describe('archive queue bounds', () => {
     const held = await budget.reserve(14);
     const first = budget.reserve(14);
     const second = budget.reserve(14);
-    await expect(budget.reserve(14)).rejects.toThrow('archive-pipeline-queue-full');
+    const full = budget.reserve(14);
+    await expect(full).rejects.toThrow('archive-pipeline-queue-full');
+    await expect(full).rejects.toBeInstanceOf(ArchiveBackpressureError);
     expect(budget.snapshot()).toMatchObject({ waiting: 2, historyWaiting: 2, reactionWaiting: 0 });
     held();
     (await first)();
     (await second)();
     expect(budget.snapshot().reservedBytes).toBe(0);
+  });
+
+  it('flattens the shutdown writer counters so the scrubber keeps every number', async () => {
+    const writer = new ArchiveSerialWriter();
+    await writer.run(async () => undefined);
+    const inbox = new ArchiveSerialWriter();
+    const writers = [archiveWriterPerformanceLog('1', writer.snapshot(), inbox.snapshot())];
+    const scrubbed = scrubForLog({ writers }) as { writers: Record<string, unknown>[] };
+    expect(leaves(scrubbed).filter(([, value]) => value === '[Redacted]')).toEqual([]);
+    expect(scrubbed.writers[0]).toEqual({
+      guildId: '1',
+      writerPending: 0,
+      writerPeakPending: 1,
+      writerCompleted: 1,
+      writerFailed: 0,
+      writerQueueWaitMs: expect.any(Number),
+      writerOperationMs: expect.any(Number),
+      writerDrainMs: 0,
+      inboxWriterPending: 0,
+      inboxWriterPeakPending: 0,
+      inboxWriterCompleted: 0,
+      inboxWriterFailed: 0,
+      inboxWriterQueueWaitMs: 0,
+      inboxWriterOperationMs: 0,
+      inboxWriterDrainMs: 0,
+    });
+  });
+
+  it('keeps the background limit of invalid-request protection after the scrubber', () => {
+    const scheduler = new ArchiveScheduler({ concurrency: 8 });
+    expect(
+      archivePerformanceLog(
+        new ArchivePipelineBudget(16).snapshot(),
+        new ArchiveRestTelemetry(() => 0).snapshot(),
+        scheduler.snapshot(),
+      ).scheduler,
+    ).not.toHaveProperty('backgroundLimit');
+    scheduler.setBackgroundLimit(1);
+    const payload = archivePerformanceLog(
+      new ArchivePipelineBudget(16).snapshot(),
+      new ArchiveRestTelemetry(() => 0).snapshot(),
+      scheduler.snapshot(),
+    );
+    const scrubbed = scrubForLog(payload) as ArchivePerformanceLog;
+    expect(scrubbed.scheduler.backgroundLimit).toBe(1);
+    expect(leaves(scrubbed)).toContainEqual(['scheduler.backgroundLimit', 1]);
+    scheduler.stop();
   });
 });

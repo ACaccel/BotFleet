@@ -187,14 +187,8 @@ export class ReactionRefresher {
       const chunks = new Map<string, number>();
       let reactionUsers = 0;
       let reactionPages = 0;
-      const reportReactionActivity = (): void => {
-        state.progress?.activity(snapshot.channelId, {
-          step: 'reactions',
-          reactionUsers,
-          reactionPages,
-          provisional: true,
-        });
-      };
+      const reportReactionActivity = (): void =>
+        options.onActivity?.({ reactionUsers, reactionPages });
       if (streams.length > 0) reportReactionActivity();
       // Staged chunks are written together, bounded by the batch limits.
       let staged: ArchiveReactionChunk[] = [];

@@ -129,6 +129,7 @@ export class JobRunner {
           work: 'full-backup',
           jobId: job.jobId,
           runId,
+          logger: this.ctx.options.logger,
         });
         await this.deps.inbox.drainInboxSafely(state);
         const { interruption, ...result } = await this.deps.scanner.scan(state, {

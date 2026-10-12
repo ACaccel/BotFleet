@@ -29,6 +29,28 @@ export type ArchiveScheduleNotice =
       readonly failures: number;
     });
 
+/**
+ * A debug-channel message about Discord's invalid-request count (see
+ * `ARCHIVE_INVALID_REQUESTS`), persisted until delivered. One `invalid-requests`
+ * notice is raised per episode and one `invalid-requests-recovered` notice ends it.
+ */
+export type ArchiveInvalidRequestNotice =
+  | (ArchiveNoticeDelivery & {
+      readonly kind: 'invalid-requests';
+      /** Invalid requests in the ten minutes before the notice was raised. */
+      readonly count: number;
+    })
+  | (ArchiveNoticeDelivery & { readonly kind: 'invalid-requests-recovered' });
+
+/** A guild's invalid-request episode: whether a warning was raised, and its pending notice. */
+export interface ArchiveInvalidRequestAlert {
+  readonly alerted: boolean;
+  readonly notice?: ArchiveInvalidRequestNotice;
+}
+
+/** Which stored notice a delivery reads and records. */
+export type ArchiveNoticeSlot = 'schedule' | 'invalid-requests';
+
 export interface ArchiveSchedule {
   readonly enabled: boolean;
   readonly intervalMs: number;

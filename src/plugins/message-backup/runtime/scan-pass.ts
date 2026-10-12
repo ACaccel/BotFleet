@@ -24,6 +24,7 @@ import {
 } from './scan-contract';
 import { inventoriedChannel, pageStatistics, revalidatedChannel } from './scan-records';
 import { FullBackupSourceOrder } from './source-order';
+import { ARCHIVE_SOURCE_RETRY } from './source-failure';
 import {
   ArchiveScanInterruptedError,
   mutateArchive,
@@ -32,7 +33,9 @@ import {
 } from './worker-context';
 
 type HistoryResult = Awaited<ReturnType<typeof scanArchiveHistory>>;
-export type ScanPassContext = ArchiveWorkerContextFor<'client' | 'config' | 'logger'>;
+export type ScanPassContext = ArchiveWorkerContextFor<
+  'client' | 'config' | 'logger' | 'sourceRetryBaseMs'
+>;
 
 /**
  * One history scan of a guild and the state it keeps while it runs: the channel
@@ -99,7 +102,7 @@ export class ScanPass {
         : new ArchiveJobCancellation(
             this.jobId,
             async (id) => (await state.repos.jobs.getJob(id))?.cancelRequested === true,
-            state.signal.signal,
+            { signal: state.signal.signal, logger: ctx.options.logger },
           );
     this.progress =
       this.jobId === undefined
@@ -108,6 +111,7 @@ export class ScanPass {
             startedAt: cutoff,
             work: 'periodic',
             scanId: runId,
+            logger: ctx.options.logger,
           })
         : (state.progress ??
           new ProgressTracker({
@@ -115,6 +119,7 @@ export class ScanPass {
             work: 'full-backup',
             jobId: this.jobId,
             runId,
+            logger: ctx.options.logger,
           }));
     state.progress = this.progress;
     this.sourceOrder =
@@ -202,6 +207,14 @@ export class ScanPass {
         void this.deps.progress.notify(this.guildId, this.state, this.jobId, true);
       },
       pipelineBudget: this.ctx.pipelineBudget,
+      ...(this.ctx.options.sourceRetryBaseMs === undefined
+        ? {}
+        : {
+            sourceRetry: {
+              ...ARCHIVE_SOURCE_RETRY,
+              baseMs: this.ctx.options.sourceRetryBaseMs,
+            },
+          }),
       fetched: (_channelId, count) => progress.messageCounts({ fetched: count }),
       onActivity: (channelId, activity) =>
         progress.activity(
@@ -468,6 +481,8 @@ export class ScanPass {
     return this.deps.ingestor.ingest(this.state, raw, {
       channel,
       signal: this.signal,
+      onReactionActivity: (counts) =>
+        this.progress.activity(channel.id, { step: 'reactions', ...counts, provisional: true }),
       onReactionProgress: async (estimate) => {
         await this.checkSchedule();
         this.progress.setCurrentPhaseEstimate(estimate);

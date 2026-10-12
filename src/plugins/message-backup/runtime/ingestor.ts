@@ -30,6 +30,7 @@ import {
   noReactions,
   rawReactions,
   sameReactionCounts,
+  type ReactionRefreshOptions,
   type ReactionRefreshScope,
 } from './reaction-scope';
 import {
@@ -59,6 +60,8 @@ export interface IngestOptions {
   readonly onReactionProgress?: (estimate: RemainingEstimate | undefined) => Promise<void>;
   /** A live reconciliation's lists to reread (see `liveRefreshScope`); all by default. */
   readonly scope?: ReactionRefreshScope;
+  /** Reports membership progress of a history source; live ingests leave it unset. */
+  readonly onReactionActivity?: ReactionRefreshOptions['onActivity'];
 }
 /** One stored history page. */
 export interface HistoryPageResult {
@@ -143,7 +146,13 @@ export class HistoryIngestor {
   public async ingest(
     state: ArchiveGuildState,
     raw: Record<string, unknown>,
-    { channel, signal = state.signal.signal, onReactionProgress, ...options }: IngestOptions = {},
+    {
+      channel,
+      signal = state.signal.signal,
+      onReactionProgress,
+      onReactionActivity,
+      ...options
+    }: IngestOptions = {},
   ): Promise<boolean> {
     try {
       const snapshot = normalizeMessage(raw, {
@@ -187,6 +196,7 @@ export class HistoryIngestor {
       await this.reactions.refresh(state, raw, snapshot, signal, onReactionProgress, undefined, {
         staleMarked,
         scope,
+        ...(onReactionActivity === undefined ? {} : { onActivity: onReactionActivity }),
       });
       return true;
     } finally {
@@ -518,6 +528,12 @@ export class HistoryIngestor {
     try {
       await this.reactions.refresh(state, raw, snapshot, signal, undefined, checkpoint, {
         staleMarked,
+        onActivity: (counts) =>
+          state.progress?.activity(snapshot.channelId, {
+            step: 'reactions',
+            ...counts,
+            provisional: true,
+          }),
       });
       return true;
     } catch (error) {

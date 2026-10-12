@@ -1,5 +1,6 @@
 import { archiveJobProgress } from '../../../core/archive/progress';
 import type { ArchiveFullBackupJob } from '../../../core/archive/types';
+import type { ArchiveNoticeSlot } from '../../../core/archive/schedule';
 import type { ArchiveScheduleRepo } from '../../../persistence/repositories/archive-schedule.repo';
 import { deliverArchiveScheduleNotice } from './backup-notifier';
 import type { ArchiveGuildState, ArchiveWorkerContextFor } from './worker-context';
@@ -75,10 +76,14 @@ export class NotificationRecovery {
     for (const job of jobs) await this.publishBackupResult(guildId, state, job);
   }
 
-  /** Failing and recovered notices go to the debug channel once; failures are retried. */
+  /**
+   * A slot's notices (periodic health by default, or the invalid-request episode) go
+   * to the debug channel once; failures are retried.
+   */
   public async deliverScheduleNotice(
     guildId: string,
     schedule: ArchiveScheduleRepo,
+    slot: ArchiveNoticeSlot = 'schedule',
   ): Promise<void> {
     if (this.ctx.stopped) return;
     const channel = this.ctx.options.registry.getChannel(guildId, 'debug');
@@ -87,19 +92,24 @@ export class NotificationRecovery {
         schedule,
         channel !== undefined && channel.isSendable() ? channel : undefined,
         this.ctx.options.translator,
+        Date.now(),
+        slot,
       );
       if (delivery.kind === 'deferred')
         this.ctx.options.logger.warn(
-          { guildId, retryAt: delivery.retryAt, err: delivery.error },
+          { guildId, slot, retryAt: delivery.retryAt, err: delivery.error },
           'Archive schedule notice deferred',
         );
       else if (delivery.kind === 'abandoned')
         this.ctx.options.logger.error(
-          { guildId, err: delivery.error },
+          { guildId, slot, err: delivery.error },
           'Archive schedule notice refused by Discord; not retried',
         );
     } catch (error) {
-      this.ctx.options.logger.warn({ guildId, err: error }, 'Archive schedule notice not recorded');
+      this.ctx.options.logger.warn(
+        { guildId, slot, err: error },
+        'Archive schedule notice not recorded',
+      );
     }
   }
 }
