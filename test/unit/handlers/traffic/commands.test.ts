@@ -4,7 +4,8 @@
  * downloads are stubbed to fail, so every reply also proves a missing picture
  * never fails the image.
  *
- * Pinned contracts: the reply is deferred before any query; it is one embed with
+ * Pinned contracts: the reply is deferred (publicly by default) before any query,
+ * and refusals, notices and errors reach only the invoker; the report is one embed with
  * the report title and the dashboard PNG, no summary line and no footer, and
  * only overview and channel put the top messages in the embed text; member
  * statistics only count the invoker's visible channels while emoji and stickers
@@ -18,6 +19,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { DatabaseError } from '../../../../src/core/errors/external-service-error';
 import { err } from '../../../../src/core/result';
 import Traffic from '../../../../src/handlers/commands/traffic';
+import TrafficOverview from '../../../../src/handlers/commands/traffic/action';
+import TrafficApps from '../../../../src/handlers/commands/traffic_apps/action';
+import TrafficChannel from '../../../../src/handlers/commands/traffic_channel/action';
+import TrafficMe from '../../../../src/handlers/commands/traffic_me/action';
+import TrafficUser from '../../../../src/handlers/commands/traffic_user/action';
+import {
+  APP_RANK_LIMIT,
+  RANK_ROW_LIMIT,
+} from '../../../../src/handlers/commands/traffic-shared/dashboard';
 
 import {
   fakeBot,
@@ -77,6 +87,9 @@ const embedOf = (reply: Reply | undefined): EmbedShape | undefined =>
 
 const HOT_HEADING = 'replies:traffic.hot.heading';
 
+/** A notice after a public deferral: the placeholder is deleted, the answer is ephemeral. */
+const privately = (content: string): Reply[] => [{ deleted: true }, { content, flags: 64 }];
+
 /** One embed: title, image, no footer; the top messages are its text when `hot`. */
 const expectDashboard = (reply: Reply | undefined, hot: boolean): void => {
   expect(reply?.content).toBeUndefined();
@@ -124,10 +137,35 @@ describe('/traffic subcommands', () => {
     expect(embedText(replies[0])).not.toMatch(/delet/i);
   });
 
-  it('defers ephemerally by default and publicly on request', async () => {
-    expect((await run({ subcommand: 'overview' })).deferred[0]).toEqual({ flags: 64 });
-    const shown = await run({ subcommand: 'overview', values: { visibility: 'public' } });
-    expect(shown.deferred[0]).toEqual({});
+  it('caps member, channel and app rankings at 5', async () => {
+    const topN = (Action: { new (): { config: { options?: { number?: unknown[] } } } }) =>
+      new Action().config.options?.number?.find(
+        (option) => (option as { name: string }).name === 'top_n',
+      );
+    for (const Action of [TrafficOverview, TrafficChannel, TrafficMe, TrafficUser])
+      expect(topN(Action)).toMatchObject({ min: 1, max: RANK_ROW_LIMIT });
+    expect(RANK_ROW_LIMIT).toBe(5);
+    expect(topN(TrafficApps)).toMatchObject({ min: 1, max: APP_RANK_LIMIT });
+    expect(APP_RANK_LIMIT).toBe(5);
+
+    for (const [subcommand, sections] of [
+      ['overview', ['authors', 'channels']],
+      ['me', ['channels', 'partners']],
+    ] as const) {
+      const { stats } = await run({ subcommand });
+      const limits = stats.calls.find((call) => call.method === 'activity')?.limits ?? {};
+      for (const section of sections) expect(limits[section], section).toBe(5);
+    }
+    // `top_n` sizes the app ranking only; the member list stays a top 5.
+    const apps = await run({ subcommand: 'apps', values: { top_n: 8 } });
+    const usage = apps.stats.calls.filter((call) => call.method === 'appUsage');
+    expect(usage[0]?.limits?.members).toBe(RANK_ROW_LIMIT);
+  });
+
+  it('defers publicly by default and ephemerally on request', async () => {
+    expect((await run({ subcommand: 'overview' })).deferred[0]).toEqual({});
+    const hidden = await run({ subcommand: 'overview', values: { visibility: 'ephemeral' } });
+    expect(hidden.deferred[0]).toEqual({ flags: 64 });
   });
 
   it('counts only the invoker-visible channels for member statistics', async () => {
@@ -163,15 +201,20 @@ describe('/traffic subcommands', () => {
   it('answers a hidden channel exactly like a missing one', async () => {
     const hidden = await run({ subcommand: 'channel', channel: 'secret' });
     const missing = await run({ subcommand: 'channel', channel: 'does-not-exist' });
-    expect(hidden.replies).toEqual([{ content: 'replies:traffic.channel_not_found' }]);
+    expect(hidden.replies).toEqual(privately('replies:traffic.channel_not_found'));
     expect(missing.replies).toEqual(hidden.replies);
     expect(hidden.order).not.toContain('activity');
   });
 
   it('caps a public reply by the command channel rank', async () => {
     const guild = fakeGuild({ invokerRoles: ['staff'] });
-    const privately = await run({ subcommand: 'channel', channel: 'secret', guild });
-    expectDashboard(privately.replies[0], true);
+    const ephemeral = await run({
+      subcommand: 'channel',
+      channel: 'secret',
+      guild,
+      values: { visibility: 'ephemeral' },
+    });
+    expectDashboard(ephemeral.replies[0], true);
     const publicly = await run({
       subcommand: 'channel',
       channel: 'secret',
@@ -179,7 +222,7 @@ describe('/traffic subcommands', () => {
       channelId: 'c1',
       values: { visibility: 'public' },
     });
-    expect(publicly.replies).toEqual([{ content: 'replies:traffic.channel_not_found' }]);
+    expect(publicly.replies).toEqual(privately('replies:traffic.channel_not_found'));
     const overview = await run({
       subcommand: 'overview',
       guild,
@@ -202,7 +245,10 @@ describe('/traffic subcommands', () => {
     // A translator that resolves keys, so the boundary keeps the error's own copy.
     const t = (key: string) => `<${key}>`;
     const { replies } = await run({ subcommand: 'overview', values: { range: '365d' } }, stats, t);
-    expect(replies).toEqual([{ content: '<errors:db.query_timeout>' }]);
+    expect(replies).toEqual([
+      { deleted: true },
+      { content: '<errors:db.query_timeout>', flags: 64 },
+    ]);
   });
 
   it.each([
@@ -212,12 +258,12 @@ describe('/traffic subcommands', () => {
     ['user', 'replies:traffic.person_no_data'],
   ])('answers %s without activity with a notice and no image', async (subcommand, key) => {
     const { replies } = await run({ subcommand }, fakeStatsRepo({ messages: 0 }));
-    expect(replies).toEqual([{ content: key }]);
+    expect(replies).toEqual(privately(key));
   });
 
   it('answers apps without interaction records with a notice', async () => {
     const { replies } = await run({ subcommand: 'apps' }, fakeStatsRepo({ appUses: 0 }));
-    expect(replies).toEqual([{ content: 'replies:traffic.apps_no_data' }]);
+    expect(replies).toEqual(privately('replies:traffic.apps_no_data'));
   });
 
   it('reads apps from interaction records only', async () => {
@@ -229,17 +275,26 @@ describe('/traffic subcommands', () => {
 
   it('answers a guild without emoji or stickers with a notice', async () => {
     const guild = fakeGuild({ emoji: 0, stickers: 0 });
-    expect((await run({ subcommand: 'emoji', guild })).replies).toEqual([
-      { content: 'replies:traffic.emoji_none' },
-    ]);
-    expect((await run({ subcommand: 'sticker', guild })).replies).toEqual([
-      { content: 'replies:traffic.sticker_none' },
-    ]);
+    expect((await run({ subcommand: 'emoji', guild })).replies).toEqual(
+      privately('replies:traffic.emoji_none'),
+    );
+    expect((await run({ subcommand: 'sticker', guild })).replies).toEqual(
+      privately('replies:traffic.sticker_none'),
+    );
   });
 
-  it('refuses outside a guild', async () => {
-    const { replies } = await run({ subcommand: 'overview', guild: null });
-    expect(replies).toEqual([{ content: 'errors:command.guild_not_found' }]);
+  it('refuses outside a guild privately, before deferring', async () => {
+    const { replies, deferred } = await run({ subcommand: 'overview', guild: null });
+    expect(replies).toEqual([{ content: 'errors:command.guild_not_found', flags: 64 }]);
+    expect(deferred).toEqual([]);
+  });
+
+  it('keeps notices in the deferred reply when the report is ephemeral', async () => {
+    const { replies } = await run(
+      { subcommand: 'overview', values: { visibility: 'ephemeral' } },
+      fakeStatsRepo({ messages: 0 }),
+    );
+    expect(replies).toEqual([{ content: 'replies:traffic.no_data' }]);
   });
 
   it.each([

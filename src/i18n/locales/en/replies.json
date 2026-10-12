@@ -361,7 +361,7 @@
       "empty": "(no text)",
       "carries": "({{items}})",
       "line": "**{{rank}}.** {{preview}}  [Jump to message]({{url}})",
-      "meta": "-# {{author}} · {{channel}} · {{time}} · reactions {{number}} ({{top}})"
+      "meta": "-# {{author}} · {{channel}} ({{top}})"
     },
     "apps": {
       "title": "App usage · {{range}}",

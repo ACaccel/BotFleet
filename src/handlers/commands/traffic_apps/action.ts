@@ -3,11 +3,12 @@ import type { BaseBot } from '@bot';
 import { Command } from '../command';
 
 import { buildAppsReport } from '../traffic-shared/apps-report';
-import { RANK_ROW_LIMIT } from '../traffic-shared/dashboard';
+import { APP_RANK_LIMIT } from '../traffic-shared/dashboard';
 import { trafficCommandOptions, type TrafficOptionSpec } from '../traffic-shared/options';
 import { runTrafficAction } from '../traffic-shared/run';
 
-const OPTIONS: TrafficOptionSpec = { defaultRange: '7d', maxTopN: RANK_ROW_LIMIT };
+/** `top_n` sizes the app ranking; the member ranking is always a top 5. */
+const OPTIONS: TrafficOptionSpec = { defaultRange: '7d', maxTopN: APP_RANK_LIMIT };
 
 /**
  * `/traffic apps` — command, component and modal use per application in the

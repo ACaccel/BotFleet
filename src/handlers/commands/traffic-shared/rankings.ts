@@ -111,7 +111,6 @@ export const topMessagesText = (
     guildId: context.guild.id,
     names: mentionNames(context, records),
     author: (message) => memberName(context.guild, message.author.id, message.author, unknown),
-    timeZone: context.period.timeZone,
     t: context.t,
   });
 };

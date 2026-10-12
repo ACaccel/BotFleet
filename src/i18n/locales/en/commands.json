@@ -462,14 +462,14 @@
             }
           },
           "visibility": {
-            "description": "Who can see the reply (optional, default: ephemeral)",
+            "description": "Who can see the reply (optional, default: public)",
             "choices": {
               "ephemeral": "Only you",
               "public": "Everyone"
             }
           },
           "top_n": {
-            "description": "How many entries to rank (optional, 1-10, default: 10)"
+            "description": "How many entries to rank (optional, 1-5, default: 5)"
           }
         }
       },
@@ -493,14 +493,14 @@
             }
           },
           "visibility": {
-            "description": "Who can see the reply (optional, default: ephemeral)",
+            "description": "Who can see the reply (optional, default: public)",
             "choices": {
               "ephemeral": "Only you",
               "public": "Everyone"
             }
           },
           "top_n": {
-            "description": "How many entries to rank (optional, 1-10, default: 10)"
+            "description": "How many entries to rank (optional, 1-5, default: 5)"
           }
         }
       },
@@ -518,14 +518,14 @@
             }
           },
           "visibility": {
-            "description": "Who can see the reply (optional, default: ephemeral)",
+            "description": "Who can see the reply (optional, default: public)",
             "choices": {
               "ephemeral": "Only you",
               "public": "Everyone"
             }
           },
           "top_n": {
-            "description": "How many entries to rank (optional, 1-10, default: 10)"
+            "description": "How many entries to rank (optional, 1-5, default: 5)"
           }
         }
       },
@@ -546,14 +546,14 @@
             }
           },
           "visibility": {
-            "description": "Who can see the reply (optional, default: ephemeral)",
+            "description": "Who can see the reply (optional, default: public)",
             "choices": {
               "ephemeral": "Only you",
               "public": "Everyone"
             }
           },
           "top_n": {
-            "description": "How many entries to rank (optional, 1-10, default: 10)"
+            "description": "How many entries to rank (optional, 1-5, default: 5)"
           }
         }
       },
@@ -574,14 +574,14 @@
             }
           },
           "visibility": {
-            "description": "Who can see the reply (optional, default: ephemeral)",
+            "description": "Who can see the reply (optional, default: public)",
             "choices": {
               "ephemeral": "Only you",
               "public": "Everyone"
             }
           },
           "top_n": {
-            "description": "How many entries to rank (optional, 1-10, default: 10)"
+            "description": "How many apps to rank (optional, 1-5, default: 5)"
           }
         }
       },
@@ -622,7 +622,7 @@
             }
           },
           "visibility": {
-            "description": "Who can see the reply (optional, default: ephemeral)",
+            "description": "Who can see the reply (optional, default: public)",
             "choices": {
               "ephemeral": "Only you",
               "public": "Everyone"
@@ -654,7 +654,7 @@
             }
           },
           "visibility": {
-            "description": "Who can see the reply (optional, default: ephemeral)",
+            "description": "Who can see the reply (optional, default: public)",
             "choices": {
               "ephemeral": "Only you",
               "public": "Everyone"

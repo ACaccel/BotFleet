@@ -1,7 +1,7 @@
 /**
- * The landscape column composer and the column-aware blocks: columns sit
- * side by side at their widths; the canvas is as tall as the tallest
- * column but never wider than 16:9; a growing column is rebuilt with the
+ * The column composer and the column-aware blocks: columns sit side by
+ * side at their widths; the canvas is as tall as the tallest column, and
+ * with `maxAspect` never wider than that ratio; a growing column is rebuilt with the
  * spare height, and other columns spread it over their section gaps only
  * while the gaps stay close; a legend too wide for its title line wraps;
  * the heatmap moves its peak caption to its own line when the legend and
@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   COLUMN_SPACING,
+  EMBED_IMAGE_ASPECT,
   SECTION_GAP,
   canvasWidth,
   renderColumns,
@@ -63,7 +64,7 @@ const sizeOf = (png: Buffer): { width: number; height: number } => ({
 const canvasHeight = (content: number): number => PAD + content + BOTTOM_PAD;
 
 describe('renderColumns', () => {
-  it('places columns side by side and never renders wider than 16:9', () => {
+  it('places columns side by side as tall as their content', () => {
     const { block, drawn } = recorder();
     const png = renderColumns([
       { width: 100, sections: (col) => [block('a', col, 40)] },
@@ -71,12 +72,23 @@ describe('renderColumns', () => {
     ]);
     const width = canvasWidth([100, 200]);
     expect(width).toBe(2 * PAD + 300 + COLUMN_SPACING);
-    expect(sizeOf(png)).toEqual({
-      width: width * SCALE,
-      height: Math.ceil(width / (16 / 9)) * SCALE,
-    });
+    expect(sizeOf(png)).toEqual({ width: width * SCALE, height: canvasHeight(40) * SCALE });
     expect(drawn.map((d) => d.x)).toEqual([PAD, PAD + 100 + COLUMN_SPACING]);
     expect(drawn.map((d) => d.y)).toEqual([PAD, PAD]);
+  });
+
+  it('grows the canvas taller rather than wider than maxAspect', () => {
+    const { block } = recorder();
+    const specs: ColumnSpec[] = [{ width: 300, sections: (col) => [block('a', col, 40)] }];
+    const width = canvasWidth([300]);
+    const png = renderColumns(specs, { maxAspect: EMBED_IMAGE_ASPECT });
+    expect(EMBED_IMAGE_ASPECT).toBeCloseTo(4 / 3);
+    expect(sizeOf(png).height).toBe(Math.ceil(width / EMBED_IMAGE_ASPECT) * SCALE);
+    // Content taller than the floor sets the height itself.
+    const tall = renderColumns([{ width: 300, sections: (col) => [block('t', col, 900)] }], {
+      maxAspect: EMBED_IMAGE_ASPECT,
+    });
+    expect(sizeOf(tall).height).toBe(canvasHeight(900) * SCALE);
   });
 
   it('grows the canvas to the tallest column', () => {

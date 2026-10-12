@@ -1,10 +1,13 @@
 /**
  * The body every `/traffic` subcommand runs around its report: read the options,
- * admit the request (one report per member, one long range per guild), defer
- * (ephemerality is fixed at defer time), check the guild wiring, build the
- * invoker's visible channel set, and send the report. Every failure ends at one
- * boundary: a query timeout answers with the translated "try a smaller range"
- * error, anything else (a renderer throw too) with the `failed` copy and a trace ID.
+ * admit the request (one report per member, one long range per guild), check the
+ * guild wiring, defer (ephemerality is fixed at defer time), build the invoker's
+ * visible channel set, and send the report. Every failure ends at one boundary: a
+ * query timeout answers with the translated "try a smaller range" error, anything
+ * else (a renderer throw too) with the `failed` copy and a trace ID.
+ *
+ * Only the report itself follows `visibility`; refusals, notices (no data, channel
+ * not found) and errors always reach the invoker alone (see `answerPrivately`).
  */
 import {
   MessageFlags,
@@ -27,6 +30,7 @@ import { lookupGuildRepos } from '../../require-guild-repos';
 import { loadVisibleScope } from './allowed-channels';
 import { trafficImageLoader, warnOnceWithoutEmojiFont } from './images';
 import { admitReport } from './inflight';
+import { answerPrivately } from './private-answer';
 import { readTrafficOptions, type TrafficOptionSpec } from './options';
 import { hostTimeZone, resolvePeriod, type Period } from './period';
 import type { TFn, TrafficOptions } from './types';
@@ -82,13 +86,11 @@ export const runTrafficAction = async (
     await interaction.reply({ content: t(admission.key), flags: MessageFlags.Ephemeral });
     return;
   }
+  const isPublic = options.visibility === 'public';
   try {
-    await interaction.deferReply(
-      options.visibility === 'ephemeral' ? { flags: MessageFlags.Ephemeral } : {},
-    );
     const guild = interaction.guild;
     if (!guild) {
-      await interaction.editReply({ content: t('errors:command.guild_not_found') });
+      await answerPrivately(interaction, t('errors:command.guild_not_found'), false);
       return;
     }
     const lookup = lookupGuildRepos(bot, guild.id);
@@ -96,9 +98,10 @@ export const runTrafficAction = async (
     if (lookup.kind !== 'ready' || !policy) {
       const key = lookup.kind === 'ready' ? 'errors:db.not_configured' : lookup.key;
       const params = lookup.kind === 'ready' ? undefined : lookup.params;
-      await interaction.editReply({ content: t(key, params) });
+      await answerPrivately(interaction, t(key, params), false);
       return;
     }
+    await interaction.deferReply(isPublic ? {} : { flags: MessageFlags.Ephemeral });
     const repos = lookup.repos;
     const member = await guild.members.fetch(interaction.user.id);
     let scoped: Pick<TrafficContext, 'records' | 'visible'> = { records: [], visible: new Set() };
@@ -128,7 +131,7 @@ export const runTrafficAction = async (
     });
     if (outcome.kind === 'error') throw outcome.error;
     if (outcome.kind === 'notice') {
-      await interaction.editReply({ content: t(outcome.key) });
+      await answerPrivately(interaction, t(outcome.key), isPublic);
       return;
     }
     await interaction.editReply({
@@ -137,7 +140,9 @@ export const runTrafficAction = async (
       allowedMentions: { parse: [] },
     });
   } catch (error) {
-    await replyForError(interaction, bot, error, FAILED_KEY, interaction.guild?.id);
+    await replyForError(interaction, bot, error, FAILED_KEY, interaction.guild?.id, {
+      privateAfterPublicReply: isPublic,
+    });
   } finally {
     admission.release();
   }

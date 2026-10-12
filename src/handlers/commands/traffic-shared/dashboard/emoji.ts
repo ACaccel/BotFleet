@@ -1,5 +1,5 @@
 /**
- * Custom-emoji dashboard in two landscape columns: the summary tiles above
+ * Custom-emoji dashboard in two columns: the summary tiles above
  * the chips of emoji nobody used, beside the top 20 flowing down two
  * halves (art, name, animated chip, total, and a content / reaction split
  * bar).
@@ -10,18 +10,22 @@ import { EMOJI_ROW_HEIGHT, drawCell } from './emoji-cell';
 import { sectionTitle, splitColumn, type Block, type Column, type Ctx } from './layout';
 import { hline, swatchLegend } from './shapes';
 import { drawText } from './text';
-import { COLOR, COLUMN_GAP, RANK_ROW_LIMIT } from './theme';
+import { COLOR, COLUMN_GAP } from './theme';
 import { tileRows } from './tiles';
 import type { EmojiDashboard, EmojiRanking } from './types';
 
-/** Two halves of at most `RANK_ROW_LIMIT` rows each. */
-export const EMOJI_RANK_LIMIT = RANK_ROW_LIMIT * 2;
+/** Two halves of at most ten rows each. */
+export const EMOJI_RANK_LIMIT = 20;
 
 const NOTE_HEIGHT = 22;
-const SUMMARY_WIDTH = 256;
-const RANKING_WIDTH = 620;
+/**
+ * Halves as narrow as a cell allows: the image is wider than 4:3, so Discord
+ * fits it by width and every pixel of width saved enlarges the text.
+ */
+const SUMMARY_WIDTH = 200;
+const RANKING_WIDTH = 480;
 /** Chip rows that keep the summary column no taller than a full ranking. */
-const UNUSED_ROWS = 9;
+const UNUSED_ROWS = 8;
 
 /** Rows per half: the shown rows split evenly, ranks 1..n down the left half first. */
 const rowsPerHalf = (count: number): number => Math.max(1, Math.ceil(count / 2));

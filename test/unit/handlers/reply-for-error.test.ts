@@ -60,6 +60,8 @@ const stubLogger = () => {
 const stubInteraction = (state: { deferred: boolean; replied: boolean }) => {
   const replies: Array<{ content?: string }> = [];
   const editReplies: Array<{ content?: string }> = [];
+  const followUps: Array<{ content?: string; flags?: number }> = [];
+  const deleted: string[] = [];
   return {
     interaction: {
       get deferred() {
@@ -74,9 +76,17 @@ const stubInteraction = (state: { deferred: boolean; replied: boolean }) => {
       editReply: async (opts: { content?: string }) => {
         editReplies.push(opts);
       },
+      deleteReply: async () => {
+        deleted.push('@original');
+      },
+      followUp: async (opts: { content?: string; flags?: number }) => {
+        followUps.push(opts);
+      },
     } as never,
     replies,
     editReplies,
+    followUps,
+    deleted,
   };
 };
 
@@ -189,6 +199,29 @@ describe('replyForError — dual-channel boundary', () => {
 
     expect(editReplies).toHaveLength(0);
     expect(replies).toHaveLength(1);
+  });
+
+  it('replaces a public reply with an ephemeral follow-up when asked', async () => {
+    const { logger } = stubLogger();
+    const { interaction, editReplies, followUps, deleted } = stubInteraction({
+      deferred: true,
+      replied: false,
+    });
+
+    await replyForError(
+      interaction,
+      { logger, translator: stubTranslator() },
+      new Error('boom'),
+      'replies:help.failed',
+      'g1',
+      { privateAfterPublicReply: true },
+    );
+
+    expect(editReplies).toHaveLength(0);
+    expect(deleted).toEqual(['@original']);
+    expect(followUps).toHaveLength(1);
+    expect(followUps[0]?.flags).toBe(64);
+    expect(followUps[0]?.content).toContain('T(replies:help.failed)');
   });
 
   it('still logs the operator channel when the translator is unbound', async () => {

@@ -17,7 +17,6 @@ import type { TopReactedMessage } from '../../../persistence/repositories/archiv
 
 import { formatCount } from './dashboard';
 import { emojiMarkdown } from './emoji-art';
-import { localDateTime } from './labels';
 import type { TFn } from './types';
 
 export const PREVIEW_LENGTH = 30;
@@ -107,7 +106,6 @@ export interface HotMessagesInput {
   readonly guildId: string;
   readonly names: MentionNames;
   readonly author: (message: TopReactedMessage) => string;
-  readonly timeZone: string;
   readonly t: TFn;
 }
 
@@ -130,8 +128,6 @@ export const hotMessagesText = (input: HotMessagesInput): string | undefined => 
       t('replies:traffic.hot.meta', {
         author: escapeMarkdown(input.author(message), ESCAPE_ALL),
         channel: escapeMarkdown(`#${input.names.channel(message.channelId)}`, ESCAPE_ALL),
-        time: localDateTime(message.createdTimestamp, input.timeZone),
-        number: formatCount(message.totalReactions),
         top,
       }),
     ];

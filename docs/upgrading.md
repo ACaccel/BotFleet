@@ -46,8 +46,10 @@ standalone commands are removed without aliases:
 | `/db_list_message`   | None yet                                                                                                               |
 
 `/traffic` adds `channel` and `apps`, the `90d` and `365d` ranges, and a dashboard
-image per reply; `top_n` now stops at the rows a dashboard draws (10, 20 for emoji, 12
-for stickers).
+image per reply; `top_n` now stops at the rows a dashboard draws (5 for member,
+channel and app rankings, 20 for emoji, 12 for stickers). Reports are
+public by default (`visibility: ephemeral` keeps one private); refusals, notices and
+errors stay private.
 
 1. Remove `emoji_frequency`, `sticker_frequency` and `db_list_message` from each bot's
    `commands` in `config.json`; keep `traffic`. Unknown IDs are skipped at startup.

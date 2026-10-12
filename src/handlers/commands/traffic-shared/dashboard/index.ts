@@ -1,9 +1,9 @@
 /**
  * Public surface of the /traffic dashboard renderers. Each function takes
  * an already-aggregated, already-translated view model and returns the
- * PNG bytes of one landscape dashboard image: two or three columns of
- * equal height, at least as tall as a 16:9 canvas and taller only when a
- * column's content needs it. The renderers hold no database, Discord
+ * PNG bytes of one dashboard image: side-by-side columns of equal height,
+ * laid out near the 4:3 box Discord fits an embed image into so the text
+ * displays as large as the content allows. The renderers hold no database, Discord
  * client, or translator access. They throw when the canvas font is missing, and the
  * heatmap-bearing ones throw `RangeError` on a malformed heatmap grid.
  */
@@ -12,7 +12,7 @@ export { renderAppSingleDashboard, renderAppsDashboard } from './apps';
 export { EMOJI_RANK_LIMIT, renderEmojiDashboard } from './emoji';
 export { EMOJI_SLOT, richFromTemplate } from './rich';
 export { STICKER_RANK_LIMIT, renderStickerDashboard } from './sticker';
-export { RANK_ROW_LIMIT, formatCount, formatPercent } from './theme';
+export { APP_RANK_LIMIT, RANK_ROW_LIMIT, formatCount, formatPercent } from './theme';
 export type {
   AppRow,
   AppSingleDashboard,

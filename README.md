@@ -114,7 +114,8 @@ in the [benchmark report](docs/contributing/archive-performance-results.md).
 
 Any bot can enable the read-only `/traffic` reports on the archive: `overview`,
 `channel`, `me`, `user`, `apps`, `emoji` and `sticker`, each one embed with a
-landscape dashboard image (see [activity reports](docs/message-archive.md#activity-reports)).
+dashboard image sized for Discord's embed image box (see
+[activity reports](docs/message-archive.md#activity-reports)).
 
 Related slash commands are grouped under `/feed`, `/reply`, `/activity`,
 `/giveaway`, `/ai`, `/thread`, and `/traffic`. Use `/help` for executable paths;

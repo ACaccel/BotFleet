@@ -5,9 +5,8 @@
  * subcommand-specific options are declared and read by the subcommand.
  *
  * `visibility` sets both the reply audience and the channel-rank ceiling of the
- * visibility filter: `public` is capped by the invoker's clearance AND the
- * command channel's rank, `ephemeral` (the default) by the invoker's clearance
- * alone. Discord enforces the choice and bound limits; the parsing here is a
+ * visibility filter: `public` (the default) is capped by the invoker's clearance
+ * AND the command channel's rank, `ephemeral` by the invoker's clearance alone. Discord enforces the choice and bound limits; the parsing here is a
  * defence against direct API calls that bypass them.
  */
 import type { ChatInputCommandInteraction } from 'discord.js';
@@ -62,7 +61,7 @@ export const readTrafficOptions = (
       ? Math.min(spec.maxTopN, Math.max(1, Math.floor(rawTopN)))
       : spec.maxTopN;
   return {
-    visibility: pick(interaction.options.get('visibility')?.value, VISIBILITIES, 'ephemeral'),
+    visibility: pick(interaction.options.get('visibility')?.value, VISIBILITIES, 'public'),
     range: pick(interaction.options.get('range')?.value, RANGES, spec.defaultRange),
     topN,
   };

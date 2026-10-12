@@ -149,6 +149,8 @@ export interface StatsCall {
   readonly sections?: readonly string[];
   readonly authorId?: string;
   readonly excludeUserIds?: readonly string[];
+  /** Row limits a query asked for, by section (`appUsage` records its own as `members`). */
+  readonly limits?: Readonly<Record<string, number | undefined>>;
 }
 
 /** A statistics reader whose `activity` fills every requested section; `calls` records scopes. */
@@ -167,6 +169,11 @@ export const fakeStatsRepo = (
       ...(s.partners?.excludeUserIds === undefined
         ? {}
         : { excludeUserIds: s.partners.excludeUserIds }),
+      limits: {
+        authors: s.authors?.limit,
+        channels: s.channels?.limit,
+        partners: s.partners?.limit,
+      },
     });
     const person = s.summary?.authorId !== undefined;
     const messages = person ? Math.round(total / 15) : total;
@@ -246,7 +253,7 @@ export const fakeStatsRepo = (
     if (s.activeDays) report.activeDays = { activeDays: 24, longestStreak: 11, dayKeys: [] };
     if (s.partners)
       report.partners = {
-        partners: MEMBER_NAMES.map((_, i) => ({
+        partners: MEMBER_NAMES.slice(0, s.partners.limit).map((_, i) => ({
           userId: `a${i + 1}`,
           repliesTo: 30 - i * 3,
           repliesFrom: 28 - i * 2,
@@ -271,7 +278,11 @@ export const fakeStatsRepo = (
     scope: { readonly channelIds: readonly string[] },
     opts: Parameters<ArchiveStatsRepo['appUsage']>[2] = {},
   ) => {
-    calls.push({ method: 'appUsage', channelIds: scope.channelIds });
+    calls.push({
+      method: 'appUsage',
+      channelIds: scope.channelIds,
+      limits: { members: opts.limit },
+    });
     const uses = options.appUses ?? 1690;
     const apps = [
       {
@@ -312,7 +323,10 @@ export const fakeStatsRepo = (
       users: 104,
       firstRecordAt: window.startMs + 3 * 86_400_000,
       apps: uses === 0 ? [] : apps,
-      topUsers: MEMBER_NAMES.map((_, i) => ({ userId: `a${i + 1}`, uses: 96 - i * 6 })),
+      topUsers: MEMBER_NAMES.map((_, i) => ({ userId: `a${i + 1}`, uses: 96 - i * 6 })).slice(
+        0,
+        opts.limit,
+      ),
       ...(opts.trend === undefined
         ? {}
         : {
@@ -464,6 +478,10 @@ export const fakeGuild = (options: FakeGuildOptions = {}): Guild => {
 
 export interface Reply {
   readonly content?: string;
+  /** Ephemeral answers carry `flags: 64`. */
+  readonly flags?: number;
+  /** Recorded when the reply is deleted (a public placeholder replaced privately). */
+  readonly deleted?: true;
   readonly embeds?: readonly { toJSON(): Record<string, unknown> }[];
   readonly files?: readonly { attachment: unknown; name?: string }[];
 }
@@ -513,6 +531,12 @@ export const fakeInteraction = (
       replies.push(payload);
     },
     reply: async (payload: Reply) => {
+      replies.push(payload);
+    },
+    deleteReply: async () => {
+      replies.push({ deleted: true });
+    },
+    followUp: async (payload: Reply) => {
       replies.push(payload);
     },
   };

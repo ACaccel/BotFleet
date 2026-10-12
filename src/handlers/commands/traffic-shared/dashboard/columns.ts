@@ -1,12 +1,15 @@
 /**
- * Landscape column composer. A dashboard is two or three side-by-side
- * columns, each a list of sections built for its own `Column`. All columns
- * share one height: the tallest column's, but never less than a 16:9
- * canvas, so short data still renders at a readable size in Discord. A
- * column that can grow (a taller trend chart) is rebuilt with the spare
- * height; any other column spreads the spare height over its section
- * gaps so the columns end on one baseline, or, when that would pull its
- * sections far apart, keeps the standard gaps and leaves the space below.
+ * Column composer. A dashboard is side-by-side columns, each a list of
+ * sections built for its own `Column`. All columns share one height: the
+ * tallest column's, or, with `maxAspect`, at least the height that keeps
+ * the canvas from being wider than that ratio. Discord fits an embed image
+ * into a box of about 4:3 (`EMBED_IMAGE_ASPECT`), so text is largest when
+ * the content itself lays out near 4:3; a taller floor never shrinks the
+ * displayed text of a wider image, and a growing column (a taller trend
+ * chart) uses the room. Any other column spreads the spare height over its
+ * section gaps so the columns end on one baseline, or, when that would
+ * pull its sections far apart, keeps the standard gaps and leaves the
+ * space below.
  */
 import { createCanvas } from 'canvas';
 
@@ -26,10 +29,10 @@ export const SECTION_GAP = 22;
 /** Horizontal gap between columns; a hairline divider sits in its middle. */
 export const COLUMN_SPACING = 24;
 const BOTTOM_PAD = 14;
-/** The canvas is never wider than this ratio. */
-const MAX_ASPECT = 16 / 9;
+/** Width to height of the box Discord fits an embed image into. */
+export const EMBED_IMAGE_ASPECT = 4 / 3;
 /** A section gap stretches by at most this much to align a column's bottom. */
-const MAX_GAP_SPREAD = 80;
+const MAX_GAP_SPREAD = 100;
 
 export interface ColumnSpec {
   /** Logical width of the column. */
@@ -69,8 +72,16 @@ const gapFor = (built: Built, height: number): number => {
   return spread > 0 && spread <= MAX_GAP_SPREAD ? SECTION_GAP + spread : SECTION_GAP;
 };
 
+export interface ColumnsOptions {
+  /** The canvas grows taller rather than be wider than this ratio. */
+  readonly maxAspect?: number;
+}
+
 /** Measure, equalise and draw the columns; returns the PNG bytes. */
-export const renderColumns = (specs: readonly ColumnSpec[]): Buffer => {
+export const renderColumns = (
+  specs: readonly ColumnSpec[],
+  options: ColumnsOptions = {},
+): Buffer => {
   const measure = measureContext();
   const width = canvasWidth(specs.map((s) => s.width));
   let x = PAD;
@@ -79,7 +90,8 @@ export const renderColumns = (specs: readonly ColumnSpec[]): Buffer => {
     x += spec.width + COLUMN_SPACING;
     return built;
   });
-  const floor = Math.ceil(width / MAX_ASPECT) - PAD - BOTTOM_PAD;
+  const floor =
+    options.maxAspect === undefined ? 0 : Math.ceil(width / options.maxAspect) - PAD - BOTTOM_PAD;
   const height = Math.max(floor, ...first.map((b) => b.natural));
   const columns = first.map((built, i) => {
     const spec = specs[i];

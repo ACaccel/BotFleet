@@ -79,12 +79,12 @@ export const kpiBlocks = (
   ];
 };
 
-/** Most tiles a narrow column fits in one row. */
-const TILES_PER_ROW = 3;
+/** Most tiles a narrow summary column fits in one row without cutting a label. */
+const TILES_PER_ROW = 2;
 
 /**
- * Flat tiles wrapped into rows of at most three, the fuller rows last
- * (five tiles make rows of two and three), separated by the tile gap.
+ * Flat tiles wrapped into rows of at most two, the fuller rows last (three
+ * tiles make rows of one and two), separated by the tile gap.
  */
 export const tileRows = (tiles: readonly StatTile[], col: Column): Block[] => {
   const count = Math.ceil(tiles.length / TILES_PER_ROW);

@@ -154,7 +154,11 @@ describe('every /traffic model', () => {
     const t = (key: string, params?: Record<string, unknown>) =>
       params === undefined ? key : `${key} ${JSON.stringify(params)}`;
     const replies = await run('overview', {}, t);
+    // The public placeholder is deleted and the failure answered privately.
+    expect(replies[0]).toEqual({ deleted: true });
+    replies.shift();
     expect(replies).toHaveLength(1);
+    expect((replies[0] as { flags?: number }).flags).toBe(64);
     expect(replies[0]?.content).toMatch(/^replies:traffic\.failed \{"traceId":"[0-9a-z]{6}"\}$/);
     expect(replies[0]?.files).toBeUndefined();
   });

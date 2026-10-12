@@ -119,7 +119,6 @@ describe('hotMessagesText', () => {
         guildId: 'g',
         names,
         author: () => 'x',
-        timeZone: 'UTC',
         t,
       }),
     ).toBeUndefined();
@@ -141,7 +140,6 @@ describe('hotMessagesText', () => {
       guildId: 'g1',
       names,
       author: () => 'Alice_*',
-      timeZone: 'UTC',
       t,
     });
     const description = text ?? '';
@@ -152,7 +150,9 @@ describe('hotMessagesText', () => {
     expect(meta).toContain('"author":"Alice\\\\_\\\\*"');
     expect(meta).toContain('"channel":"#general"');
     expect(meta).toContain('"top":"😂 9 · <a:blob:42> 4 · 👍 2"');
-    expect(meta).toContain('"number":"16"');
+    // The meta line carries only author, channel and the top reactions.
+    expect(meta).not.toContain('"number"');
+    expect(meta).not.toContain('"time"');
     expect(description).not.toMatch(/delet/i);
   });
 });

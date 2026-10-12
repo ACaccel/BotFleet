@@ -71,7 +71,7 @@ export interface AppRanking {
   readonly title: string;
   /** Interaction type names, one per segment colour (at most three). */
   readonly legend: readonly string[];
-  /** Only the first `RANK_ROW_LIMIT` rows are drawn. */
+  /** Only the first `APP_RANK_LIMIT` rows are drawn. */
   readonly rows: readonly AppRow[];
 }
 

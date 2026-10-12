@@ -361,7 +361,7 @@
       "empty": "（沒有文字）",
       "carries": "（{{items}}）",
       "line": "**{{rank}}.** {{preview}}　[前往訊息]({{url}})",
-      "meta": "-# {{author}} · {{channel}} · {{time}} · reaction {{number}}（{{top}}）"
+      "meta": "-# {{author}} · {{channel}}（{{top}}）"
     },
     "apps": {
       "title": "應用程式使用 · {{range}}",

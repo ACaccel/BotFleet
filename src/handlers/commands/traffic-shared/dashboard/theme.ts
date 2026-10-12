@@ -14,8 +14,10 @@ export const PAD = 16;
 /** Gap between the two halves of a paired section inside one column. */
 export const COLUMN_GAP = 20;
 
-/** Ranked lists never show more rows than this per column. */
-export const RANK_ROW_LIMIT = 10;
+/** Member and channel rankings never show more rows than this. */
+export const RANK_ROW_LIMIT = 5;
+/** The application ranking of `/traffic apps` shows at most this many apps. */
+export const APP_RANK_LIMIT = 5;
 
 export const COLOR = {
   embedBg: '#2b2d31',

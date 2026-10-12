@@ -2,7 +2,8 @@
  * `/traffic apps`: command and component use per application, from interaction
  * records (bot replies that carry `interactionMetadata`) in the visible
  * channels. Ordinary member messages never count here, and the member ranking
- * never lists a bot. With `app`, the reply drills into one application.
+ * never lists a bot. `top_n` sizes the app ranking; the member ranking is a
+ * top 5. With `app`, the reply drills into one application.
  */
 import type { Guild } from 'discord.js';
 
@@ -13,6 +14,7 @@ import { heroOf, tCount } from './activity-common';
 import { heatmapOf } from './activity-sections';
 import { appBreakdown, appTypeLegend, appTypeRows, usageTrend } from './apps-sections';
 import {
+  RANK_ROW_LIMIT,
   formatCount,
   formatPercent,
   renderAppSingleDashboard,
@@ -69,7 +71,7 @@ export const buildAppsReport = async (
   const [current, previous, all] = await Promise.all([
     repos.archiveStats.appUsage(period.window, scope, {
       ...app,
-      limit: options.topN,
+      limit: RANK_ROW_LIMIT,
       trend,
       ...heatmap,
     }),

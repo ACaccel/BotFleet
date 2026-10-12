@@ -34,7 +34,7 @@ export const splitColumn = (col: Column, leftW: number): readonly [Column, Colum
 export const TITLE_HEIGHT = 26;
 /** A legend that does not fit beside its title wraps to a line of this height. */
 const LEGEND_LINE_HEIGHT = 20;
-const TITLE_SIZE = 15;
+export const TITLE_SIZE = 15;
 const LEGEND_GAP = 14;
 
 export const spacer = (height: number): Block => ({ height, draw: () => undefined });

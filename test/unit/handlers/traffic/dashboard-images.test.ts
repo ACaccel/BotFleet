@@ -9,6 +9,7 @@ import { createCanvas, Image, loadImage, type ImageData } from 'canvas';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  RANK_ROW_LIMIT,
   formatCount,
   renderAppsDashboard,
   renderEmojiDashboard,
@@ -272,7 +273,8 @@ describe('unranked lists', () => {
     // Empty names leave the rank numbers as the only marks at the list's left edge.
     const base = fixtures.channel();
     const render = (ranked: boolean): Buffer => {
-      const rows = base.breakdown.rows.map((r) => ({ ...r, name: '' }));
+      // Empty names and no tags leave the rank numbers as the only marks.
+      const rows = base.breakdown.rows.map((r) => ({ name: '', value: r.value }));
       const column = { ...base.breakdown, rows, ranked };
       return single(268, (col) => [rankingList(column, col)]);
     };
@@ -281,7 +283,7 @@ describe('unranked lists', () => {
       x0: PAD * SCALE,
       x1: (PAD + 8) * SCALE,
       y0: listTop * SCALE,
-      y1: (listTop + 10 * ROW_HEIGHT) * SCALE,
+      y1: (listTop + RANK_ROW_LIMIT * ROW_HEIGHT) * SCALE,
     };
     const area = (band.x1 - band.x0) * (band.y1 - band.y0);
     const inked = async (png: Buffer): Promise<number> =>
@@ -316,9 +318,9 @@ describe('unused chips', () => {
 describe('animated emoji tag', () => {
   beforeAll(() => ensureCanvasFont());
 
-  /** Private emoji layout, mirrored: the ranking column follows the 256 px summary column. */
-  const RANKING_X = PAD + 256 + 24;
-  const RANKING_WIDTH = 620;
+  /** Private emoji layout, mirrored: the ranking column follows the 200 px summary column. */
+  const RANKING_X = PAD + 200 + 24;
+  const RANKING_WIDTH = 480;
 
   const onlyRow = (animated: boolean): Buffer => {
     const base = fixtures.emoji();

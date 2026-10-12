@@ -19,7 +19,7 @@ const TAG_MAX_WIDTH = 72;
 const LABEL_SHARE = 0.5;
 
 /** A row's bar total; a negative count draws as an empty bar, like a segment. */
-export const rowTotal = (row: AnyRankRow): number =>
+const rowTotal = (row: AnyRankRow): number =>
   row.segments === undefined ? Math.max(0, row.value) : segmentTotal(row.segments);
 
 export interface RankBarOptions {

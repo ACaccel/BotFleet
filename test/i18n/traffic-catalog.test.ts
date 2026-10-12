@@ -45,8 +45,10 @@ describe.each(['en', 'zh-TW'] as const)('/traffic catalog in %s', (locale) => {
       return text;
     };
     for (const options of CASES) {
-      const { interaction, replies } = fakeInteraction(options);
+      const { interaction, replies: all } = fakeInteraction(options);
       await new Traffic().execute(interaction, fakeBot(fakeStatsRepo(), t));
+      // A notice replaces the deleted public placeholder; count the answers only.
+      const replies = all.filter((reply) => reply.deleted !== true);
       expect(replies, options.subcommand).toHaveLength(1);
       if (replies[0]?.embeds === undefined) continue;
       expect(replies[0].embeds, options.subcommand).toHaveLength(1);

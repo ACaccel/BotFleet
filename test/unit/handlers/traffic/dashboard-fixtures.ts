@@ -125,17 +125,13 @@ export const overview = (): OverviewDashboard => ({
   ...activityBase(),
   hero: hero('12,345', 'up'),
   members: {
-    title: '成員排行 · 前 10',
-    rows: rankRows('成員', 10),
+    title: '成員排行 · 前 5',
+    rows: rankRows('成員', 5),
     note: '其他 203 位成員 6,980 則',
   },
   channels: {
-    title: '頻道排行 · 前 10',
-    rows: [
-      ...rankRows('頻道', 6),
-      { name: '每週心得', tag: '#創作論壇', value: 596 },
-      ...rankRows('頻道', 3),
-    ],
+    title: '頻道排行 · 前 5',
+    rows: [...rankRows('頻道', 4), { name: '每週心得', tag: '#創作論壇', value: 596 }],
     note: '其他 27 個頻道 2,611 則',
   },
 });
@@ -147,10 +143,10 @@ export const channel = (): ChannelDashboard => {
     hero: { ...hero('4,210', 'down'), metrics: heroMetrics().slice(0, 2) },
     tileRows: [base.tileRows[0] ?? [], (base.tileRows[1] ?? []).slice(1)],
     trend: trend(30),
-    members: { title: '成員排行 · 前 10', rows: rankRows('成員', 10) },
+    members: { title: '成員排行 · 前 5', rows: rankRows('成員', 5) },
     breakdown: {
-      title: '頻道與討論串排行 · 前 10',
-      rows: [{ name: '#閒聊（頻道本身）', value: 1640 }, ...rankRows('討論串', 9)],
+      title: '頻道與討論串排行 · 前 5',
+      rows: [{ name: '#閒聊', tag: '本頻道', value: 1640 }, ...rankRows('討論串', 4)],
       note: '其他 7 個討論串 152 則',
     },
   };
@@ -177,19 +173,19 @@ export const person = (): PersonDashboard => ({
   ],
   trend: trend(30),
   partners: {
-    title: '最常互動的成員 · 前 10',
-    rows: Array.from({ length: 10 }, (_, i) => ({
+    title: '最常互動的成員 · 前 5',
+    rows: Array.from({ length: 5 }, (_, i) => ({
       name: `夥伴${i + 1}`,
       segments: [58 - i * 5, 14 - i],
     })),
   },
   partnerLegend: ['回覆往來', '提及往來'],
-  channels: { title: '頻道分布 · 前 10', rows: rankRows('頻道', 10), note: '其他 3 個頻道 20 則' },
+  channels: { title: '頻道分布 · 前 5', rows: rankRows('頻道', 5), note: '其他 8 個頻道 520 則' },
 });
 
 const members = (): RankingColumn => ({
-  title: '最常使用的成員 · 前 10',
-  rows: rankRows('成員', 10),
+  title: '最常使用的成員 · 前 5',
+  rows: rankRows('成員', 5),
 });
 
 export const appRows = (n: number): AppsDashboard['ranking']['rows'] =>

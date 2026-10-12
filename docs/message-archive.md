@@ -508,10 +508,13 @@ it.
 `/traffic` reads the archive through the read-only statistics reader, so any bot can
 enable it; only msg-archive writes. Every subcommand defers its reply and sends one
 embed: a title naming the report and its range (for example "<server> · Server
-activity · Last 7 days") and a landscape dashboard image of about 16:9, laid out in
-two or three columns and taller only when a column's content needs it. `overview` and
-`channel` also list the top 3 messages in the embed text, under a bold heading;
-Discord shows that text above the image. The reply has no summary line and no footer.
+activity · Last 7 days") and a dashboard image in two columns. Discord fits an embed
+image into a box of about 4:3, so the dashboards are laid out near 4:3 for the largest
+displayed text: the activity and app dashboards fill exactly 4:3 (a taller trend uses
+any spare height), and the emoji and sticker dashboards are a little wider, where
+extra height would only add empty space. `overview` and `channel` also list the top 3
+messages in the embed text, under a bold heading; Discord shows that text above the
+image. The reply has no summary line and no footer.
 
 | Subcommand                                    | Shows                                                                                                                                                                                                                                                                                                     |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -523,13 +526,16 @@ Discord shows that text above the image. The reply has no summary line and no fo
 | `sticker [order]`                             | Use of the guild's current stickers, matched by ID, with unused stickers listed                                                                                                                                                                                                                           |
 
 Shared options: `range` (`24h`, `7d`, `30d`, `90d`, `365d`; default `7d`, `30d` for
-emoji and stickers), `visibility` (`ephemeral` by default, or `public`), and `top_n`
-(at most the rows a dashboard draws: 10, 20 for emoji, 12 for stickers). `24h` is a
-rolling window; the other ranges are whole local days ending today, so `7d` shows
-seven daily points with today last, compared with the same span one range earlier.
+emoji and stickers), `visibility` (`public` by default, or `ephemeral`), and `top_n`
+(at most the rows a dashboard draws: 5 for member, channel and app rankings, where
+`top_n` sizes the app ranking of `apps` and its member ranking stays a top 5; 20 for
+emoji, 12 for stickers). `24h`
+is a rolling window; the other ranges are whole local days ending today, so `7d`
+shows seven daily points with today last, compared with the same span one range
+earlier.
 Trends are hourly for `24h`, weekly for `365d` and daily otherwise; trends, heat
-maps and day labels use the bot host's time zone. `24h` omits the heat map and widens
-the dashboard's other columns to fill its place. A member
+maps and day labels use the bot host's time zone. `24h` omits the heat map; the two
+rankings then stack instead of sitting side by side. A member
 runs one report at a time, and a server runs one `90d` or `365d` report at a time;
 a request beyond that gets a private "busy" reply.
 
@@ -545,7 +551,9 @@ no channel. `/traffic user` is filtered by the invoker, not the member shown. A
 `public` reply counts only channels that every role able to read the command channel
 can also read, and never private threads. `/traffic channel` answers a channel the
 invoker may not count, including one a `public` reply excludes, with "not found or
-no permission". Message previews name only channels the reply may count.
+no permission". Message previews name only channels the reply may count. Only the
+report follows `visibility`: a busy refusal, a notice such as "no data" or "not
+found", and an error always reach only the invoker, even for a `public` report.
 
 The top messages are the three live member messages with the most reactions. Each
 preview shows at most 30 characters of the current text with markdown and masked

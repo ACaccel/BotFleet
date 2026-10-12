@@ -42,7 +42,7 @@ describe('trafficCommandOptions', () => {
 describe('readTrafficOptions', () => {
   it('applies the subcommand defaults when nothing is supplied', () => {
     expect(readTrafficOptions(interactionWith({}), ACTIVITY)).toEqual({
-      visibility: 'ephemeral',
+      visibility: 'public',
       range: '7d',
       topN: 10,
     });
@@ -51,11 +51,11 @@ describe('readTrafficOptions', () => {
 
   it('passes valid values through and falls back on unknown ones', () => {
     expect(
-      readTrafficOptions(interactionWith({ visibility: 'public', range: '365d' }), ACTIVITY),
-    ).toMatchObject({ visibility: 'public', range: '365d' });
+      readTrafficOptions(interactionWith({ visibility: 'ephemeral', range: '365d' }), ACTIVITY),
+    ).toMatchObject({ visibility: 'ephemeral', range: '365d' });
     expect(
       readTrafficOptions(interactionWith({ visibility: 'loud', range: '2y' }), ACTIVITY),
-    ).toMatchObject({ visibility: 'ephemeral', range: '7d' });
+    ).toMatchObject({ visibility: 'public', range: '7d' });
   });
 
   it.each([

@@ -462,14 +462,14 @@
             }
           },
           "visibility": {
-            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "description": "誰能看到回覆 (optional,預設:public)",
             "choices": {
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
           },
           "top_n": {
-            "description": "排行顯示幾名 (optional,1-10,預設:10)"
+            "description": "排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },
@@ -493,14 +493,14 @@
             }
           },
           "visibility": {
-            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "description": "誰能看到回覆 (optional,預設:public)",
             "choices": {
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
           },
           "top_n": {
-            "description": "排行顯示幾名 (optional,1-10,預設:10)"
+            "description": "排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },
@@ -518,14 +518,14 @@
             }
           },
           "visibility": {
-            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "description": "誰能看到回覆 (optional,預設:public)",
             "choices": {
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
           },
           "top_n": {
-            "description": "排行顯示幾名 (optional,1-10,預設:10)"
+            "description": "排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },
@@ -546,14 +546,14 @@
             }
           },
           "visibility": {
-            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "description": "誰能看到回覆 (optional,預設:public)",
             "choices": {
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
           },
           "top_n": {
-            "description": "排行顯示幾名 (optional,1-10,預設:10)"
+            "description": "排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },
@@ -574,14 +574,14 @@
             }
           },
           "visibility": {
-            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "description": "誰能看到回覆 (optional,預設:public)",
             "choices": {
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
           },
           "top_n": {
-            "description": "排行顯示幾名 (optional,1-10,預設:10)"
+            "description": "應用程式排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },
@@ -622,7 +622,7 @@
             }
           },
           "visibility": {
-            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "description": "誰能看到回覆 (optional,預設:public)",
             "choices": {
               "ephemeral": "僅你自己",
               "public": "所有人"
@@ -654,7 +654,7 @@
             }
           },
           "visibility": {
-            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "description": "誰能看到回覆 (optional,預設:public)",
             "choices": {
               "ephemeral": "僅你自己",
               "public": "所有人"

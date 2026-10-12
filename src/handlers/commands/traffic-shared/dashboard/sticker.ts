@@ -1,5 +1,5 @@
 /**
- * Server-sticker dashboard in two landscape columns: the summary tiles
+ * Server-sticker dashboard in two columns: the summary tiles
  * above the chips of stickers nobody used, beside a grid of ranked sticker
  * cards (art, name, count with share, usage bar relative to the top
  * sticker).
@@ -19,12 +19,13 @@ const COLUMNS = 4;
 export const STICKER_RANK_LIMIT = COLUMNS * 3;
 
 const GAP = 8;
-const CARD_WIDTH = 130;
+const CARD_WIDTH = 116;
 const CARD_HEIGHT = 138;
-const SUMMARY_WIDTH = 310;
+/** The image is wider than 4:3, so narrow columns enlarge the displayed text. */
+const SUMMARY_WIDTH = 200;
 const GRID_WIDTH = COLUMNS * CARD_WIDTH + GAP * (COLUMNS - 1);
 /** Chip rows that keep the summary column no taller than a full grid. */
-const UNUSED_ROWS = 11;
+const UNUSED_ROWS = 10;
 const ART_SIZE = 70;
 const NOTE_HEIGHT = 22;
 
