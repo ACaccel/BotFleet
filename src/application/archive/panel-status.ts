@@ -32,7 +32,7 @@ const fullBackupLine = (t: ArchiveText, status: ArchiveStatus, now: number): str
         progress.sources.total > 0
           ? archiveNumber(progress.sources.total)
           : t.t('replies:archive.value_unknown'),
-      elapsed: archiveDuration(t, progress.activeMs),
+      elapsed: archiveDuration(t, Math.max(0, now - (job.startedAt ?? job.createdAt))),
     });
   }
   return t.t('replies:archive.status_backup_finished', {

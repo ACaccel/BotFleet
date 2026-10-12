@@ -168,7 +168,12 @@ const archiveBackupLines = (
       : [t.t('replies:archive.backup_speed', { rate: archiveNumber(rate) })]),
     t.t('replies:archive.backup_timing', {
       cutoff: Number.isSafeInteger(job.options.cutoff) ? archiveTime(job.options.cutoff) : unknown,
-      elapsed: archiveDuration(t, snapshot.activeMs),
+      // Wall time since the job first started, so a restart mid-backup does not reset it.
+      elapsed: archiveDuration(
+        t,
+        Math.max(0, (job.finishedAt ?? now) - (job.startedAt ?? job.createdAt)),
+      ),
+      started: archiveTime(job.startedAt ?? job.createdAt),
       updated: archiveTime(job.finishedAt ?? now, 'T'),
     }),
     ...(state === 'failed'

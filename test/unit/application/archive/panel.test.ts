@@ -120,6 +120,23 @@ describe('archive panels', () => {
     }
   });
 
+  it('labels the covered range and counts time since the job first started', async () => {
+    const t = await translator('zh-TW');
+    const progress = new ProgressTracker({ cutoff: new Date(0), work: 'full-backup' });
+    // A restart re-claimed the job an hour ago, but it first started three hours ago.
+    const started = 1_700_000_000_000;
+    const panel = renderArchiveBackupPanel(
+      t,
+      job({ startedAt: started, resumedAt: started + 2 * 3_600_000 }),
+      progress.snapshot(),
+      { now: started + 3 * 3_600_000, latest: true },
+    );
+    const body = text(panel);
+    expect(body).toContain('涵蓋範圍');
+    expect(body).not.toContain('截止時間');
+    expect(body).toContain('已執行 3 小時 0 分');
+  });
+
   it('shows the current page, stop control and failure reason', async () => {
     const t = await translator('en');
     const progress = new ProgressTracker({ cutoff: new Date(0), work: 'full-backup' });
