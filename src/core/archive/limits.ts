@@ -25,7 +25,14 @@ export const ARCHIVE_LIMITS = {
    * its reservation before staging, and one above `batchBytes` is rejected.
    */
   reactionPageBytes: 256 * 1024,
-  pipelineBytes: 64 * 1024 * 1024,
+  /**
+   * Logical byte budget for in-flight reads, split into a reaction lane of at most
+   * `reactionLaneBytes` and a history lane with the rest. Sized for 32 readers: the
+   * reaction lane admits 64 initial page reservations and the history lane 14 page
+   * reads, still a small fraction of host memory.
+   */
+  pipelineBytes: 128 * 1024 * 1024,
+  reactionLaneBytes: 16 * 1024 * 1024,
 } as const;
 
 export const archiveConcurrencySchema = z

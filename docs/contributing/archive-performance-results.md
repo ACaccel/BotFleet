@@ -22,6 +22,11 @@ message stale), so the lane's 8 MiB remains the logical ceiling and now admits 3
 reads. A grower gives back its bytes while it waits and is admitted ahead of new
 requests, so growers cannot deadlock or starve.
 
+Follow-up the same day: at 24 readers production wrote about 281 messages per second
+(166 at 16) with no global rate-limit wait, and the reaction lane held 7.6 of its
+8 MiB. To run 32 readers without queueing on the lane, the owner budget became
+128 MiB with a 16 MiB reaction lane (64 reaction reads, 14 history reads).
+
 Per-message reaction streams stay at two. `@discordjs/rest` keys a handler by the
 bucket hash of `/channels/:id/messages/:id/reactions/:reaction` and the channel,
 so every reaction read of a channel, across messages and emoji, runs one after

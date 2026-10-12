@@ -225,7 +225,7 @@ headroom the previous maximum of 8 had. Before raising it, check the
 [performance log](message-archive.md#backup-throughput) for which
 limit is waiting. Internal batches normally stop at 500 documents
 or 4 MiB. A single larger message image uses its own batch up to the existing
-15 MiB safety limit; it is never truncated. History/reaction staging shares a 64 MiB owner budget. These bounds are
+15 MiB safety limit; it is never truncated. History/reaction staging shares a 128 MiB owner budget. These bounds are
 implementation limits, not additional configuration fields. CPU worker offloading
 remains disabled; see the [measurement report](contributing/archive-performance-results.md).
 

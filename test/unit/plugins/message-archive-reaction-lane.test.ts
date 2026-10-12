@@ -71,7 +71,7 @@ describe('reaction page reservation', () => {
     expect(bytes * 1.9).toBeLessThan(ARCHIVE_LIMITS.reactionPageBytes);
   });
 
-  it('reserves one page estimate per read, so the 8 MiB lane runs 32 reads at once', async () => {
+  it('reserves one page estimate per read, so the 16 MiB lane runs 64 reads at once', async () => {
     const budget = new ArchivePipelineBudget();
     const reserve = vi.spyOn(budget, 'reserve');
     const gate = deferred<void>();
@@ -80,7 +80,8 @@ describe('reaction page reservation', () => {
       return [{ id: '1' }];
     });
     const lanes = budget.snapshot().reactionCapacityBytes / ARCHIVE_LIMITS.reactionPageBytes;
-    expect(lanes).toBe(32);
+    expect(budget.snapshot().reactionCapacityBytes).toBe(16 * 1024 * 1024);
+    expect(lanes).toBe(64);
     const reads = Array.from({ length: lanes + 1 }, () => fetchOne(budget, get));
     await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(lanes));
     expect(reserve).toHaveBeenCalledWith(ARCHIVE_LIMITS.reactionPageBytes, undefined, 'reactions');

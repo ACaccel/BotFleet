@@ -475,12 +475,12 @@ checkpoints, and the same fields close `Archive worker performance` at shutdown.
 Values are cumulative since the worker started, and no field nests deeper than the
 log scrubber's limit (`stages.fetch.count`):
 
-- `pipeline`: the 64 MiB staging budget, reserved and waiting per lane
+- `pipeline`: the 128 MiB staging budget, reserved and waiting per lane
   (`historyReservedBytes`, `reactionReservedBytes`, `historyWaiting`,
   `reactionWaiting`), its peak and total `queueWaitMs`. A history read reserves its
-  8 MiB maximum until it returns, so at most seven are in flight. A reaction read
+  8 MiB maximum until it returns, so at most fourteen are in flight. A reaction read
   reserves a 256 KiB page estimate and grows it if the response is larger, so the
-  8 MiB reaction lane admits 32 reads at once.
+  16 MiB reaction lane admits 64 reads at once.
 - `stages`: `count`, `durationMs` and `bytes` for `fetch`, `normalize`
   (normalization), `write` (full-page writes), `reactions` (membership refresh),
   `checkpoint` and `process` (consuming a page). Timings overlap, so do not sum

@@ -84,7 +84,10 @@ export class ArchivePipelineBudget {
       throw new Error('invalid-archive-pipeline-budget');
     if (!Number.isSafeInteger(maxWaiting) || maxWaiting < 1)
       throw new Error('invalid-archive-pipeline-queue-limit');
-    this.reactionCapacity = Math.min(8 * 1024 * 1024, Math.max(1, Math.floor(capacityBytes / 8)));
+    this.reactionCapacity = Math.min(
+      ARCHIVE_LIMITS.reactionLaneBytes,
+      Math.max(1, Math.floor(capacityBytes / 8)),
+    );
     this.historyCapacity = capacityBytes - this.reactionCapacity;
   }
 

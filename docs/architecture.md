@@ -332,7 +332,7 @@ pause new requests. Admission runs at most one request per route and channel, th
 unit `@discordjs/rest` serializes, so a channel's history pages, message reads and
 reaction lists proceed in parallel. Each channel retains its ordered cursor with at
 most one speculative next page. Checkpoints advance only after message writes and complete
-reaction generations. History and reaction queues share a 64 MiB logical staging
+reaction generations. History and reaction queues share a 128 MiB logical staging
 budget with a reserved reaction lane; this is not a hard limit on V8/SDK transient
 allocations or process RSS. Oversized pages produce partial coverage instead of
 silently advancing a checkpoint.
