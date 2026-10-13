@@ -74,7 +74,7 @@ Use [typed options](../../src/infra/discord/options.ts) matching each declared
 [paged replies](../../src/infra/discord/send-paged-reply.ts), and
 [`requireCapture`](../../src/core/regex-capture.ts) for regex captures.
 Validate per-bot configuration with `Command.validateBotConfig`; see
-[`weather_forecast/config.ts`](../../src/handlers/commands/weather_forecast/config.ts).
+[`random_restaurant/config.ts`](../../src/handlers/commands/random_restaurant/config.ts).
 Code a command shares with plugins lives in `src/application/`; see
 [layers and boundaries](../architecture.md#layers-and-boundaries).
 A `channel` option accepts the text-capable channels and threads by default; set

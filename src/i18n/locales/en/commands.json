@@ -10,14 +10,6 @@
       }
     }
   },
-  "bubble_wrap": {
-    "description": "Generate bubble wrap",
-    "options": {
-      "str": {
-        "description": "Hidden text"
-      }
-    }
-  },
   "bug_report": {
     "description": "Report a bug",
     "options": {
@@ -34,24 +26,8 @@
       }
     }
   },
-  "change_nickname": {
-    "description": "Change the bot's nickname",
-    "options": {
-      "nickname": {
-        "description": "New nickname"
-      }
-    }
-  },
   "gay": {
     "description": "Are they gay",
-    "options": {
-      "user": {
-        "description": "Choose a target"
-      }
-    }
-  },
-  "get_avatar": {
-    "description": "Get a user's avatar",
     "options": {
       "user": {
         "description": "Choose a target"
@@ -74,9 +50,6 @@
         "description": "Right bound"
       }
     }
-  },
-  "list_guild_members": {
-    "description": "List all members in the current server (including bots)"
   },
   "menu_get_avatar": {
     "name": "Get user avatar URL"
@@ -126,17 +99,6 @@
       }
     }
   },
-  "search_anime_scene": {
-    "description": "Search for the source of an anime screenshot",
-    "options": {
-      "image": {
-        "description": "Anime screenshot"
-      },
-      "display_num": {
-        "description": "How many search results to display (optional)"
-      }
-    }
-  },
   "talk": {
     "description": "[Admin] Make the bot speak without a signature",
     "options": {
@@ -169,9 +131,6 @@
   },
   "update_role": {
     "description": "Update Mee6 level roles"
-  },
-  "weather_forecast": {
-    "description": "Weather forecast (Taipei)"
   },
   "archive": {
     "description": "Manage msg-archive's full backup and periodic backup",

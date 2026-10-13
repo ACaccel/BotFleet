@@ -94,9 +94,6 @@
     "vote_failed": "{{count}} votes — the timeout threshold of {{threshold}} votes was not reached.",
     "timeout_reason": "Lady Sakiko's timeout verdict!"
   },
-  "bubble_wrap": {
-    "too_long": "The string is too long. Please shorten it to within 64 characters."
-  },
   "bug_report": {
     "empty_content": "Please enter some content.",
     "failed": "Could not report the bug. (error code: {{traceId}})",
@@ -109,19 +106,12 @@
     "failed": "Change failed. (error code: {{traceId}})",
     "changed": "{{oldName}} is gone; now is the time for {{newName}} to reclaim the throne."
   },
-  "change_nickname": {
-    "failed": "Change failed. (error code: {{traceId}})",
-    "changed": "Nickname changed to: {{newName}}"
-  },
   "delete_reply": {
     "failed": "Could not delete the auto-reply pair. (error code: {{traceId}})",
     "record_not_found": "That reply record was not found.",
     "select_placeholder": "Select the reply to delete",
     "image_preview_header": "Image preview:\n",
     "deleted": "Deleted reply: {{key}} => {{reply}}"
-  },
-  "get_avatar": {
-    "failed": "Could not get the avatar. (error code: {{traceId}})"
   },
   "help": {
     "no_commands": "No command list available.",
@@ -146,13 +136,6 @@
     "current_xp": "**Current XP:** {{userXp}} / {{levelXp}} ",
     "total_xp": "**Total XP:** {{totalXp}} ",
     "average_xp": "**Average XP:** {{averageXp}} \n\n"
-  },
-  "list_guild_members": {
-    "empty": "There are no members to list right now.",
-    "failed": "Failed to get the member list. (error code: {{traceId}})",
-    "title": "{{name}} member list",
-    "total": "Total: {{total}} (users: {{users}}, bots: {{bots}})",
-    "footer": "{{totalText}}|Page {{current}}/{{total}}"
   },
   "list_reply": {
     "failed": "Could not list the auto-reply pairs. (error code: {{traceId}})",
@@ -195,12 +178,6 @@
     "announcement_header": "Lady Sakiko's roll-call list: <@{{userId}}> has started a roll call!\n",
     "activity_id_line": "(Activity ID: {{id}})\n",
     "trigger_prefix": "Lady Sakiko's roll-call list"
-  },
-  "search_anime_scene": {
-    "upload_image": "Please upload an image.",
-    "failed": "Could not search for the anime scene. (error code: {{traceId}})",
-    "description": "Episode {{episode}},\nsimilarity: {{similarity}}%\ntime: {{fromMin}}:{{fromSec}} - {{toMin}}:{{toSec}}",
-    "footer": "Result {{index}}"
   },
   "talk": {
     "missing_args": "Please enter a channel and content.",
@@ -444,18 +421,6 @@
     "failed": "Could not update the roles. (error code: {{traceId}})",
     "removed": "[ SYSTEM ] {{name}}, removed: {{role}}",
     "granted": "[ SYSTEM ] {{name}}, gained: {{role}}"
-  },
-  "weather_forecast": {
-    "failed": "Could not get the weather forecast. (error code: {{traceId}})",
-    "unavailable": "The weather forecast service is temporarily unavailable (ACCUWEATHER_KEY is not set).",
-    "header": "Hourly weather forecast:\n",
-    "forecast_time": "- Forecast time: {{value}}\n",
-    "weather_status": "- Weather: {{value}}\n",
-    "precipitation": "- Precipitation chance: {{value}}%\n",
-    "thunderstorm": "- Thunderstorm chance: {{value}}%\n",
-    "temperature": "- Outdoor temperature: {{value}}°C\n",
-    "real_feel": "- RealFeel temperature: {{value}}°C\n",
-    "humidity": "- Relative humidity: {{value}}%\n"
   },
   "earthquake": {
     "alert": "# <@&{{role}}> Taipei strong earthquake alert!!! (intensity 4 or above)\n> Why must there be an earthquake!?"

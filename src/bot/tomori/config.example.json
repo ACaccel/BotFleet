@@ -14,7 +14,7 @@
       }
     }
   },
-  "commands": ["help", "temp_role", "weather_forecast", "random_restaurant"],
+  "commands": ["help", "temp_role", "random_restaurant"],
   "guild_events": {
     "attachment_cache": { "enabled": true, "ttlHours": 24, "minFreeDiskMb": 5120 }
   },
@@ -50,6 +50,5 @@
     ],
     "globalLuckyProbability": 0.005
   },
-  "weather_forecast": { "locationKey": "315078" },
   "random_restaurant": { "apiUrl": "https://food-api-kappa-hazel.vercel.app/recommend" }
 }

@@ -94,9 +94,6 @@
     "vote_failed": "投票數 {{count}} 票,未達到禁言門檻 {{threshold}} 票",
     "timeout_reason": "初華大人的禁言裁決!"
   },
-  "bubble_wrap": {
-    "too_long": "字串太長了,請縮短到 64 字元以內"
-  },
   "bug_report": {
     "empty_content": "請輸入內容",
     "failed": "無法回報問題 (錯誤代碼:{{traceId}})",
@@ -109,19 +106,12 @@
     "failed": "更改失敗 (錯誤代碼:{{traceId}})",
     "changed": "{{oldName}}已死,現在正是{{newName}}復權的時刻"
   },
-  "change_nickname": {
-    "failed": "更改失敗 (錯誤代碼:{{traceId}})",
-    "changed": "已更改暱稱為:{{newName}}"
-  },
   "delete_reply": {
     "failed": "無法刪除訊息回覆配對 (錯誤代碼:{{traceId}})",
     "record_not_found": "找不到該回覆紀錄",
     "select_placeholder": "選擇要刪除的回覆",
     "image_preview_header": "圖片預覽:\n",
     "deleted": "已刪除回覆:{{key}} => {{reply}}"
-  },
-  "get_avatar": {
-    "failed": "無法取得頭像 (錯誤代碼:{{traceId}})"
   },
   "help": {
     "no_commands": "沒有指令清單",
@@ -146,13 +136,6 @@
     "current_xp": "**當前經驗值:** {{userXp}} / {{levelXp}} ",
     "total_xp": "**總經驗值:** {{totalXp}} ",
     "average_xp": "**平均經驗值:** {{averageXp}} \n\n"
-  },
-  "list_guild_members": {
-    "empty": "目前沒有可列出的成員",
-    "failed": "取得成員清單失敗 (錯誤代碼:{{traceId}})",
-    "title": "{{name}} 成員清單",
-    "total": "總數:{{total}}(使用者:{{users}}、機器人:{{bots}})",
-    "footer": "{{totalText}}|第 {{current}}/{{total}} 頁"
   },
   "list_reply": {
     "failed": "無法列出訊息回覆配對 (錯誤代碼:{{traceId}})",
@@ -195,12 +178,6 @@
     "announcement_header": "初華大人的點名簿:<@{{userId}}> 發起了點名!\n",
     "activity_id_line": "(活動ID: {{id}})\n",
     "trigger_prefix": "初華大人的點名簿"
-  },
-  "search_anime_scene": {
-    "upload_image": "請上傳圖片",
-    "failed": "無法搜尋動畫截圖 (錯誤代碼:{{traceId}})",
-    "description": "第 {{episode}} 集,\n相似度:{{similarity}}%\n時間:{{fromMin}}:{{fromSec}} - {{toMin}}:{{toSec}}",
-    "footer": "第 {{index}} 筆結果"
   },
   "talk": {
     "missing_args": "請輸入頻道和內容",
@@ -444,18 +421,6 @@
     "failed": "無法更新身份組 (錯誤代碼:{{traceId}})",
     "removed": "[ SYSTEM ] {{name}}, 移除: {{role}}",
     "granted": "[ SYSTEM ] {{name}}, 獲得: {{role}}"
-  },
-  "weather_forecast": {
-    "failed": "無法取得天氣預報 (錯誤代碼:{{traceId}})",
-    "unavailable": "天氣預報服務暫時無法使用 (未設定 ACCUWEATHER_KEY)",
-    "header": "每小時天氣預報:\n",
-    "forecast_time": "- 預測時間:{{value}}\n",
-    "weather_status": "- 天氣狀況:{{value}}\n",
-    "precipitation": "- 降雨機率:{{value}}%\n",
-    "thunderstorm": "- 雷暴機率:{{value}}%\n",
-    "temperature": "- 室外氣溫:{{value}}°C\n",
-    "real_feel": "- 體感溫度:{{value}}°C\n",
-    "humidity": "- 相對濕度:{{value}}%\n"
   },
   "earthquake": {
     "alert": "# <@&{{role}}> 台北強震警報!!! (4級以上)\n> 為什麼要地震!?"

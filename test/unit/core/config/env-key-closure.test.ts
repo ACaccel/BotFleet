@@ -4,10 +4,9 @@
  * `loadEnv` projects the parsed environment onto the schema's own keys
  * so `.passthrough()` cannot leak unknown variables to callers. That
  * projection used to be a hand-written destructure, and it silently
- * dropped `ACCUWEATHER_KEY` — the key existed in the schema and in the
- * `Env` type, but never reached the returned object, so
- * `/weather_forecast` reported "service unavailable" on a correctly
- * configured deployment.
+ * dropped an optional API key — the key existed in the schema and in the
+ * `Env` type, but never reached the returned object, so its feature
+ * reported "service unavailable" on a correctly configured deployment.
  *
  * The contract asserted here is closure in both directions: every key
  * the schema declares comes back out, and nothing else does.
@@ -35,7 +34,6 @@ const FULL_SOURCE: NodeJS.ProcessEnv = {
   ANTHROPIC_API_KEY: 'sk-anthropic',
   GEMINI_API_KEY: 'sk-gemini',
   XAI_API_KEY: 'sk-xai',
-  ACCUWEATHER_KEY: 'accuweather-key',
   GOPHER_SETTINGS_API_KEY: 'gopher-bearer',
 };
 
@@ -51,9 +49,9 @@ describe('Env key closure', () => {
     expect(Object.keys(env).sort()).toEqual([...ENV_KEYS].sort());
   });
 
-  it('carries ACCUWEATHER_KEY through to the result', () => {
+  it('carries an optional API key through to the result', () => {
     const env = loadEnv({ exitOnFailure: false, source: { ...FULL_SOURCE } });
-    expect(env.ACCUWEATHER_KEY).toBe('accuweather-key');
+    expect(env.GOPHER_SETTINGS_API_KEY).toBe('gopher-bearer');
   });
 
   it('drops keys the schema does not declare', () => {

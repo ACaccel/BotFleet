@@ -29,7 +29,6 @@ placeholders fail startup; there is no root `.env.example`.
 | `LOG_DIR`                                                              | File log root, default `logs`; empty disables file logs         |
 | `LOG_RETENTION_DAYS`                                                   | Days of file logs to keep, default `60`; `0` keeps all          |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                  |
-| `ACCUWEATHER_KEY`                                                      | Required for weather commands                                   |
 | `GOPHER_SETTINGS_API_KEY`                                              | Required when gopher's settings API is enabled                  |
 | `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup      |
 
@@ -92,10 +91,9 @@ Plugin settings are validated at startup; strict schemas reject unknown keys.
 | `guild_events.attachment_cache` | nijika, tomori | Enabled; see attachment storage below                                              |
 | `level_roles`                   | nijika         | `level_<n>` to role-name map for `/update_role`                                    |
 | `auto_reply`                    | nijika, tomori | Per-user `luckyReplies`; `globalLuckyProbability` defaults to `0.005`              |
-| `weather_forecast.locationKey`  | nijika, tomori | AccuWeather location ID                                                            |
 | `random_restaurant.apiUrl`      | nijika, tomori | Absolute HTTP(S) recommendation endpoint                                           |
 
-Invalid role, weather or restaurant settings disable the affected command.
+Invalid role or restaurant settings disable the affected command.
 
 ### Social previews and feeds
 

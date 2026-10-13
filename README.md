@@ -47,7 +47,7 @@ Every bot shares the framework capabilities:
   [thread moderation](docs/thread-moderation.md) with paginated ban lists,
   delegated management approved by DM and deletion of attributable bot replies.
 - **Community tools.** Giveaways, activities, temporary notification roles,
-  role-claim messages, level roles, weather forecasts and restaurant picks.
+  role-claim messages, level roles and restaurant picks.
 - **Social media.** Rich previews for shared links and per-channel subscriptions to
   social feeds. Facebook uses custom cards with truncated text and separate video
   attachments and engagement counts when available; the title links to the post,
@@ -110,14 +110,14 @@ for test-guild registration and the opt-out flags. Registration is separate from
 A bot exposes only the command IDs listed in its `config.json` `commands`. Related
 actions are grouped under one root; `/help` lists every executable path.
 
-| Area              | Commands                                                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Grouped roots     | `/activity`, `/ai`, `/feed`, `/giveaway`, `/reply`, `/thread`, `/traffic`, `/archive`                                                          |
-| Activity reports  | `/traffic overview`, `channel`, `me`, `user`, `apps`, `emoji`, `sticker`                                                                       |
-| Server and roles  | `/temp_role`, `/role_message`, `/update_role`, `/level_detail`, `/list_guild_members`, `/roll_call`, `/ban_user`                               |
-| Bot persona       | `/talk`, `/talk_signed`, `/change_avatar`, `/change_nickname`                                                                                  |
-| Utilities and fun | `/help`, `/bug_report`, `/get_avatar`, `/weather_forecast`, `/random_restaurant`, `/search_anime_scene`, `/bubble_wrap`, `/give_score`, `/gay` |
-| Context menus     | Get avatar, get sticker                                                                                                                        |
+| Area              | Commands                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| Grouped roots     | `/activity`, `/ai`, `/feed`, `/giveaway`, `/reply`, `/thread`, `/traffic`, `/archive`     |
+| Activity reports  | `/traffic overview`, `channel`, `me`, `user`, `apps`, `emoji`, `sticker`                  |
+| Server and roles  | `/temp_role`, `/role_message`, `/update_role`, `/level_detail`, `/roll_call`, `/ban_user` |
+| Bot persona       | `/talk`, `/talk_signed`, `/change_avatar`                                                 |
+| Utilities and fun | `/help`, `/bug_report`, `/random_restaurant`, `/give_score`, `/gay`                       |
+| Context menus     | Get avatar, get sticker                                                                   |
 
 Upgrading from standalone commands such as `/feed_subscribe`, or from the removed
 `/emoji_frequency`, `/sticker_frequency` and `/db_list_message`? See

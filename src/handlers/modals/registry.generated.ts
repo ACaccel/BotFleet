@@ -5,10 +5,8 @@
 
 import type { ModalHandler } from '.';
 import { default as Handler_0 } from './ai_settings';
-import { default as Handler_1 } from './archive_attachment';
-import { default as Handler_2 } from './giveaway_create';
+import { default as Handler_1 } from './giveaway_create';
 export const MODAL_REGISTRY = {
   ai_settings: Handler_0,
-  archive_attachment: Handler_1,
-  giveaway_create: Handler_2,
+  giveaway_create: Handler_1,
 } as const satisfies Readonly<Record<string, new () => ModalHandler>>;

@@ -2,36 +2,15 @@
  * Operator-config parsing for the handlers whose upstream endpoints and
  * location ids moved out of source.
  *
- * Both blocks are mandatory whenever their command is enabled: there is
- * no safe default for "which city" or "which recommendation service",
+ * The block is mandatory whenever its command is enabled: there is no
+ * safe default for "which recommendation service",
  * so `validateBotConfig` fails the command's registration instead of
  * letting it answer with confidently wrong data.
  */
 import { describe, expect, it } from 'vitest';
 
-import { parseWeatherForecastConfig } from '../../../src/handlers/commands/weather_forecast/config';
 import { parseRandomRestaurantConfig } from '../../../src/handlers/commands/random_restaurant/config';
 import { parseUpdateRoleConfig } from '../../../src/handlers/commands/update_role/config';
-
-describe('parseWeatherForecastConfig', () => {
-  it('reads the location key from the bot config', () => {
-    expect(parseWeatherForecastConfig({ weather_forecast: { locationKey: '315078' } })).toEqual({
-      locationKey: '315078',
-    });
-  });
-
-  it('rejects a missing block', () => {
-    expect(() => parseWeatherForecastConfig({})).toThrow();
-    expect(() => parseWeatherForecastConfig(undefined)).toThrow();
-  });
-
-  it('rejects an empty key and an unknown field', () => {
-    expect(() => parseWeatherForecastConfig({ weather_forecast: { locationKey: '' } })).toThrow();
-    expect(() =>
-      parseWeatherForecastConfig({ weather_forecast: { locationKey: '1', typo: true } }),
-    ).toThrow();
-  });
-});
 
 describe('parseRandomRestaurantConfig', () => {
   it('reads the endpoint from the bot config', () => {

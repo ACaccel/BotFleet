@@ -133,8 +133,8 @@ Every command and every button press checks, in this order:
 The command sets no Discord default member permission, so every member sees it;
 anyone outside the `admin` list gets a private refusal and nothing is posted.
 Rejected buttons reply privately and leave the shared panel unchanged. Buttons,
-menus and forms on panels from earlier versions skip these checks and only reply
-privately that the panel is out of date.
+menus and forms on panels from before the redesign have no handler and fail;
+run `/archive` again for a current panel.
 
 Only starting a full backup asks for confirmation. The confirmation is bound to the
 administrator who opened it, its channel and its message, expires after five

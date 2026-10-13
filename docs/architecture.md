@@ -121,7 +121,7 @@ titles, text and buttons must also communicate the state.
 | `error`       | `#ED4245` | Failed operations                                          |
 | `celebration` | `#9B59B6` | Activity and giveaway announcements                        |
 
-Both avatar entry points and anime search use `info`. Archive renderers map their
+The avatar context menu uses `info`. Archive renderers map their
 existing state rules through `ARCHIVE_COLORS`; a full backup's `partial` result is
 an error, while a periodic pass's `partial` result is a warning.
 Social cards retain source identity through `SOCIAL_COLORS` (X `#1D9BF0`, Facebook

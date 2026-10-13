@@ -1,5 +1,29 @@
 # Upgrade notes
 
+## Command review
+
+Unknown IDs in a bot's `commands` now stop startup and `npm run register`, so remove
+retired IDs before deploying. These commands are removed without aliases:
+
+| Removed command       | Alternative                                              |
+| --------------------- | -------------------------------------------------------- |
+| `/get_avatar`         | The user context menu (Apps → get avatar)                |
+| `/change_nickname`    | `/change_avatar`, or the bot's server profile in Discord |
+| `/list_guild_members` | Discord's member list                                    |
+| `/weather_forecast`   | None                                                     |
+| `/search_anime_scene` | None                                                     |
+| `/bubble_wrap`        | None                                                     |
+
+1. Remove `get_avatar`, `change_nickname`, `list_guild_members`, `weather_forecast`,
+   `search_anime_scene` and `bubble_wrap` from each bot's `commands`. Delete the
+   `weather_forecast` block from `config.json` and `ACCUWEATHER_KEY` from `.env`;
+   neither is read any more.
+2. Deploy, then run `npm run register` (one bot: `npm run register -t <bot>`) so
+   Discord drops the removed commands.
+
+Buttons, menus and forms on archive panels from before the `/archive` redesign no
+longer answer; run `/archive` again.
+
 ## Grouped slash commands
 
 Related commands now use subcommands. The old standalone slash commands and
@@ -52,7 +76,7 @@ public by default (`visibility: ephemeral` keeps one private); refusals, notices
 errors stay private.
 
 1. Remove `emoji_frequency`, `sticker_frequency` and `db_list_message` from each bot's
-   `commands` in `config.json`; keep `traffic`. Unknown IDs are skipped at startup.
+   `commands` in `config.json`; keep `traffic`. An unknown ID stops startup.
 2. Deploy, then run `npm run register` (one bot: `npm run register -t <bot>`) so
    Discord drops the old commands and shows the new subcommands.
 
@@ -255,8 +279,8 @@ register msg-archive's commands again with `npm run register -t msg-archive`.
   channel gets one notice after three consecutive failed passes and one when a
   pass completes again.
 - **Old panels.** Buttons, menus and forms on messages from earlier versions no
-  longer act. Using one replies privately that the panel is out of date and leaves
-  the old message as it is; run the command again for a current panel.
+  longer act; Discord reports the interaction as failed and the old message stays
+  as it is. Run the command again for a current panel.
 - **Data.** Plan, journal, quarantine and control collections of the old flow
   (`archive_repair_*`, `archive_journals`, `archive_quarantine`,
   `archive_plan_deletions`, `archive_control_deletions`, `archive_bulk_*`,

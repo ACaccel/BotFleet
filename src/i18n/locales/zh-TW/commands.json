@@ -10,14 +10,6 @@
       }
     }
   },
-  "bubble_wrap": {
-    "description": "產生泡泡紙",
-    "options": {
-      "str": {
-        "description": "隱藏字"
-      }
-    }
-  },
   "bug_report": {
     "description": "回報問題",
     "options": {
@@ -34,24 +26,8 @@
       }
     }
   },
-  "change_nickname": {
-    "description": "更改bot暱稱",
-    "options": {
-      "nickname": {
-        "description": "新暱稱"
-      }
-    }
-  },
   "gay": {
     "description": "是不是給",
-    "options": {
-      "user": {
-        "description": "選擇對象"
-      }
-    }
-  },
-  "get_avatar": {
-    "description": "取得使用者頭像",
     "options": {
       "user": {
         "description": "選擇對象"
@@ -74,9 +50,6 @@
         "description": "右邊界"
       }
     }
-  },
-  "list_guild_members": {
-    "description": "列出目前伺服器所有成員（含機器人）"
   },
   "menu_get_avatar": {
     "name": "取得用戶頭像連結"
@@ -126,17 +99,6 @@
       }
     }
   },
-  "search_anime_scene": {
-    "description": "搜尋動漫截圖來源",
-    "options": {
-      "image": {
-        "description": "動漫截圖"
-      },
-      "display_num": {
-        "description": "顯示幾筆搜尋結果 (optional)"
-      }
-    }
-  },
   "talk": {
     "description": "[管理員] 讓機器人說話(不署名)",
     "options": {
@@ -169,9 +131,6 @@
   },
   "update_role": {
     "description": "更新Mee6等級身分組"
-  },
-  "weather_forecast": {
-    "description": "天氣預報(台北)"
   },
   "archive": {
     "description": "管理 msg-archive 的完整備份與日常備份",

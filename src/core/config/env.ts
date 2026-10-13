@@ -85,11 +85,10 @@ const llmKeySchema = z.preprocess(
  * The typed environment contract, as a zod shape.
  *
  * `Env` is derived from this rather than restated: a hand-written type
- * beside a hand-written destructure is exactly how `ACCUWEATHER_KEY`
- * came to exist in both the schema and the type while never reaching
- * the returned object, silently disabling `/weather_forecast` on every
- * deployment. Adding a key here now updates the type, the runtime
- * projection, and the contract test at once.
+ * beside a hand-written destructure once let a key exist in both the
+ * schema and the type while never reaching the returned object. Adding
+ * a key here updates the type, the runtime projection, and the contract
+ * test at once.
  */
 const envShape = {
   /** Deployment-owned marker path; unset for ordinary interactive startup. */
@@ -129,8 +128,6 @@ const envShape = {
   ANTHROPIC_API_KEY: llmKeySchema,
   GEMINI_API_KEY: llmKeySchema,
   XAI_API_KEY: llmKeySchema,
-  /** AccuWeather API key. Optional — only required for the weather_forecast slash command. */
-  ACCUWEATHER_KEY: z.string().min(1).optional(),
   /**
    * Bearer key for gopher's settings REST API. Optional — only gopher
    * sets it; the settings-api plugin refuses to start (when enabled)
