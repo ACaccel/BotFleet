@@ -336,8 +336,8 @@
     "reactions_given_top_other": "最多 {{emoji}} {{number}}",
     "command_uses": "使用指令",
     "partners_title": "最常互動的成員 · 前 {{n}}",
-    "partners_reply": "回覆往來",
-    "partners_mention": "提及往來",
+    "partners_reply": "互相回覆",
+    "partners_mention": "互相@",
     "person_channels_title": "頻道分布 · 前 {{n}}",
     "overview": {
       "title": "{{guild}} · 流量總覽 · {{range}}"

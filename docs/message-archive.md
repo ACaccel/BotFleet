@@ -633,6 +633,12 @@ summary line and no footer.
 | `emoji [order] [kind] [source]`               | Use of the guild's current custom emoji in text and reactions, matched by ID, with unused emoji listed                                                                                                                                                                                                    |
 | `sticker [order]`                             | Use of the guild's current stickers, matched by ID, with unused stickers listed                                                                                                                                                                                                                           |
 
+The personal conversation-partner legend uses "Mutual replies" and "Mutual
+@mentions". Each count sums both directions between the report's member and the
+listed partner; either direction alone can contribute. @mentions count individual
+users, not roles or @everyone/@here. A reply that also mentions its recipient counts
+only as a reply in this ranking.
+
 Shared options: `range` (`24h`, `7d`, `30d`, `90d`, `365d`; default `7d`, `30d` for
 emoji and stickers), `visibility` (`public` by default, or `ephemeral`), and `top_n`
 (at most the rows a dashboard draws: 5 for member, channel and app rankings, where

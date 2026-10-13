@@ -336,8 +336,8 @@
     "reactions_given_top_other": "Most {{emoji}} {{number}}",
     "command_uses": "Commands",
     "partners_title": "Partners · top {{n}}",
-    "partners_reply": "Replies",
-    "partners_mention": "Mentions",
+    "partners_reply": "Mutual replies",
+    "partners_mention": "Mutual @mentions",
     "person_channels_title": "Channels · top {{n}}",
     "overview": {
       "title": "{{guild}} · Server activity · {{range}}"

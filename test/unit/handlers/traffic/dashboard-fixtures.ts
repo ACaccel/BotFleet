@@ -179,7 +179,7 @@ export const person = (): PersonDashboard => ({
       segments: [58 - i * 5, 14 - i],
     })),
   },
-  partnerLegend: ['回覆往來', '提及往來'],
+  partnerLegend: ['互相回覆', '互相@'],
   channels: { title: '頻道分布 · 前 5', rows: rankRows('頻道', 5), note: '其他 8 個頻道 520 則' },
 });
 
