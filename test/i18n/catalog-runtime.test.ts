@@ -67,7 +67,7 @@ describe('catalog runtime behaviour', () => {
     };
     delete (trimmedEn.en.replies as Record<string, unknown>).help;
     const translator = await I18NextTranslator.create(trimmedEn, 'zh-TW');
-    expect(translator.t('replies:help.no_commands', undefined, 'en')).toBe('沒有指令清單');
+    expect(translator.t('replies:help.title', undefined, 'en')).toBe('指令說明');
   });
 
   it('resolves every errors:feed.* FeedError messageKey with its params filled in', async () => {

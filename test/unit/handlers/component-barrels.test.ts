@@ -78,7 +78,11 @@ describe('select-menu barrel', () => {
 
     await registerSSMs(bot);
 
-    expect([...bot.ssmHandlers.keys()].sort()).toEqual(['delete_reply', 'giveaway_delete']);
+    expect([...bot.ssmHandlers.keys()].sort()).toEqual([
+      'delete_reply',
+      'giveaway_delete',
+      'help_category',
+    ]);
   });
 
   it('routes a customId to the handler its leading segment names', async () => {

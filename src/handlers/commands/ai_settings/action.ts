@@ -11,6 +11,7 @@ import { PROVIDER_CHOICES, type UserApiDoc } from './provider-choices';
 import { checkAiSettingsReady } from './validate-ai-settings';
 import { buildSettingsModal } from './build-settings-modal';
 import { loadModelOptions } from './model-options';
+import { allowedModelsFor, parseAiPolicy } from '../../../application/ai/policy';
 
 export default class ai_settings extends Command {
   constructor() {
@@ -49,7 +50,21 @@ export default class ai_settings extends Command {
 
     // An empty list still gets an honest "model list unavailable" reply
     // rather than a guessed list.
-    const modelOptions = [...(await loadModelOptions(bot.modelCatalog, provider))];
+    // Members choose only from the configured allowlist; bot admins from every live model.
+    const policy = parseAiPolicy(bot.config);
+    const allowed = bot.isAdmin(interaction.user.id)
+      ? undefined
+      : allowedModelsFor(policy, provider);
+    if (allowed !== undefined && allowed.length === 0) {
+      await interaction.reply({
+        content: t('replies:ai_settings.provider_not_allowed', { provider }),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const modelOptions = allowed
+      ? [...allowed]
+      : [...(await loadModelOptions(bot.modelCatalog, provider))];
     const check = checkAiSettingsReady(docResult.value as UserApiDoc | undefined, modelOptions);
     if (!check.ok) {
       const key =

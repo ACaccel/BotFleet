@@ -3,9 +3,18 @@
   "language": "zh-TW",
   "guilds": {
     "YOUR_GUILD_ID": {
-      "channels": { "debug": "YOUR_DEBUG_CHANNEL_ID" },
+      "channels": {
+        "debug": "YOUR_DEBUG_CHANNEL_ID"
+      },
       "roles": {}
     }
   },
-  "commands": ["help"]
+  "commands": ["help", "ai"],
+  "ai": {
+    "rateLimit": {
+      "perUserPerHour": 30,
+      "perUserPerDay": 200,
+      "concurrent": 1
+    }
+  }
 }

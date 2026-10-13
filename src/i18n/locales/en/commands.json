@@ -27,18 +27,34 @@
     }
   },
   "gay": {
-    "description": "Are they gay",
+    "description": "Read a member's gay meter, or two members' ship meter (just for fun)",
     "options": {
       "user": {
-        "description": "Choose a target"
+        "description": "Member to read"
+      },
+      "user2": {
+        "description": "A second member, to read the pair instead"
       }
     }
   },
   "give_score": {
-    "description": "Give a score"
+    "description": "Score anything from 0 to 10; the result holds all day",
+    "options": {
+      "subject": {
+        "description": "What to score (omit to score yourself)"
+      },
+      "user": {
+        "description": "Member to score"
+      }
+    }
   },
   "help": {
-    "description": "Show the command list and help"
+    "description": "List commands, or show how to use one",
+    "options": {
+      "command": {
+        "description": "Command to look up"
+      }
+    }
   },
   "level_detail": {
     "description": "Show MEE6 leaderboard details for a range of ranks",
@@ -80,14 +96,6 @@
       }
     }
   },
-  "role_message": {
-    "description": "Send a role-claim message",
-    "options": {
-      "roles": {
-        "description": "Claimable role IDs (ex: @role1 @role2...)"
-      }
-    }
-  },
   "roll_call": {
     "description": "Roll call",
     "options": {
@@ -100,37 +108,18 @@
     }
   },
   "talk": {
-    "description": "[Admin] Make the bot speak without a signature",
+    "description": "Have the bot speak for you (signed by default)",
     "options": {
+      "content": {
+        "description": "What to say (up to 1900 characters)"
+      },
       "channel": {
-        "description": "Choose a channel"
+        "description": "Channel to post in (defaults to this channel)"
       },
-      "content": {
-        "description": "The content"
+      "anonymous": {
+        "description": "Post without your signature (bot admins only)"
       }
     }
-  },
-  "talk_signed": {
-    "description": "Make the bot speak (signed)",
-    "options": {
-      "content": {
-        "description": "The content"
-      }
-    }
-  },
-  "temp_role": {
-    "description": "Create a temporary notification role that anyone can claim; it is deleted automatically when it expires",
-    "options": {
-      "name": {
-        "description": "Role name"
-      },
-      "days": {
-        "description": "Lifetime in days (1-30, default 30)"
-      }
-    }
-  },
-  "update_role": {
-    "description": "Update Mee6 level roles"
   },
   "archive": {
     "description": "Manage msg-archive's full backup and periodic backup",
@@ -606,6 +595,51 @@
           },
           "top_n": {
             "description": "How many entries to rank (optional, 1-12, default: 12)"
+          }
+        }
+      }
+    }
+  },
+  "role": {
+    "description": "Get or manage roles",
+    "subcommands": {
+      "panel": {
+        "description": "Post a role-claim panel (requires Manage Roles)",
+        "options": {
+          "roles": {
+            "description": "Roles to offer; mention one or more"
+          }
+        }
+      },
+      "sync": {
+        "description": "Sync level roles from MEE6 now"
+      }
+    },
+    "groups": {
+      "temp": {
+        "description": "Temporary notification roles",
+        "subcommands": {
+          "create": {
+            "description": "Create a temporary role anyone can claim; it is deleted when it expires",
+            "options": {
+              "name": {
+                "description": "Role name (🔔 is added)"
+              },
+              "days": {
+                "description": "Days it lasts (1-30, default 30)"
+              }
+            }
+          },
+          "list": {
+            "description": "List active temporary roles"
+          },
+          "delete": {
+            "description": "Delete a temporary role early (its creator or a moderator)",
+            "options": {
+              "role": {
+                "description": "Temporary role to delete"
+              }
+            }
           }
         }
       }

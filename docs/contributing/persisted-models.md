@@ -38,3 +38,8 @@ Full-backup jobs, periodic-pass records, schedule notices and confirmation token
 persist across restarts; their operator controls live in
 [Discord](../message-archive.md#discord-controls). Keep message content and raw errors
 out of panels and reports.
+
+`AiUsage` records only a member ID and request timestamp in each guild database;
+its compound lookup index serves rolling usage windows and its timestamp index
+expires records after 25 hours. Keep admission through `AiUsageRepo`, without
+storing prompts or responses. See [AI policy](../configuration.md#ai-models-and-usage-limits).

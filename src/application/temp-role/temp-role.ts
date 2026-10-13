@@ -68,7 +68,9 @@ type CreateTempRoleOutcome =
   | { readonly status: 'created'; readonly roleId: string; readonly expiresAt: number }
   | { readonly status: 'role_limit' }
   | { readonly status: 'no_db' }
-  | { readonly status: 'announce_failed' };
+  | { readonly status: 'announce_failed' }
+  | { readonly status: 'too_many'; readonly max: number }
+  | { readonly status: 'name_taken' };
 
 interface CreateTempRoleArgs {
   readonly guild: Guild;
@@ -76,7 +78,15 @@ interface CreateTempRoleArgs {
   readonly creatorId: string;
   readonly roleName: string;
   readonly days: number;
+  /** Most temp roles one member may have active at once. */
+  readonly maxActivePerMember: number;
 }
+
+/**
+ * Marks a temp role apart from staff roles at a glance; a member cannot
+ * name one to impersonate a moderator role.
+ */
+const TEMP_ROLE_PREFIX = '🔔 ';
 
 /**
  * Post the claim message carrying the self-service toggle button. The
@@ -106,16 +116,26 @@ const announceTempRole = async (
   return (await channel.send({ content, components: [row] })) ?? null;
 };
 
-/** Delete a Discord role, tolerating an already-removed role. */
+/** Discord's "Unknown Role": the role is already gone. */
+const DISCORD_UNKNOWN_ROLE = 10011;
+
+/**
+ * Delete a Discord role, tolerating an already-removed role. Returns
+ * whether the role is gone, so a refused deletion keeps its record.
+ */
 const deleteRoleQuietly = async (
   deps: TempRoleDeps,
   guild: Guild,
   roleId: string,
-): Promise<void> => {
+): Promise<boolean> => {
   try {
     await guild.roles.delete(roleId, AUDIT_REASON_EXPIRE);
+    return true;
   } catch (error) {
+    if (error instanceof DiscordAPIError && Number(error.code) === DISCORD_UNKNOWN_ROLE)
+      return true;
     logError(deps.logger, guild.id, error);
+    return false;
   }
 };
 
@@ -143,35 +163,36 @@ const markMessageExpired = async (
 };
 
 /**
- * Expire a temporary role: cancel its job, delete the Discord role,
- * mark the claim message expired, and remove the DB row.
+ * Expire a temporary role: delete the Discord role, mark the claim
+ * message expired, and remove the DB row and job.
  *
- * Discord-side cleanup is best-effort (the role may have been deleted
- * manually, the message removed, or permissions revoked); the DB delete
- * throws on error so a reboot sweep retries it.
+ * A role already deleted by hand counts as gone. When Discord refuses
+ * the deletion (for example, missing permissions) the row and job stay,
+ * so the role is not left behind untracked; the next reboot sweep or
+ * expiry retries. The DB delete throws on error for the same reason.
+ *
+ * @returns whether the role was removed.
  */
 export const expireTempRole = async (
   deps: TempRoleDeps,
   guildId: string,
   roleId: string,
-): Promise<void> => {
-  new JobManager(deps.jobMap).cancel(tempRoleJobKey(roleId));
-
+): Promise<boolean> => {
   const repos = deps.registry.getRepos(guildId);
-  if (!repos) return;
+  if (!repos) return false;
 
   const findResult = await repos.tempRole.findByRoleId(roleId);
   if (!findResult.ok) throw findResult.error;
   const doc = findResult.value;
 
   const guild = deps.client.guilds.cache.get(guildId);
-  if (guild) {
-    await deleteRoleQuietly(deps, guild, roleId);
-    if (doc) await markMessageExpired(deps, guild, doc);
-  }
+  if (!guild || !(await deleteRoleQuietly(deps, guild, roleId))) return false;
+  if (doc) await markMessageExpired(deps, guild, doc);
 
   const deleteResult = await repos.tempRole.deleteByRoleId(roleId);
   if (!deleteResult.ok) throw deleteResult.error;
+  new JobManager(deps.jobMap).cancel(tempRoleJobKey(roleId));
+  return true;
 };
 
 /** Run an expiry detached, routing any rejection to the logger. */
@@ -204,23 +225,7 @@ const scheduleExpiryJob = (
   );
 };
 
-/**
- * Create a temporary notification role, post its claim message, persist
- * the row, and schedule its expiry. The role is permission-less and
- * mentionable: its only purpose is to notify holders when `@mentioned`.
- *
- * Best-effort rollback keeps the three side effects consistent: if the
- * announcement or the DB write fails after the role exists, the orphan
- * role (and message) are removed so no never-expiring role is leaked.
- *
- * Security invariant: the command is open to every member *because* the
- * role it creates is powerless — `permissions: []`, `mentionable: true`.
- * That coupling is load-bearing, and the guild role ceiling is the only
- * abuse bound enforced. Granting the created role any permission makes
- * unrestricted creation a privilege-escalation path, so such a change
- * must revisit the open-access decision first.
- */
-export const createTempRole = async (
+const createTempRoleUnlocked = async (
   deps: TempRoleDeps,
   args: CreateTempRoleArgs,
 ): Promise<CreateTempRoleOutcome> => {
@@ -233,15 +238,29 @@ export const createTempRole = async (
   const repos = deps.registry.getRepos(guild.id);
   if (!repos) return { status: 'no_db' };
 
+  const fullName = `${TEMP_ROLE_PREFIX}${roleName}`;
+  const existing = await repos.tempRole.listAll();
+  if (!existing.ok) throw existing.error;
+  const roleNames = new Set([
+    ...[...guild.roles.cache.values()].map((role) => role.name.toLowerCase()),
+    ...existing.value.map((doc) => doc.role_name.toLowerCase()),
+  ]);
+  const taken = (name: string): boolean => roleNames.has(name.toLowerCase());
+  if (taken(roleName) || taken(fullName)) return { status: 'name_taken' };
+  const active = existing.value.filter((doc) => doc.creator_id === creatorId).length;
+  if (active >= args.maxActivePerMember) {
+    return { status: 'too_many', max: args.maxActivePerMember };
+  }
+
   const expiresAt = deps.clock.now() + days * MS_PER_DAY;
 
   let role: Role;
   try {
     role = await guild.roles.create({
-      name: roleName,
+      name: fullName,
       mentionable: true,
       permissions: [],
-      reason: AUDIT_REASON_CREATE,
+      reason: `${AUDIT_REASON_CREATE} by ${creatorId}`,
     });
   } catch (error) {
     if (error instanceof DiscordAPIError && Number(error.code) === DISCORD_MAX_ROLES_ERROR) {
@@ -261,7 +280,7 @@ export const createTempRole = async (
     channel_id: channel.id,
     message_id: message.id,
     creator_id: creatorId,
-    role_name: roleName,
+    role_name: fullName,
     expires_at: expiresAt,
   });
   if (!createResult.ok) {
@@ -274,6 +293,82 @@ export const createTempRole = async (
 
   scheduleExpiryJob(deps, guild.id, role.id, new Date(expiresAt));
   return { status: 'created', roleId: role.id, expiresAt };
+};
+
+const creationQueues = new Map<string, Promise<unknown>>();
+
+/**
+ * Create a temporary notification role, post its claim message, persist
+ * the row, and schedule its expiry. The role is permission-less and
+ * mentionable: its only purpose is to notify holders when `@mentioned`.
+ *
+ * Best-effort rollback keeps the three side effects consistent: if the
+ * announcement or the DB write fails after the role exists, the orphan
+ * role (and message) are removed so no never-expiring role is leaked.
+ *
+ * Security invariant: the command is open to every member *because* the
+ * role it creates is powerless — `permissions: []`, `mentionable: true`.
+ * That coupling is load-bearing; the guild ceiling and per-member cap
+ * bound role creation. Granting the created role any permission makes
+ * unrestricted creation a privilege-escalation path, so such a change
+ * must revisit the open-access decision first.
+ *
+ * Creations per guild run one at a time, so two concurrent requests
+ * cannot both pass the per-member cap or claim the same name.
+ */
+export const createTempRole = async (
+  deps: TempRoleDeps,
+  args: CreateTempRoleArgs,
+): Promise<CreateTempRoleOutcome> => {
+  const guildId = args.guild.id;
+  const previous = creationQueues.get(guildId) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(() => createTempRoleUnlocked(deps, args));
+  creationQueues.set(guildId, run);
+  try {
+    return await run;
+  } finally {
+    if (creationQueues.get(guildId) === run) creationQueues.delete(guildId);
+  }
+};
+
+/** Outcome of {@link cancelTempRole}. */
+type CancelTempRoleOutcome =
+  | { readonly status: 'cancelled' }
+  | { readonly status: 'delete_failed' }
+  | { readonly status: 'not_temp_role' }
+  | { readonly status: 'forbidden' }
+  | { readonly status: 'no_db' };
+
+/**
+ * End a temp role early, as if it had expired. `canCancel` decides from
+ * the role's creator whether the requester may.
+ */
+export const cancelTempRole = async (
+  deps: TempRoleDeps,
+  guildId: string,
+  roleId: string,
+  canCancel: (creatorId: string) => boolean,
+): Promise<CancelTempRoleOutcome> => {
+  const repos = deps.registry.getRepos(guildId);
+  if (!repos) return { status: 'no_db' };
+  const found = await repos.tempRole.findByRoleId(roleId);
+  if (!found.ok) throw found.error;
+  if (!found.value) return { status: 'not_temp_role' };
+  if (!canCancel(found.value.creator_id)) return { status: 'forbidden' };
+  const guild = deps.client.guilds.cache.get(guildId);
+  if (!guild) throw new Error(`Cannot cancel a temporary role in unavailable guild ${guildId}`);
+  try {
+    await guild.roles.delete(roleId, AUDIT_REASON_EXPIRE);
+  } catch (error) {
+    // Keep the row and expiry job when Discord has not confirmed deletion.
+    if (!(error instanceof DiscordAPIError && Number(error.code) === DISCORD_UNKNOWN_ROLE))
+      throw error;
+  }
+  await markMessageExpired(deps, guild, found.value);
+  const deleted = await repos.tempRole.deleteByRoleId(roleId);
+  if (!deleted.ok) throw deleted.error;
+  new JobManager(deps.jobMap).cancel(tempRoleJobKey(roleId));
+  return { status: 'cancelled' };
 };
 
 /**

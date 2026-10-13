@@ -1,91 +1,63 @@
 /**
- * Pure builder for the `/help` reply embed.
+ * Builders for the `/help` views: the overview with its category menu,
+ * one category's executable paths, and one command's detail page.
  *
- * Kept out of the handler `index.ts` so it can be unit-tested without a
- * Discord interaction: it takes the command map + translator and returns
- * an `EmbedBuilder`. The handler owns the Discord I/O (defer / editReply)
- * and error path; this module owns only the formatting.
- *
- * Imports come from `../command` (not the `@cmd` barrel) on purpose — the
- * barrel pulls in `registry.generated`, and `help/index.ts` is itself in
- * that registry; routing through the registry-free `command` module keeps
- * this helper out of that import cycle.
+ * Pure apart from discord.js builders, so they are unit-tested without an
+ * interaction; the handler and the category menu own the Discord I/O.
+ * Imports avoid the `@cmd` barrel, which registers `/help` itself.
  */
 import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
-import { EmbedBuilder } from 'discord.js';
+import {
+  ActionRowBuilder,
+  EmbedBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+} from 'discord.js';
 
 import type { Translator } from '../../../core/i18n';
 import type { Command, CommandCategory } from '../command';
-import { localizeCommandConfig } from '../command';
+import { commandsByCategory, helpPaths, type HelpPath } from './help-model';
+import {
+  FIELD_MAX,
+  displayName,
+  isMenu,
+  packLines,
+  pathLabel,
+  summary,
+  translate,
+  truncate,
+} from './help-presentation';
 
-/** Discord's hard cap on a single embed field `value`. */
-const FIELD_VALUE_MAX = 1024;
+/** Discord's caps on embed descriptions and field count. */
+const DESCRIPTION_MAX = 4096;
+const MAX_FIELDS = 25;
 
-/**
- * Render order for category sections. `'other'` is last so unclassified
- * commands fall to the end as a catch-all.
- */
-const CATEGORY_ORDER: readonly CommandCategory[] = [
-  'auto_reply',
-  'fun',
-  'server_activity',
-  'utility',
-  'admin',
-  'ai',
-  'other',
-];
+/** Custom ID of the overview's category menu, routed to `select-menus/help_category`. */
+const HELP_CATEGORY_MENU = 'help_category';
 
-interface HelpEmbedOptions {
+interface HelpViewer {
+  /** Bot admins also see admin-only paths. */
+  readonly isAdmin: boolean;
+}
+
+interface OverviewOptions extends HelpViewer {
   /** Display name shown in the embed author line. */
   readonly botName: string;
-  /** Optional avatar URL for the embed author icon. */
   readonly botAvatarUrl?: string;
   /** Personality intro (from `bot.helpMessage`); empty falls back to a generic line. */
   readonly intro: string;
 }
 
-/** Truncate to `max` chars, appending an ellipsis when cut. */
-const truncate = (text: string, max: number): string =>
-  text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+const visiblePaths = (command: Command, viewer: HelpViewer): HelpPath[] =>
+  helpPaths(command).filter((path) => viewer.isAdmin || !path.adminOnly);
 
-/**
- * Build the categorized `/help` embed from a bot's loaded command
- * handlers. Commands are grouped by `config.category` (defaulting to
- * `'other'`), each non-empty category becomes one embed field, and the
- * footer carries the command / category counts.
- */
-export const buildHelpEmbed = (
-  commandHandlers: Map<string, Command>,
+/** The ephemeral overview: one line per command, grouped, plus the category menu. */
+export const buildHelpOverview = (
+  handlers: ReadonlyMap<string, Command>,
   translator: Translator | undefined,
-  options: HelpEmbedOptions,
-): EmbedBuilder => {
-  const t = (key: string, params?: Record<string, string | number>): string =>
-    translator?.t(key, params) ?? '';
-
-  // Group localized command lines by category, preserving the handler
-  // registration order within each group.
-  const grouped = new Map<CommandCategory, string[]>();
-  for (const cmd of commandHandlers.values()) {
-    if (cmd.config.name.length === 0) continue;
-    const category = cmd.config.category ?? 'other';
-    const localized = localizeCommandConfig(cmd.config, translator);
-    const paths = [
-      ...(localized.subcommands ?? []).map((entry) => `/${localized.name} ${entry.name}`),
-      ...(localized.subcommandGroups ?? []).flatMap((group) =>
-        group.subcommands.map((entry) => `/${localized.name} ${group.name} ${entry.name}`),
-      ),
-    ];
-    // Show executable paths while retaining one entry per registered command.
-    const label =
-      localized.type !== undefined
-        ? `\`${localized.name}\``
-        : (paths.length ? paths : [`/${localized.name}`]).map((name) => `\`${name}\``).join(', ');
-    const line = `${label} ${localized.description}`.trimEnd();
-    const bucket = grouped.get(category);
-    if (bucket !== undefined) bucket.push(line);
-    else grouped.set(category, [line]);
-  }
-
+  options: OverviewOptions,
+): { embed: EmbedBuilder; menu: ActionRowBuilder<StringSelectMenuBuilder> | null } => {
+  const t = translate(translator);
   const authorName = `${options.botName} · ${t('replies:help.title')}`;
   const embed = new EmbedBuilder()
     .setColor(EMBED_COLORS.info)
@@ -94,25 +66,85 @@ export const buildHelpEmbed = (
         ? { name: authorName, iconURL: options.botAvatarUrl }
         : { name: authorName },
     );
+  const intro = options.intro.trim() || t('replies:help.intro_fallback');
+  embed.setDescription(truncate(`${intro}\n\n${t('replies:help.usage_hint')}`, DESCRIPTION_MAX));
 
-  const intro = options.intro.trim();
-  embed.setDescription(intro.length > 0 ? intro : t('replies:help.intro_fallback'));
-
+  const categories: CommandCategory[] = [];
   let commandCount = 0;
-  let categoryCount = 0;
-  for (const category of CATEGORY_ORDER) {
-    const lines = grouped.get(category);
-    if (lines === undefined || lines.length === 0) continue;
-    categoryCount += 1;
+  for (const [category, commands] of commandsByCategory(handlers)) {
+    const lines = commands
+      .filter((command) => visiblePaths(command, options).length > 0)
+      .map((command) => `\`${displayName(command, t)}\` ${summary(command, t)}`);
+    if (lines.length === 0) continue;
+    categories.push(category);
     commandCount += lines.length;
-    embed.addFields({
-      name: t(`replies:help.category.${category}`),
-      value: truncate(lines.join('\n'), FIELD_VALUE_MAX),
-    });
+    for (const value of packLines(lines)) {
+      if ((embed.data.fields?.length ?? 0) >= MAX_FIELDS) break;
+      embed.addFields({ name: t(`replies:help.category.${category}`), value });
+    }
   }
+  embed.setFooter({ text: t('replies:help.footer', { count: commandCount }) });
 
-  embed.setFooter({
-    text: t('replies:help.footer', { count: commandCount, categories: categoryCount }),
-  });
+  if (categories.length === 0) return { embed, menu: null };
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(HELP_CATEGORY_MENU)
+    .setPlaceholder(t('replies:help.select_placeholder'))
+    .addOptions(
+      categories.map((category) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(truncate(t(`replies:help.category.${category}`), 100))
+          .setValue(category),
+      ),
+    );
+  return { embed, menu: new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select) };
+};
+
+/** Every executable path in one category, each with its own description. */
+export const buildCategoryEmbed = (
+  handlers: ReadonlyMap<string, Command>,
+  translator: Translator | undefined,
+  category: CommandCategory,
+  viewer: HelpViewer,
+): EmbedBuilder => {
+  const t = translate(translator);
+  const commands = commandsByCategory(handlers).get(category) ?? [];
+  const lines = commands.flatMap((command) =>
+    visiblePaths(command, viewer).map((path) => {
+      const description = path.descriptionKey ? t(path.descriptionKey) : summary(command, t);
+      return `**\`${pathLabel(path, t)}\`** ${description}`;
+    }),
+  );
+  return new EmbedBuilder()
+    .setColor(EMBED_COLORS.info)
+    .setTitle(t(`replies:help.category.${category}`))
+    .setDescription(truncate(lines.join('\n') || t('replies:help.category_empty'), DESCRIPTION_MAX))
+    .setFooter({ text: t('replies:help.detail_hint') });
+};
+
+/** One command's detail page: its purpose, notes, and every path with its options. */
+export const buildCommandDetail = (
+  command: Command,
+  translator: Translator | undefined,
+  viewer: HelpViewer,
+): EmbedBuilder => {
+  const t = translate(translator);
+  const details = t(`replies:help.details.${command.config.name}`);
+  const embed = new EmbedBuilder()
+    .setColor(EMBED_COLORS.info)
+    .setTitle(displayName(command, t))
+    .setDescription(truncate(`${summary(command, t)}\n\n${details}`, DESCRIPTION_MAX));
+  for (const path of visiblePaths(command, viewer).slice(0, MAX_FIELDS)) {
+    if (isMenu(command)) break;
+    const optionLines = path.options.map(
+      (option) =>
+        `• \`${option.name}\` (${t(option.required ? 'replies:help.required' : 'replies:help.optional')}) ${t(option.descriptionKey)}`,
+    );
+    const lines = [
+      t(path.descriptionKey),
+      ...(path.adminOnly ? [t('replies:help.admin_only')] : []),
+      ...optionLines,
+    ];
+    embed.addFields({ name: pathLabel(path, t), value: truncate(lines.join('\n'), FIELD_MAX) });
+  }
   return embed;
 };

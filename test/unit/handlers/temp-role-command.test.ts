@@ -12,7 +12,7 @@ import type { ChatInputCommandInteraction } from 'discord.js';
 
 import { err, ok } from '../../../src/core/result';
 import { databaseErrorFrom } from '../../../src/persistence/error-translator';
-import temp_role from '../../../src/handlers/commands/temp_role';
+import temp_role from '../../../src/handlers/commands/temp_role/action';
 import type { BaseBot } from '../../../src/bot';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
 import { buildGuild, buildGuildRoles } from '../../fixtures/discord/guild-builder';

@@ -95,8 +95,9 @@ durable guild audit trail. See [command log presentation](configuration.md#commo
 Text that members author and the bot re-posts carries explicit `allowedMentions`:
 
 - Stored auto-replies (including `[*]`) and `/reply list` ping nobody.
-- `/talk` and `/talk_signed` may ping members and roles, never `@everyone`/`@here`;
-  unsigned `/talk` is limited to bot admins.
+- `/talk` signs messages by default and checks the member's destination-channel
+  permissions. It may ping members and roles, never `@everyone`/`@here`;
+  `anonymous:true` is limited to bot admins and records the sender in logs.
 - A `/ban_user` vote pings only the guild's `roles.ban_user`, and nobody when it is
   unset; bots cannot be voted on.
 - Giveaway results ping only the winners and the prize owner; the prize text cannot.
@@ -104,8 +105,16 @@ Text that members author and the bot re-posts carries explicit `allowedMentions`
 Self-service role buttons grant only roles that pass
 [`isSelfAssignableRole`](../src/infra/discord/self-assignable-role.ts): below the
 bot's highest role, not integration-managed, and without moderation or
-administrative permissions. A `/role_message` author may only offer roles below
+administrative permissions. A `/role panel` author may only offer roles below
 their own highest role, and the button rechecks the role on every click.
+
+`/role temp` uses the shared temporary-role application service for creation,
+listing and early cancellation. Creation is serialized per guild within each
+process to enforce
+member caps and name uniqueness. Cancellation retains the stored record and
+expiry job if Discord refuses deletion. `/role sync` resolves configured level
+roles by ID, bounds member batches and role-edit concurrency, and reports
+failures; it adds the target role before removing obsolete level roles.
 
 ## Discord presentation colors
 
@@ -159,6 +168,14 @@ connections and bounded retries. See [database recovery](contributing/operations
 and [persisted models](contributing/persisted-models.md).
 
 LLM, link-preview and social-feed strategies isolate provider behavior and errors.
+The application AI policy validates model allowlists/defaults and rolling usage
+limits; `/ai` settings and the LLM plugin share that policy. The plugin checks
+session ownership and nonempty input before admission, reserves concurrency, and
+serializes each member's quota admission within its process. Per-guild
+`AiUsageRepo` stores only user IDs and timestamps, with a 25-hour TTL; its rolling
+counts survive restarts. See [AI configuration](configuration.md#ai-models-and-usage-limits)
+for admin exemptions, fallback behavior and cross-process limits.
+
 The X provider reads posts from a JSON API into a neutral post model and keeps
 the proxy rewrite only for videos a proxy can play. Link previews and X feed
 subscriptions share this provider and the Discord renderer in

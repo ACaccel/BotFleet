@@ -41,13 +41,17 @@ Every bot shares the framework capabilities:
 - **Slash commands and components.** Commands, context menus, buttons, modals and
   select menus, with shared [state-based embed colors](docs/architecture.md#discord-presentation-colors).
 - **LLM integration.** Chat through OpenAI, Anthropic, Gemini and xAI, with the
-  user whitelist and settings managed through `/ai`; self-hosted auto-replies.
+  user whitelist and settings managed through `/ai`, configurable
+  [model and usage limits](docs/configuration.md#ai-models-and-usage-limits),
+  and self-hosted auto-replies.
 - **Moderation.** [Temporary moderation](docs/contributing/operations.md#temporary-moderation)
   through `/ban_user` votes with automatic reply suppression, and
   [thread moderation](docs/thread-moderation.md) with paginated ban lists,
   delegated management approved by DM and deletion of attributable bot replies.
 - **Community tools.** Giveaways, activities, temporary notification roles,
-  role-claim messages, level roles and restaurant picks.
+  role-claim messages, level roles and restaurant picks. `/give_score` and `/gay`
+  give stable daily readings in the bot's configured time zone, with member and
+  pair options and mention-safe replies.
 - **Social media.** Rich previews for shared links and per-channel subscriptions to
   social feeds. X links and subscriptions use custom cards for text and photos,
   proxies for playable videos, and bounded video uploads as a fallback.
@@ -110,16 +114,18 @@ for test-guild registration and the opt-out flags. Registration is separate from
 ## Commands
 
 A bot exposes only the command IDs listed in its `config.json` `commands`. Related
-actions are grouped under one root; `/help` lists every executable path.
+actions are grouped under one root. `/help` shows a private root-command overview
+with a category selector; `/help command:<name>` lists that command's paths and
+options. Admin-only paths are hidden from non-admins.
 
-| Area              | Commands                                                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------- |
-| Grouped roots     | `/activity`, `/ai`, `/feed`, `/giveaway`, `/reply`, `/thread`, `/traffic`, `/archive`     |
-| Activity reports  | `/traffic overview`, `channel`, `me`, `user`, `apps`, `emoji`, `sticker`                  |
-| Server and roles  | `/temp_role`, `/role_message`, `/update_role`, `/level_detail`, `/roll_call`, `/ban_user` |
-| Bot persona       | `/talk`, `/talk_signed`, `/change_avatar`                                                 |
-| Utilities and fun | `/help`, `/bug_report`, `/random_restaurant`, `/give_score`, `/gay`                       |
-| Context menus     | Get avatar, get sticker                                                                   |
+| Area              | Commands                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| Grouped roots     | `/activity`, `/ai`, `/feed`, `/giveaway`, `/reply`, `/role`, `/thread`, `/traffic`, `/archive` |
+| Activity reports  | `/traffic overview`, `channel`, `me`, `user`, `apps`, `emoji`, `sticker`                       |
+| Server and roles  | `/role`, `/level_detail`, `/roll_call`, `/ban_user`                                            |
+| Bot persona       | `/talk`, `/change_avatar`                                                                      |
+| Utilities and fun | `/help`, `/bug_report`, `/random_restaurant`, `/give_score`, `/gay`                            |
+| Context menus     | Get avatar, get sticker                                                                        |
 
 Upgrading from standalone commands such as `/feed_subscribe`, or from the removed
 `/emoji_frequency`, `/sticker_frequency` and `/db_list_message`? See

@@ -11,7 +11,7 @@
 import { PermissionFlagsBits, type ChatInputCommandInteraction } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
-import RoleMessage from '../../../../src/handlers/commands/role_message';
+import RoleMessage from '../../../../src/handlers/commands/role_message/action';
 import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
 import { buildGuild, buildGuildRoles } from '../../../fixtures/discord/guild-builder';
 import { buildGuildMember } from '../../../fixtures/discord/member-builder';

@@ -106,6 +106,11 @@ export const addCommandOptions = (
         o.setName(e.name).setDescription(e.description).setRequired(e.required),
       ),
 
+    role: (e: LocalizedCommandOption) =>
+      builder.addRoleOption((o) =>
+        o.setName(e.name).setDescription(e.description).setRequired(e.required),
+      ),
+
     attachment: (e: LocalizedCommandOption) =>
       builder.addAttachmentOption((o) =>
         o.setName(e.name).setDescription(e.description).setRequired(e.required),

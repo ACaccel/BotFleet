@@ -7,6 +7,14 @@ For service commands and rollback, see [deployment](deployment.md).
 For debug-channel embed contents, language, permissions and suppression behavior,
 see [the configuration reference](../configuration.md#common-bot-settings).
 
+## Role and posting commands
+
+See [role and posting configuration](../configuration.md#roles-and-posting) for
+temporary-role limits, early cancellation, level-role synchronization and signed
+posting. For retired command IDs, follow the
+[role and talk migration](../upgrading.md#role-and-talk-command-migration) before
+deployment and command registration.
+
 ## Host migration
 
 Follow the [migration runbook](../../tools/migration/README.md) for host transfer and cutover.

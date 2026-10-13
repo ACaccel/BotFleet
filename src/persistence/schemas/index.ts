@@ -15,6 +15,7 @@ import type { ArchiveInboxDocument, ArchiveJob, ArchiveChannel } from '../../cor
  * does not invite drive-by edits to the others.
  */
 import { activitySchema, type ActivityDoc } from './activity.schema';
+import { aiUsageSchema, type AiUsageDoc } from './ai-usage.schema';
 import { feedSubscriptionSchema, type FeedSubscriptionDoc } from './feed-subscription.schema';
 import { fetchSchema, type FetchDoc } from './fetch.schema';
 import { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
@@ -30,6 +31,7 @@ import { userApiSettingSchema, type UserApiSettingDoc } from './user-api-setting
 export * from './archive.schema';
 
 export { activitySchema, type ActivityDoc } from './activity.schema';
+export { aiUsageSchema, type AiUsageDoc } from './ai-usage.schema';
 export {
   feedSubscriptionSchema,
   type FeedSubscriptionDoc,
@@ -67,6 +69,7 @@ export const SCHEMAS = {
   ThreadMessageSource: threadMessageSourceSchema,
   UserApiSetting: userApiSettingSchema,
   FeedSubscription: feedSubscriptionSchema,
+  AiUsage: aiUsageSchema,
 } as const;
 
 export type SchemaName = keyof typeof SCHEMAS;
@@ -91,4 +94,5 @@ export interface DocByName {
   ThreadMessageSource: ThreadMessageSourceDoc;
   UserApiSetting: UserApiSettingDoc;
   FeedSubscription: FeedSubscriptionDoc;
+  AiUsage: AiUsageDoc;
 }

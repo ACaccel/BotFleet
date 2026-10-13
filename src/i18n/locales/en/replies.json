@@ -26,7 +26,9 @@
   },
   "llm_chat": {
     "thinking": "🤔 Thinking...",
-    "cost_unknown": "~$? (unknown model pricing)"
+    "cost_unknown": "~$? (unknown model pricing)",
+    "busy": "Your previous reply is still being written; wait for it to finish.",
+    "rate_limited": "You have reached your usage limit; try again {{at}}."
   },
   "menu_get_avatar": {
     "avatar_url_field": "Profile avatar URL",
@@ -47,8 +49,20 @@
     "long_hair_line": "Go to the spa"
   },
   "gay": {
-    "is_gay": "{{name}} is gay",
-    "is_not_gay": "{{name}} is not gay"
+    "single": "{{name}}'s gay meter: **{{percent}}%** {{bar}}",
+    "pair": "{{name}} × {{other}} ship meter: **{{percent}}%** {{bar}}",
+    "single_low_1": "Straight today, but tomorrow is another day.",
+    "single_low_2": "Reading low, but life is full of surprises.",
+    "single_mid_1": "Right on the edge, with real potential.",
+    "single_mid_2": "Half and half; a free spirit today.",
+    "single_high_1": "No doubt about it, today it's you!",
+    "single_high_2": "Off the scale; everyone can tell.",
+    "pair_low_1": "These two are better off as friends today.",
+    "pair_low_2": "The spark is faint; give it time?",
+    "pair_mid_1": "A little ambiguous; worth watching.",
+    "pair_mid_2": "Decent chemistry that needs nurturing.",
+    "pair_high_1": "A match made in heaven; the whole server ships it!",
+    "pair_high_2": "I ship it already!"
   },
   "add_reply": {
     "added": "Added input: {{input}} reply: {{reply}}!",
@@ -84,13 +98,16 @@
     "updated_header": "✅ AI settings updated:",
     "modal_system_prompt_preview": "\n```\n{{preview}}\n…({{length}} characters total, truncated)\n```",
     "web_search_status": "• Web Search: {{value}}",
-    "failed": "Hmm... updating the AI settings failed. Give it another try later! (error code: {{traceId}})"
+    "failed": "Hmm... updating the AI settings failed. Give it another try later! (error code: {{traceId}})",
+    "provider_not_allowed": "`{{provider}}` is not available to members; pick another provider.",
+    "model_not_allowed": "Model `{{model}}` is not available; reopen the settings to choose another."
   },
   "ai_status": {
     "system_prompt_preview": "`{{preview}}…` ({{length}} characters total, truncated)",
     "system_prompt_not_set": "(not set)",
     "web_search_status": "**Web Search:** {{value}}",
-    "failed": "Hmm... reading the AI settings failed. Give it another try later! (error code: {{traceId}})"
+    "failed": "Hmm... reading the AI settings failed. Give it another try later! (error code: {{traceId}})",
+    "model_fallback": "⚠️ Your chosen model is not available, so chats use `{{provider}}` / `{{model}}`."
   },
   "ban_user": {
     "cannot_get_votes": "Could not get the vote count.",
@@ -126,11 +143,10 @@
     "none_deletable": "You can only delete auto-replies you added; deleting others' needs Manage Messages."
   },
   "help": {
-    "no_commands": "No command list available.",
     "failed": "Could not get the command list. (error code: {{traceId}})",
     "title": "Command Help",
     "intro_fallback": "Here are the commands you can use:",
-    "footer": "{{count}} commands · {{categories}} categories",
+    "footer": "{{count}} commands",
     "category": {
       "auto_reply": "💬 Auto-reply",
       "fun": "🎮 Fun & Interaction",
@@ -139,6 +155,38 @@
       "admin": "🛡️ Server Admin",
       "ai": "🤖 AI Chat",
       "other": "📦 Other"
+    },
+    "usage_hint": "Browse a category with the menu below, or use `/help command:<name>` for one command in full.",
+    "select_placeholder": "Choose a category",
+    "context_menu": "Right-click a message or member and look under Apps",
+    "category_empty": "No commands in this category are available to you.",
+    "detail_hint": "Use /help command:<name> for options and notes",
+    "required": "required",
+    "optional": "optional",
+    "admin_only": "Bot admins only",
+    "unknown_command": "No command named \"{{name}}\".",
+    "details": {
+      "activity": "Start an activity in a restricted channel; only members who can see the channel can sign up.",
+      "ai": "Chatting needs a whitelist entry from an admin; `settings` picks the model, temperature and system prompt, and `status` shows them.",
+      "archive": "Bot admins only, in the debug channel: manage full and periodic backups.",
+      "ban_user": "Five 👍 votes within one minute time the member out for 1-5 minutes; a member who cannot be timed out has their messages deleted for that time instead. Bots cannot be voted on.",
+      "bug_report": "Reports go to the bot admins by DM.",
+      "change_avatar": "Switch the bot's avatar, nickname and colour; Discord limits how often the avatar can change.",
+      "feed": "Forward new posts from a social account to a channel; subscribing again replaces the account's filters.",
+      "gay": "Just for fun.",
+      "give_score": "Just for fun: a random score from 0 to 10.",
+      "giveaway": "`create` opens a form for the prize, winners and duration (1 minute-30 days); members enter with 🎉. `delete` cancels your own giveaways; moderators can cancel any.",
+      "help": "Without options it shows the overview; with `command` it shows one command in full.",
+      "level_detail": "Reads the MEE6 leaderboard (it must be public); results are cached for five minutes.",
+      "menu_get_avatar": "Shows a member's avatar, preferring their server avatar.",
+      "menu_get_sticker": "Shows a message's stickers and custom emoji with links to the files.",
+      "random_restaurant": "Suggests a random restaurant in Taipei and parts of New Taipei.",
+      "reply": "After `add`, the bot answers any message **exactly** matching the keyword; the keyword `[*]` makes the bot interject at random. Replies never ping anyone. `delete` removes your own pairs; members who manage messages can remove any.",
+      "role": "`panel` posts role buttons (requires Manage Roles; only ordinary roles below you and the bot); `temp` creates notification roles that expire, up to three active per member; `sync` syncs MEE6 level roles, at most once every ten minutes.",
+      "roll_call": "Roll-call members or roles, up to 50 people; @everyone is not allowed.",
+      "talk": "Signed as \"display name(username)\" by default; `channel` posts elsewhere, but only where you can post yourself. Members and roles can be pinged, @everyone/@here cannot. `anonymous` posts unsigned, bot admins only.",
+      "thread": "`ban`/`allow`/`list` run inside a thread for its owner, delegates and bot admins; `claim` requests delegated management; `manager` is for bot admins.",
+      "traffic": "Counts activity in channels you can see; `user` is private by default, the others public, and `visibility` changes either."
     }
   },
   "level_detail": {
@@ -195,15 +243,9 @@
     "trigger_prefix": "{{persona}}'s roll-call list"
   },
   "talk": {
-    "missing_args": "Please enter a channel and content.",
-    "tag_warning": "{{user}}, you naughty one — I caught you tagging everyone.",
-    "failed": "Hmm... the message couldn't be sent. Give it another try later! (error code: {{traceId}})"
-  },
-  "talk_signed": {
-    "missing_args": "Please enter some content.",
-    "member_not_found": "Could not get the member information.",
     "tag_warning": "{{displayName}} ({{username}}), you naughty one — I caught you tagging everyone.",
-    "failed": "Hmm... the message couldn't be sent. Give it another try later! (error code: {{traceId}})"
+    "failed": "Hmm... the message couldn't be sent. Give it another try later! (error code: {{traceId}})",
+    "channel_not_allowed": "You cannot post in that channel, or the bot cannot."
   },
   "traffic": {
     "failed": "Could not build the traffic report. (error code: {{traceId}})",
@@ -432,10 +474,10 @@
   },
   "update_role": {
     "no_config": "No level role configuration found in the config file.",
-    "done": "Update complete.",
     "failed": "Could not update the roles. (error code: {{traceId}})",
-    "removed": "[ SYSTEM ] {{name}}, removed: {{role}}",
-    "granted": "[ SYSTEM ] {{name}}, gained: {{role}}"
+    "cooldown": "Level roles were just synced; try again {{at}}.",
+    "unavailable": "Could not read the MEE6 leaderboard; it may be private, or MEE6 may have changed its interface.",
+    "summary": "Level roles synced: {{granted}} members gained a role, {{removed}} old roles removed, {{failed}} members failed."
   },
   "earthquake": {
     "alert": "# <@&{{role}}> Taipei strong earthquake alert!!! (intensity 4 or above)\n> Why must there be an earthquake!?"
@@ -558,7 +600,15 @@
     "invalid_duration": "The lifetime must be an integer between 1 and {{max}} days.",
     "missing_name": "Please provide a role name.",
     "announce_failed": "Could not post the claim message in this channel; the temporary role was not created.",
-    "failed": "Could not create the temporary role (error code: {{traceId}})"
+    "failed": "Could not create the temporary role (error code: {{traceId}})",
+    "too_many": "You can have at most {{max}} active temporary roles at once.",
+    "name_taken": "A role with that name already exists; pick another name.",
+    "list_empty": "There are no active temporary roles.",
+    "list_header": "Active temporary roles ({{count}}):",
+    "list_line": "{{role}}: expires {{expiry}}, created by {{creator}}",
+    "cancelled": "Temporary role deleted.",
+    "not_temp_role": "That is not a temporary role.",
+    "cancel_forbidden": "Only its creator or a member who manages roles can delete it."
   },
   "toggle_role": {
     "role_not_found": "Role not found; it may have been deleted.",
@@ -793,5 +843,25 @@
   "persona": {
     "persona_name": "the bot",
     "vote_flavor": ""
+  },
+  "give_score": {
+    "result": "{{persona}} gives \"{{subject}}\" **{{score}}/10**!",
+    "comment": {
+      "negative_1": "This is beyond scoring...",
+      "negative_2": "Docked so many points it went negative. A new record!",
+      "low_1": "Hmm... plenty of room to improve.",
+      "low_2": "Let's not talk about this one today.",
+      "low_3": "The effort may be going the wrong way.",
+      "mid_1": "Average, but not bad.",
+      "mid_2": "Solid enough; push a little harder next time!",
+      "mid_3": "Just about passing; it can get better.",
+      "high_1": "Not bad at all; a little extra and it'd be perfect~",
+      "high_2": "Great! Almost full marks.",
+      "high_3": "That passes with honours!",
+      "perfect_1": "Full marks! Not a single flaw!",
+      "perfect_2": "Today's best, full marks!",
+      "bonus_1": "Off the charts! That score broke the scale!",
+      "bonus_2": "11? Rules are made to be broken!"
+    }
   }
 }

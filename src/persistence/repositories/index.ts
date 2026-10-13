@@ -11,6 +11,7 @@
 import type { GuildConnection } from '../connection';
 
 import { MongoActivityRepo, type ActivityRepo } from './activity.repo';
+import { MongoAiUsageRepo, type AiUsageRepo } from './ai-usage.repo';
 import { MongoArchiveStatsRepo } from './archive-stats.repo';
 import type { ArchiveStatsRepo } from './archive-stats.types';
 import { MongoFeedSubscriptionRepo, type FeedSubscriptionRepo } from './feed-subscription.repo';
@@ -26,6 +27,7 @@ export {
 } from './archive.repo';
 
 export { MongoActivityRepo, type ActivityRepo, type ActivityInput } from './activity.repo';
+export { MongoAiUsageRepo, type AiUsageRepo, type UsageWindow } from './ai-usage.repo';
 export { MongoArchiveStatsRepo } from './archive-stats.repo';
 export type {
   ArchiveStatsRepo,
@@ -74,6 +76,7 @@ export {
  */
 export interface Repos {
   readonly activity: ActivityRepo;
+  readonly aiUsage: AiUsageRepo;
   /** Read-only archive statistics; every bot may read through its reader connection. */
   readonly archiveStats: ArchiveStatsRepo;
   readonly giveaway: GiveawayRepo;
@@ -92,6 +95,7 @@ export interface Repos {
  */
 export const buildRepos = (conn: GuildConnection): Repos => ({
   activity: new MongoActivityRepo(conn),
+  aiUsage: new MongoAiUsageRepo(conn),
   archiveStats: new MongoArchiveStatsRepo(conn),
   giveaway: new MongoGiveawayRepo(conn),
   reply: new MongoReplyRepo(conn),

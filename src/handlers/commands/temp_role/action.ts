@@ -1,8 +1,9 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
-import { Command } from '@cmd';
+import { Command } from '../command';
 import { MAX_TEMP_ROLE_DAYS } from '../../../application/temp-role/temp-role';
 import { handleTempRoleCreate } from './create';
+import { parseTempRoleConfig } from './config';
 import { replyForError } from '../../../infra/discord/reply-for-error';
 
 export default class temp_role extends Command {
@@ -13,12 +14,8 @@ export default class temp_role extends Command {
       category: 'utility',
       guildOnly: true,
       options: {
-        string: [
-          {
-            name: 'name',
-            required: true,
-          },
-        ],
+        // Leaves room for the prefix within Discord's 100-character role names.
+        string: [{ name: 'name', required: true, minLength: 1, maxLength: 90 }],
         integer: [
           {
             name: 'days',
@@ -29,6 +26,10 @@ export default class temp_role extends Command {
         ],
       },
     });
+  }
+
+  public override validateBotConfig(config: unknown): void {
+    parseTempRoleConfig(config);
   }
 
   public override async execute(

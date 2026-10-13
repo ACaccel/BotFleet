@@ -50,6 +50,29 @@ Register commands again after deploying so Discord shows the new options.
 
 ## Grouped slash commands
 
+### Role and talk command migration
+
+Replace `role_message`, `update_role` and `temp_role` in each bot's `commands`
+with `role`, listed once. Their new paths are `/role panel`, `/role sync` and
+`/role temp create`; `/role temp list` and `/role temp delete` are new. Keep the
+`temp_role` configuration block and temporary-role lifecycle plugin. Existing
+stored roles and claim buttons remain valid.
+
+`temp_role.maxActivePerMember` defaults to `3` (integer `1`–`50`); new roles have
+the `🔔 ` prefix and creation refuses existing names. Migrate `level_roles` values
+from role names to IDs; legacy names still resolve with a warning.
+
+Remove `talk_signed` from `commands` and enable `talk` once. `/talk` now signs
+messages by default; choose `anonymous:true` for the previous unsigned behavior,
+which still requires a configured bot admin. The destination channel is optional
+and the sender's posting permissions are checked.
+
+After updating configuration, deploy and register the affected bot's commands
+again. The role and posting behavior is documented in
+[configuration](configuration.md#roles-and-posting).
+
+### Other grouped commands
+
 Related commands now use subcommands. The old standalone slash commands and
 configuration IDs have been removed; there are no compatibility aliases.
 
@@ -78,7 +101,8 @@ configuration IDs have been removed; there are no compatibility aliases.
    continues to run inside each action. Update saved instructions and shortcuts.
 
 Options, stored data, button/modal identifiers, and per-action authorization
-remain unchanged. `/help` lists full executable paths; its command count counts
+remain unchanged. `/help` shows root commands; its category and command detail
+views list executable paths and options. Its command count counts
 registered roots, not individual actions. Internal action modules are not public
 command entries. See [configuration](configuration.md) for enabled-command setup.
 

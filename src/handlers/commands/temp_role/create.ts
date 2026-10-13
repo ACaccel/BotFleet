@@ -9,10 +9,11 @@ import {
   MAX_TEMP_ROLE_DAYS,
 } from '../../../application/temp-role/temp-role';
 import { buildTempRoleDepsFromBot } from './deps-from-bot';
+import { parseTempRoleConfig } from './config';
 import { getOptionalNumber, getRequiredString } from '../../../infra/discord/options';
 
 /**
- * `/temp_role` — create a permission-less, mentionable role that anyone
+ * `/role temp create` — create a permission-less, mentionable role that anyone
  * can self-claim via a toggle button, auto-deleted after a chosen number
  * of days (capped at {@link MAX_TEMP_ROLE_DAYS}).
  *
@@ -72,6 +73,7 @@ export const handleTempRoleCreate = async (
     creatorId: interaction.user.id,
     roleName: name.trim(),
     days,
+    maxActivePerMember: parseTempRoleConfig(bot.config).maxActivePerMember,
   });
 
   switch (outcome.status) {
@@ -85,6 +87,14 @@ export const handleTempRoleCreate = async (
       return;
     case 'announce_failed':
       await interaction.editReply({ content: t('replies:temp_role.announce_failed') });
+      return;
+    case 'too_many':
+      await interaction.editReply({
+        content: t('replies:temp_role.too_many', { max: outcome.max }),
+      });
+      return;
+    case 'name_taken':
+      await interaction.editReply({ content: t('replies:temp_role.name_taken') });
       return;
     case 'created':
       // The public claim message is the only intended output.

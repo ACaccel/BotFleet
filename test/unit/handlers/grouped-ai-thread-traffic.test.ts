@@ -80,7 +80,12 @@ describe('AI, thread, and traffic command groups', () => {
     const manager = root.config.subcommandGroups?.find((group) => group.name === 'manager');
     expect(root.config.guildOnly).toBe(true);
     expect(root.config.defaultMemberPermissions).toBeUndefined();
-    expect(manager?.subcommands).toEqual(new ThreadManager().config.subcommands);
+    expect(manager?.subcommands).toEqual(
+      new ThreadManager().config.subcommands?.map((subcommand) => ({
+        ...subcommand,
+        adminOnly: true,
+      })),
+    );
     expect(new Ai().config.defaultMemberPermissions).toBeUndefined();
   });
 });

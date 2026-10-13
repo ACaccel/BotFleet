@@ -17,9 +17,9 @@ export default class Thread extends GroupedCommand {
         { name: 'allow', command: new ThreadAllowAction() },
         { name: 'list', command: new ThreadListAction() },
         { name: 'claim', command: new ThreadClaimAction() },
-        { group: 'manager', name: 'add', command: manager },
-        { group: 'manager', name: 'remove', command: manager },
-        { group: 'manager', name: 'list', command: manager },
+        { group: 'manager', name: 'add', command: manager, adminOnly: true },
+        { group: 'manager', name: 'remove', command: manager, adminOnly: true },
+        { group: 'manager', name: 'list', command: manager, adminOnly: true },
       ],
     });
   }

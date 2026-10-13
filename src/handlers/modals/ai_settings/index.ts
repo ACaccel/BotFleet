@@ -5,6 +5,7 @@ import { ModalHandler } from '@modal';
 
 import { type LLMProviderName } from '../../../infra/llm';
 import { requireGuildRepos } from '../../require-guild-repos';
+import { isModelAllowed, parseAiPolicy } from '../../../application/ai/policy';
 
 import { replyForError } from '../../../infra/discord/reply-for-error';
 const VALID_PROVIDERS: ReadonlySet<LLMProviderName> = new Set([
@@ -46,6 +47,15 @@ export default class ai_settings_modal extends ModalHandler {
     if (!model || !webSearchValue) {
       await interaction.reply({
         content: bot.translator?.t('replies:ai_settings.missing_model_or_web_search') ?? '',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    // Recheck: the form may predate an allowlist change.
+    if (!bot.isAdmin(userId) && !isModelAllowed(parseAiPolicy(bot.config), provider, model)) {
+      await interaction.reply({
+        content: bot.translator?.t('replies:ai_settings.model_not_allowed', { model }) ?? '',
         flags: MessageFlags.Ephemeral,
       });
       return;

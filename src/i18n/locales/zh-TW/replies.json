@@ -26,7 +26,9 @@
   },
   "llm_chat": {
     "thinking": "🤔 思考中…",
-    "cost_unknown": "~$?(未知 model 計價)"
+    "cost_unknown": "~$?(未知 model 計價)",
+    "busy": "上一個回覆還在產生中,請等它完成再傳",
+    "rate_limited": "你已達到使用上限,{{at}}可以再試"
   },
   "menu_get_avatar": {
     "avatar_url_field": "個人頭像連結",
@@ -47,8 +49,20 @@
     "long_hair_line": "去spa"
   },
   "gay": {
-    "is_gay": "{{name}} 是 gay",
-    "is_not_gay": "{{name}} 不是 gay"
+    "single": "{{name}} 的 gay 指數:**{{percent}}%** {{bar}}",
+    "pair": "{{name}} × {{other}} 的 CP 指數:**{{percent}}%** {{bar}}",
+    "single_low_1": "看起來今天是直的,但明天就不一定了。",
+    "single_low_2": "指數偏低,不過人生總有驚喜。",
+    "single_mid_1": "在邊緣徘徊,很有潛力喔。",
+    "single_mid_2": "一半一半,今天是自由的靈魂。",
+    "single_high_1": "不用懷疑了,今天就是你!",
+    "single_high_2": "指數爆表,全場都看得出來。",
+    "pair_low_1": "今天的兩位還是當朋友比較好。",
+    "pair_low_2": "火花有點微弱,再相處看看?",
+    "pair_mid_1": "有點曖昧,值得觀察。",
+    "pair_mid_2": "默契還行,感情需要培養。",
+    "pair_high_1": "天作之合,全伺服器都在嗑!",
+    "pair_high_2": "這對我先站了!"
   },
   "add_reply": {
     "added": "已新增 輸入:{{input}} 回覆:{{reply}}!",
@@ -84,13 +98,16 @@
     "updated_header": "✅ AI 設定已更新:",
     "modal_system_prompt_preview": "\n```\n{{preview}}\n…(共 {{length}} 字,已截斷)\n```",
     "web_search_status": "• Web Search: {{value}}",
-    "failed": "唔...AI 設定更新失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
+    "failed": "唔...AI 設定更新失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})",
+    "provider_not_allowed": "`{{provider}}` 沒有開放給一般成員使用,請改選其他 provider",
+    "model_not_allowed": "模型 `{{model}}` 沒有開放使用,請重新開啟設定選擇"
   },
   "ai_status": {
     "system_prompt_preview": "`{{preview}}…`(共 {{length}} 字,已截斷)",
     "system_prompt_not_set": "(未設定)",
     "web_search_status": "**Web Search:** {{value}}",
-    "failed": "唔...讀取 AI 設定失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
+    "failed": "唔...讀取 AI 設定失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})",
+    "model_fallback": "⚠️ 你選的模型目前沒有開放,對話會改用 `{{provider}}` / `{{model}}`"
   },
   "ban_user": {
     "cannot_get_votes": "無法取得投票數",
@@ -126,11 +143,10 @@
     "none_deletable": "你只能刪除自己新增的自動回覆;需要管理訊息權限才能刪除別人的"
   },
   "help": {
-    "no_commands": "沒有指令清單",
     "failed": "無法取得指令清單 (錯誤代碼:{{traceId}})",
     "title": "指令說明",
     "intro_fallback": "以下是目前可用的指令:",
-    "footer": "共 {{count}} 個指令 · {{categories}} 個分類",
+    "footer": "共 {{count}} 個指令",
     "category": {
       "auto_reply": "💬 自動回覆",
       "fun": "🎮 娛樂互動",
@@ -139,6 +155,38 @@
       "admin": "🛡️ 伺服器管理",
       "ai": "🤖 AI 對話",
       "other": "📦 其他"
+    },
+    "usage_hint": "用下方選單瀏覽分類,或輸入 `/help command:<指令>` 查看單一指令的完整用法。",
+    "select_placeholder": "選擇分類",
+    "context_menu": "右鍵點擊訊息或成員,在「應用程式」中使用",
+    "category_empty": "這個分類沒有你可以使用的指令",
+    "detail_hint": "輸入 /help command:<指令> 查看參數與注意事項",
+    "required": "必填",
+    "optional": "選填",
+    "admin_only": "僅 bot 管理員",
+    "unknown_command": "找不到指令「{{name}}」",
+    "details": {
+      "activity": "在有權限限制的頻道發起活動,只有看得到該頻道的成員能報名。",
+      "ai": "與 AI 對話需要先被管理員加入白名單;`settings` 設定模型、溫度與系統提示,`status` 查看目前設定。",
+      "archive": "僅限 bot 管理員在除錯頻道使用,管理完整備份與日常備份。",
+      "ban_user": "發起後 1 分鐘內累積 5 票 👍 即禁言目標 1-5 分鐘;無法禁言的成員改為刪除他在期間內的訊息。不能對 bot 投票。",
+      "bug_report": "回報會私訊給 bot 管理員。",
+      "change_avatar": "切換 bot 的頭像、暱稱與代表色;Discord 限制頭像更換頻率,太頻繁時請稍後再試。",
+      "feed": "把社群平台帳號的新貼文轉發到頻道;重新訂閱同一帳號會取代原本的條件。",
+      "gay": "純娛樂。",
+      "give_score": "純娛樂,隨機給 0-10 分。",
+      "giveaway": "`create` 開啟表單填寫獎品、名額與時間(1 分鐘到 30 天),成員按 🎉 參加;`delete` 只能取消自己的抽獎,管理員可以取消任何抽獎。",
+      "help": "不帶參數顯示總覽,帶 `command` 顯示單一指令的詳細用法。",
+      "level_detail": "讀取 MEE6 排行榜(需設為公開),結果會快取 5 分鐘。",
+      "menu_get_avatar": "顯示成員的頭像;有伺服器專屬頭像時優先顯示。",
+      "menu_get_sticker": "顯示訊息中的貼圖與自訂表情,並提供原始檔連結。",
+      "random_restaurant": "依條件隨機推薦台北與部分新北的餐廳。",
+      "reply": "`add` 新增後,有人發出與關鍵字**完全相同**的訊息時 bot 會回覆;關鍵字填 `[*]` 代表 bot 偶爾隨機插話。回覆內容不會 tag 任何人。`delete` 只能刪除自己新增的回覆,能管理訊息的成員可刪除全部。",
+      "role": "`panel` 張貼身分組領取按鈕(需管理身分組權限,只能放低於你和 bot 的一般身分組);`temp` 建立會自動過期的通知身分組,每人同時最多 3 個;`sync` 依 MEE6 等級同步等級身分組,每 10 分鐘最多一次。",
+      "roll_call": "點名指定的成員或身分組,上限 50 人,不能點 @everyone。",
+      "talk": "預設會署名「暱稱(帳號)」;`channel` 可以發到其他頻道,但你本人必須能在該頻道發言。可以 tag 成員與身分組,不能 @everyone/@here。`anonymous` 不署名發送,僅限 bot 管理員。",
+      "thread": "`ban`/`allow`/`list` 在討論串內由擁有者、代理管理者或 bot 管理員使用;`claim` 申請成為代理管理者;`manager` 僅 bot 管理員。",
+      "traffic": "統計看得到的頻道活動;`user` 預設只有你看得到,其他子命令預設公開,可用 `visibility` 調整。"
     }
   },
   "level_detail": {
@@ -195,15 +243,9 @@
     "trigger_prefix": "{{persona}}的點名簿"
   },
   "talk": {
-    "missing_args": "請輸入頻道和內容",
-    "tag_warning": "{{user}}好壞喔被我抓到你在 tag 所有人",
-    "failed": "唔...訊息送不出去耶,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
-  },
-  "talk_signed": {
-    "missing_args": "請輸入內容",
-    "member_not_found": "無法取得成員資訊",
     "tag_warning": "{{displayName}}({{username}})好壞喔被我抓到你在 tag 所有人",
-    "failed": "唔...訊息送不出去耶,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
+    "failed": "唔...訊息送不出去耶,稍後再試一次看看吧!(錯誤代碼:{{traceId}})",
+    "channel_not_allowed": "你沒有在那個頻道發言的權限,或 bot 無法在那裡發言"
   },
   "traffic": {
     "failed": "無法產生流量報告 (錯誤代碼:{{traceId}})",
@@ -432,10 +474,10 @@
   },
   "update_role": {
     "no_config": "設定檔中未找到等級身分組配置",
-    "done": "更新完成",
     "failed": "無法更新身分組 (錯誤代碼:{{traceId}})",
-    "removed": "[ SYSTEM ] {{name}}, 移除: {{role}}",
-    "granted": "[ SYSTEM ] {{name}}, 獲得: {{role}}"
+    "cooldown": "等級身分組剛同步過,請在 {{at}} 再試",
+    "unavailable": "無法讀取 MEE6 排行榜,可能是排行榜未公開或 MEE6 介面變動。",
+    "summary": "等級身分組同步完成:{{granted}} 人獲得新身分組、移除 {{removed}} 個舊身分組、{{failed}} 人失敗。"
   },
   "earthquake": {
     "alert": "# <@&{{role}}> 台北強震警報!!! (4級以上)\n> 為什麼要地震!?"
@@ -558,7 +600,15 @@
     "invalid_duration": "存活天數必須是 1 到 {{max}} 之間的整數。",
     "missing_name": "請提供身分組名稱。",
     "announce_failed": "無法在此頻道發送領取訊息,暫時身分組未建立。",
-    "failed": "無法建立暫時身分組 (錯誤代碼:{{traceId}})"
+    "failed": "無法建立暫時身分組 (錯誤代碼:{{traceId}})",
+    "too_many": "你同時最多只能有 {{max}} 個進行中的暫時身分組",
+    "name_taken": "已經有同名的身分組了,請換一個名稱",
+    "list_empty": "目前沒有進行中的暫時通知身分組",
+    "list_header": "進行中的暫時通知身分組(共 {{count}} 個):",
+    "list_line": "{{role}}:{{expiry}}到期,建立者 {{creator}}",
+    "cancelled": "暫時通知身分組已刪除",
+    "not_temp_role": "這不是暫時通知身分組",
+    "cancel_forbidden": "只有建立者或能管理身分組的成員可以刪除它"
   },
   "toggle_role": {
     "role_not_found": "找不到該身分組,可能已被刪除。",
@@ -793,5 +843,25 @@
   "persona": {
     "persona_name": "機器人",
     "vote_flavor": ""
+  },
+  "give_score": {
+    "result": "{{persona}}給「{{subject}}」打了 **{{score}}/10** 分!",
+    "comment": {
+      "negative_1": "這已經不是分數的問題了……",
+      "negative_2": "扣分扣到變負的,恭喜創下紀錄。",
+      "low_1": "嗯……還有很大的進步空間呢。",
+      "low_2": "這個嘛,我們今天先不要提它好了。",
+      "low_3": "努力的方向好像有點偏掉了喔。",
+      "mid_1": "普普通通,不過也不差啦。",
+      "mid_2": "中規中矩,下次再加把勁!",
+      "mid_3": "及格邊緣,還可以更好喔。",
+      "high_1": "還不錯嘛,下次再加點料就完美了~",
+      "high_2": "很棒喔!差一點點就滿分了。",
+      "high_3": "這個我給過,值得驕傲!",
+      "perfect_1": "滿分!完全挑不出毛病!",
+      "perfect_2": "今天的最佳,滿分送上!",
+      "bonus_1": "破表了!這分數超出量表了!",
+      "bonus_2": "11 分?規則就是用來打破的!"
+    }
   }
 }

@@ -1,10 +1,13 @@
-import type { ChatInputCommandInteraction } from 'discord.js';
+import type { ChatInputCommandInteraction, GuildMember, User } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
 
-import { getRequiredString } from '../../../infra/discord/options';
+import { meterBar, pairReading, singleReading } from './meter';
 
-const IS_GAY_PROBABILITY = 0.95;
+const nameOf = (user: User, member: unknown): string =>
+  member !== null && typeof member === 'object' && 'displayName' in member
+    ? (member as GuildMember).displayName
+    : user.displayName;
 
 export default class gay extends Command {
   constructor() {
@@ -15,10 +18,8 @@ export default class gay extends Command {
       guildOnly: true,
       options: {
         user: [
-          {
-            name: 'user',
-            required: true,
-          },
+          { name: 'user', required: true },
+          { name: 'user2', required: false },
         ],
       },
     });
@@ -28,16 +29,24 @@ export default class gay extends Command {
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    const userId = getRequiredString(interaction, 'user');
-    const target = interaction.guild?.members.cache.get(userId);
-    const t = bot.translator;
-    // Defensive guard for the pre-run() window: the translator field is
-    // only set once `run()` resolves. The early-return keeps the strict
-    // typecheck honest and silently no-ops when the target is unknown.
-    if (t === undefined || target === undefined) return;
+    const t = (key: string, params?: Record<string, string | number>): string =>
+      bot.translator?.t(key, params) ?? '';
+    const first = interaction.options.getUser('user', true);
+    const second = interaction.options.getUser('user2') ?? undefined;
+    const name = nameOf(first, interaction.options.getMember('user'));
 
-    const key =
-      Math.random() < IS_GAY_PROBABILITY ? 'replies:gay.is_gay' : 'replies:gay.is_not_gay';
-    await interaction.reply({ content: t.t(key, { name: target.displayName }) });
+    let content: string;
+    if (second === undefined || second.id === first.id) {
+      const { percent, commentKey } = singleReading(first.id, bot.timeZone);
+      content = t('replies:gay.single', { name, percent, bar: meterBar(percent) });
+      content += `\n> ${t(commentKey)}`;
+    } else {
+      const { percent, commentKey } = pairReading(first.id, second.id, bot.timeZone);
+      const other = nameOf(second, interaction.options.getMember('user2'));
+      content = t('replies:gay.pair', { name, other, percent, bar: meterBar(percent) });
+      content += `\n> ${t(commentKey)}`;
+    }
+    // Names are member-chosen text; nothing in the reading may ping.
+    await interaction.reply({ content, allowedMentions: { parse: [] } });
   }
 }

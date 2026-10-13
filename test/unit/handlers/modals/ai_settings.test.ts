@@ -32,6 +32,8 @@ interface BuildInput {
   /** `false` means the user has no whitelist row. */
   readonly whitelisted?: boolean;
   readonly updateFails?: boolean;
+  readonly config?: Record<string, unknown>;
+  readonly isAdmin?: boolean;
 }
 
 const build = ({
@@ -42,6 +44,8 @@ const build = ({
   systemPrompt = 'be terse',
   whitelisted = true,
   updateFails = false,
+  config = {},
+  isAdmin = false,
 }: BuildInput = {}) => {
   const update = vi.fn(async () => (updateFails ? dbErr() : ok(true)));
   const repos = {
@@ -52,6 +56,8 @@ const build = ({
   } as unknown as Repos;
 
   const { bot } = buildFakeBot({
+    config,
+    isAdmin: () => isAdmin,
     connectionManager: undefined,
     getRepos: (guildId: string) => (guildId === GUILD_ID ? repos : undefined),
   });
@@ -89,6 +95,42 @@ const replyContent = (reply: ReturnType<typeof vi.fn>): string =>
   (reply.mock.calls[0]?.[0] as { content: string }).content;
 
 describe('ai_settings modal', () => {
+  const restricted = {
+    ai: {
+      models: {
+        default: { provider: 'openai', model: 'gpt-allowed' },
+        allowed: { openai: ['gpt-allowed'] },
+      },
+    },
+  };
+
+  it("persists a member's allowed model", async () => {
+    const { update } = await run({ config: restricted, model: 'gpt-allowed' });
+    expect(update).toHaveBeenCalledWith(USER_ID, expect.objectContaining({ model: 'gpt-allowed' }));
+  });
+
+  it('rejects a model removed since the settings form was opened', async () => {
+    const built = build({ model: 'gpt-4o' });
+    Object.assign(built.bot.config, restricted);
+    await new ai_settings_modal().execute(built.interaction, built.bot);
+    expect(built.update).not.toHaveBeenCalled();
+    expect(replyContent(built.reply)).toBe('replies:ai_settings.model_not_allowed');
+  });
+
+  it("rejects a member's provider outside the allowlist", async () => {
+    const { update, reply } = await run({
+      config: restricted,
+      customId: 'ai_settings|xai',
+      model: 'grok-model',
+    });
+    expect(update).not.toHaveBeenCalled();
+    expect(replyContent(reply)).toBe('replies:ai_settings.model_not_allowed');
+  });
+
+  it("allows a bot admin's model outside the member allowlist", async () => {
+    const { update } = await run({ config: restricted, model: 'gpt-4o', isAdmin: true });
+    expect(update).toHaveBeenCalledWith(USER_ID, expect.objectContaining({ model: 'gpt-4o' }));
+  });
   it('persists the submitted settings against the caller', async () => {
     const { update } = await run();
 

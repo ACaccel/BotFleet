@@ -52,7 +52,7 @@ The optional base fields are defined by [Config](../src/bot/index.ts).
 
 | Field                         | Purpose                                                                                                                                                     |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                       | Bot-admin IDs for `/ai whitelist`, unsigned `/talk`, `/bug_report`, msg-archive's `/archive` and its notices; default `[]`                                  |
+| `admin`                       | Bot-admin IDs for `/ai whitelist`, anonymous `/talk`, `/bug_report`, msg-archive's `/archive` and its notices; default `[]`                                 |
 | `language`                    | `zh-TW` (default) or `en`; also controls registered command text                                                                                            |
 | `timeZone`                    | IANA zone for report calendars, such as `/traffic` days and heat maps; default `UTC`; an unknown zone stops startup                                         |
 | `commands`                    | Commands to expose; an unknown name stops startup and registration; [register again](contributing/local-setup.md#registering-slash-commands) after changing |
@@ -89,7 +89,8 @@ Plugin settings are validated at startup; strict schemas reject unknown keys.
 | `social_link_preview`           | nijika, tomori | Disabled; provider/proxy lists and request limits                                  |
 | `social_feed`                   | nijika         | Disabled; enabled feeds require a nonempty `platforms` map (`x` supported)         |
 | `guild_events.attachment_cache` | nijika, tomori | Enabled; see attachment storage below                                              |
-| `level_roles`                   | nijika         | `level_<n>` to role-name map for `/update_role`                                    |
+| `level_roles`                   | nijika         | `level_<n>` to role-ID map for `/role sync`; legacy role names remain supported    |
+| `temp_role.maxActivePerMember`  | nijika, tomori | Active temporary roles per creator in a guild; default `3`, integer `1`–`50`       |
 | `auto_reply`                    | nijika, tomori | Per-user `luckyReplies`; `globalLuckyProbability` defaults to `0.005`              |
 | `random_restaurant.apiUrl`      | nijika, tomori | Absolute HTTP(S) recommendation endpoint                                           |
 
@@ -99,6 +100,57 @@ Invalid role or restaurant settings disable the affected command.
 names from [`identity.json`](../src/handlers/commands/change_avatar/identity.json).
 `data/` is shared across releases and kept out of version control, so artwork is
 never published with the source; a missing file is reported and nothing changes.
+
+### Roles and posting
+
+Enable the `role` command ID for `/role panel`, `/role sync` and `/role temp
+create|list|delete`. Temporary roles are permission-less, mentionable and prefixed
+with `🔔 `; creation refuses an existing role name and enforces
+`temp_role.maxActivePerMember` (default `3`, range `1`–`50`). Listing replies
+privately. A role's creator, a configured bot admin or a member with Manage Roles
+may end it early; failed Discord deletion preserves its expiry tracking.
+
+`level_roles` maps `level_<n>` thresholds to role IDs in any order. Legacy role
+names still resolve with a warning. `/role sync` reads all MEE6 leaderboard pages,
+assigns each member's highest qualifying role and removes other configured level
+roles; unmanageable roles are skipped. It reports granted, removed and failed
+changes, with a ten-minute cooldown per guild; an unavailable leaderboard resets
+the cooldown for a retry.
+
+`/talk` signs messages by default, accepts an optional destination channel and
+requires the member to be able to post there. `anonymous:true` requires a bot
+admin and records the sender in logs. Messages may ping members and roles;
+`@everyone` or `@here` text produces a warning without any pings.
+
+### AI models and usage limits
+
+The `ai` block applies to bots with the LLM chat plugin and `/ai` commands.
+Omitting `ai.models` permits every model from the provider catalog. When set,
+`ai.models.allowed` maps `xai`, `openai`, `anthropic` or `gemini` to 1–25 model
+IDs each; a missing provider is unavailable to members. Model IDs must be 1–100
+characters. `ai.models.default` contains `provider` and `model`, and must appear
+in the allowlist. Invalid settings fail startup validation.
+
+`/ai settings` offers members only allowed models and rechecks the policy when
+its modal is submitted. If a saved choice is no longer allowed, chat uses the
+configured default without changing the saved settings; `/ai status` reports
+that fallback. Bot admins can choose any catalog model and bypass the model
+restriction and usage limits, but still require an AI whitelist entry.
+
+| `ai.rateLimit` field | Default | Valid values     |
+| -------------------- | ------- | ---------------- |
+| `perUserPerHour`     | `30`    | Positive integer |
+| `perUserPerDay`      | `200`   | Positive integer |
+| `concurrent`         | `1`     | Integer 1–5      |
+
+When `rateLimit` is supplied, all three fields are required. Hourly and daily
+limits count admitted requests in rolling windows per member and guild, including
+provider failures. Requests rejected as busy, over quota, empty, or belonging to
+another member's session do not consume quota. Usage persists across restarts;
+only user IDs and timestamps are stored, with a 25-hour TTL. The plugin serializes
+admission within each process; independent bot processes sharing a guild database
+can still race at the quota boundary. Busy members receive a retry message;
+quota refusals show the earliest retry time.
 
 ### Social previews and feeds
 

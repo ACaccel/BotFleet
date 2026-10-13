@@ -1,6 +1,6 @@
 import type { ChatInputCommandInteraction, GuildMember, Role } from 'discord.js';
 import type { BaseBot } from '@bot';
-import { Command } from '@cmd';
+import { Command } from '../command';
 import { requireCapture } from '../../../core/regex-capture';
 import { buildButtonRows } from '../discord-helpers';
 

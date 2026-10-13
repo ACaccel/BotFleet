@@ -31,6 +31,11 @@ for root subcommands with boolean and integer options.
 `guildOnly` and `defaultMemberPermissions` constrain registration; handlers must
 still validate guild scope and permissions at execution time.
 
+Grouped routes may set `adminOnly: true` to filter their paths in `/help`;
+retain the action's runtime authorization checks. Override `validateBotConfig`
+for command-specific settings that must fail startup. Executable-path metadata
+supplies help descriptions and option lists; keep it aligned with registration.
+
 For durable operational actions, delegate persistence and bounded inspection to
 an infra service. Confirmation buttons must recheck permissions and bind the
 action to the original operator, guild, channel and reviewed state; use durable

@@ -7,6 +7,8 @@ interface CommandRoute {
   readonly group?: string;
   readonly name: string;
   readonly command: Command;
+  /** Hide the path from non-admins in `/help`; the action still authorizes. */
+  readonly adminOnly?: boolean;
 }
 
 interface GroupedCommandConfig {
@@ -37,7 +39,11 @@ export class GroupedCommand extends Command {
       if (child.subcommands && !child.subcommands.some((entry) => entry.name === route.name)) {
         throw new TypeError(`Unknown child subcommand: ${child.name}/${route.name}`);
       }
-      const subcommand = { name: route.name, ...(options ? { options } : {}) };
+      const subcommand = {
+        name: route.name,
+        ...(options ? { options } : {}),
+        ...(route.adminOnly === true ? { adminOnly: true } : {}),
+      };
       if (route.group === undefined) subcommands.push(subcommand);
       else {
         let group = groups.find((entry) => entry.name === route.group);

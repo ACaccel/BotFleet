@@ -18,14 +18,11 @@ const GUILD_ONLY = [
   'giveaway',
   'level_detail',
   'reply',
-  'role_message',
+  'role',
   'roll_call',
   'talk',
-  'talk_signed',
-  'temp_role',
   'thread',
   'traffic',
-  'update_role',
 ] as const satisfies readonly (keyof typeof COMMAND_REGISTRY)[];
 
 describe('guild-only commands', () => {

@@ -5,6 +5,7 @@ import { Command } from '../command';
 
 import { requireGuildRepos } from '../../require-guild-repos';
 
+import { effectiveModel, parseAiPolicy } from '../../../application/ai/policy';
 import { replyForError } from '../../../infra/discord/reply-for-error';
 export default class ai_status extends Command {
   constructor() {
@@ -60,6 +61,12 @@ export default class ai_status extends Command {
         }),
         `**System Prompt:** ${promptDisplay}`,
       ];
+      const used = effectiveModel(parseAiPolicy(bot.config), doc);
+      if (used.fellBack && !bot.isAdmin(userId)) {
+        lines.push(
+          t('replies:ai_status.model_fallback', { provider: used.provider, model: used.model }),
+        );
+      }
       await interaction.editReply({ content: lines.join('\n') });
     } catch (err) {
       await replyForError(interaction, bot, err, 'replies:ai_status.failed', interaction.guildId);

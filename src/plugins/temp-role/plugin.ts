@@ -2,8 +2,8 @@
  * TempRolePlugin — rebuilds jobs on startup and guild database recovery.
  *
  * The plugin resolves its dependencies through `ctx` and calls
- * `rebootTempRoleJobs` from `application/temp-role`. The `/temp_role` command
- * handler bridges into the same service via its own `BaseBot` reference,
+ * `rebootTempRoleJobs` from `application/temp-role`. The `/role temp` actions
+ * bridge into the same service via their own `BaseBot` reference,
  * since handlers and plugins may not import each other.
  */
 import { TOKENS } from '../../bot/tokens';

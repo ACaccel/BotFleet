@@ -5,6 +5,7 @@ import type { Config } from '@bot';
 import { BaseBot } from '@bot';
 import type { ClientEventBridgeSuppression } from '../client-event-bridge';
 import { createLlmChatPlugin } from '@plugins';
+import { parseAiPolicy } from '../../application/ai/policy';
 
 /**
  * Konata composition root. The entire LLM chat lifecycle (session
@@ -25,7 +26,14 @@ export class Konata extends BaseBot<Config> {
     config: Config,
   ) {
     super(client, token, mongoURI, clientId, config);
-    this.use(createLlmChatPlugin({ clientId: this.clientId }));
+    this.use(
+      createLlmChatPlugin({
+        clientId: this.clientId,
+        // Parsed here so a malformed `ai` block stops startup.
+        policy: parseAiPolicy(config),
+        isAdmin: (userId) => this.isAdmin(userId),
+      }),
+    );
     this.registerPresence();
   }
 

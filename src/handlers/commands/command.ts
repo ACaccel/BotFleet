@@ -71,6 +71,8 @@ export interface CommandConfig {
     user?: CommandOption[];
     channel?: CommandOption[];
     attachment?: CommandOption[];
+    /** Discord's role picker; the value is the role ID. */
+    role?: CommandOption[];
   };
 }
 
@@ -78,12 +80,19 @@ interface CommandSubcommand {
   name: string;
   description?: string;
   options?: CommandConfig['options'];
+  /**
+   * `/help` lists the path only to bot admins. Display metadata only:
+   * the action still authorizes every call itself.
+   */
+  adminOnly?: boolean;
 }
 
 interface CommandSubcommandGroup {
   name: string;
   description?: string;
   subcommands: CommandSubcommand[];
+  /** As {@link CommandSubcommand.adminOnly}, for every subcommand in the group. */
+  adminOnly?: boolean;
 }
 
 interface CommandOption {
@@ -146,6 +155,7 @@ export interface LocalizedCommandConfig extends CommandConfig {
     user?: LocalizedCommandOption[];
     channel?: LocalizedCommandOption[];
     attachment?: LocalizedCommandOption[];
+    role?: LocalizedCommandOption[];
   };
 }
 

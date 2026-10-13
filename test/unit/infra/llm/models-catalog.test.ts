@@ -27,6 +27,7 @@ import {
 import type { DisabledPlugin, Plugin, PluginId } from '../../../../src/core/plugin/types';
 import { systemClock } from '../../../../src/core/time';
 import { ModelCatalog } from '../../../../src/infra/llm/models-catalog';
+import { DEFAULT_RATE_LIMIT } from '../../../../src/application/ai/policy';
 import { createLlmChatPlugin } from '../../../../src/plugins/llm-chat';
 
 const silent = createLogger({ level: 'silent', pretty: false });
@@ -63,7 +64,11 @@ describe('ModelCatalog DI wiring', () => {
       listGuildIds: () => [],
     }));
 
-    const plugin = createLlmChatPlugin({ clientId: 'bot-1' }) as Plugin;
+    const plugin = createLlmChatPlugin({
+      clientId: 'bot-1',
+      policy: { rateLimit: DEFAULT_RATE_LIMIT },
+      isAdmin: () => false,
+    }) as Plugin;
     const registered = new Map<PluginId, RegisteredPlugin>([[plugin.id, { plugin }]]);
     const host: LifecycleHost = {
       registered,

@@ -1,95 +1,232 @@
 /**
- * `/update_role` guard rails.
- *
- * The handler used to narrow its config with `'level_roles' in
- * bot.config` (true for a `level_roles: 42` typo) and then dereference
- * `bot.getGuildInfo(...)!`, which crashed outright on any guild the bot
- * had not registered.
+ * `/role sync` gives each ranked member exactly the role for their level,
+ * reports one summary instead of a message per change, and runs at most
+ * once per guild every ten minutes.
  */
 /* eslint-disable import/first */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ChatInputCommandInteraction } from 'discord.js';
+import type { ChatInputCommandInteraction, Guild, Role } from 'discord.js';
 
-const getLeaderboardPage = vi.fn(async (_guildId: string) => []);
-vi.mock('mee6-levels-api', () => ({
-  default: { getLeaderboardPage: (guildId: string) => getLeaderboardPage(guildId) },
+const { fetchMee6Leaderboard } = vi.hoisted(() => ({ fetchMee6Leaderboard: vi.fn() }));
+vi.mock('../../../../src/handlers/commands/mee6-shared/leaderboard', () => ({
+  fetchMee6Leaderboard: (...args: unknown[]) => fetchMee6Leaderboard(...args),
 }));
 
-import UpdateRole from '../../../../src/handlers/commands/update_role';
+import LevelRoleSync from '../../../../src/handlers/commands/update_role/action';
+import {
+  resolveLevelRoles,
+  syncLevelRoles,
+  targetRoleFor,
+} from '../../../../src/handlers/commands/update_role/sync';
 import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
 
-const GUILD_ID = 'g1';
+const role = (id: string, name: string, position = 1) =>
+  ({
+    id,
+    name,
+    comparePositionTo: (other: { position: number }) => position - other.position,
+  }) as unknown as Role;
 
-interface Fixture {
-  readonly config?: unknown;
-  readonly registered?: boolean;
-}
+const ROOKIE = role('100000000000000001', 'Rookie');
+const VETERAN = role('100000000000000002', 'Veteran');
 
-const build = ({ config = { level_roles: { level_1: 'Rookie' } }, registered = true }: Fixture) => {
-  const { bot } = buildFakeBot({
-    config,
-    getGuildInfo: () =>
-      registered
-        ? { guild: { members: { cache: new Map() }, roles: { cache: new Map() } } }
-        : undefined,
-  });
-
-  const interaction = {
-    deferReply: vi.fn(async () => undefined),
-    editReply: vi.fn(async () => undefined),
-    deferred: true,
-    replied: false,
-    guild: { id: GUILD_ID },
-    channel: { isSendable: () => true, send: vi.fn(async () => undefined) },
-    options: { get: () => undefined },
-  } as unknown as ChatInputCommandInteraction;
-
-  return { bot, interaction };
+const memberWith = (id: string, roleIds: string[]) => {
+  const cache = new Map(roleIds.map((roleId) => [roleId, { id: roleId }]));
+  return {
+    id,
+    roles: {
+      cache,
+      add: vi.fn(async (r: Role) => void cache.set(r.id, { id: r.id })),
+      remove: vi.fn(async (ids: string[]) => ids.forEach((roleId) => cache.delete(roleId))),
+    },
+  };
 };
+
+const guildWith = (members: ReturnType<typeof memberWith>[]) =>
+  ({
+    id: 'g1',
+    roles: {
+      cache: new Map([
+        [ROOKIE.id, ROOKIE],
+        [VETERAN.id, VETERAN],
+      ]),
+    },
+    members: {
+      me: { roles: { highest: { position: 10 } } },
+      cache: new Map(members.map((member) => [member.id, member])),
+      fetch: vi.fn(async () => undefined),
+    },
+  }) as unknown as Guild;
+
+const player = (id: string, level: number) => ({ id, level }) as never;
 
 afterEach(() => vi.clearAllMocks());
 
-describe('update_role', () => {
-  it('answers an unregistered guild instead of crashing on it', async () => {
-    const { bot, interaction } = build({ registered: false });
+describe('level role sync', () => {
+  const levels = [
+    { level: 5, role: ROOKIE },
+    { level: 20, role: VETERAN },
+  ];
 
-    await new UpdateRole().execute(interaction, bot);
-
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'errors:command.guild_not_found',
-    });
-    // The non-null assertion this replaces threw before reaching here.
-    expect(getLeaderboardPage).not.toHaveBeenCalled();
+  it('picks the highest threshold reached', () => {
+    expect(targetRoleFor(4, levels)).toBeUndefined();
+    expect(targetRoleFor(5, levels)).toBe(ROOKIE);
+    expect(targetRoleFor(25, levels)).toBe(VETERAN);
   });
 
-  it('answers a missing level_roles block', async () => {
-    const { bot, interaction } = build({ config: {} });
-
-    await new UpdateRole().execute(interaction, bot);
-
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'replies:update_role.no_config',
-    });
-    expect(getLeaderboardPage).not.toHaveBeenCalled();
+  it('resolves role IDs and legacy names, skipping missing roles', () => {
+    const guild = guildWith([]);
+    const resolved = resolveLevelRoles(
+      guild,
+      { level_20: VETERAN.id, level_5: 'Rookie', level_9: 'Gone' },
+      { warn: vi.fn() },
+    );
+    expect(resolved.map((entry) => entry.role)).toEqual([ROOKIE, VETERAN]);
   });
 
-  it('rejects a malformed level_roles block a property check would have accepted', async () => {
-    const { bot, interaction } = build({ config: { level_roles: 42 } });
+  it('swaps a promoted member to their new role and counts the changes', async () => {
+    const promoted = memberWith('u1', [ROOKIE.id]);
+    const unranked = memberWith('u2', []);
+    const guild = guildWith([promoted, unranked]);
 
-    await new UpdateRole().execute(interaction, bot);
+    const summary = await syncLevelRoles(
+      guild,
+      [player('u1', 21), player('u2', 1)],
+      levels,
+      undefined,
+    );
 
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'replies:update_role.no_config',
-    });
-    expect(getLeaderboardPage).not.toHaveBeenCalled();
+    expect(summary).toEqual({ granted: 1, removed: 1, failed: 0 });
+    expect([...promoted.roles.cache.keys()]).toEqual([VETERAN.id]);
   });
 
-  it('runs the sync for a well-formed config on a registered guild', async () => {
-    const { bot, interaction } = build({});
+  it('keeps the previous role when granting its replacement fails', async () => {
+    const member = memberWith('u1', [ROOKIE.id]);
+    member.roles.add.mockRejectedValueOnce(new Error('Missing Permissions'));
 
-    await new UpdateRole().execute(interaction, bot);
+    const summary = await syncLevelRoles(
+      guildWith([member]),
+      [player('u1', 21)],
+      levels,
+      undefined,
+    );
 
-    expect(getLeaderboardPage).toHaveBeenCalledWith(GUILD_ID);
-    expect(interaction.editReply).toHaveBeenCalledWith({ content: 'replies:update_role.done' });
+    expect(summary).toEqual({ granted: 0, removed: 0, failed: 1 });
+    expect(member.roles.cache.has(ROOKIE.id)).toBe(true);
+    expect(member.roles.remove).not.toHaveBeenCalled();
+  });
+
+  it('counts members unresolved after a failed fetch and still syncs cached members', async () => {
+    const member = memberWith('cached', []);
+    const guild = guildWith([member]);
+    const error = new Error('Gateway timeout');
+    vi.mocked(guild.members.fetch).mockRejectedValueOnce(error);
+    const logger = { warn: vi.fn() };
+
+    const summary = await syncLevelRoles(
+      guild,
+      [player('cached', 5), player('missing-1', 5), player('missing-2', 20)],
+      levels,
+      logger,
+    );
+
+    expect(summary).toEqual({ granted: 1, removed: 0, failed: 2 });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { err: error, guildId: 'g1', memberIds: ['missing-1', 'missing-2'] },
+      'level role member fetch failed',
+    );
+  });
+
+  it('does not count departed members omitted by a successful fetch as failures', async () => {
+    const logger = { warn: vi.fn() };
+
+    const summary = await syncLevelRoles(guildWith([]), [player('departed', 20)], levels, logger);
+
+    expect(summary).toEqual({ granted: 0, removed: 0, failed: 0 });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('syncs members populated before a partial fetch failure', async () => {
+    const member = memberWith('fetched', []);
+    const guild = guildWith([]);
+    vi.mocked(guild.members.fetch).mockImplementationOnce(async () => {
+      guild.members.cache.set(member.id, member as never);
+      throw new Error('Gateway timeout');
+    });
+
+    const summary = await syncLevelRoles(
+      guild,
+      [player('fetched', 5), player('missing', 5)],
+      levels,
+      undefined,
+    );
+
+    expect(summary).toEqual({ granted: 1, removed: 0, failed: 1 });
+  });
+
+  it('counts a failed member and carries on', async () => {
+    const broken = memberWith('u1', []);
+    broken.roles.add.mockRejectedValueOnce(new Error('Missing Permissions'));
+    const fine = memberWith('u2', []);
+
+    const summary = await syncLevelRoles(
+      guildWith([broken, fine]),
+      [player('u1', 5), player('u2', 5)],
+      levels,
+      { warn: vi.fn() },
+    );
+
+    expect(summary).toEqual({ granted: 1, removed: 0, failed: 1 });
+  });
+});
+
+describe('/role sync', () => {
+  const run = async (
+    guildId: string,
+    config: unknown = { level_roles: { level_5: ROOKIE.id } },
+  ) => {
+    const reply = vi.fn(async () => undefined);
+    const editReply = vi.fn(async () => undefined);
+    const interaction = {
+      reply,
+      editReply,
+      deferReply: vi.fn(async () => undefined),
+      deferred: true,
+      replied: false,
+      guild: { ...guildWith([]), id: guildId },
+      guildId,
+    } as unknown as ChatInputCommandInteraction;
+    const { bot } = buildFakeBot({ config });
+    await new LevelRoleSync().execute(interaction, bot);
+    return { reply, editReply };
+  };
+
+  it('answers with one summary, then refuses a second run within ten minutes', async () => {
+    fetchMee6Leaderboard.mockResolvedValue([]);
+
+    const first = await run('g-cooldown');
+    expect(first.editReply).toHaveBeenCalledWith({ content: 'replies:update_role.summary' });
+
+    const second = await run('g-cooldown');
+    expect(second.reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'replies:update_role.cooldown' }),
+    );
+  });
+
+  it('explains an unreadable leaderboard and allows an immediate retry', async () => {
+    fetchMee6Leaderboard.mockRejectedValueOnce(new Error('403'));
+    const failed = await run('g-unavailable');
+    expect(failed.editReply).toHaveBeenCalledWith({ content: 'replies:update_role.unavailable' });
+
+    fetchMee6Leaderboard.mockResolvedValueOnce([]);
+    const retried = await run('g-unavailable');
+    expect(retried.editReply).toHaveBeenCalledWith({ content: 'replies:update_role.summary' });
+  });
+
+  it('answers no_config when level roles are not configured', async () => {
+    const { reply } = await run('g-none', {});
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'replies:update_role.no_config' }),
+    );
   });
 });

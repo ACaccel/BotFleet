@@ -27,18 +27,34 @@
     }
   },
   "gay": {
-    "description": "是不是給",
+    "description": "測量成員的 gay 指數,或兩人的 CP 指數(純娛樂)",
     "options": {
       "user": {
-        "description": "選擇對象"
+        "description": "要測量的成員"
+      },
+      "user2": {
+        "description": "第二位成員,填了就改測兩人的 CP 指數"
       }
     }
   },
   "give_score": {
-    "description": "給分"
+    "description": "幫任何東西打 0-10 分,每天結果固定",
+    "options": {
+      "subject": {
+        "description": "要評分的東西(不填則幫你自己打分)"
+      },
+      "user": {
+        "description": "要評分的成員"
+      }
+    }
   },
   "help": {
-    "description": "顯示指令清單與說明"
+    "description": "顯示指令清單,或查看某個指令的詳細用法",
+    "options": {
+      "command": {
+        "description": "要查看的指令"
+      }
+    }
   },
   "level_detail": {
     "description": "查看 MEE6 等級排行中某段名次的詳細數據",
@@ -80,14 +96,6 @@
       }
     }
   },
-  "role_message": {
-    "description": "發送身分組領取訊息",
-    "options": {
-      "roles": {
-        "description": "可領取身分組id (ex: @身分組1 @身分組2...)"
-      }
-    }
-  },
   "roll_call": {
     "description": "點名",
     "options": {
@@ -100,37 +108,18 @@
     }
   },
   "talk": {
-    "description": "[管理員] 讓機器人說話(不署名)",
+    "description": "讓 bot 代你發言(預設會署名)",
     "options": {
+      "content": {
+        "description": "要說的話(最多 1900 字)"
+      },
       "channel": {
-        "description": "選擇頻道"
+        "description": "發送到哪個頻道(預設為目前頻道)"
       },
-      "content": {
-        "description": "就是內容"
+      "anonymous": {
+        "description": "不署名發送(僅 bot 管理員)"
       }
     }
-  },
-  "talk_signed": {
-    "description": "讓機器人說話(署名)",
-    "options": {
-      "content": {
-        "description": "就是內容"
-      }
-    }
-  },
-  "temp_role": {
-    "description": "建立一個暫時性的通知身分組,任何人都能領取,到期後自動刪除",
-    "options": {
-      "name": {
-        "description": "身分組名稱"
-      },
-      "days": {
-        "description": "存活天數 (1-30,預設 30)"
-      }
-    }
-  },
-  "update_role": {
-    "description": "更新Mee6等級身分組"
   },
   "archive": {
     "description": "管理 msg-archive 的完整備份與日常備份",
@@ -606,6 +595,51 @@
           },
           "top_n": {
             "description": "排行顯示幾名 (optional,1-12,預設:12)"
+          }
+        }
+      }
+    }
+  },
+  "role": {
+    "description": "領取或管理身分組",
+    "subcommands": {
+      "panel": {
+        "description": "發送身分組領取面板(需要管理身分組權限)",
+        "options": {
+          "roles": {
+            "description": "要放上面板的身分組,直接 @ 提及,可以多個"
+          }
+        }
+      },
+      "sync": {
+        "description": "依 MEE6 等級立即同步等級身分組"
+      }
+    },
+    "groups": {
+      "temp": {
+        "description": "暫時通知身分組",
+        "subcommands": {
+          "create": {
+            "description": "建立暫時通知身分組,任何人可領取,到期自動刪除",
+            "options": {
+              "name": {
+                "description": "身分組名稱(會自動加上 🔔)"
+              },
+              "days": {
+                "description": "存活天數(1-30,預設 30)"
+              }
+            }
+          },
+          "list": {
+            "description": "列出進行中的暫時通知身分組"
+          },
+          "delete": {
+            "description": "提前刪除暫時通知身分組(建立者或管理員)",
+            "options": {
+              "role": {
+                "description": "要刪除的暫時通知身分組"
+              }
+            }
           }
         }
       }

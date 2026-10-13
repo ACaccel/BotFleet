@@ -11,12 +11,17 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_RATE_LIMIT } from '../../../src/application/ai/policy';
 import { createLlmChatPlugin } from '../../../src/plugins/llm-chat';
 import type { PluginEventContext } from '../../../src/core/plugin';
 
 describe('createLlmChatPlugin dependency wiring', () => {
   it('refuses to run an event that somehow precedes init', async () => {
-    const handler = createLlmChatPlugin({ clientId: 'bot-1' }).events?.messageCreate;
+    const handler = createLlmChatPlugin({
+      clientId: 'bot-1',
+      policy: { rateLimit: DEFAULT_RATE_LIMIT },
+      isAdmin: () => false,
+    }).events?.messageCreate;
     if (handler === undefined) throw new Error('llm-chat must subscribe to messageCreate');
 
     await expect(
