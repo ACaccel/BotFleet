@@ -415,15 +415,31 @@ const partnerFacets = (
   };
 };
 
-/** Live messages ordered by their last observed reaction total. */
+/** A membership chunk's stream and generation, comparable with {@link publishedStreams}. */
+const chunkStream: Stage = {
+  k: { $concat: ['$emojiKey', ':', { $toString: '$type' }] },
+  generation: '$generation',
+};
+/** The published stream generations of a message's `reactionGenerations`. */
+const publishedStreams = (generations: string): Stage => ({
+  $map: {
+    input: { $objectToArray: { $ifNull: [generations, {}] } },
+    in: { k: '$$this.k', generation: '$$this.v.generation' },
+  },
+});
+
+/**
+ * Live messages ordered by how many distinct users reacted, counted from the
+ * published membership generations; ties by reaction total, then age. A message
+ * whose member lists are missing or partial counts at least its largest single
+ * reaction. That count bounds the distinct users from below and the reaction total
+ * bounds them from above, so only messages whose total reaches the `limit`-th
+ * largest single reaction can rank, and only those load their member lists.
+ */
 const topMessagesFacet = (limit: number, window: StatsWindow): Facets => ({
   topMessages: [
     windowMatch(window),
     { $match: { deletedAt: { $exists: false }, 'reactions.0': { $exists: true } } },
-    { $addFields: { totalReactions: { $sum: '$reactions.count' } } },
-    { $match: { totalReactions: { $gt: 0 } } },
-    { $sort: { totalReactions: -1, createdTimestamp: 1, _id: 1 } },
-    { $limit: limit },
     {
       $project: {
         channelId: 1,
@@ -440,9 +456,61 @@ const topMessagesFacet = (limit: number, window: StatsWindow): Facets => ({
         'poll.question.text': 1,
         'messageSnapshots.content': 1,
         reactions: 1,
-        totalReactions: 1,
+        reactionGenerations: 1,
       },
     },
+    {
+      $addFields: {
+        totalReactions: { $sum: '$reactions.count' },
+        largestReaction: { $max: '$reactions.count' },
+      },
+    },
+    { $match: { totalReactions: { $gt: 0 } } },
+    {
+      $setWindowFields: {
+        output: {
+          leaders: {
+            $topN: { n: limit, sortBy: { largestReaction: -1 }, output: '$largestReaction' },
+            window: { documents: ['unbounded', 'unbounded'] },
+          },
+        },
+      },
+    },
+    {
+      $match: {
+        $expr: {
+          $or: [
+            { $lt: [{ $size: '$leaders' }, limit] },
+            { $gte: ['$totalReactions', { $last: '$leaders' }] },
+          ],
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: 'archive_reactions',
+        localField: '_id',
+        foreignField: 'messageId',
+        let: { published: publishedStreams('$reactionGenerations') },
+        pipeline: [
+          { $match: { $expr: { $in: [chunkStream, '$$published'] } } },
+          { $unwind: '$userIds' },
+          { $group: { _id: '$userIds' } },
+          { $count: 'count' },
+        ],
+        as: 'members',
+      },
+    },
+    {
+      $addFields: {
+        reactors: {
+          $max: [{ $ifNull: [{ $first: '$members.count' }, 0] }, '$largestReaction'],
+        },
+      },
+    },
+    { $sort: { reactors: -1, totalReactions: -1, createdTimestamp: 1, _id: 1 } },
+    { $limit: limit },
+    { $unset: ['reactionGenerations', 'largestReaction', 'leaders', 'members'] },
   ],
 });
 
@@ -541,15 +609,7 @@ export const reactionsGivenPipeline = (
     $match: {
       'message.author.id': { $exists: true, $ne: userId },
       $expr: {
-        $in: [
-          { k: { $concat: ['$emojiKey', ':', { $toString: '$type' }] }, generation: '$generation' },
-          {
-            $map: {
-              input: { $objectToArray: { $ifNull: ['$message.reactionGenerations', {}] } },
-              in: { k: '$$this.k', generation: '$$this.v.generation' },
-            },
-          },
-        ],
+        $in: [chunkStream, publishedStreams('$message.reactionGenerations')],
       },
     },
   },

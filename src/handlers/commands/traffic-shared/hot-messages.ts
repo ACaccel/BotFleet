@@ -128,6 +128,7 @@ export const hotMessagesText = (input: HotMessagesInput): string | undefined => 
       t('replies:traffic.hot.meta', {
         author: escapeMarkdown(input.author(message), ESCAPE_ALL),
         channel: escapeMarkdown(`#${input.names.channel(message.channelId)}`, ESCAPE_ALL),
+        reactors: t('replies:traffic.hot.reactors', { count: message.reactors }),
         top,
       }),
     ];

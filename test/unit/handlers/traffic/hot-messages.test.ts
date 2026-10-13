@@ -3,7 +3,7 @@
  * characters, inert (markdown and masked links escaped, mentions and custom
  * emoji turned into plain text, spoilers hidden), and a message without text
  * names what it carries. The text is a heading line, then each message with
- * its jump link and reaction counts, and nothing else.
+ * its jump link, reactor count and reaction counts, and nothing else.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -34,6 +34,7 @@ const message = (overrides: Partial<TopReactedMessage> = {}): TopReactedMessage 
   attachments: [],
   stickers: [],
   totalReactions: 3,
+  reactors: 3,
   reactions: [{ key: '👍', name: '👍', count: 3 }],
   ...overrides,
 });
@@ -124,7 +125,7 @@ describe('hotMessagesText', () => {
     ).toBeUndefined();
   });
 
-  it('lists each message under the heading with its jump link, author, channel and top reactions', () => {
+  it('lists each message under the heading with its jump link, author, channel, reactor count and top reactions', () => {
     const text = hotMessagesText({
       messages: [
         message({
@@ -135,6 +136,7 @@ describe('hotMessagesText', () => {
             { key: '🎉', count: 1 },
           ],
           totalReactions: 16,
+          reactors: 12,
         }),
       ],
       guildId: 'g1',
@@ -150,7 +152,8 @@ describe('hotMessagesText', () => {
     expect(meta).toContain('"author":"Alice\\\\_\\\\*"');
     expect(meta).toContain('"channel":"#general"');
     expect(meta).toContain('"top":"😂 9 · <a:blob:42> 4 · 👍 2"');
-    // The meta line carries only author, channel and the top reactions.
+    expect(meta).toContain('"reactors":"[replies:traffic.hot.reactors|{\\"count\\":12}]"');
+    // The meta line carries only author, channel, the reactor count and the top reactions.
     expect(meta).not.toContain('"number"');
     expect(meta).not.toContain('"time"');
     expect(description).not.toMatch(/delet/i);

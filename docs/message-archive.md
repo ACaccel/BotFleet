@@ -671,11 +671,14 @@ no permission". Message previews name only channels the reply may count. Only th
 report follows `visibility`: a busy refusal, a notice such as "no data" or "not
 found", and an error always reach only the invoker, even for a `public` report.
 
-The top messages are the three live member messages with the most reactions. Each
-preview shows at most 30 characters of the current text with markdown and masked
-links escaped, mentions and custom emoji as plain names, spoilers hidden, and a
-placeholder such as "(2 images)" for a message without text; the jump link is in the
-embed text.
+The top messages are the three live member messages with the most distinct users
+reacting, counted from the stored reaction member lists; ties go to the higher
+reaction total, then the older message. A message whose member lists are missing or
+partial counts at least its largest single reaction. Each line shows that user count
+beside the top reactions. Each preview shows at most 30 characters of the current
+text with markdown and masked links escaped, mentions and custom emoji as plain
+names, spoilers hidden, and a placeholder such as "(2 images)" for a message without
+text; the jump link is in the embed text.
 
 Data limits, not repeated in the replies: reaction counts are the last observed
 values; command use covers only interactions that left a public reply and has no data

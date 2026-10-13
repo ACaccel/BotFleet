@@ -162,6 +162,11 @@ export interface TopReactedMessage {
   /** Text of a forwarded message. */
   readonly forwardedContent?: string;
   readonly totalReactions: number;
+  /**
+   * Distinct users who reacted, from the stored member lists; at least the largest
+   * single reaction count when those lists are missing or partial.
+   */
+  readonly reactors: number;
   /** Highest count first. */
   readonly reactions: readonly ReactionCount[];
 }

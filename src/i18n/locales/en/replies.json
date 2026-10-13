@@ -366,7 +366,9 @@
       "empty": "(no text)",
       "carries": "({{items}})",
       "line": "**{{rank}}.** {{preview}}  [Jump to message]({{url}})",
-      "meta": "-# {{author}} · {{channel}} ({{top}})"
+      "reactors_one": "{{count}} person",
+      "reactors_other": "{{count}} people",
+      "meta": "-# {{author}} · {{channel}} · {{reactors}} ({{top}})"
     },
     "apps": {
       "title": "App usage · {{range}}",

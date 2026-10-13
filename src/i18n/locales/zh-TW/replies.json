@@ -366,7 +366,9 @@
       "empty": "（沒有文字）",
       "carries": "（{{items}}）",
       "line": "**{{rank}}.** {{preview}}　[前往訊息]({{url}})",
-      "meta": "-# {{author}} · {{channel}}（{{top}}）"
+      "reactors_one": "{{count}} 人",
+      "reactors_other": "{{count}} 人",
+      "meta": "-# {{author}} · {{channel}} · {{reactors}}（{{top}}）"
     },
     "apps": {
       "title": "應用程式使用 · {{range}}",

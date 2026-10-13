@@ -634,7 +634,7 @@ describe('ArchiveStatsRepo member interactions', () => {
 });
 
 describe('ArchiveStatsRepo hot messages', () => {
-  it('orders live member messages by reaction total and returns the preview fields', async () => {
+  it('orders live member messages by their largest reaction without member lists and returns the preview fields', async () => {
     const reactions = (count: number) => [{ emoji: { name: '👍' }, count }];
     const top = message({
       author: { id: 'a', username: 'alice', globalName: 'Alice' },
@@ -681,6 +681,7 @@ describe('ArchiveStatsRepo hot messages', () => {
         attachments: [{ contentType: 'image/png', name: 'a.png' }],
         stickers: [{ id: 's1', name: 'wave' }],
         totalReactions: 10,
+        reactors: 7,
         reactions: [
           { key: 'e1', emojiId: 'e1', name: 'party', count: 7 },
           { key: '👍', name: '👍', count: 3 },
@@ -694,6 +695,86 @@ describe('ArchiveStatsRepo hot messages', () => {
       });
       expect(all[3]?.content).toBeUndefined();
     });
+  });
+  it('orders by distinct users in the published member lists, then by reaction total', async () => {
+    const users = (prefix: string, count: number) =>
+      Array.from({ length: count }, (_, i) => `${prefix}${i}`);
+    const generations = (keys: readonly string[], generation = 'g1') =>
+      Object.fromEntries(keys.map((key) => [key, { generation, observedAt: T0, complete: true }]));
+    const members = (
+      target: ArchiveMessage,
+      emojiKey: string,
+      userIds: string[],
+      fields: Partial<ArchiveReactionDoc> = {},
+    ): ArchiveReactionDoc => ({
+      messageId: target._id,
+      channelId: target.channelId,
+      emojiKey,
+      type: 0,
+      generation: 'g1',
+      chunk: 0,
+      userIds,
+      observedAt: T0,
+      ...fields,
+    });
+    // The same six users on both reactions.
+    const repeated = message({
+      author: { id: 'a' },
+      reactions: [
+        { emoji: { name: '👍' }, count: 6 },
+        { emoji: { name: '🎉' }, count: 6 },
+      ],
+      reactionGenerations: generations(['👍:0', '🎉:0']),
+    });
+    // Twelve different users, one of them a super reaction.
+    const spread = message({
+      author: { id: 'b' },
+      at: T0 + 2 * HOUR,
+      reactions: [
+        { emoji: { name: '👍' }, count: 4 },
+        { emoji: { name: '🎉' }, count: 4 },
+        { emoji: { name: '😂' }, count: 4 },
+      ],
+      reactionGenerations: generations(['👍:0', '🎉:0', '😂:0', '😂:1']),
+    });
+    // A superseded generation awaiting garbage collection does not count.
+    const superseded = message({
+      author: { id: 'c' },
+      at: T0 + 3 * HOUR,
+      reactions: [{ emoji: { name: '👍' }, count: 5 }],
+      reactionGenerations: generations(['👍:0']),
+    });
+    const unlisted = message({
+      author: { id: 'd' },
+      at: T0 + 4 * HOUR,
+      reactions: [{ emoji: { name: '👍' }, count: 3 }],
+    });
+    const reactions = [
+      members(repeated, '👍', users('r', 6)),
+      members(repeated, '🎉', users('r', 6)),
+      members(spread, '👍', users('x', 4)),
+      members(spread, '🎉', users('y', 4)),
+      members(spread, '😂', users('z', 3)),
+      members(spread, '😂', ['burst'], { type: 1 }),
+      members(superseded, '👍', users('s', 5)),
+      members(superseded, '👍', users('old', 20), { generation: 'g0' }),
+    ];
+    await withFixture(
+      { messages: [repeated, spread, superseded, unlisted], reactions },
+      async ({ repo }) => {
+        const all = unwrap(await topMessagesOf(repo, WEEK, scope, 4));
+        expect(all.map((entry) => [entry.messageId, entry.reactors, entry.totalReactions])).toEqual(
+          [
+            [spread._id, 12, 12],
+            [repeated._id, 6, 12],
+            [superseded._id, 5, 5],
+            [unlisted._id, 3, 3],
+          ],
+        );
+        const top = unwrap(await topMessagesOf(repo, WEEK, scope, 2));
+        expect(top.map((entry) => entry.messageId)).toEqual([spread._id, repeated._id]);
+      },
+    );
   });
 });
 

@@ -471,6 +471,7 @@ const topMessage = (row: Row): TopReactedMessage => {
     ...(pollQuestion === undefined ? {} : { pollQuestion }),
     ...(forwardedContent === undefined ? {} : { forwardedContent }),
     totalReactions: num(row.totalReactions),
+    reactors: num(row.reactors),
     reactions,
   };
 };

@@ -103,6 +103,7 @@ const hotMessages = (): TopReactedMessage[] => [
     attachments: [],
     stickers: [],
     totalReactions: 486,
+    reactors: 324,
     reactions: [
       { key: '😂', name: '😂', count: 214 },
       { key: 'e1', emojiId: 'e1', name: 'pepe_laugh', count: 147 },
@@ -119,6 +120,7 @@ const hotMessages = (): TopReactedMessage[] => [
     attachments: [{ contentType: 'image/png' }],
     stickers: [],
     totalReactions: 352,
+    reactors: 234,
     reactions: [{ key: '👍', name: '👍', count: 201 }],
   },
   {
@@ -131,6 +133,7 @@ const hotMessages = (): TopReactedMessage[] => [
     attachments: [{ contentType: 'image/png' }, { contentType: 'image/jpeg' }],
     stickers: [],
     totalReactions: 301,
+    reactors: 200,
     reactions: [{ key: '👍', name: '👍', count: 133 }],
   },
 ];
