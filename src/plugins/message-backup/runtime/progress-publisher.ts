@@ -2,13 +2,17 @@ import { randomUUID } from 'node:crypto';
 import { ARCHIVE_PROCESS_ID } from '../../../infra/archive/owner';
 import { ProgressNotifier } from '../flow/progress';
 import type { ArchiveGuildState, ArchiveWorkerContextFor } from './worker-context';
+import type { NotificationRecovery } from './notification-recovery';
 
 /**
  * Publishes a running scan's progress: saved with the full backup or the periodic
- * run, and shown on a full backup's panel.
+ * run, and shown on its Discord panel.
  */
 export class ProgressPublisher {
-  public constructor(private readonly ctx: ArchiveWorkerContextFor<'config' | 'logger'>) {}
+  public constructor(
+    private readonly ctx: ArchiveWorkerContextFor<'config' | 'logger'>,
+    private readonly notifications: Pick<NotificationRecovery, 'publishPeriodicProgress'>,
+  ) {}
 
   public async notify(
     guildId: string,
@@ -29,7 +33,7 @@ export class ProgressPublisher {
   /**
    * Every ten seconds, and at once on state changes, the snapshot is saved with the
    * full backup (renewing its lease) or the periodic run. A full backup's panel is
-   * edited too; periodic passes post nothing to Discord.
+   * edited too, as is the current periodic pass's debug-channel panel.
    */
   private async start(
     guildId: string,
@@ -61,6 +65,12 @@ export class ProgressPublisher {
           );
         } else if (scanId !== undefined) {
           await state.archive.periodicRuns.update(scanId, { progress: snapshot });
+          await this.ctx.scheduler.run(
+            `notify:${guildId}:${scanId}`,
+            'live',
+            () => this.notifications.publishPeriodicProgress(guildId, state, snapshot),
+            { signal: state.signal.signal },
+          );
         }
       } catch (error) {
         this.ctx.options.logger.warn(

@@ -209,28 +209,40 @@ export const deliverArchiveScheduleNotice = async (
 /** What happened to a pass summary; `deleteError` is set when the replaced one remains. */
 export type ArchiveSummaryDelivery =
   | { readonly kind: 'none' }
-  | { readonly kind: 'sent'; readonly deleteError?: unknown };
+  | { readonly kind: 'sent'; readonly deleteError?: unknown }
+  | { readonly kind: 'edited' };
 
 /**
- * Posts a periodic pass summary to the debug channel, then deletes the summary it
- * replaces so the channel keeps only the latest. A failed send throws and keeps the
- * previous summary. Deleting a summary that is already gone, or no longer
- * accessible, counts as done; other delete failures leave it in place.
+ * Posts a panel when a pass starts, then edits that message through completion.
+ * A new pass replaces the previous panel. A failed send keeps the old message;
+ * a missing current message is recreated, while other edit failures propagate.
  */
 export const publishArchivePeriodicSummary = async (
   schedule: Pick<ArchiveScheduleRepo, 'read' | 'replaceSummary'>,
   channel: SendableChannels | undefined,
-  rest: Pick<Client['rest'], 'delete'>,
+  rest: Pick<Client['rest'], 'delete' | 'patch'>,
   translator: ArchiveText,
   summary: ArchivePeriodicSummary,
 ): Promise<ArchiveSummaryDelivery> => {
   if (channel === undefined) return { kind: 'none' };
-  const { nextRunAt } = await schedule.read();
+  const { nextRunAt, summary: current } = await schedule.read();
   const panel = renderArchivePeriodicSummary(translator, summary, nextRunAt);
+  if (current?.startedAt === summary.startedAt) {
+    try {
+      await rest.patch(Routes.channelMessage(current.channelId, current.messageId), {
+        body: { embeds: panel.embeds, allowed_mentions: { parse: [] } },
+      });
+      return { kind: 'edited' };
+    } catch (error) {
+      // Recreate only a deleted message; lost permissions must not cause repeated sends.
+      if ((error as { code?: unknown } | null)?.code !== 10008) throw error;
+    }
+  }
   const sent = await channel.send({ embeds: panel.embeds, allowedMentions: { parse: [] } });
   const previous = await schedule.replaceSummary({
     channelId: sent.channelId,
     messageId: sent.id,
+    startedAt: summary.startedAt,
   });
   if (previous === undefined || previous.messageId === sent.id) return { kind: 'sent' };
   try {

@@ -11,7 +11,7 @@ import {
   publishArchivePeriodicSummary,
 } from '../../../src/plugins/message-backup/runtime/backup-notifier';
 import type {
-  ArchiveMessageRef,
+  ArchivePeriodicMessageRef,
   ArchivePeriodicSummary,
   ArchiveScheduleNotice,
 } from '../../../src/core/archive/schedule';
@@ -220,31 +220,92 @@ describe('periodic pass summary', () => {
     finishedAt: 2000,
     gapCount: 0,
   };
-  const target = (previous?: ArchiveMessageRef) => ({
+  const target = (previous?: ArchivePeriodicMessageRef) => ({
     read: vi.fn().mockResolvedValue({ nextRunAt: 5000 }),
     replaceSummary: vi.fn().mockResolvedValue(previous),
   });
   const sent = vi.fn().mockResolvedValue({ id: '61', channelId: '10' });
 
+  it('edits progress and the final result without replacing the current pass message', async () => {
+    const schedule = target();
+    schedule.read.mockResolvedValue({
+      nextRunAt: 5000,
+      summary: { channelId: '10', messageId: '61', startedAt: summary.startedAt },
+    });
+    const send = vi.fn();
+    const rest = { patch: vi.fn().mockResolvedValue(undefined), delete: vi.fn() };
+    for (const status of ['running', 'complete', 'cancelled', 'failed'] as const) {
+      expect(
+        await publishArchivePeriodicSummary(schedule, channel(send), rest, translator, {
+          ...summary,
+          status,
+        }),
+      ).toEqual({ kind: 'edited' });
+    }
+    expect(rest.patch).toHaveBeenCalledTimes(4);
+    expect(rest.patch).toHaveBeenLastCalledWith('/channels/10/messages/61', {
+      body: expect.objectContaining({ allowed_mentions: { parse: [] } }),
+    });
+    expect(send).not.toHaveBeenCalled();
+    expect(rest.delete).not.toHaveBeenCalled();
+    expect(schedule.replaceSummary).not.toHaveBeenCalled();
+  });
+
+  it('recreates a deleted current message but keeps its reference on transient edit failure', async () => {
+    const schedule = target({ channelId: '10', messageId: '60', startedAt: 1000 });
+    schedule.read.mockResolvedValue({
+      nextRunAt: 5000,
+      summary: { channelId: '10', messageId: '60', startedAt: 1000 },
+    });
+    const rest = {
+      patch: vi.fn().mockRejectedValue(Object.assign(new Error('gone'), { code: 10008 })),
+      delete: vi.fn().mockResolvedValue(undefined),
+    };
+    expect(
+      await publishArchivePeriodicSummary(schedule, channel(sent), rest, translator, summary),
+    ).toEqual({ kind: 'sent' });
+    expect(schedule.replaceSummary).toHaveBeenCalledWith({
+      channelId: '10',
+      messageId: '61',
+      startedAt: 1000,
+    });
+    const send = vi.fn();
+    rest.patch.mockRejectedValue(new Error('timeout'));
+    await expect(
+      publishArchivePeriodicSummary(schedule, channel(send), rest, translator, summary),
+    ).rejects.toThrow('timeout');
+    rest.patch.mockRejectedValue(Object.assign(new Error('forbidden'), { code: 50013 }));
+    await expect(
+      publishArchivePeriodicSummary(schedule, channel(send), rest, translator, summary),
+    ).rejects.toThrow('forbidden');
+    expect(send).not.toHaveBeenCalled();
+    expect(schedule.replaceSummary).toHaveBeenCalledTimes(1);
+  });
+
   it('posts the summary without mentions and deletes the one it replaces', async () => {
     const schedule = target({ channelId: '9', messageId: '60' });
-    const rest = { delete: vi.fn().mockResolvedValue(undefined) };
+    const rest = { patch: vi.fn(), delete: vi.fn().mockResolvedValue(undefined) };
     expect(
       await publishArchivePeriodicSummary(schedule, channel(sent), rest, translator, summary),
     ).toEqual({ kind: 'sent' });
     expect(sent).toHaveBeenCalledWith(expect.objectContaining({ allowedMentions: { parse: [] } }));
-    expect(schedule.replaceSummary).toHaveBeenCalledWith({ channelId: '10', messageId: '61' });
+    expect(schedule.replaceSummary).toHaveBeenCalledWith({
+      channelId: '10',
+      messageId: '61',
+      startedAt: 1000,
+    });
     expect(rest.delete).toHaveBeenCalledWith('/channels/9/messages/60');
   });
 
   it('deletes nothing for the first summary', async () => {
-    const rest = { delete: vi.fn() };
+    const rest = { patch: vi.fn(), delete: vi.fn() };
     await publishArchivePeriodicSummary(target(), channel(sent), rest, translator, summary);
     expect(rest.delete).not.toHaveBeenCalled();
   });
 
   it('treats a gone summary as deleted and reports other delete failures', async () => {
     const gone = {
+      patch: vi.fn(),
       delete: vi.fn().mockRejectedValue(Object.assign(new Error('x'), { code: 10008 })),
     };
     expect(
@@ -257,7 +318,7 @@ describe('periodic pass summary', () => {
       ),
     ).toEqual({ kind: 'sent' });
     const error = new Error('socket hang up');
-    const flaky = { delete: vi.fn().mockRejectedValue(error) };
+    const flaky = { patch: vi.fn(), delete: vi.fn().mockRejectedValue(error) };
     expect(
       await publishArchivePeriodicSummary(
         target({ channelId: '9', messageId: '60' }),
@@ -271,7 +332,7 @@ describe('periodic pass summary', () => {
 
   it('keeps the previous summary when the send fails, and skips without a channel', async () => {
     const schedule = target({ channelId: '9', messageId: '60' });
-    const rest = { delete: vi.fn() };
+    const rest = { patch: vi.fn(), delete: vi.fn() };
     const failingSend = vi.fn().mockRejectedValue(new Error('socket hang up'));
     await expect(
       publishArchivePeriodicSummary(schedule, channel(failingSend), rest, translator, summary),

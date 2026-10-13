@@ -6,7 +6,11 @@ import {
   type ArchivePeriodicRun,
   type ArchiveTerminalStatus,
 } from '../../../core/archive/types';
-import { ARCHIVE_JOB_RECORDS_KEPT, ARCHIVE_LIMITS } from '../../../core/archive/limits';
+import {
+  ARCHIVE_DEFAULT_INTERVAL_MS,
+  ARCHIVE_JOB_RECORDS_KEPT,
+  ARCHIVE_LIMITS,
+} from '../../../core/archive/limits';
 import { archiveRetryDelay, type ArchivePeriodicSummary } from '../../../core/archive/schedule';
 import { continuityFullChannelIds, continuityRescanFrom } from '../../../core/archive/continuity';
 import { ProgressTracker } from '../flow/progress';
@@ -112,6 +116,12 @@ export class PeriodicRunner {
   public async run(guildId: string, shouldContinue?: () => Promise<boolean>): Promise<void> {
     const state = await this.ctx.initialize(guildId);
     const pass = await this.startPeriodic(state, guildId, shouldContinue);
+    if (pass?.summary !== undefined)
+      await this.deps.notifications.publishPeriodicSummary(
+        guildId,
+        state.archive.schedule(ARCHIVE_DEFAULT_INTERVAL_MS),
+        pass.summary,
+      );
     if (pass !== undefined && 'error' in pass) throw pass.error;
   }
 
@@ -211,6 +221,14 @@ export class PeriodicRunner {
         progress: initialProgress,
         passStartedAt,
       });
+      await this.deps.notifications.publishPeriodicSummary(
+        guildId,
+        state.archive.schedule(ARCHIVE_DEFAULT_INTERVAL_MS),
+        {
+          ...periodicSummary(current, 'running', passStartedAt, 0, undefined),
+          progress: initialProgress,
+        },
+      );
       // Traced only once the run that rescans their sources is durable.
       if (deadLetters.length > 0)
         await state.repos.inbox.traceDeadLetters(deadLetters, current.runId);
@@ -253,7 +271,7 @@ export class PeriodicRunner {
         await this.deps.continuity.settleCoverage(state, current);
         return { outcome: { kind: 'complete' }, summary: summary('complete') };
       }
-      if (!blocked) return { outcome: { kind: 'interrupted' } };
+      if (!blocked) return { outcome: { kind: 'interrupted' }, summary: summary('cancelled') };
       const reason = archiveGapReason(result.issues[0] ?? '');
       return { outcome: { kind: 'partial' }, reason, summary: summary('partial', reason) };
     } catch (error) {
@@ -285,7 +303,13 @@ export class PeriodicRunner {
           issueCount: 1,
         });
       }
-      if (interrupted) return { outcome: { kind: 'interrupted' } };
+      if (interrupted)
+        return {
+          outcome: { kind: 'interrupted' },
+          ...(run === undefined
+            ? {}
+            : { summary: periodicSummary(run, 'cancelled', passStartedAt, 0, undefined) }),
+        };
       const reason = archiveGapReason(String(error));
       return {
         outcome: { kind: 'failed', consecutiveFailures },

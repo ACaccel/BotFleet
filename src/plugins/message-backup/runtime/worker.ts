@@ -92,7 +92,7 @@ export class ArchiveWorker {
       ingestor,
       observations,
     });
-    this.progress = new ProgressPublisher(ctx);
+    this.progress = new ProgressPublisher(ctx, notifications);
     const scanner = new ScanRunner(ctx, {
       continuity: this.continuity,
       locator,

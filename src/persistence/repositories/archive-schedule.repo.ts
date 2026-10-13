@@ -1,7 +1,7 @@
 import type { Connection } from 'mongoose';
 import type {
   ArchiveInvalidRequestAlert,
-  ArchiveMessageRef,
+  ArchivePeriodicMessageRef,
   ArchiveNoticeSlot,
   ArchivePassHealth,
   ArchiveSchedule,
@@ -38,8 +38,10 @@ export interface ArchiveScheduleRepo {
     slot?: ArchiveNoticeSlot,
   ): Promise<void>;
   abandonNotice(createdAt: number, slot?: ArchiveNoticeSlot): Promise<void>;
-  /** Records the newest pass summary and returns the one it replaces. */
-  replaceSummary(summary: ArchiveMessageRef): Promise<ArchiveMessageRef | undefined>;
+  /** Records the newest pass panel and returns the one it replaces. */
+  replaceSummary(
+    summary: ArchivePeriodicMessageRef,
+  ): Promise<ArchivePeriodicMessageRef | undefined>;
   readInvalidRequests(): Promise<ArchiveInvalidRequestAlert>;
   /**
    * Raises the episode's warning unless one is already raised, or its recovery
@@ -273,11 +275,13 @@ export class MongoArchiveScheduleRepo implements ArchiveScheduleRepo {
     });
   }
 
-  public async replaceSummary(summary: ArchiveMessageRef): Promise<ArchiveMessageRef | undefined> {
+  public async replaceSummary(
+    summary: ArchivePeriodicMessageRef,
+  ): Promise<ArchivePeriodicMessageRef | undefined> {
     const before = await this.collection().findOneAndUpdate(
       { _id: 'current' },
-      { $set: { summary: { channelId: summary.channelId, messageId: summary.messageId } } },
-      { returnDocument: 'before', projection: { summary: 1 } },
+      { $set: { summary: { ...summary } }, $setOnInsert: this.defaults() },
+      { upsert: true, returnDocument: 'before', projection: { summary: 1 } },
     );
     return before?.summary;
   }

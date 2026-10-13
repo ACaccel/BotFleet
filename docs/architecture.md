@@ -282,9 +282,9 @@ active backup, the newest complete one or the newest resumable one.
 Panels render in the application layer from durable job, run, schedule and channel records, so the
 worker and button handlers share one renderer. The worker edits only a backup's own
 panel message, through a per-guild publisher the plugin injects, and leaves it alone while an operator shows gap details; worker and
-handler edits of one message share an in-process lock. Each finished periodic pass
-replaces one best-effort summary message in the debug channel, tracked in
-`archive_schedule`; three consecutive failures raise one notice stored there, and
+handler edits of one message share an in-process lock. Each periodic pass starts one best-effort progress embed in the debug channel,
+replacing the previous pass's message. Progress and the final result edit the same
+message; its ID and pass start time are tracked in `archive_schedule`; three consecutive failures raise one notice stored there, and
 the next complete pass raises one recovered notice, each delivered once across
 restarts and mentioning the bot's admins. Discord's invalid-request count gets the same treatment in its own
 `archive_schedule` document: one warning per episode and one recovery (see

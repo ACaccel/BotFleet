@@ -257,15 +257,25 @@ describe('archive schedule persistence', () => {
   it('replaces the pass summary reference and returns the one it replaced', async () =>
     withFreshConnection(async (connection) => {
       const store = new MongoArchiveScheduleRepo(connection, 60_000);
+      // Progress may be published before any schedule settings have been saved.
+      const first = { channelId: '10', messageId: '60', startedAt: 1000 };
+      const second = { channelId: '10', messageId: '61', startedAt: 2000 };
+      expect(await store.replaceSummary(first)).toBeUndefined();
+      const reopened = new MongoArchiveScheduleRepo(connection, 60_000);
+      expect(await reopened.read()).toMatchObject({
+        enabled: false,
+        intervalMs: 60_000,
+        summary: first,
+      });
       await store.update({ enabled: true });
-      expect(await store.replaceSummary({ channelId: '10', messageId: '60' })).toBeUndefined();
-      expect(await store.replaceSummary({ channelId: '10', messageId: '61' })).toEqual({
+      expect(await store.replaceSummary(second)).toEqual({
         channelId: '10',
         messageId: '60',
+        startedAt: 1000,
       });
-      expect((await store.read()).summary).toEqual({ channelId: '10', messageId: '61' });
+      expect((await store.read()).summary).toEqual(second);
       // Settings changes keep the summary reference.
       await store.update({ intervalMs: 120_000 });
-      expect((await store.read()).summary).toEqual({ channelId: '10', messageId: '61' });
+      expect((await store.read()).summary).toEqual(second);
     }));
 });

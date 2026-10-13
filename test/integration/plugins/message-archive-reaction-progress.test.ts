@@ -86,6 +86,7 @@ function fixture(
   const messages: string[] = [];
   const message = {
     id: '100',
+    channelId: '10',
     edit: vi.fn(async (options: { content: string }) => {
       messages.push(options.content);
       return message;
@@ -861,13 +862,34 @@ describe('reaction identity and job progress integration', () => {
       }
     }));
 
-  it('posts nothing to Discord for periodic passes and keeps their progress durable', async () =>
+  it('edits one periodic progress panel and keeps its reaction progress durable', async () =>
     withFreshConnection(async (connection) => {
       const f = fixture(new StaticConnectionManager(connection), true);
       try {
         await f.worker.periodic('1');
-        expect(f.debugChannel.send).not.toHaveBeenCalled();
-        expect(f.patch).not.toHaveBeenCalled();
+        expect(f.debugChannel.send).toHaveBeenCalledTimes(1);
+        expect(f.debugChannel.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            embeds: [
+              expect.objectContaining({ title: expect.stringContaining('summary_title_running') }),
+            ],
+          }),
+        );
+        expect(f.patch).toHaveBeenLastCalledWith(
+          '/channels/10/messages/100',
+          expect.objectContaining({
+            body: expect.objectContaining({
+              embeds: [
+                expect.objectContaining({
+                  title: expect.stringContaining('summary_title_complete'),
+                }),
+              ],
+            }),
+          }),
+        );
+        expect(f.patch.mock.calls.every(([route]) => route === '/channels/10/messages/100')).toBe(
+          true,
+        );
         const saved = await connection
           .collection<{
             _id: string;

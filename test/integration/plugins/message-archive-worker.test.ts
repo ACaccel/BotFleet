@@ -422,7 +422,7 @@ describe('msg-archive worker integration', () => {
       }
     }));
 
-  it('replaces the debug-channel pass summary after each pass and states the range it reread', async () =>
+  it('posts periodic progress before scanning, edits it through completion and replaces it next pass', async () =>
     withFreshConnection(async (connection) => {
       let id = 70;
       const notifications = {
@@ -430,7 +430,7 @@ describe('msg-archive worker integration', () => {
         patch: vi.fn(),
         delete: vi.fn(async () => undefined),
       };
-      const { worker } = fixture(
+      const { worker, client } = fixture(
         new StaticConnectionManager(connection),
         rawMessage,
         notifications,
@@ -444,17 +444,56 @@ describe('msg-archive worker integration', () => {
             (call as unknown as [{ embeds: { title: string; description: string }[] }])[0]
               .embeds[0],
         );
+      const edits = () =>
+        notifications.patch.mock.calls.map(
+          (call) =>
+            (
+              call as unknown as [
+                string,
+                { body: { embeds: { title: string; description: string }[] } },
+              ]
+            )[1].body.embeds[0],
+        );
+      let release!: () => void;
+      let enter!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let passing: Promise<void> | undefined;
       try {
-        await worker.scheduledPeriodic('1', 60_000);
+        await worker.initialize('1');
+        vi.mocked(client.rest.get).mockImplementationOnce(async () => {
+          enter();
+          await held;
+          return [rawMessage()];
+        });
+        passing = worker.scheduledPeriodic('1', 60_000);
+        await entered;
+        expect(summaries()).toEqual([
+          expect.objectContaining({ title: 'replies:archive.summary_title_running' }),
+        ]);
+        expect(edits().length).toBeGreaterThan(0);
+        expect(
+          edits().every((embed) => embed?.title === 'replies:archive.summary_title_running'),
+        ).toBe(true);
+        expect((await store.read()).summary).toMatchObject({ channelId: '10', messageId: '71' });
+        expect(notifications.delete).not.toHaveBeenCalled();
+        release();
+        await passing;
         const first = await runs(connection).findOne({});
         expect(first).toMatchObject({ status: 'complete', full: true });
         expect(first?.coverageFrom).toBeUndefined();
-        expect(summaries()).toEqual([
-          expect.objectContaining({
-            title: 'replies:archive.summary_title_complete',
-            description: expect.stringContaining('replies:archive.summary_range_full'),
-          }),
-        ]);
+        expect(notifications.send).toHaveBeenCalledTimes(1);
+        expect(edits().at(-1)).toMatchObject({
+          title: 'replies:archive.summary_title_complete',
+          description: expect.stringContaining('replies:archive.summary_range_full'),
+        });
+        expect(
+          notifications.patch.mock.calls.every((call) => call[0] === '/channels/10/messages/71'),
+        ).toBe(true);
         expect(notifications.delete).not.toHaveBeenCalled();
 
         await connection
@@ -467,12 +506,159 @@ describe('msg-archive worker integration', () => {
           Math.min(first!.cutoff, second?.rescanFrom ?? first!.cutoff) - 30 * 60_000,
         );
         expect(summaries()[1]).toMatchObject({
+          title: 'replies:archive.summary_title_running',
+          description: expect.stringContaining('replies:archive.summary_range'),
+        });
+        expect(edits().at(-1)).toMatchObject({
           title: 'replies:archive.summary_title_complete',
           description: expect.stringContaining('replies:archive.summary_range'),
         });
+        expect(notifications.send).toHaveBeenCalledTimes(2);
+        expect(notifications.patch.mock.calls.at(-1)?.[0]).toBe('/channels/10/messages/72');
         expect(notifications.delete).toHaveBeenCalledExactlyOnceWith('/channels/10/messages/71');
-        expect((await store.read()).summary).toEqual({ channelId: '10', messageId: '72' });
+        expect((await store.read()).summary).toEqual({
+          channelId: '10',
+          messageId: '72',
+          startedAt: second?.passStartedAt,
+        });
       } finally {
+        release();
+        await passing;
+        await worker.stop();
+      }
+    }));
+
+  it('finishes a paused pass panel and replaces it when the same run resumes after a restart', async () =>
+    withFreshConnection(async (connection) => {
+      let id = 80;
+      const notifications = {
+        send: vi.fn(async () => ({ id: String((id += 1)), channelId: '10' })),
+        patch: vi.fn(),
+        delete: vi.fn(async () => undefined),
+      };
+      const manager = new StaticConnectionManager(connection);
+      const first = fixture(manager, rawMessage, notifications);
+      let activeWorker = first.worker;
+      const store = new MongoArchiveScheduleRepo(connection, 60_000);
+      await store.update({ enabled: true });
+      try {
+        const state = await first.worker.initialize('1');
+        const listChannels = state.repos.channels.listChannels.bind(state.repos.channels);
+        vi.spyOn(state.repos.channels, 'listChannels').mockImplementationOnce(async () => {
+          await store.update({ enabled: false });
+          return listChannels();
+        });
+        await first.worker.scheduledPeriodic('1', 60_000);
+        const paused = await runs(connection).findOne({});
+        expect(paused).toMatchObject({ status: 'partial' });
+        expect(notifications.send).toHaveBeenCalledTimes(1);
+        expect(notifications.patch).toHaveBeenLastCalledWith(
+          '/channels/10/messages/81',
+          expect.objectContaining({
+            body: expect.objectContaining({
+              embeds: [
+                expect.objectContaining({ title: 'replies:archive.summary_title_cancelled' }),
+              ],
+            }),
+          }),
+        );
+        expect((await store.read()).summary).toEqual({
+          channelId: '10',
+          messageId: '81',
+          startedAt: paused?.passStartedAt,
+        });
+        expect(notifications.delete).not.toHaveBeenCalled();
+        await first.worker.stop();
+        await advanceClock(paused!.passStartedAt!);
+        const second = fixture(manager, rawMessage, notifications);
+        activeWorker = second.worker;
+        await store.update({ enabled: true });
+        await second.worker.scheduledPeriodic('1', 60_000);
+        const resumed = await runs(connection).findOne({});
+        expect(resumed).toMatchObject({
+          runId: paused?.runId,
+          cutoff: paused?.cutoff,
+          status: 'complete',
+        });
+        expect(resumed?.passStartedAt).toBeGreaterThan(paused!.passStartedAt!);
+        expect(notifications.send).toHaveBeenCalledTimes(2);
+        expect(notifications.delete).toHaveBeenCalledExactlyOnceWith('/channels/10/messages/81');
+        expect(notifications.patch).toHaveBeenLastCalledWith(
+          '/channels/10/messages/82',
+          expect.objectContaining({
+            body: expect.objectContaining({
+              embeds: [
+                expect.objectContaining({ title: 'replies:archive.summary_title_complete' }),
+              ],
+            }),
+          }),
+        );
+        expect((await store.read()).summary).toEqual({
+          channelId: '10',
+          messageId: '82',
+          startedAt: resumed?.passStartedAt,
+        });
+      } finally {
+        await activeWorker.stop();
+      }
+    }));
+
+  it('recovers a failed initial periodic panel send on the next progress update without duplicates', async () =>
+    withFreshConnection(async (connection) => {
+      const notifications = {
+        send: vi.fn().mockRejectedValueOnce(new Error('temporary send failure')).mockResolvedValue({
+          id: '81',
+          channelId: '10',
+        }),
+        patch: vi.fn(),
+        delete: vi.fn(async () => undefined),
+      };
+      const { worker, client } = fixture(
+        new StaticConnectionManager(connection),
+        rawMessage,
+        notifications,
+      );
+      const store = new MongoArchiveScheduleRepo(connection, 60_000);
+      await store.update({ enabled: true });
+      let release!: () => void;
+      let enter!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let passing: Promise<void> | undefined;
+      try {
+        await worker.initialize('1');
+        vi.mocked(client.rest.get).mockImplementationOnce(async () => {
+          enter();
+          await held;
+          return [rawMessage()];
+        });
+        passing = worker.scheduledPeriodic('1', 60_000);
+        await entered;
+        expect(notifications.send).toHaveBeenCalledTimes(2);
+        expect((await store.read()).summary).toMatchObject({ channelId: '10', messageId: '81' });
+        expect(await runs(connection).findOne({})).toMatchObject({ status: 'running' });
+        release();
+        await passing;
+        expect(await runs(connection).findOne({})).toMatchObject({ status: 'complete' });
+        expect(notifications.send).toHaveBeenCalledTimes(2);
+        expect(notifications.delete).not.toHaveBeenCalled();
+        expect(notifications.patch).toHaveBeenLastCalledWith(
+          '/channels/10/messages/81',
+          expect.objectContaining({
+            body: expect.objectContaining({
+              embeds: [
+                expect.objectContaining({ title: 'replies:archive.summary_title_complete' }),
+              ],
+            }),
+          }),
+        );
+      } finally {
+        release();
+        await passing;
         await worker.stop();
       }
     }));

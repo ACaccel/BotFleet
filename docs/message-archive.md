@@ -255,20 +255,26 @@ immediately. A disabled running pass preserves checkpoints; enabling resumes tha
 pass before starting a fresh one. In-flight requests may finish before a pause is
 observed. Schedule changes never stop a full backup or live capture.
 
-Each pass that reaches its end, or fails after its run began, posts a summary to
-the debug channel and deletes the previous one, so the channel keeps only the
-latest. The summary shows the result, the range it reread, channels, messages read
-and messages added or updated, known gaps, the failure reason when not complete,
-the duration and the next run. The range starts at the previous coverage end (the
-later of the last complete pass's and the newest complete full backup's cutoff, or
-the restart rescan bound when earlier) minus `overlap_minutes`; every message after
-it was reread. A full reconciliation shows its cutoff instead. Interrupted or
-skipped passes post no summary. Summaries are best effort: a failed send keeps the
-previous summary and is not retried, and a previous summary that cannot be deleted
-for a transient reason stays (`Archive previous pass summary not deleted`). The
-latest summary's message ID is kept in `archive_schedule`, so the replacement works
-across restarts; a crash between posting and recording leaves that one summary
-behind.
+Each pass posts an embed to the debug channel when its run begins and deletes the
+previous pass's embed. The same message refreshes every ten seconds and on phase
+changes with the current stage, active sources, channel and message counts, known
+gaps and elapsed time. Completion, failure or interruption edits that message with
+the result, checked range, counts, duration and next run; it stays until the next
+pass starts. A resumed pass posts a fresh embed. Skipped passes post nothing.
+
+The checked range starts at the previous coverage end (the later of the last
+complete pass's and the newest complete full backup's cutoff, or the restart
+rescan bound when earlier) minus `overlap_minutes`; every message after it was
+reread. A full reconciliation shows its cutoff instead.
+
+Delivery is best effort and never fails the backup. A failed send preserves the
+previous embed; later progress updates retry. Transient edit failures retry on a
+later update, and a manually deleted message is recreated. A transient failure to
+delete the previous embed leaves it in place (`Archive previous pass summary not
+deleted`). The message ID and pass start time are kept in `archive_schedule`, so
+replacement works across restarts. A crash between posting and recording can
+leave an extra message. Final edits are best effort; the durable result remains
+available in `/archive status`.
 
 After three consecutive passes end failed (with blocking failures or an unexpected
 error, or skipped because the guild is in capture-only mode), the debug channel gets
@@ -585,11 +591,13 @@ totals stay unknown. Raw errors, message bodies, membership lists and temporary
 attachment URLs are not panel data; a failed backup shows a reason category and the
 worker log holds the error.
 
-`progress_interval_seconds` is fixed at `10`. The full-backup panel refreshes on that
-heartbeat even when no counter changes; state changes and final results publish at
-once. Edits of one panel are serialized between the worker and button handlers and
-coalesced; a failed edit is retried without posting duplicates, and a failed final
-result is retried on later polls, backing off from five seconds to five minutes.
+`progress_interval_seconds` is fixed at `10`. Full-backup and periodic-pass panels
+refresh on that heartbeat even when no counter changes; state changes and final
+results publish at once. Full-backup panel edits are serialized between the worker
+and button handlers and coalesced; a failed edit is retried without posting
+duplicates, and a failed final result is retried on later polls, backing off from
+five seconds to five minutes. Periodic-panel delivery follows the best-effort rules
+under [Periodic schedule](#periodic-schedule).
 Discord rate limits or outages can delay delivery. Notification failures never
 change the durable outcome: the worker saves the job's final state before showing
 it.

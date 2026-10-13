@@ -1,4 +1,4 @@
-import type { ArchiveGapReason } from './progress';
+import type { ArchiveGapReason, ArchiveProgressSnapshot } from './progress';
 
 /** Delivery bookkeeping shared by both notice kinds. */
 interface ArchiveNoticeDelivery {
@@ -51,24 +51,27 @@ export interface ArchiveInvalidRequestAlert {
 /** Which stored notice a delivery reads and records. */
 export type ArchiveNoticeSlot = 'schedule' | 'invalid-requests';
 
-/** A posted Discord message the worker may later delete. */
-export interface ArchiveMessageRef {
+/** A periodic panel the worker may edit or replace on the next pass. */
+export interface ArchivePeriodicMessageRef {
   readonly channelId: string;
   readonly messageId: string;
+  /** The pass identity; older result messages have none. */
+  readonly startedAt?: number;
 }
 
 /**
- * What the debug-channel summary of a finished periodic pass shows. Interrupted
- * and skipped passes have none.
+ * What the debug-channel panel of a running or finished periodic pass shows.
  */
 export interface ArchivePeriodicSummary {
-  readonly status: 'complete' | 'partial' | 'failed';
+  readonly status: 'running' | 'complete' | 'partial' | 'failed' | 'cancelled';
+  readonly progress?: ArchiveProgressSnapshot;
   /** A full reconciliation rereads every message before `cutoff`. */
   readonly full: boolean;
   readonly cutoff: number;
-  /** Every message after this time was reread (see `ArchivePeriodicRun.coverageFrom`). */
+  /** Lower bound of the checked range (see `ArchivePeriodicRun.coverageFrom`). */
   readonly coverageFrom?: number;
   readonly startedAt: number;
+  /** The observation time while running, or the finish time once settled. */
   readonly finishedAt: number;
   readonly channels?: number;
   readonly scanned?: number;
@@ -93,8 +96,8 @@ export interface ArchiveSchedule {
   readonly lastCompletedAt?: number;
   readonly lastFailureReason?: ArchiveGapReason;
   readonly notice?: ArchiveScheduleNotice;
-  /** The latest pass summary in the debug channel; the next summary replaces it. */
-  readonly summary?: ArchiveMessageRef;
+  /** The current pass panel in the debug channel; the next pass replaces it. */
+  readonly summary?: ArchivePeriodicMessageRef;
 }
 
 /** An operator's schedule change; omitted settings stay as saved. */

@@ -462,9 +462,11 @@ export const renderArchiveScheduleNotice = (
 });
 
 const SUMMARY_TITLES: Readonly<Record<ArchivePeriodicSummary['status'], string>> = {
+  running: 'replies:archive.summary_title_running',
   complete: 'replies:archive.summary_title_complete',
   partial: 'replies:archive.summary_title_partial',
   failed: 'replies:archive.summary_title_failed',
+  cancelled: 'replies:archive.summary_title_cancelled',
 };
 
 const summaryRange = (t: ArchiveText, summary: ArchivePeriodicSummary): string => {
@@ -475,12 +477,14 @@ const summaryRange = (t: ArchiveText, summary: ArchivePeriodicSummary): string =
     : t.t('replies:archive.summary_range', { from: archiveTime(summary.coverageFrom), cutoff });
 };
 
-/** The debug-channel summary of a finished periodic pass; each pass replaces the previous one. */
+/** One periodic pass's progress and result in the debug channel. */
 export const renderArchivePeriodicSummary = (
   t: ArchiveText,
   summary: ArchivePeriodicSummary,
   nextRunAt: number | null,
 ): ArchivePanel => {
+  const running = summary.status === 'running';
+  const progress = summary.progress;
   const counts =
     summary.channels === undefined || summary.scanned === undefined || summary.written === undefined
       ? undefined
@@ -491,15 +495,37 @@ export const renderArchivePeriodicSummary = (
         });
   const lines = [
     summaryRange(t, summary),
+    ...(running && progress !== undefined
+      ? [
+          t.t('replies:archive.summary_phase', {
+            phase: t.t(`replies:archive.phase_${progress.phase}`),
+          }),
+          activityLine(t, progress),
+          t.t('replies:archive.backup_channels', {
+            completed: archiveNumber(progress.sources.completed),
+            total:
+              progress.sources.total > 0
+                ? archiveNumber(progress.sources.total)
+                : t.t('replies:archive.value_unknown'),
+            gaps: archiveCount(t, 'count_gaps', progress.gapCount),
+          }),
+          t.t('replies:archive.backup_messages', {
+            scanned: archiveNumber(progress.messages.scanned),
+            written: archiveNumber(progress.messages.inserted + progress.messages.updated),
+            unchanged: archiveNumber(progress.messages.unchanged),
+          }),
+        ]
+      : []),
     counts,
     summary.gapCount > 0
       ? t.t('replies:archive.summary_gaps', { count: archiveNumber(summary.gapCount) })
       : undefined,
-    summary.status === 'complete'
-      ? undefined
-      : t.t('replies:archive.summary_reason', { reason: archiveReason(t, summary.reason) }),
-    t.t('replies:archive.summary_timing', {
+    summary.status === 'partial' || summary.status === 'failed'
+      ? t.t('replies:archive.summary_reason', { reason: archiveReason(t, summary.reason) })
+      : undefined,
+    t.t(running ? 'replies:archive.summary_progress_timing' : 'replies:archive.summary_timing', {
       duration: archiveDuration(t, summary.finishedAt - summary.startedAt),
+      updated: archiveTime(summary.finishedAt, 'T'),
       next:
         nextRunAt === null
           ? t.t('replies:archive.summary_next_disabled')
@@ -511,12 +537,15 @@ export const renderArchivePeriodicSummary = (
       {
         title: t.t(SUMMARY_TITLES[summary.status]),
         description: lines.filter((line) => line !== undefined).join('\n'),
-        color:
-          summary.status === 'failed'
-            ? ARCHIVE_COLORS.failed
-            : summary.status === 'partial' || summary.gapCount > 0
-              ? ARCHIVE_COLORS.gaps
-              : ARCHIVE_COLORS.complete,
+        color: running
+          ? ARCHIVE_COLORS.running
+          : summary.status === 'cancelled'
+            ? ARCHIVE_COLORS.stopped
+            : summary.status === 'failed'
+              ? ARCHIVE_COLORS.failed
+              : summary.status === 'partial' || summary.gapCount > 0
+                ? ARCHIVE_COLORS.gaps
+                : ARCHIVE_COLORS.complete,
       },
     ],
     components: [],

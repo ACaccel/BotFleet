@@ -1,4 +1,5 @@
-import { archiveJobProgress } from '../../../core/archive/progress';
+import { ARCHIVE_DEFAULT_INTERVAL_MS } from '../../../core/archive/limits';
+import { archiveJobProgress, type ArchiveProgressSnapshot } from '../../../core/archive/progress';
 import type { ArchiveFullBackupJob } from '../../../core/archive/types';
 import type { ArchiveNoticeSlot, ArchivePeriodicSummary } from '../../../core/archive/schedule';
 import type { ArchiveScheduleRepo } from '../../../persistence/repositories/archive-schedule.repo';
@@ -16,7 +17,7 @@ export const deferredRetryDelay = (attempts: number): number =>
 /**
  * Delivers results and notices that must reach Discord eventually: a finished full
  * backup's panel result and the schedule's failing and recovered notices. Also
- * posts each periodic pass summary, best effort.
+ * publishes each periodic pass's progress and result, best effort.
  */
 export class NotificationRecovery {
   public constructor(
@@ -117,10 +118,31 @@ export class NotificationRecovery {
     }
   }
 
-  /**
-   * Replaces the debug channel's pass summary. A summary is informational, so a
-   * failure is logged and never retried; the next pass posts a fresh one.
-   */
+  /** Shows saved periodic progress; a resumed pass has a new start time and panel. */
+  public async publishPeriodicProgress(
+    guildId: string,
+    state: ArchiveGuildState,
+    snapshot: ArchiveProgressSnapshot,
+  ): Promise<void> {
+    const run = await state.archive.periodicRuns.current();
+    if (run === null || run.runId !== snapshot.scanId) return;
+    await this.publishPeriodicSummary(
+      guildId,
+      state.archive.schedule(ARCHIVE_DEFAULT_INTERVAL_MS),
+      {
+        status: 'running',
+        full: run.full,
+        cutoff: run.cutoff,
+        coverageFrom: run.coverageFrom,
+        startedAt: run.passStartedAt ?? run.cutoff,
+        finishedAt: snapshot.updatedAt,
+        gapCount: snapshot.gapCount,
+        progress: snapshot,
+      },
+    );
+  }
+
+  /** Edits or replaces the pass panel; delivery failure never fails the backup. */
   public async publishPeriodicSummary(
     guildId: string,
     schedule: ArchiveScheduleRepo,

@@ -268,6 +268,25 @@ describe('archive panels', () => {
       finishedAt: 1_700_000_000_000,
       gapCount: 0,
     } as const;
+    const progress = new ProgressTracker({
+      cutoff: new Date(base.cutoff),
+      startedAt: base.startedAt,
+      work: 'periodic',
+    });
+    progress.setPhase('history');
+    const running = renderArchivePeriodicSummary(
+      t,
+      { ...base, status: 'running', progress: progress.snapshot() },
+      base.startedAt,
+    );
+    expectLocalized(running);
+    expect(running.embeds[0]?.title).toBe(t.t('replies:archive.summary_title_running'));
+    expect(running.embeds[0]?.color).toBe(0x5865f2);
+    expect(text(running)).toContain(t.t('replies:archive.phase_history'));
+    expect(text(running)).not.toContain('<t:1699999880:R>');
+    const paused = renderArchivePeriodicSummary(t, { ...base, status: 'cancelled' }, null);
+    expectLocalized(paused);
+    expect(paused.embeds[0]?.title).toBe(t.t('replies:archive.summary_title_cancelled'));
     const complete = renderArchivePeriodicSummary(
       t,
       {
