@@ -26,10 +26,26 @@ placeholders fail startup; there is no root `.env.example`.
 | `MONGO_RECOVERY_INTERVAL_MS`                                           | Recovery polling, default `60000`                               |
 | `NODE_ENV`                                                             | `development` (default), `test`, or `production`                |
 | `LOG_LEVEL`                                                            | `trace`, `debug`, `info` (default), `warn`, `error`, or `fatal` |
+| `LOG_DIR`                                                              | File log root, default `logs`; empty disables file logs         |
+| `LOG_RETENTION_DAYS`                                                   | Days of file logs to keep, default `60`; `0` keeps all          |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                  |
 | `ACCUWEATHER_KEY`                                                      | Required for weather commands                                   |
 | `GOPHER_SETTINGS_API_KEY`                                              | Required when gopher's settings API is enabled                  |
 | `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup      |
+
+### Log retention
+
+Each bot process prunes `LOG_DIR` at startup and then about every 24 hours. It
+deletes regular files named `YYYY-MM-DD.log` (bot and guild logs) or
+`*-YYYY-MM-DD_HH-MM-SS.log` (msg-archive transcripts) dated more than
+`LOG_RETENTION_DAYS` local days ago, then removes directories left empty.
+
+- Age comes from the file name, never from modification time. Other names and
+  symlinks are left alone.
+- msg-archive transcripts live in `logs/backup/` of the working directory, so they
+  are pruned only while `LOG_DIR` is the default `logs`.
+- A non-numeric, negative, fractional or blank value fails startup; the maximum is
+  `3650`. Pruning failures are written to stderr and never stop the bot.
 
 ## Common bot settings
 

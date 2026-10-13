@@ -38,6 +38,10 @@
  * downstream aggregators (cross-guild dashboards, archival pipelines)
  * use it as a join key without access to the originating file path.
  *
+ * Retention: when `retentionDays` is set the stream also runs the
+ * {@link startLogRetention} schedule over `rootDir` (see
+ * `./log-retention`), which owns the age rules.
+ *
  * Layer purity: only Node built-ins (`fs`, `path`, `stream`). No
  * discord.js / mongoose / our own infra — `core/**` stays clean. The
  * `time` field on each record is left as pino's UTC ISO so the file
@@ -50,9 +54,17 @@ import { Writable } from 'node:stream';
 
 import type { StreamEntry } from 'pino';
 
+import { startLogRetention, type LogRetention } from './log-retention';
+
 interface FileRouterOptions {
   /** Root directory under which `<botId>[/<guildId>]/<date>.log` lives. */
   readonly rootDir: string;
+  /**
+   * Delete dated log files older than this many local days, once at
+   * start and then daily, for as long as the stream is open. Omitted or
+   * `0` disables retention.
+   */
+  readonly retentionDays?: number;
 }
 
 interface CachedStream {
@@ -119,6 +131,14 @@ const reportSinkFailure = (filePath: string, err: unknown): void => {
  * fatal — a full disk would take the whole bot down. Attaching a
  * listener is what turns that into a degraded file sink.
  */
+const reportRetentionFailure = (path: string, err: unknown, failures: number): void => {
+  const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  process.stderr.write(
+    `file-router-transport: log retention failed at ${path} (${reason}); ` +
+      `${failures} failure(s) this pass. Retrying at the next scheduled pass.\n`,
+  );
+};
+
 const openStream = (filePath: string, onError: (err: Error) => void): WriteStream => {
   mkdirSync(dirname(filePath), { recursive: true });
   const stream = createWriteStream(filePath, { flags: 'a', encoding: 'utf8' });
@@ -165,6 +185,16 @@ export const createFileRouterStream = (options: FileRouterOptions): Writable => 
   const retryAfter = new Map<string, number>();
   // Buffer for partial lines (defensive; pino writes complete lines).
   let pending = '';
+  // Owned by the stream so closing the sink also stops the schedule; the
+  // timer is unref'd and must never outlive `final` / `destroy`.
+  const retention: LogRetention | undefined =
+    options.retentionDays !== undefined && options.retentionDays > 0
+      ? startLogRetention({
+          rootDir,
+          retentionDays: options.retentionDays,
+          onFailure: reportRetentionFailure,
+        })
+      : undefined;
 
   const writeRecord = (line: string): void => {
     if (line.length === 0) return;
@@ -281,10 +311,16 @@ export const createFileRouterStream = (options: FileRouterOptions): Writable => 
       }
       cb();
     },
+    destroy(err, cb): void {
+      // `destroy` skips `final`, so stop the schedule here too.
+      retention?.stop();
+      cb(err);
+    },
     final(cb): void {
       // Drain any trailing partial line, then close every cached
       // stream. `Promise.all` is awaited inline so the pino flush path
       // sees a clean shutdown.
+      retention?.stop();
       if (pending.length > 0) {
         writeRecord(pending);
         pending = '';
@@ -316,9 +352,13 @@ export const createFileRouterStream = (options: FileRouterOptions): Writable => 
 export const createFileSink = (options: {
   readonly rootDir: string;
   readonly level: StreamEntry['level'];
+  readonly retentionDays?: number;
 }): StreamEntry => ({
   level: options.level,
-  stream: createFileRouterStream({ rootDir: options.rootDir }),
+  stream: createFileRouterStream({
+    rootDir: options.rootDir,
+    ...(options.retentionDays !== undefined ? { retentionDays: options.retentionDays } : {}),
+  }),
 });
 
 /**

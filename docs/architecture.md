@@ -144,7 +144,9 @@ the `/archive` interaction boundary raises `ArchiveAccessError` and
 preparation raise it fail-fast, and a feature that finds one only when used (the
 canvas font when a chart first renders, the archive settings an interaction
 rereads) raises it for the interaction boundary to log and answer with a trace ID.
-Pino logs include bot and optional guild context; file output is JSON Lines under `logs/`.
+Pino logs include bot and optional guild context; file output is JSON Lines under `logs/`, and each
+process deletes dated files older than `LOG_RETENTION_DAYS` (default 60; see
+[configuration](configuration.md#log-retention)).
 
 User-facing strings use aligned English and Traditional Chinese
 [catalogs](../src/i18n/locales/). CI scans handlers, plugins, application, bot and

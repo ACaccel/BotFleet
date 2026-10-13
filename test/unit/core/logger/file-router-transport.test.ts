@@ -203,6 +203,57 @@ describe('file-router stream', () => {
   });
 });
 
+describe('file-router retention', () => {
+  const oldName = '2000-01-01.log';
+  const waitGone = async (path: string): Promise<void> => {
+    await vi.waitFor(() => {
+      expect(existsSync(path)).toBe(false);
+    });
+  };
+
+  it('prunes expired files at start and clears its timer when the stream ends', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const stale = join(rootDir, 'bot1', oldName);
+    mkdirSync(join(rootDir, 'bot1'));
+    writeFileSync(stale, 'x');
+
+    const sink = createFileRouterStream({ rootDir, retentionDays: 60 });
+    await waitGone(stale);
+    expect(vi.getTimerCount()).toBe(1);
+
+    await new Promise<void>((resolve) => sink.end(() => resolve()));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears its timer when the stream is destroyed without ending', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const sink = createFileRouterStream({ rootDir, retentionDays: 60 });
+    expect(vi.getTimerCount()).toBe(1);
+
+    await new Promise<void>((resolve) => {
+      sink.once('close', () => resolve());
+      sink.destroy();
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does nothing when retention is omitted or 0', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const stale = join(rootDir, 'bot1', oldName);
+    mkdirSync(join(rootDir, 'bot1'));
+    writeFileSync(stale, 'x');
+
+    const plain = createFileRouterStream({ rootDir });
+    const zero = createFileRouterStream({ rootDir, retentionDays: 0 });
+    await new Promise<void>((r) => setImmediate(r));
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(existsSync(stale)).toBe(true);
+    plain.destroy();
+    zero.destroy();
+  });
+});
+
 describe('fixed-path file stream', () => {
   it('invokes the write callback exactly once per chunk', async () => {
     const filePath = join(rootDir, 'error.log');

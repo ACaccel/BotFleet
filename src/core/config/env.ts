@@ -26,6 +26,8 @@ import { z } from 'zod';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
+import { DEFAULT_LOG_RETENTION_DAYS, parseLogRetentionDays } from '../logger/log-retention';
+
 /**
  * Regex matched against TOKEN and CLIENT_ID values — substring match,
  * case-insensitive, so a leaked placeholder like
@@ -104,6 +106,24 @@ const envShape = {
   PORT: z.coerce.number().int().positive().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+  /**
+   * Days of file logs to keep; `0` disables pruning. Digits only so a
+   * blank or malformed value fails startup instead of reading as `0`.
+   */
+  LOG_RETENTION_DAYS: z
+    .string()
+    .default(String(DEFAULT_LOG_RETENTION_DAYS))
+    .transform((raw, ctx) => {
+      const days = parseLogRetentionDays(raw);
+      if (days === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'LOG_RETENTION_DAYS must be a whole number of days (0 disables pruning)',
+        });
+        return z.NEVER;
+      }
+      return days;
+    }),
   /** Optional per-provider LLM API keys. Absent when the deployment does not use that provider. */
   OPENAI_API_KEY: llmKeySchema,
   ANTHROPIC_API_KEY: llmKeySchema,

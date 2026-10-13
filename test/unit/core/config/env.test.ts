@@ -232,6 +232,29 @@ describe('loadEnv', () => {
     });
   });
 
+  describe('LOG_RETENTION_DAYS', () => {
+    const days = (value: string | undefined): number =>
+      loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, ...(value === undefined ? {} : { LOG_RETENTION_DAYS: value }) },
+      }).LOG_RETENTION_DAYS;
+
+    it('defaults to 60 days', () => {
+      expect(days(undefined)).toBe(60);
+    });
+
+    it('accepts a positive count and 0 (disabled)', () => {
+      expect(days('14')).toBe(14);
+      expect(days('0')).toBe(0);
+    });
+
+    it('fails startup on blank, negative, fractional or non-numeric values', () => {
+      for (const bad of ['', ' ', '-1', '1.5', 'abc', '1e2', '99999']) {
+        expect(() => days(bad), bad).toThrow(EnvLoadError);
+      }
+    });
+  });
+
   describe('production + debug warning', () => {
     it('writes a warn NDJSON line when NODE_ENV=production and LOG_LEVEL=debug', () => {
       const env = loadEnv({
