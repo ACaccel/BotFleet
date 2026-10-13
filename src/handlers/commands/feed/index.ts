@@ -8,6 +8,7 @@ export default class feed extends GroupedCommand {
     super({
       name: 'feed',
       category: 'utility',
+      guildOnly: true,
       routes: [
         { name: 'subscribe', command: new FeedSubscribe() },
         { name: 'unsubscribe', command: new FeedUnsubscribe() },

@@ -7,6 +7,7 @@ export default class giveaway extends GroupedCommand {
     super({
       name: 'giveaway',
       category: 'server_activity',
+      guildOnly: true,
       routes: [
         { name: 'create', command: new GiveawayCreate() },
         { name: 'delete', command: new GiveawayDelete() },

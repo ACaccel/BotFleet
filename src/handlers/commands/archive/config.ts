@@ -15,7 +15,7 @@ export const archiveCommandConfig: CommandConfig = {
       name: 'schedule',
       options: {
         boolean: [{ name: 'enabled', required: false }],
-        number: [{ name: 'minutes', required: false, min: 1, max: 10_080 }],
+        integer: [{ name: 'minutes', required: false, min: 1, max: 10_080 }],
       },
     },
   ],

@@ -25,7 +25,7 @@ export default class thread_manager extends Command {
         { name: 'remove', options: { channel: thread, user } },
         {
           name: 'list',
-          options: { channel: thread, number: [{ name: 'page', required: false, min: 1 }] },
+          options: { channel: thread, integer: [{ name: 'page', required: false, min: 1 }] },
         },
       ],
     });

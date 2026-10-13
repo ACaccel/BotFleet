@@ -24,7 +24,7 @@ export default class search_anime_scene extends Command {
             required: true,
           },
         ],
-        number: [
+        integer: [
           {
             name: 'display_num',
             required: false,

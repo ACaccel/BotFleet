@@ -7,6 +7,7 @@ export default class activity extends GroupedCommand {
     super({
       name: 'activity',
       category: 'server_activity',
+      guildOnly: true,
       routes: [
         { name: 'create', command: new ActivityCreate() },
         { name: 'delete', command: new ActivityDelete() },

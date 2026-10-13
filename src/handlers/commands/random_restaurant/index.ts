@@ -50,7 +50,7 @@ export default class random_restaurant extends Command {
             required: false,
           },
         ],
-        number: [
+        integer: [
           {
             name: 'budget',
             required: false,

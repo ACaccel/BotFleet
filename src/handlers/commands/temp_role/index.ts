@@ -11,6 +11,7 @@ export default class temp_role extends Command {
     this.setConfig({
       name: 'temp_role',
       category: 'utility',
+      guildOnly: true,
       options: {
         string: [
           {
@@ -18,7 +19,7 @@ export default class temp_role extends Command {
             required: true,
           },
         ],
-        number: [
+        integer: [
           {
             name: 'days',
             required: false,

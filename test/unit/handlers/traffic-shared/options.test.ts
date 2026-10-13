@@ -35,7 +35,7 @@ describe('trafficCommandOptions', () => {
       '90d',
       '365d',
     ]);
-    expect(options.number).toEqual([{ name: 'top_n', required: false, min: 1, max: 20 }]);
+    expect(options.integer).toEqual([{ name: 'top_n', required: false, min: 1, max: 20 }]);
   });
 });
 

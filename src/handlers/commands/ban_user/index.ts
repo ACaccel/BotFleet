@@ -14,6 +14,7 @@ export default class ban_user extends Command {
     this.setConfig({
       name: 'ban_user',
       category: 'admin',
+      guildOnly: true,
       options: {
         user: [
           {
@@ -21,7 +22,7 @@ export default class ban_user extends Command {
             required: true,
           },
         ],
-        number: [
+        integer: [
           {
             name: 'duration',
             required: false,

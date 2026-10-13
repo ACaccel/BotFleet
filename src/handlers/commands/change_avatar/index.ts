@@ -12,6 +12,7 @@ export default class change_avatar extends Command {
     this.setConfig({
       name: 'change_avatar',
       category: 'admin',
+      guildOnly: true,
       options: {
         string: [
           {

@@ -154,8 +154,8 @@ describe('/traffic subcommands', () => {
   );
 
   it('caps member, channel and app rankings at 5', async () => {
-    const topN = (Action: { new (): { config: { options?: { number?: unknown[] } } } }) =>
-      new Action().config.options?.number?.find(
+    const topN = (Action: { new (): { config: { options?: { integer?: unknown[] } } } }) =>
+      new Action().config.options?.integer?.find(
         (option) => (option as { name: string }).name === 'top_n',
       );
     for (const Action of [TrafficOverview, TrafficChannel, TrafficMe, TrafficUser])

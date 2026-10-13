@@ -11,6 +11,7 @@ export default class talk_signed extends Command {
     this.setConfig({
       name: 'talk_signed',
       category: 'fun',
+      guildOnly: true,
       options: {
         string: [
           {

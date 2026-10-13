@@ -63,7 +63,9 @@ export interface CommandConfig {
   subcommandGroups?: CommandSubcommandGroup[];
   options?: {
     string?: CommandOption[];
-    number?: CommandOption[];
+    /** Whole numbers; read with `getOptionalNumber` / `getRequiredNumber`. */
+    integer?: CommandOption[];
+    /** Decimal numbers. */
     float?: CommandOption[];
     boolean?: CommandOption[];
     user?: CommandOption[];
@@ -99,10 +101,14 @@ interface CommandOption {
    * fails on either misuse rather than letting it reach the REST call.
    */
   autocomplete?: boolean;
-  /** Minimum numeric value (only applies to `number` and `float` options). */
+  /** Minimum value (`integer` and `float` options only). */
   min?: number;
-  /** Maximum numeric value (only applies to `number` and `float` options). */
+  /** Maximum value (`integer` and `float` options only). */
   max?: number;
+  /** Minimum length (`string` options only). */
+  minLength?: number;
+  /** Maximum length (`string` options only); Discord caps input at 6000. */
+  maxLength?: number;
   /**
    * Channel types a `channel` option accepts; defaults to the text-capable
    * guild channels and threads (`addCommandOptions`).
@@ -134,7 +140,7 @@ export interface LocalizedCommandConfig extends CommandConfig {
   subcommandGroups?: LocalizedCommandSubcommandGroup[];
   options?: {
     string?: LocalizedCommandOption[];
-    number?: LocalizedCommandOption[];
+    integer?: LocalizedCommandOption[];
     boolean?: LocalizedCommandOption[];
     float?: LocalizedCommandOption[];
     user?: LocalizedCommandOption[];

@@ -3,11 +3,12 @@ import type { SlashCommandBuilder, SlashCommandSubcommandBuilder } from '@discor
 import type { LocalizedCommandConfig, LocalizedCommandOption } from './command';
 
 /**
- * Reject the two ways `autocomplete` can be declared on an option
- * Discord will not accept it on.
+ * Reject option metadata Discord will not accept on the declared type:
+ * `autocomplete` and length bounds on non-string options, value bounds
+ * on non-numeric ones, and `autocomplete` alongside `choices`.
  *
- * Both are authoring mistakes in a handler's `setConfig`, and both
- * would otherwise surface as an opaque REST 400 during `npm run register` —
+ * Each is an authoring mistake in a handler's `setConfig` that would
+ * otherwise surface as an opaque REST 400 during `npm run register` —
  * with no indication of which option of which command caused it.
  * Failing here catches them in the unit suite instead, since every
  * registration path funnels through this builder.
@@ -15,21 +16,27 @@ import type { LocalizedCommandConfig, LocalizedCommandOption } from './command';
  * A native `TypeError`, not a `DomainError`: nothing about this is
  * recoverable at runtime or reportable to a member.
  */
-const assertAutocompleteUsable = (
+const assertOptionUsable = (
   commandName: string,
   optionType: string,
   option: LocalizedCommandOption,
 ): void => {
-  if (option.autocomplete !== true) return;
-  if (optionType !== 'string') {
-    throw new TypeError(
-      `command "${commandName}" option "${option.name}": autocomplete applies to string options only, not ${optionType}.`,
-    );
+  const fail = (reason: string): never => {
+    throw new TypeError(`command "${commandName}" option "${option.name}": ${reason}`);
+  };
+  if (option.autocomplete === true) {
+    if (optionType !== 'string') {
+      fail(`autocomplete applies to string options only, not ${optionType}.`);
+    }
+    if (option.choices !== undefined) fail('choices and autocomplete are mutually exclusive.');
   }
-  if (option.choices !== undefined) {
-    throw new TypeError(
-      `command "${commandName}" option "${option.name}": choices and autocomplete are mutually exclusive.`,
-    );
+  const hasLength = option.minLength !== undefined || option.maxLength !== undefined;
+  if (hasLength && optionType !== 'string') {
+    fail(`minLength/maxLength apply to string options only, not ${optionType}.`);
+  }
+  const hasRange = option.min !== undefined || option.max !== undefined;
+  if (hasRange && optionType !== 'integer' && optionType !== 'float') {
+    fail(`min/max apply to integer and float options only, not ${optionType}.`);
   }
 };
 
@@ -73,10 +80,12 @@ export const addCommandOptions = (
           o.addChoices(...e.choices);
         }
         if (e.autocomplete === true) o.setAutocomplete(true);
+        if (typeof e.minLength === 'number') o.setMinLength(e.minLength);
+        if (typeof e.maxLength === 'number') o.setMaxLength(e.maxLength);
         return o;
       }),
 
-    number: (e: LocalizedCommandOption) =>
+    integer: (e: LocalizedCommandOption) =>
       builder.addIntegerOption((o) => {
         o.setName(e.name).setDescription(e.description).setRequired(e.required);
         if (typeof e.min === 'number') o.setMinValue(e.min);
@@ -113,7 +122,7 @@ export const addCommandOptions = (
     if (!handler) continue;
 
     entries.forEach((opt) => {
-      assertAutocompleteUsable(commandName, type, opt);
+      assertOptionUsable(commandName, type, opt);
       allOptions.push({ type: type as keyof typeof optionHandlers, data: opt });
     });
   }

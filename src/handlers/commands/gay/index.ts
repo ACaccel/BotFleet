@@ -12,6 +12,7 @@ export default class gay extends Command {
     this.setConfig({
       name: 'gay',
       category: 'fun',
+      guildOnly: true,
       options: {
         user: [
           {

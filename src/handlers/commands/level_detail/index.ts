@@ -11,8 +11,9 @@ export default class level_detail extends Command {
     this.setConfig({
       name: 'level_detail',
       category: 'utility',
+      guildOnly: true,
       options: {
-        number: [
+        integer: [
           {
             name: 'left',
             required: true,

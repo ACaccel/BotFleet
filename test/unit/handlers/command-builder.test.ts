@@ -67,7 +67,7 @@ describe('buildCommandJsonBody', () => {
               name: 'interval',
               description: 'Set interval',
               options: {
-                number: [
+                integer: [
                   {
                     name: 'minutes',
                     description: 'Interval in minutes',
@@ -141,7 +141,7 @@ describe('buildCommandJsonBody', () => {
                 name: 'interval',
                 description: 'Set interval',
                 options: {
-                  number: [
+                  integer: [
                     { name: 'minutes', description: 'Minutes', required: true, autocomplete: true },
                   ],
                 },
@@ -208,7 +208,7 @@ describe('buildCommandJsonBody', () => {
             choices: [{ name: 'Fast', value: 'fast' }],
           },
         ],
-        number: [{ name: 'count', description: 'Count', required: true, min: 1, max: 9 }],
+        integer: [{ name: 'count', description: 'Count', required: true, min: 1, max: 9 }],
         float: [{ name: 'ratio', description: 'Ratio', required: false, min: 0, max: 1 }],
         user: [{ name: 'target', description: 'Target user', required: true }],
         channel: [{ name: 'where', description: 'Target channel', required: false }],
@@ -318,10 +318,57 @@ describe('buildCommandJsonBody', () => {
       name: 'remind',
       description: 'Set a reminder',
       options: {
-        number: [{ name: 'count', description: 'Count', required: false, autocomplete: true }],
+        integer: [{ name: 'count', description: 'Count', required: false, autocomplete: true }],
       },
     };
 
     expect(() => buildCommandJsonBody(config)).toThrow(/string options only/);
+  });
+
+  it('renders string length bounds and an integer type for integer options', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'note',
+      description: 'Take a note',
+      options: {
+        string: [
+          { name: 'text', description: 'Text', required: true, minLength: 1, maxLength: 100 },
+        ],
+        integer: [{ name: 'count', description: 'Count', required: false }],
+      },
+    };
+
+    const json = buildCommandJsonBody(config);
+    const options = 'options' in json ? (json.options ?? []) : [];
+
+    expect(options.find((o) => o.name === 'text')).toMatchObject({
+      min_length: 1,
+      max_length: 100,
+    });
+    // Discord's INTEGER option type.
+    expect(options.find((o) => o.name === 'count')?.type).toBe(4);
+  });
+
+  it('rejects length bounds on a non-string option', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'note',
+      description: 'Take a note',
+      options: {
+        integer: [{ name: 'count', description: 'Count', required: false, maxLength: 5 }],
+      },
+    };
+
+    expect(() => buildCommandJsonBody(config)).toThrow(/string options only/);
+  });
+
+  it('rejects value bounds on a non-numeric option', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'note',
+      description: 'Take a note',
+      options: {
+        string: [{ name: 'text', description: 'Text', required: false, max: 5 }],
+      },
+    };
+
+    expect(() => buildCommandJsonBody(config)).toThrow(/integer and float options only/);
   });
 });

@@ -10,6 +10,7 @@ export default class Ai extends GroupedCommand {
     super({
       name: 'ai',
       category: 'ai',
+      guildOnly: true,
       routes: [
         { name: 'settings', command: new AiSettingsAction() },
         { name: 'status', command: new AiStatusAction() },

@@ -42,7 +42,10 @@ export const trafficCommandOptions = (spec: TrafficOptionSpec, extra: Options = 
       choices: VISIBILITIES.map((value) => ({ value })),
     },
   ],
-  number: [...(extra.number ?? []), { name: 'top_n', required: false, min: 1, max: spec.maxTopN }],
+  integer: [
+    ...(extra.integer ?? []),
+    { name: 'top_n', required: false, min: 1, max: spec.maxTopN },
+  ],
 });
 
 const isOneOf = <T extends string>(raw: unknown, values: readonly T[]): raw is T =>

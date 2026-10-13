@@ -14,6 +14,7 @@ export default class update_role extends Command {
     this.setConfig({
       name: 'update_role',
       category: 'admin',
+      guildOnly: true,
     });
   }
 

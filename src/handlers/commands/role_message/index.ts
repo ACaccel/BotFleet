@@ -13,6 +13,7 @@ export default class role_message extends Command {
     this.setConfig({
       name: 'role_message',
       category: 'admin',
+      guildOnly: true,
       options: {
         string: [
           {

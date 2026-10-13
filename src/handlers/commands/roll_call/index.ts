@@ -16,6 +16,7 @@ export default class roll_call extends Command {
     this.setConfig({
       name: 'roll_call',
       category: 'server_activity',
+      guildOnly: true,
       options: {
         string: [
           {

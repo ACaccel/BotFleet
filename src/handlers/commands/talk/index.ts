@@ -11,6 +11,7 @@ export default class talk extends Command {
     this.setConfig({
       name: 'talk',
       category: 'fun',
+      guildOnly: true,
       options: {
         channel: [
           {

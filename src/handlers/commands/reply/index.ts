@@ -8,6 +8,7 @@ export default class reply extends GroupedCommand {
     super({
       name: 'reply',
       category: 'auto_reply',
+      guildOnly: true,
       routes: [
         { name: 'add', command: new AddReply() },
         { name: 'delete', command: new DeleteReply() },
