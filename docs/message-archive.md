@@ -95,7 +95,10 @@ Discord API while the message exists. Once a message or channel is deleted, its
 files cannot be retrieved; the archive never downloads them.
 
 Deleted messages never captured and edits made while the bot was offline cannot be
-recovered. Incomplete reaction refreshes preserve the previous complete membership.
+recovered. Deletions are recorded only from Gateway events: history scans cannot tell
+a deleted message from one outside their range, so a message deleted while the bot
+was offline stays stored without `deletedAt`. Incomplete reaction refreshes preserve
+the previous complete membership.
 See [configuration](configuration.md#message-archive).
 
 ## Discord controls
