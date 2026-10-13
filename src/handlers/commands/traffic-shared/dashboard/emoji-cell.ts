@@ -4,7 +4,7 @@
  * reaction split bar with both counts.
  */
 import { roundRect } from '../canvas-primitives';
-import { drawArt } from './art';
+import { drawArt, initialsOf } from './art';
 import type { Column, Ctx } from './layout';
 import { drawText, fitText, textWidth } from './text';
 import { COLOR, formatCount } from './theme';
@@ -13,11 +13,6 @@ import type { EmojiRankRow } from './types';
 /** Height of one cell. */
 export const EMOJI_ROW_HEIGHT = 46;
 const SPLIT_BAR_WIDTH = 92;
-
-const initialsOf = (label: string): string =>
-  Array.from(label.replace(/^:+|:+$/g, ''))
-    .slice(0, 2)
-    .join('');
 
 const drawSplitBar = (ctx: Ctx, row: EmojiRankRow, x: number, cy: number): void => {
   const total = row.inContent + row.inReactions;
@@ -71,7 +66,7 @@ export const drawCell = (
   drawText(ctx, String(rank), x, cy, { size: 13, color: COLOR.muted });
   drawArt(
     ctx,
-    { image: row.image, name: row.label, initials: initialsOf(row.label) },
+    { image: row.image, name: row.label, initials: initialsOf(row.label, 2) },
     x + 20,
     cy - 15,
     30,

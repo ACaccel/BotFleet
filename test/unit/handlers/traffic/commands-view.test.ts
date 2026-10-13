@@ -75,8 +75,8 @@ describe('/traffic emoji model', () => {
     expect(totals).toEqual([...totals].sort((a, b) => b - a));
     expect(totals.every((total) => total > 0)).toBe(true);
     // Every fourth fake emoji has no use at all.
-    expect(model.unused?.names).toHaveLength(6);
-    expect(model.unused?.names.every((name) => /^:.+:$/.test(name))).toBe(true);
+    expect(model.unused?.items).toHaveLength(6);
+    expect(model.unused?.items.every((item) => /^:.+:$/.test(item.label))).toBe(true);
   });
 
   it('ranks the least used first with order: least', async () => {
@@ -111,7 +111,8 @@ describe('/traffic sticker model', () => {
     const most = modelOf<StickerDashboard>(dashboard.renderStickerDashboard);
     const counts = most.ranking.rows.map((row) => row.count);
     expect(counts).toEqual([...counts].sort((a, b) => b - a));
-    expect(most.unused?.names).toHaveLength(3);
+    expect(most.unused?.items).toHaveLength(3);
+    expect(most.unused?.total).toBe(3);
     expect(most.ranking.totalUses).toBe(counts.reduce((a, b) => a + b, 0));
     vi.clearAllMocks();
     await run('sticker', { order: 'least' });

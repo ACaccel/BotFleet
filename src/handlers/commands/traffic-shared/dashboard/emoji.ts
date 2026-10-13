@@ -1,10 +1,9 @@
 /**
  * Custom-emoji dashboard in two columns: the summary tiles above
- * the chips of emoji nobody used, beside the top 20 flowing down two
+ * the pictures of emoji nobody used, beside the top 20 flowing down two
  * halves (art, name, animated chip, total, and a content / reaction split
  * bar).
  */
-import { unusedBlocks } from './chips';
 import { renderColumns } from './columns';
 import { EMOJI_ROW_HEIGHT, drawCell } from './emoji-cell';
 import { sectionTitle, splitColumn, type Block, type Column, type Ctx } from './layout';
@@ -12,6 +11,7 @@ import { hline, swatchLegend } from './shapes';
 import { drawText } from './text';
 import { COLOR, COLUMN_GAP } from './theme';
 import { tileRows } from './tiles';
+import { unusedBlocks } from './unused';
 import type { EmojiDashboard, EmojiRanking } from './types';
 
 /** Two halves of at most ten rows each. */
@@ -24,8 +24,9 @@ const NOTE_HEIGHT = 22;
  */
 const SUMMARY_WIDTH = 200;
 const RANKING_WIDTH = 480;
-/** Chip rows that keep the summary column no taller than a full ranking. */
-const UNUSED_ROWS = 8;
+/** Picture rows that keep the summary column no taller than a full ranking. */
+const UNUSED_ROWS = 7;
+const UNUSED_SIZE = 26;
 
 /** Rows per half: the shown rows split evenly, ranks 1..n down the left half first. */
 const rowsPerHalf = (count: number): number => Math.max(1, Math.ceil(count / 2));
@@ -69,7 +70,7 @@ export const renderEmojiDashboard = (data: EmojiDashboard): Buffer =>
         data.tiles.length > 0 ? tileRows(data.tiles, col) : undefined,
         data.unused === undefined
           ? undefined
-          : unusedBlocks(measure, data.unused, col, UNUSED_ROWS),
+          : unusedBlocks(measure, data.unused, col, UNUSED_ROWS, UNUSED_SIZE),
       ],
     },
     {

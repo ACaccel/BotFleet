@@ -251,8 +251,8 @@ export const emoji = (): EmojiDashboard => ({
   unused: {
     title: '沒有人用的表情',
     note: '共 7 個',
-    zeroLabel: '0',
-    names: [
+    total: 7,
+    items: [
       'old_logo',
       'april_fools',
       'event_2024',
@@ -260,7 +260,7 @@ export const emoji = (): EmojiDashboard => ({
       'wip_blob',
       'retired_cat',
       'beta',
-    ].map((n) => `:${n}:`),
+    ].map((n) => ({ label: `:${n}:`, image: null })),
   },
 });
 
@@ -286,7 +286,7 @@ export const sticker = (): StickerDashboard => ({
   unused: {
     title: '沒有人用的貼圖',
     note: '共 3 個',
-    zeroLabel: '0',
-    names: ['舊版歡迎', '愚人節限定', '活動紀念'],
+    total: 3,
+    items: ['舊版歡迎', '愚人節限定', '活動紀念'].map((label) => ({ label, image: null })),
   },
 });

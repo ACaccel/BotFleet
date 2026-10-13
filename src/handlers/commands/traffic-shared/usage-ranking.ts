@@ -10,8 +10,8 @@ import type { TFn } from './types';
 export type UsageOrder = 'most' | 'least';
 export const USAGE_ORDERS: readonly UsageOrder[] = ['most', 'least'];
 
-/** Chips beyond this are summarised by the section's total. */
-export const UNUSED_CHIP_LIMIT = 40;
+/** Pictures beyond this are summarised by the section's `…` chip and total. */
+export const UNUSED_ART_LIMIT = 40;
 
 export interface Ranked<T> {
   readonly used: readonly T[];

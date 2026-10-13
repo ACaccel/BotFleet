@@ -132,12 +132,17 @@ export interface TitledRows<Row> {
   readonly rows: readonly Row[];
 }
 
-/** Server items nobody used, shown as `name 0` chips. */
+/** Server emoji or stickers nobody used, shown as their pictures. */
 export interface UnusedSection {
   readonly title: string;
   /** Muted caption after the title, e.g. "7 in total". */
   readonly note: string;
+  /** How many items nobody used; more than `items` adds a `…` chip. */
+  readonly total: number;
   /** Nothing but the title is drawn when this is empty. */
-  readonly names: readonly string[];
-  readonly zeroLabel: string;
+  readonly items: readonly {
+    /** Seeds the placeholder drawn when `image` is missing. */
+    readonly label: string;
+    readonly image: Image | null;
+  }[];
 }

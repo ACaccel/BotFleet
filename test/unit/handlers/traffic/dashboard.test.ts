@@ -361,18 +361,41 @@ describe('empty and optional sections', () => {
     expect(size(bareSticker).width).toBe(stickerSize);
   });
 
-  it('caps unused chips at their rows with a trailing ellipsis chip', () => {
+  it.each([
+    ['emoji', () => fixtures.emoji(), renderEmojiDashboard],
+    ['sticker', () => fixtures.sticker(), renderStickerDashboard],
+  ] as const)(
+    'caps unused %s pictures at their rows with a trailing ellipsis chip',
+    (_kind, fixture, renderDashboard) => {
+      const base = fixture();
+      const unused = base.unused;
+      if (unused === undefined) throw new Error('fixture needs an unused section');
+      const render = (count: number): Buffer =>
+        (renderDashboard as (d: typeof base) => Buffer)({
+          ...base,
+          unused: {
+            ...unused,
+            total: count,
+            items: Array.from({ length: count }, (_, i) => ({ label: `unused_${i}`, image: null })),
+          },
+        });
+      const many = render(80);
+      expect(render(120).equals(many)).toBe(true);
+      expect(heightOf(many)).toBe(heightOf(render(2)));
+    },
+  );
+
+  it('adds an ellipsis chip when fewer unused emoji are given than their total', () => {
     const base = fixtures.emoji();
     const unused = base.unused;
     if (unused === undefined) throw new Error('fixture needs an unused section');
-    const render = (count: number): Buffer =>
-      renderEmojiDashboard({
-        ...base,
-        unused: { ...unused, names: Array.from({ length: count }, (_, i) => `:unused_${i}:`) },
-      });
-    const many = render(80);
-    expect(render(120).equals(many)).toBe(true);
-    expect(heightOf(many)).toBe(heightOf(render(2)));
+    const withTotal = (total: number): Buffer =>
+      renderEmojiDashboard({ ...base, unused: { ...unused, total } });
+    const complete = withTotal(unused.items.length);
+    expect(withTotal(unused.items.length + 5).equals(complete)).toBe(false);
+    expect(withTotal(unused.items.length + 50).equals(withTotal(unused.items.length + 5))).toBe(
+      true,
+    );
   });
 });
 

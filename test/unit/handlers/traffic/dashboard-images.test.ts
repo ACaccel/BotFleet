@@ -21,7 +21,6 @@ import {
 } from '../../../../src/handlers/commands/traffic-shared/dashboard';
 import { textWidth } from '../../../../src/handlers/commands/traffic-shared/dashboard/text';
 import { ROW_HEIGHT } from '../../../../src/handlers/commands/traffic-shared/dashboard/bars';
-import { unusedBlocks } from '../../../../src/handlers/commands/traffic-shared/dashboard/chips';
 import { renderColumns } from '../../../../src/handlers/commands/traffic-shared/dashboard/columns';
 import {
   TITLE_HEIGHT,
@@ -135,6 +134,32 @@ describe('preloaded images', () => {
     expect(wide).toBeGreaterThanOrEqual(20 * (side - 2) * (side / 2 - 2));
     expect(wide).toBeLessThanOrEqual(20 * side * (side / 2));
   });
+
+  it.each([
+    ['emoji', 26, () => fixtures.emoji(), renderEmojiDashboard],
+    ['sticker', 36, () => fixtures.sticker(), renderStickerDashboard],
+  ] as const)(
+    'draws every unused %s picture at its %i px slot and placeholders otherwise',
+    async (_kind, px, base, render) => {
+      const unusedWith = (image: () => Image | null): Buffer => {
+        const data = base();
+        const items = (data.unused?.items ?? []).map((item) => ({ ...item, image: image() }));
+        const unused = { title: '', note: '', total: items.length, items };
+        return (render as (d: typeof data) => Buffer)({ ...data, unused });
+      };
+      const count = base().unused?.items.length ?? 0;
+      const side = px * SCALE;
+      const drawn = await countColor(
+        unusedWith(() => fixtures.solidImage(MAGENTA)),
+        MAGENTA,
+      );
+      expect(drawn).toBeGreaterThanOrEqual(count * (side - 2) ** 2);
+      expect(drawn).toBeLessThanOrEqual(count * side ** 2);
+      const fallback = unusedWith(() => null);
+      expect(await countColor(fallback, MAGENTA)).toBe(0);
+      expect(unusedWith(brokenImage).equals(fallback)).toBe(true);
+    },
+  );
 
   it('draws sticker art at its 70 px slot and placeholders otherwise', async () => {
     const stickerWith = (image: () => Image | null): Buffer => {
@@ -295,26 +320,6 @@ describe('unranked lists', () => {
     expect(await inked(ranked)).toBeGreaterThan(100);
     expect(await countColorIn(ranked, COLOR.muted, band)).toBeGreaterThan(0);
     expect(await inked(render(false))).toBe(0);
-  });
-});
-
-describe('unused chips', () => {
-  it('truncates a name wider than the column so the chip stays inside it', async () => {
-    const unused = fixtures.emoji().unused;
-    if (unused === undefined) throw new Error('fixture needs an unused section');
-    const width = 256;
-    const section = { ...unused, names: [`:${'very_long_unused_name_'.repeat(8)}:`] };
-    const png = single(width, (col, measure) => [unusedBlocks(measure, section, col, 4)]);
-    // The single chip row sits right under the section title.
-    const band = {
-      x0: 0,
-      x1: png.readUInt32BE(16),
-      y0: (PAD + TITLE_HEIGHT) * SCALE,
-      y1: (PAD + TITLE_HEIGHT + 22) * SCALE,
-    };
-    const right = await rightmost(png, COLOR.tile, band);
-    expect(right).toBeGreaterThan((PAD + width - 20) * SCALE);
-    expect(right).toBeLessThan((PAD + width) * SCALE);
   });
 });
 

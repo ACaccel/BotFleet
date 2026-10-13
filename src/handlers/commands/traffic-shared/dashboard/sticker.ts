@@ -1,18 +1,18 @@
 /**
  * Server-sticker dashboard in two columns: the summary tiles
- * above the chips of stickers nobody used, beside a grid of ranked sticker
+ * above the pictures of stickers nobody used, beside a grid of ranked sticker
  * cards (art, name, count with share, usage bar relative to the top
  * sticker).
  */
 import { roundRect } from '../canvas-primitives';
 import { drawArt } from './art';
-import { unusedBlocks } from './chips';
 import { renderColumns } from './columns';
 import { sectionTitle, type Block, type Column, type Ctx } from './layout';
 import { drawFitted, drawText, fitText, textWidth } from './text';
 import { COLOR, formatCount, formatPercent } from './theme';
 import { tileRows } from './tiles';
 import type { StickerDashboard, StickerRanking, StickerRankRow } from './types';
+import { unusedBlocks } from './unused';
 
 const COLUMNS = 4;
 /** Three rows of four cards. */
@@ -24,8 +24,9 @@ const CARD_HEIGHT = 138;
 /** The image is wider than 4:3, so narrow columns enlarge the displayed text. */
 const SUMMARY_WIDTH = 200;
 const GRID_WIDTH = COLUMNS * CARD_WIDTH + GAP * (COLUMNS - 1);
-/** Chip rows that keep the summary column no taller than a full grid. */
-const UNUSED_ROWS = 10;
+/** Picture rows that keep the summary column no taller than a full grid. */
+const UNUSED_ROWS = 6;
+const UNUSED_SIZE = 36;
 const ART_SIZE = 70;
 const NOTE_HEIGHT = 22;
 
@@ -113,7 +114,7 @@ export const renderStickerDashboard = (data: StickerDashboard): Buffer =>
         data.tiles.length > 0 ? tileRows(data.tiles, col) : undefined,
         data.unused === undefined
           ? undefined
-          : unusedBlocks(measure, data.unused, col, UNUSED_ROWS),
+          : unusedBlocks(measure, data.unused, col, UNUSED_ROWS, UNUSED_SIZE),
       ],
     },
     { width: GRID_WIDTH, sections: (col, measure) => [rankingBlocks(measure, data.ranking, col)] },

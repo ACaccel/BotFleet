@@ -10,7 +10,7 @@ import { STICKER_RANK_LIMIT, formatCount, renderStickerDashboard } from './dashb
 import { rangeLabel } from './labels';
 import { dashboardReply } from './reply';
 import { failed, type TrafficContext, type TrafficOutcome } from './run';
-import { countTile, rankUsage, UNUSED_CHIP_LIMIT, type UsageOrder } from './usage-ranking';
+import { countTile, rankUsage, UNUSED_ART_LIMIT, type UsageOrder } from './usage-ranking';
 
 const K = 'replies:traffic';
 
@@ -49,13 +49,18 @@ export const buildStickerReport = async (
   const rest = ranked.used.slice(shown.length);
   const totalUses = rows.reduce((sum, row) => sum + row.uses, 0);
   const restUses = rest.reduce((sum, row) => sum + row.uses, 0);
-  const cards = await Promise.all(
-    shown.map(async (row) => ({
-      name: row.name,
-      image: row.url === null ? null : await context.images.load(row.url),
-      count: row.uses,
-    })),
-  );
+  const pictureOf = (row: StickerCount) =>
+    row.url === null ? Promise.resolve(null) : context.images.load(row.url);
+  const [cards, unusedItems] = await Promise.all([
+    Promise.all(
+      shown.map(async (row) => ({ name: row.name, image: await pictureOf(row), count: row.uses })),
+    ),
+    Promise.all(
+      ranked.unused
+        .slice(0, UNUSED_ART_LIMIT)
+        .map(async (row) => ({ label: row.name, image: await pictureOf(row) })),
+    ),
+  ]);
   const image = renderStickerDashboard({
     tiles: [
       countTile(t, t(`${K}.sticker.server`), `${K}.unit_items`, rows.length),
@@ -74,8 +79,8 @@ export const buildStickerReport = async (
     unused: {
       title: t(`${K}.sticker.unused_title`),
       note: tCount(t, `${K}.unused_total`, ranked.unused.length),
-      names: ranked.unused.slice(0, UNUSED_CHIP_LIMIT).map((row) => row.name),
-      zeroLabel: '0',
+      total: ranked.unused.length,
+      items: unusedItems,
     },
   });
   return dashboardReply({

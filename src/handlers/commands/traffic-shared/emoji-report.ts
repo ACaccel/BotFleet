@@ -17,7 +17,7 @@ import { customEmojiLabel, customEmojiUrl } from './emoji-art';
 import { rangeLabel } from './labels';
 import { dashboardReply } from './reply';
 import { failed, type TrafficContext, type TrafficOutcome } from './run';
-import { countTile, rankUsage, UNUSED_CHIP_LIMIT, type UsageOrder } from './usage-ranking';
+import { countTile, rankUsage, UNUSED_ART_LIMIT, type UsageOrder } from './usage-ranking';
 
 const K = 'replies:traffic';
 
@@ -70,15 +70,25 @@ export const buildEmojiReport = async (
   const ranked = rankUsage(rows, total, (row) => row.label, filters.order);
   const shown = ranked.used.slice(0, Math.min(options.topN, EMOJI_RANK_LIMIT));
   const rest = ranked.used.slice(shown.length);
-  const rankRows: EmojiRankRow[] = await Promise.all(
-    shown.map(async (row) => ({
-      label: row.label,
-      image: await context.images.load(customEmojiUrl(row.id)),
-      animated: row.animated,
-      inContent: row.inContent,
-      inReactions: row.inReactions,
-    })),
-  );
+  const [rankRows, unusedItems] = await Promise.all([
+    Promise.all(
+      shown.map(
+        async (row): Promise<EmojiRankRow> => ({
+          label: row.label,
+          image: await context.images.load(customEmojiUrl(row.id)),
+          animated: row.animated,
+          inContent: row.inContent,
+          inReactions: row.inReactions,
+        }),
+      ),
+    ),
+    Promise.all(
+      ranked.unused.slice(0, UNUSED_ART_LIMIT).map(async (row) => ({
+        label: row.label,
+        image: await context.images.load(customEmojiUrl(row.id)),
+      })),
+    ),
+  ]);
   const uses = sum(rows, total);
   const image = renderEmojiDashboard({
     tiles: [
@@ -107,8 +117,8 @@ export const buildEmojiReport = async (
     unused: {
       title: t(`${K}.emoji.unused_title`),
       note: tCount(t, `${K}.unused_total`, ranked.unused.length),
-      names: ranked.unused.slice(0, UNUSED_CHIP_LIMIT).map((row) => row.label),
-      zeroLabel: '0',
+      total: ranked.unused.length,
+      items: unusedItems,
     },
   });
   return dashboardReply({

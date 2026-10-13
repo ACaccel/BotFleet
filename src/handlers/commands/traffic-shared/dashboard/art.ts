@@ -19,6 +19,12 @@ export interface Art {
   readonly initials: string;
 }
 
+/** The first `count` characters of a name, without a custom emoji's colons, for its placeholder. */
+export const initialsOf = (label: string, count: number): string =>
+  Array.from(label.replace(/^:+|:+$/g, ''))
+    .slice(0, count)
+    .join('');
+
 /** Preloaded art when drawable, else a coloured tile with short initials. */
 export const drawArt = (
   ctx: Ctx,
