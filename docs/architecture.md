@@ -85,6 +85,11 @@ reactions themselves. `npm run handlers:gen` maintains registries, checked by CI
 The router translates domain failures into ephemeral replies; failed autocomplete
 returns no suggestions. Shared Discord utilities live in `infra/discord`.
 
+The channel-logging middleware mirrors commands as localized embeds to the
+configured debug channel after dispatch, including when dispatch throws.
+It applies the `channel_logging` permission-rank ceiling without suppressing the
+durable guild audit trail. See [command log presentation](configuration.md#common-bot-settings).
+
 ## Temporary moderation and automatic replies
 
 Persistent [thread moderation](thread-moderation.md#implementation-contract) runs

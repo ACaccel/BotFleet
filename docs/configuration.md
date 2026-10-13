@@ -47,6 +47,14 @@ The optional base fields are defined by [Config](../src/bot/index.ts).
 Missing channel mappings skip channel-bound output. Message backups still run
 without a `debug` channel.
 
+Command logs in `guilds.<id>.channels.debug` use blue-purple embeds: the title
+shows the full slash-command path (including subcommand groups), or the context-menu
+command name; inline fields show user and channel mentions, and the footer shows
+the interaction's creation time in Discord's local time format. Labels follow the
+bot's `language`; argument values are omitted. The bot needs **Embed Links**
+permission in the debug channel. The `channel_logging` permission-rank ceiling
+still suppresses these embeds; durable guild audit logs remain unchanged.
+
 ## Feature settings
 
 Use the matching example:

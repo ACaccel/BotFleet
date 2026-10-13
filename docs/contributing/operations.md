@@ -2,6 +2,11 @@
 
 For service commands and rollback, see [deployment](deployment.md).
 
+## Command logs
+
+For debug-channel embed contents, language, permissions and suppression behavior,
+see [the configuration reference](../configuration.md#common-bot-settings).
+
 ## Host migration
 
 Follow the [migration runbook](../../tools/migration/README.md) for host transfer and cutover.

@@ -63,6 +63,9 @@ Every bot shares the framework capabilities:
   [`/traffic` dashboards](docs/message-archive.md#activity-reports) on the archive:
   dashboard images in embeds (two for the activity reports), public unless requested
   otherwise.
+- **Command logs.** Compact debug-channel embeds show the full command name,
+  user and channel mentions, and execution time. See
+  [configuration](docs/configuration.md#common-bot-settings).
 
 ## Requirements
 

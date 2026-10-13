@@ -18,13 +18,14 @@
  *     Implemented as a middleware so a bot that wants a different logging
  *     policy declares one instead of overriding the command dispatcher.
  */
-import { MessageFlags } from 'discord.js';
+import { Colors, EmbedBuilder, MessageFlags, channelMention, userMention } from 'discord.js';
 import type { BaseBot } from './index';
 import { executeAutocomplete, executeCommand } from '@cmd';
 import { executeButton } from '@button';
 import { executeModal } from '@modal';
 import { executeSSM } from '@select-menu';
 import { logGuildEvent } from '@core/logger';
+import { bindTranslator } from '@core/i18n';
 import { ancestorChannelIdsOf, sendChannelLog } from '../infra/discord';
 import type {
   InteractionContext,
@@ -76,11 +77,11 @@ interface ChannelLoggingMiddlewareConfig {
 }
 
 /**
- * Emits the per-command channel log line + guild log line. Only fires
+ * Emits the per-command channel embed + guild log line. Only fires
  * for slash-command / context-menu interactions — other interaction
  * types are not logged. The {@link PermissionRankPolicy} (matching the
  * channel or its parent thread against the `channel_logging` ceiling)
- * suppresses the debug-channel line but never the guild log — the latter
+ * suppresses the debug-channel embed but never the guild log — the latter
  * is a permanent audit trail.
  */
 export const createChannelLoggingMiddleware = (
@@ -105,12 +106,37 @@ export const createChannelLoggingMiddleware = (
             ancestorChannelIdsOf(interaction.channel, interaction.guild?.channels.cache),
           );
           if (!suppressed) {
-            const channel_log = `Command: /${interaction.commandName}, User: ${interaction.user.displayName}, Channel: <#${interaction.channelId}>`;
+            const t = bindTranslator(bot.translator);
+            const commandName = interaction.isChatInputCommand()
+              ? [
+                  `/${interaction.commandName}`,
+                  interaction.options.getSubcommandGroup(false),
+                  interaction.options.getSubcommand(false),
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+              : interaction.commandName;
+            const embed = new EmbedBuilder()
+              .setColor(Colors.Blurple)
+              .setTitle(commandName)
+              .addFields(
+                {
+                  name: t('replies:base_bot.command_log.user'),
+                  value: userMention(interaction.user.id),
+                  inline: true,
+                },
+                {
+                  name: t('replies:base_bot.command_log.channel'),
+                  value: channelMention(interaction.channelId),
+                  inline: true,
+                },
+              )
+              .setFooter({ text: t('replies:base_bot.command_log.executed_at') })
+              .setTimestamp(interaction.createdTimestamp);
             void sendChannelLog(
               bot.logger,
               bot.getGuildInfo(interaction.guildId)?.channels?.debug,
-              undefined,
-              channel_log,
+              embed,
             );
           }
         }

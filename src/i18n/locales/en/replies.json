@@ -1,6 +1,11 @@
 {
   "base_bot": {
-    "reboot_notice": "{{botName}} has rebooted!"
+    "reboot_notice": "{{botName}} has rebooted!",
+    "command_log": {
+      "user": "User",
+      "channel": "Channel",
+      "executed_at": "Executed at"
+    }
   },
   "nijika": {
     "help_message": "### Currently supported features:\n1. auto reply: the bot replies based on message pairs in the database\n2. roll dice: example input -> `2d5`, randomly picks two numbers between 1 and 5\n"
