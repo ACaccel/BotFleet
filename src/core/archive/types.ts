@@ -507,6 +507,12 @@ export interface ArchivePeriodicRun {
    * window), even when its watermark is newer: Gateway events after it may be missing.
    */
   rescanFrom?: number;
+  /**
+   * An incremental run rereads every message after this time: the previous coverage
+   * end (or `rescanFrom` when earlier) minus the overlap window. Each source starts
+   * at or before it. Absent for full runs and when nothing was covered before.
+   */
+  coverageFrom?: number;
 }
 /** Continuity state a periodic run or full backup was planned against. */
 export interface ArchiveRunOrigin {

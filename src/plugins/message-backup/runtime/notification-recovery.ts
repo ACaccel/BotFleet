@@ -1,8 +1,8 @@
 import { archiveJobProgress } from '../../../core/archive/progress';
 import type { ArchiveFullBackupJob } from '../../../core/archive/types';
-import type { ArchiveNoticeSlot } from '../../../core/archive/schedule';
+import type { ArchiveNoticeSlot, ArchivePeriodicSummary } from '../../../core/archive/schedule';
 import type { ArchiveScheduleRepo } from '../../../persistence/repositories/archive-schedule.repo';
-import { deliverArchiveScheduleNotice } from './backup-notifier';
+import { deliverArchiveScheduleNotice, publishArchivePeriodicSummary } from './backup-notifier';
 import type { ArchiveGuildState, ArchiveWorkerContextFor } from './worker-context';
 
 /** Later retries of an unsaved terminal state, and of a failed result edit, back off to five minutes. */
@@ -15,11 +15,14 @@ export const deferredRetryDelay = (attempts: number): number =>
 
 /**
  * Delivers results and notices that must reach Discord eventually: a finished full
- * backup's panel result and the schedule's failing and recovered notices.
+ * backup's panel result and the schedule's failing and recovered notices. Also
+ * posts each periodic pass summary, best effort.
  */
 export class NotificationRecovery {
   public constructor(
-    private readonly ctx: ArchiveWorkerContextFor<'logger' | 'registry' | 'translator'>,
+    private readonly ctx: ArchiveWorkerContextFor<
+      'adminIds' | 'client' | 'logger' | 'registry' | 'translator'
+    >,
   ) {}
 
   /**
@@ -94,6 +97,7 @@ export class NotificationRecovery {
         this.ctx.options.translator,
         Date.now(),
         slot,
+        this.ctx.options.adminIds ?? [],
       );
       if (delivery.kind === 'deferred')
         this.ctx.options.logger.warn(
@@ -110,6 +114,35 @@ export class NotificationRecovery {
         { guildId, slot, err: error },
         'Archive schedule notice not recorded',
       );
+    }
+  }
+
+  /**
+   * Replaces the debug channel's pass summary. A summary is informational, so a
+   * failure is logged and never retried; the next pass posts a fresh one.
+   */
+  public async publishPeriodicSummary(
+    guildId: string,
+    schedule: ArchiveScheduleRepo,
+    summary: ArchivePeriodicSummary,
+  ): Promise<void> {
+    if (this.ctx.stopped) return;
+    const channel = this.ctx.options.registry.getChannel(guildId, 'debug');
+    try {
+      const delivery = await publishArchivePeriodicSummary(
+        schedule,
+        channel !== undefined && channel.isSendable() ? channel : undefined,
+        this.ctx.options.client.rest,
+        this.ctx.options.translator,
+        summary,
+      );
+      if (delivery.kind === 'sent' && delivery.deleteError !== undefined)
+        this.ctx.options.logger.warn(
+          { guildId, err: delivery.deleteError },
+          'Archive previous pass summary not deleted',
+        );
+    } catch (error) {
+      this.ctx.options.logger.warn({ guildId, err: error }, 'Archive pass summary not posted');
     }
   }
 }

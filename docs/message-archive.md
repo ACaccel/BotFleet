@@ -252,12 +252,28 @@ immediately. A disabled running pass preserves checkpoints; enabling resumes tha
 pass before starting a fresh one. In-flight requests may finish before a pause is
 observed. Schedule changes never stop a full backup or live capture.
 
-Passes post nothing to Discord while they succeed. After three consecutive passes
-end failed (with blocking failures or an unexpected error, or skipped because the
-guild is in capture-only mode), the debug channel gets one notice with the failure
-count, the latest reason category and the next retry time. Further failures send
-nothing until a pass completes, which sends one recovered notice. _Complete with
-gaps_ is not a failure; interrupted passes neither count nor reset the streak.
+Each pass that reaches its end, or fails after its run began, posts a summary to
+the debug channel and deletes the previous one, so the channel keeps only the
+latest. The summary shows the result, the range it reread, channels, messages read
+and messages added or updated, known gaps, the failure reason when not complete,
+the duration and the next run. The range starts at the previous coverage end (the
+later of the last complete pass's and the newest complete full backup's cutoff, or
+the restart rescan bound when earlier) minus `overlap_minutes`; every message after
+it was reread. A full reconciliation shows its cutoff instead. Interrupted or
+skipped passes post no summary. Summaries are best effort: a failed send keeps the
+previous summary and is not retried, and a previous summary that cannot be deleted
+for a transient reason stays (`Archive previous pass summary not deleted`). The
+latest summary's message ID is kept in `archive_schedule`, so the replacement works
+across restarts; a crash between posting and recording leaves that one summary
+behind.
+
+After three consecutive passes end failed (with blocking failures or an unexpected
+error, or skipped because the guild is in capture-only mode), the debug channel gets
+one notice with the failure count, the latest reason category and the next retry
+time. Further failures send nothing until a pass completes, which sends one
+recovered notice. _Complete with gaps_ is not a failure; interrupted passes neither
+count nor reset the streak. Notices mention every msg-archive `admin` ID and are
+never deleted.
 
 The streak and the pending notice live in `archive_schedule`, so a restart does
 not lose a notice. Delivery is at least once: a crash between sending and recording
@@ -535,8 +551,8 @@ window of the running process, one recovery notice follows, but only after the
 warning was delivered (or refused permanently), so it never replaces an unsent
 warning. Both are stored in
 `archive_schedule` (document `invalid-requests`) and delivered like the
-[periodic-health notices](#periodic-schedule): a restart neither repeats the warning
-nor drops the recovery, and a failed send is retried. Investigate the cause (a lost
+[periodic-health notices](#periodic-schedule), mentioning the `admin` IDs: a restart
+neither repeats the warning nor drops the recovery, and a failed send is retried. Investigate the cause (a lost
 permission answered with 403, a revoked token, repeated 429s) before raising
 concurrency again.
 

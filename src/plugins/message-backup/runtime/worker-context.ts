@@ -40,6 +40,8 @@ export interface ArchiveWorkerOptions {
   config: ArchiveRuntimeConfig;
   policy: ArchivePolicy;
   backupLogEnabled?: boolean;
+  /** Users the debug-channel warning and recovery notices mention (the bot's admins). */
+  adminIds?: readonly string[];
   /** Without it, Gateway continuity is never confirmed beyond each boot's start. */
   gateway?: ArchiveGatewayReadiness;
   /** Builds each guild's full-backup panel publisher once, when the guild opens. */

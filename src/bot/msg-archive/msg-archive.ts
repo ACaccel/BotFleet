@@ -56,6 +56,7 @@ export class MsgArchive extends BaseBot<MsgArchiveConfig> {
       createMessageBackupPlugin({
         backupServers: this.config.backup_server,
         backupLogEnabled: this.config.backup_log_enabled ?? false,
+        adminIds: this.config.admin ?? [],
         policy: this.config.archive_policy,
         runtime: this.config.archive_runtime,
         ...(intervalMinutes !== undefined ? { backupIntervalMs: intervalMinutes * MINUTE_MS } : {}),

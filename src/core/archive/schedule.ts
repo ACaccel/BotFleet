@@ -51,6 +51,34 @@ export interface ArchiveInvalidRequestAlert {
 /** Which stored notice a delivery reads and records. */
 export type ArchiveNoticeSlot = 'schedule' | 'invalid-requests';
 
+/** A posted Discord message the worker may later delete. */
+export interface ArchiveMessageRef {
+  readonly channelId: string;
+  readonly messageId: string;
+}
+
+/**
+ * What the debug-channel summary of a finished periodic pass shows. Interrupted
+ * and skipped passes have none.
+ */
+export interface ArchivePeriodicSummary {
+  readonly status: 'complete' | 'partial' | 'failed';
+  /** A full reconciliation rereads every message before `cutoff`. */
+  readonly full: boolean;
+  readonly cutoff: number;
+  /** Every message after this time was reread (see `ArchivePeriodicRun.coverageFrom`). */
+  readonly coverageFrom?: number;
+  readonly startedAt: number;
+  readonly finishedAt: number;
+  readonly channels?: number;
+  readonly scanned?: number;
+  /** Messages inserted or updated. */
+  readonly written?: number;
+  readonly gapCount: number;
+  /** Category of the first blocking failure of a partial or failed pass. */
+  readonly reason?: ArchiveGapReason;
+}
+
 export interface ArchiveSchedule {
   readonly enabled: boolean;
   readonly intervalMs: number;
@@ -65,6 +93,8 @@ export interface ArchiveSchedule {
   readonly lastCompletedAt?: number;
   readonly lastFailureReason?: ArchiveGapReason;
   readonly notice?: ArchiveScheduleNotice;
+  /** The latest pass summary in the debug channel; the next summary replaces it. */
+  readonly summary?: ArchiveMessageRef;
 }
 
 /** An operator's schedule change; omitted settings stay as saved. */

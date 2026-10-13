@@ -77,7 +77,11 @@ const rawMessage = () => ({
 const fixture = (
   manager: StaticConnectionManager,
   read: () => Record<string, unknown> = rawMessage,
-  notifications?: { send: ReturnType<typeof vi.fn>; patch: ReturnType<typeof vi.fn> },
+  notifications?: {
+    send: ReturnType<typeof vi.fn>;
+    patch: ReturnType<typeof vi.fn>;
+    delete?: ReturnType<typeof vi.fn>;
+  },
   config: Record<string, unknown> = {},
   extra: Partial<ConstructorParameters<typeof ArchiveWorker>[0]> = {},
 ) => {
@@ -103,6 +107,7 @@ const fixture = (
             : read(),
       ),
       ...(notifications === undefined ? {} : { patch: notifications.patch }),
+      ...(notifications?.delete === undefined ? {} : { delete: notifications.delete }),
     },
   } as unknown as Client;
   const logger = createLogger({ level: 'silent', pretty: false });
@@ -366,8 +371,12 @@ describe('msg-archive worker integration', () => {
   it('notifies once after three failed passes and once on recovery, without repeating after a restart', async () =>
     withFreshConnection(async (connection) => {
       const manager = new StaticConnectionManager(connection);
-      const notifications = { send: vi.fn(async () => ({ id: '90' })), patch: vi.fn() };
-      const first = fixture(manager, rawMessage, notifications);
+      const notifications = {
+        send: vi.fn(async () => ({ id: '90', channelId: '10' })),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      };
+      const first = fixture(manager, rawMessage, notifications, {}, { adminIds: ['42'] });
       const failing = failingHistory(first.client);
       const store = new MongoArchiveScheduleRepo(connection, 60_000);
       await store.update({ enabled: true });
@@ -375,17 +384,24 @@ describe('msg-archive worker integration', () => {
         connection
           .collection<{ _id: string }>('archive_schedule')
           .updateOne({ _id: 'current' }, { $set: { nextRunAt: 0 } });
-      const titles = () =>
-        notifications.send.mock.calls.map(
-          (call) => (call as unknown as [{ embeds: { title: string }[] }])[0].embeds[0]?.title,
-        );
+      type Sent = { content?: string; embeds: { title: string }[]; allowedMentions: unknown };
+      // Pass summaries share the debug channel; only notices matter here.
+      const notices = () =>
+        notifications.send.mock.calls
+          .map((call) => (call as unknown as [Sent])[0])
+          .filter((sent) => sent.embeds[0]?.title.startsWith('replies:archive.notice_'));
+      const titles = () => notices().map((sent) => sent.embeds[0]?.title);
       try {
         for (let pass = 0; pass < 4; pass += 1) {
           await first.worker.scheduledPeriodic('1', 60_000);
           await due();
-          if (pass === 1) expect(notifications.send).not.toHaveBeenCalled();
+          if (pass === 1) expect(notices()).toEqual([]);
         }
         expect(titles()).toEqual(['replies:archive.notice_failing_title']);
+        expect(notices()[0]).toMatchObject({
+          content: '<@42>',
+          allowedMentions: { parse: [], users: ['42'] },
+        });
       } finally {
         await first.worker.stop();
       }
@@ -400,9 +416,64 @@ describe('msg-archive worker integration', () => {
         ]);
         await due();
         await second.worker.scheduledPeriodic('1', 60_000);
-        expect(notifications.send).toHaveBeenCalledTimes(2);
+        expect(notices()).toHaveLength(2);
       } finally {
         await second.worker.stop();
+      }
+    }));
+
+  it('replaces the debug-channel pass summary after each pass and states the range it reread', async () =>
+    withFreshConnection(async (connection) => {
+      let id = 70;
+      const notifications = {
+        send: vi.fn(async () => ({ id: String((id += 1)), channelId: '10' })),
+        patch: vi.fn(),
+        delete: vi.fn(async () => undefined),
+      };
+      const { worker } = fixture(
+        new StaticConnectionManager(connection),
+        rawMessage,
+        notifications,
+        { overlap_minutes: 30 },
+      );
+      const store = new MongoArchiveScheduleRepo(connection, 60_000);
+      await store.update({ enabled: true });
+      const summaries = () =>
+        notifications.send.mock.calls.map(
+          (call) =>
+            (call as unknown as [{ embeds: { title: string; description: string }[] }])[0]
+              .embeds[0],
+        );
+      try {
+        await worker.scheduledPeriodic('1', 60_000);
+        const first = await runs(connection).findOne({});
+        expect(first).toMatchObject({ status: 'complete', full: true });
+        expect(first?.coverageFrom).toBeUndefined();
+        expect(summaries()).toEqual([
+          expect.objectContaining({
+            title: 'replies:archive.summary_title_complete',
+            description: expect.stringContaining('replies:archive.summary_range_full'),
+          }),
+        ]);
+        expect(notifications.delete).not.toHaveBeenCalled();
+
+        await connection
+          .collection<{ _id: string }>('archive_schedule')
+          .updateOne({ _id: 'current' }, { $set: { nextRunAt: 0 } });
+        await worker.scheduledPeriodic('1', 60_000);
+        const second = await runs(connection).findOne({});
+        expect(second).toMatchObject({ status: 'complete', full: false });
+        expect(second?.coverageFrom).toBe(
+          Math.min(first!.cutoff, second?.rescanFrom ?? first!.cutoff) - 30 * 60_000,
+        );
+        expect(summaries()[1]).toMatchObject({
+          title: 'replies:archive.summary_title_complete',
+          description: expect.stringContaining('replies:archive.summary_range'),
+        });
+        expect(notifications.delete).toHaveBeenCalledExactlyOnceWith('/channels/10/messages/71');
+        expect((await store.read()).summary).toEqual({ channelId: '10', messageId: '72' });
+      } finally {
+        await worker.stop();
       }
     }));
 

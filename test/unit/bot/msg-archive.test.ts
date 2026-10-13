@@ -54,9 +54,18 @@ describe('MsgArchive command wiring', () => {
     expect(wiring.createPlugin).toHaveBeenCalledWith({
       backupServers: ['guild'],
       backupLogEnabled: false,
+      adminIds: [],
       policy: undefined,
       runtime: undefined,
     });
+  });
+
+  it('passes the configured admins to the plugin for its notice mentions', () => {
+    new InspectableMsgArchive(new Client({ intents: [] }), 'token', 'mongo', 'client', {
+      backup_server: [],
+      admin: ['42'],
+    });
+    expect(wiring.createPlugin).toHaveBeenCalledWith(expect.objectContaining({ adminIds: ['42'] }));
   });
 
   it('binds the archive control factory that the /archive handlers resolve', () => {

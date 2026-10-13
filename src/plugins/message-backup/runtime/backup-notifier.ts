@@ -4,10 +4,11 @@ import type { ArchiveProgressSnapshot } from '../../../core/archive/progress';
 import type { ArchiveControlRepo } from '../../../persistence/repositories/archive-control.repo';
 import type { ArchiveScheduleRepo } from '../../../persistence/repositories/archive-schedule.repo';
 import type { ArchiveText } from '../../../application/archive/panel-format';
-import type { ArchiveNoticeSlot } from '../../../core/archive/schedule';
+import type { ArchiveNoticeSlot, ArchivePeriodicSummary } from '../../../core/archive/schedule';
 import {
   renderArchiveBackupPanel,
   renderArchiveInvalidRequestNotice,
+  renderArchivePeriodicSummary,
   renderArchiveScheduleNotice,
   type ArchivePanel,
 } from '../../../application/archive/panel';
@@ -159,10 +160,10 @@ const pendingNotice = async (
 };
 
 /**
- * Sends a slot's pending notice (periodic health by default) to the debug channel.
- * Delivery is at least once: a crash between the send and its record can repeat
- * it. A failed send waits with a capped backoff; a permanent refusal is recorded
- * and never retried.
+ * Sends a slot's pending notice (periodic health by default) to the debug channel,
+ * mentioning `mentions` (the bot's admins). Delivery is at least once: a crash
+ * between the send and its record can repeat it. A failed send waits with a capped
+ * backoff; a permanent refusal is recorded and never retried.
  */
 export const deliverArchiveScheduleNotice = async (
   schedule: ArchiveScheduleRepo,
@@ -170,6 +171,7 @@ export const deliverArchiveScheduleNotice = async (
   translator: ArchiveText,
   now = Date.now(),
   slot: ArchiveNoticeSlot = 'schedule',
+  mentions: readonly string[] = [],
 ): Promise<ArchiveNoticeDelivery> => {
   const pending = await pendingNotice(schedule, slot, translator);
   const notice = pending?.notice;
@@ -184,7 +186,11 @@ export const deliverArchiveScheduleNotice = async (
     return { kind: 'none' };
   const panel = pending.render();
   try {
-    await channel.send({ embeds: panel.embeds, allowedMentions: { parse: [] } });
+    await channel.send({
+      ...(mentions.length === 0 ? {} : { content: mentions.map((id) => `<@${id}>`).join(' ') }),
+      embeds: panel.embeds,
+      allowedMentions: { parse: [], users: [...mentions] },
+    });
   } catch (error) {
     if (isPermanentDiscordFailure(error)) {
       await schedule.abandonNotice(notice.createdAt, slot);
@@ -197,5 +203,40 @@ export const deliverArchiveScheduleNotice = async (
     return { kind: 'deferred', error, retryAt };
   }
   await schedule.markNoticeDelivered(notice.createdAt, slot);
+  return { kind: 'sent' };
+};
+
+/** What happened to a pass summary; `deleteError` is set when the replaced one remains. */
+export type ArchiveSummaryDelivery =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'sent'; readonly deleteError?: unknown };
+
+/**
+ * Posts a periodic pass summary to the debug channel, then deletes the summary it
+ * replaces so the channel keeps only the latest. A failed send throws and keeps the
+ * previous summary. Deleting a summary that is already gone, or no longer
+ * accessible, counts as done; other delete failures leave it in place.
+ */
+export const publishArchivePeriodicSummary = async (
+  schedule: Pick<ArchiveScheduleRepo, 'read' | 'replaceSummary'>,
+  channel: SendableChannels | undefined,
+  rest: Pick<Client['rest'], 'delete'>,
+  translator: ArchiveText,
+  summary: ArchivePeriodicSummary,
+): Promise<ArchiveSummaryDelivery> => {
+  if (channel === undefined) return { kind: 'none' };
+  const { nextRunAt } = await schedule.read();
+  const panel = renderArchivePeriodicSummary(translator, summary, nextRunAt);
+  const sent = await channel.send({ embeds: panel.embeds, allowedMentions: { parse: [] } });
+  const previous = await schedule.replaceSummary({
+    channelId: sent.channelId,
+    messageId: sent.id,
+  });
+  if (previous === undefined || previous.messageId === sent.id) return { kind: 'sent' };
+  try {
+    await rest.delete(Routes.channelMessage(previous.channelId, previous.messageId));
+  } catch (error) {
+    if (!isPermanentDiscordFailure(error)) return { kind: 'sent', deleteError: error };
+  }
   return { kind: 'sent' };
 };

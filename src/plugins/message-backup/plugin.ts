@@ -15,6 +15,8 @@ interface MessageBackupPluginConfig {
   readonly backupServers: readonly string[];
   readonly backupIntervalMs?: number;
   readonly backupLogEnabled?: boolean;
+  /** Users the archive's warning and recovery notices mention. */
+  readonly adminIds?: readonly string[];
   readonly policy?: unknown;
   readonly runtime?: unknown;
 }
@@ -47,6 +49,7 @@ export const createMessageBackupPlugin = (raw: MessageBackupPluginConfig): Plugi
         config,
         policy,
         backupLogEnabled: raw.backupLogEnabled ?? false,
+        adminIds: [...(raw.adminIds ?? [])],
         gateway,
         backupNotifiers: archiveBackupNotifiers(client, ctx.translator),
         archiveRepos: buildArchiveRepos,

@@ -17,6 +17,7 @@ import {
 import type { ArchiveActivityStep, ArchiveProgressSnapshot } from '../../core/archive/progress';
 import type {
   ArchiveInvalidRequestNotice,
+  ArchivePeriodicSummary,
   ArchiveScheduleNotice,
 } from '../../core/archive/schedule';
 import { ARCHIVE_INVALID_REQUESTS } from '../../core/archive/limits';
@@ -459,6 +460,68 @@ export const renderArchiveScheduleNotice = (
   ],
   components: [],
 });
+
+const SUMMARY_TITLES: Readonly<Record<ArchivePeriodicSummary['status'], string>> = {
+  complete: 'replies:archive.summary_title_complete',
+  partial: 'replies:archive.summary_title_partial',
+  failed: 'replies:archive.summary_title_failed',
+};
+
+const summaryRange = (t: ArchiveText, summary: ArchivePeriodicSummary): string => {
+  const cutoff = archiveTime(summary.cutoff);
+  if (summary.full) return t.t('replies:archive.summary_range_full', { cutoff });
+  return summary.coverageFrom === undefined
+    ? t.t('replies:archive.summary_range_until', { cutoff })
+    : t.t('replies:archive.summary_range', { from: archiveTime(summary.coverageFrom), cutoff });
+};
+
+/** The debug-channel summary of a finished periodic pass; each pass replaces the previous one. */
+export const renderArchivePeriodicSummary = (
+  t: ArchiveText,
+  summary: ArchivePeriodicSummary,
+  nextRunAt: number | null,
+): ArchivePanel => {
+  const counts =
+    summary.channels === undefined || summary.scanned === undefined || summary.written === undefined
+      ? undefined
+      : t.t('replies:archive.summary_counts', {
+          channels: archiveNumber(summary.channels),
+          scanned: archiveNumber(summary.scanned),
+          written: archiveNumber(summary.written),
+        });
+  const lines = [
+    summaryRange(t, summary),
+    counts,
+    summary.gapCount > 0
+      ? t.t('replies:archive.summary_gaps', { count: archiveNumber(summary.gapCount) })
+      : undefined,
+    summary.status === 'complete'
+      ? undefined
+      : t.t('replies:archive.summary_reason', { reason: archiveReason(t, summary.reason) }),
+    t.t('replies:archive.summary_timing', {
+      duration: archiveDuration(t, summary.finishedAt - summary.startedAt),
+      next:
+        nextRunAt === null
+          ? t.t('replies:archive.summary_next_disabled')
+          : archiveTime(nextRunAt, 'R'),
+    }),
+  ];
+  return {
+    embeds: [
+      {
+        title: t.t(SUMMARY_TITLES[summary.status]),
+        description: lines.filter((line) => line !== undefined).join('\n'),
+        color:
+          summary.status === 'failed'
+            ? ARCHIVE_COLORS.failed
+            : summary.status === 'partial' || summary.gapCount > 0
+              ? ARCHIVE_COLORS.gaps
+              : ARCHIVE_COLORS.complete,
+      },
+    ],
+    components: [],
+  };
+};
 
 /** The debug-channel notice of a high, or recovered, Discord invalid-request count. */
 export const renderArchiveInvalidRequestNotice = (

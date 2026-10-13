@@ -13,6 +13,7 @@ import {
   renderArchiveGapPage,
   renderArchiveInvalidRequestNotice,
   renderArchiveRecords,
+  renderArchivePeriodicSummary,
   renderArchiveScheduleNotice,
   type ArchivePanel,
 } from '../../../../src/application/archive/panel';
@@ -257,6 +258,78 @@ describe('archive panels', () => {
       expect(recovered.embeds[0]?.description).toContain('200');
     },
   );
+
+  it.each(['en', 'zh-TW'] as const)('renders periodic pass summaries in %s', async (locale) => {
+    const t = await translator(locale);
+    const base = {
+      full: false,
+      cutoff: 1_700_000_000_000,
+      startedAt: 1_699_999_880_000,
+      finishedAt: 1_700_000_000_000,
+      gapCount: 0,
+    } as const;
+    const complete = renderArchivePeriodicSummary(
+      t,
+      {
+        ...base,
+        status: 'complete',
+        coverageFrom: 1_699_996_400_000,
+        channels: 1092,
+        scanned: 9733,
+        written: 45,
+      },
+      1_700_003_600_000,
+    );
+    expectLocalized(complete);
+    expect(complete.components).toEqual([]);
+    expect(complete.embeds[0]?.color).toBe(0x57f287);
+    for (const part of [
+      '<t:1699996400:f>',
+      '<t:1700000000:f>',
+      '<t:1700003600:R>',
+      '1,092',
+      '9,733',
+    ])
+      expect(text(complete)).toContain(part);
+
+    const full = renderArchivePeriodicSummary(t, { ...base, status: 'complete', full: true }, null);
+    expectLocalized(full);
+    expect(text(full)).toContain(t.t('replies:archive.summary_next_disabled'));
+    expect(text(full)).toContain(
+      t.t('replies:archive.summary_range_full', { cutoff: '<t:1700000000:f>' }),
+    );
+    // Without counts the summary is only its range and timing lines.
+    expect(full.embeds[0]?.description?.split('\n')).toHaveLength(2);
+
+    const until = renderArchivePeriodicSummary(
+      t,
+      { ...base, status: 'complete', gapCount: 3 },
+      null,
+    );
+    expectLocalized(until);
+    expect(until.embeds[0]?.color).toBe(0xfee75c);
+    expect(text(until)).toContain(
+      t.t('replies:archive.summary_range_until', { cutoff: '<t:1700000000:f>' }),
+    );
+
+    const partial = renderArchivePeriodicSummary(
+      t,
+      { ...base, status: 'partial', reason: 'permission', channels: 1, scanned: 2, written: 0 },
+      1_700_000_060_000,
+    );
+    expectLocalized(partial);
+    expect(partial.embeds[0]?.color).toBe(0xfee75c);
+    expect(text(partial)).toContain(t.t('replies:archive.reason_permission'));
+
+    const failed = renderArchivePeriodicSummary(
+      t,
+      { ...base, status: 'failed' },
+      1_700_000_060_000,
+    );
+    expectLocalized(failed);
+    expect(failed.embeds[0]?.color).toBe(0xed4245);
+    expect(failed.embeds[0]?.title).toBe(t.t('replies:archive.summary_title_failed'));
+  });
 
   it.each(['en', 'zh-TW'] as const)('renders status and schedule in %s', async (locale) => {
     const t = await translator(locale);

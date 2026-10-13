@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type {
-  ArchiveInboxEntry,
-  ArchivePeriodicRecord,
-  ArchivePeriodicRun,
-  ArchiveTerminalStatus,
+import {
+  archiveJobCutoff,
+  type ArchiveInboxEntry,
+  type ArchivePeriodicRecord,
+  type ArchivePeriodicRun,
+  type ArchiveTerminalStatus,
 } from '../../../core/archive/types';
 import { ARCHIVE_JOB_RECORDS_KEPT, ARCHIVE_LIMITS } from '../../../core/archive/limits';
-import { archiveRetryDelay } from '../../../core/archive/schedule';
+import { archiveRetryDelay, type ArchivePeriodicSummary } from '../../../core/archive/schedule';
 import { continuityFullChannelIds, continuityRescanFrom } from '../../../core/archive/continuity';
 import { ProgressTracker } from '../flow/progress';
 import type { GatewayContinuity } from './continuity';
@@ -34,7 +35,10 @@ export interface PeriodicRunnerDependencies {
   readonly inbox: Pick<ArchiveInboxReducer, 'drainInbox'>;
   readonly scanner: Pick<ScanRunner, 'scan'>;
   readonly progress: Pick<ProgressPublisher, 'close'>;
-  readonly notifications: Pick<NotificationRecovery, 'deliverScheduleNotice'>;
+  readonly notifications: Pick<
+    NotificationRecovery,
+    'deliverScheduleNotice' | 'publishPeriodicSummary'
+  >;
 }
 
 /**
@@ -43,7 +47,7 @@ export interface PeriodicRunnerDependencies {
  */
 export class PeriodicRunner {
   public constructor(
-    private readonly ctx: ArchiveWorkerContextFor<'logger'>,
+    private readonly ctx: ArchiveWorkerContextFor<'config' | 'logger'>,
     private readonly deps: PeriodicRunnerDependencies,
   ) {}
 
@@ -99,6 +103,9 @@ export class PeriodicRunner {
       });
     }
     if (work !== undefined) await this.deps.notifications.deliverScheduleNotice(guildId, schedule);
+    // Posted after `finish`, so it shows the next due time.
+    if (pass?.summary !== undefined)
+      await this.deps.notifications.publishPeriodicSummary(guildId, schedule, pass.summary);
     if (pass !== undefined && 'error' in pass) throw pass.error;
   }
 
@@ -168,6 +175,9 @@ export class PeriodicRunner {
           ]),
         ];
         const rescanFrom = continuityRescanFrom(state.continuity.breaks);
+        const coverageFrom = state.continuity.fullRequired
+          ? undefined
+          : await this.coverageFrom(state, previous, rescanFrom);
         run = {
           _id: 'current',
           runId: `periodic:${randomUUID()}`,
@@ -185,6 +195,7 @@ export class PeriodicRunner {
             ? {}
             : { fullChannelIds }),
           ...(state.continuity.fullRequired || rescanFrom === undefined ? {} : { rescanFrom }),
+          ...(coverageFrom === undefined ? {} : { coverageFrom }),
         };
       }
       const current = run;
@@ -229,13 +240,22 @@ export class PeriodicRunner {
         gaps: [...result.gaps],
         issueCount: result.issues.length,
       });
+      const summary = (
+        status: ArchivePeriodicSummary['status'],
+        reason?: ArchivePeriodicSummary['reason'],
+      ): ArchivePeriodicSummary => ({
+        ...periodicSummary(current, status, passStartedAt, result.gaps.length, reason),
+        ...pickCount(result.counts, 'channels'),
+        ...pickCount(result.counts, 'scanned'),
+        ...pickCount(result.counts, 'written'),
+      });
       if (result.status === 'complete') {
         await this.deps.continuity.settleCoverage(state, current);
-        return { outcome: { kind: 'complete' } };
+        return { outcome: { kind: 'complete' }, summary: summary('complete') };
       }
-      return blocked
-        ? { outcome: { kind: 'partial' }, reason: archiveGapReason(result.issues[0] ?? '') }
-        : { outcome: { kind: 'interrupted' } };
+      if (!blocked) return { outcome: { kind: 'interrupted' } };
+      const reason = archiveGapReason(result.issues[0] ?? '');
+      return { outcome: { kind: 'partial' }, reason, summary: summary('partial', reason) };
     } catch (error) {
       const interrupted =
         error instanceof ArchiveScanInterruptedError ||
@@ -266,10 +286,14 @@ export class PeriodicRunner {
         });
       }
       if (interrupted) return { outcome: { kind: 'interrupted' } };
+      const reason = archiveGapReason(String(error));
       return {
         outcome: { kind: 'failed', consecutiveFailures },
         error,
-        reason: archiveGapReason(String(error)),
+        reason,
+        ...(run === undefined
+          ? {}
+          : { summary: periodicSummary(run, 'failed', passStartedAt, 0, reason) }),
       };
     }
   }
@@ -310,6 +334,37 @@ export class PeriodicRunner {
     } catch (error) {
       this.ctx.options.logger.warn({ guildId, err: error }, 'Archive pass record not saved');
     }
+  }
+
+  /**
+   * The time after which a new incremental run rereads every message: the later of
+   * the previous complete run's and the newest complete full backup's cutoffs, or
+   * `rescanFrom` when earlier, minus the overlap window. A closed run passes on its
+   * own bound, since its unfinished sources still start there. `undefined` when
+   * nothing was covered before. Lookup failures only drop the bound from the summary.
+   */
+  private async coverageFrom(
+    state: ArchiveGuildState,
+    previous: ArchivePeriodicRun | null,
+    rescanFrom: number | undefined,
+  ): Promise<number | undefined> {
+    const backup = await state.archive.control.latestFullBackup().catch((error: unknown) => {
+      this.ctx.options.logger.warn(
+        { guildId: String(state.conn.guildId), err: error },
+        'Archive full backup lookup failed; pass summary omits its range start',
+      );
+      return undefined;
+    });
+    const overlapMs = this.ctx.options.config.overlap_minutes * 60_000;
+    const covered = Math.max(
+      previous?.status === 'complete' ? previous.cutoff : -Infinity,
+      previous !== null && previous.status !== 'complete' && previous.coverageFrom !== undefined
+        ? previous.coverageFrom + overlapMs
+        : -Infinity,
+      backup?.status === 'complete' ? (archiveJobCutoff(backup) ?? -Infinity) : -Infinity,
+    );
+    if (!Number.isFinite(covered)) return undefined;
+    return Math.min(covered, rescanFrom ?? covered) - overlapMs;
   }
 
   /** Dead letters not yet reported by a periodic run. */
@@ -360,3 +415,28 @@ export class PeriodicRunner {
     return { fullChannelIds, clearFullRequired };
   }
 }
+
+const periodicSummary = (
+  run: ArchivePeriodicRun,
+  status: ArchivePeriodicSummary['status'],
+  startedAt: number,
+  gapCount: number,
+  reason: ArchivePeriodicSummary['reason'],
+): ArchivePeriodicSummary => ({
+  status,
+  full: run.full,
+  cutoff: run.cutoff,
+  ...(run.coverageFrom === undefined ? {} : { coverageFrom: run.coverageFrom }),
+  startedAt,
+  finishedAt: Date.now(),
+  gapCount,
+  ...(reason === undefined ? {} : { reason }),
+});
+
+const pickCount = <K extends 'channels' | 'scanned' | 'written'>(
+  counts: Readonly<Record<string, number>>,
+  key: K,
+): Partial<Record<K, number>> => {
+  const value = counts[key];
+  return typeof value === 'number' ? ({ [key]: value } as Partial<Record<K, number>>) : {};
+};

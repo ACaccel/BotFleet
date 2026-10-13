@@ -37,7 +37,7 @@ The optional base fields are defined by [Config](../src/bot/index.ts).
 
 | Field                         | Purpose                                                                                                     |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `admin`                       | Bot-admin IDs for `/ai whitelist`, `/bug_report` and msg-archive's `/archive`; default `[]`                 |
+| `admin`                       | Bot-admin IDs for `/ai whitelist`, `/bug_report`, msg-archive's `/archive` and its notices; default `[]`    |
 | `language`                    | `zh-TW` (default) or `en`; also controls registered command text                                            |
 | `commands`                    | Commands to expose; [register again](contributing/local-setup.md#registering-slash-commands) after changing |
 | `guilds.<id>.channels`        | Symbolic channel names mapped to IDs                                                                        |

@@ -253,4 +253,19 @@ describe('archive schedule persistence', () => {
       await store.markNoticeDelivered(100);
       expect((await store.read()).notice).toEqual(newer);
     }));
+
+  it('replaces the pass summary reference and returns the one it replaced', async () =>
+    withFreshConnection(async (connection) => {
+      const store = new MongoArchiveScheduleRepo(connection, 60_000);
+      await store.update({ enabled: true });
+      expect(await store.replaceSummary({ channelId: '10', messageId: '60' })).toBeUndefined();
+      expect(await store.replaceSummary({ channelId: '10', messageId: '61' })).toEqual({
+        channelId: '10',
+        messageId: '60',
+      });
+      expect((await store.read()).summary).toEqual({ channelId: '10', messageId: '61' });
+      // Settings changes keep the summary reference.
+      await store.update({ intervalMs: 120_000 });
+      expect((await store.read()).summary).toEqual({ channelId: '10', messageId: '61' });
+    }));
 });
