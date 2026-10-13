@@ -63,6 +63,19 @@ and `manifest.json` before cutover. Configuration links, `data`, and `logs`
 are shared. Private releases can contain configuration snapshots; retain any release
 referenced by units or recovery journals, including after undeploy.
 
+### Release retention
+
+After `npm run deploy` or `npm run mongo:deploy` commits, the deployer prunes
+`.deploy/releases/`. It keeps the newest 3 directories named `<timestamp>-<uuid>` (numeric
+timestamp order; `RETAINED_RELEASES` in `scripts/deployment/retention.ts`) plus every
+release named by `.deploy/current.json` or `.deploy/mongodb.json`; referenced releases do
+not count toward the 3. Other entries and symlinks are never touched, and symlinks inside
+a removed release are unlinked without following them. Pruning is skipped when a recovery
+journal exists or another process holds the lock, and never runs after failure, rollback,
+`deploy:recover`, undeploy or prepare. A prune failure prints a warning and leaves the
+deployment successful. Releases from
+`deploy:prepare` that are never cut over age out like any other.
+
 Each selected bot's local JSON settings are parsed before release copying or service
 cutover. For msg-archive, preparation uses the same policy and runtime validators as
 plugin startup, including concurrency and notification cadence. Invalid settings

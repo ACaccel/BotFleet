@@ -25,6 +25,7 @@ import {
   relativeRelease,
 } from './deployment/release';
 import { applyUnits, restore, type Transaction } from './deployment/transaction';
+import { pruneAfterDeploy } from './deployment/retention';
 
 const root = realpathSync(resolve(__dirname, '..'));
 const stateDirectory = join(root, '.deploy');
@@ -205,6 +206,7 @@ async function main(): Promise<void> {
         ? 'Managed services removed; data, environments and releases retained.'
         : 'Deployment is ready and enabled for boot.',
     );
+    if (!removing) pruneAfterDeploy(root, process.pid);
   } finally {
     unlock();
   }
