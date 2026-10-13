@@ -6,8 +6,8 @@
  *
  * Hybrid mechanism (see `src/infra/link-preview/`): video-capable
  * sources are rewritten to an embed-proxy domain so Discord unfurls a
- * playable video; sources without a proxy (Bahamut) are scraped for
- * OpenGraph and rendered as a static embed. The provider framework is
+ * playable video; Facebook retains metadata for custom cards and bounded
+ * video attachments. Sources without a proxy (Bahamut) use static cards. The provider framework is
  * extensible — adding a source is one provider file plus one registry
  * line, with no change here.
  *

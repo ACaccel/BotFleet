@@ -687,7 +687,23 @@ describe('rewrite URL construction', () => {
     const url = 'https://facebed.com/watch/?v=123';
     const { client } = makeOgClient({ [url]: ok(meta({ video: 'v.mp4' })) });
     const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
-    expect(await buildUrl(provider, 'https://www.facebook.com/watch/?v=123')).toBe(url);
+    const result = await provider.build(u('https://www.facebook.com/watch/?v=123'), {
+      timeoutMs: 1000,
+    });
+    expect(result).toEqual(
+      ok({
+        kind: 'card',
+        card: {
+          url: 'https://www.facebook.com/watch/?v=123',
+          title: undefined,
+          description: undefined,
+          imageUrl: undefined,
+          siteName: 'Facebook',
+        },
+        media: { url: 'v.mp4', fallbackUrl: url },
+        sourceUrl: 'https://www.facebook.com/watch/?v=123',
+      }),
+    );
   });
 
   it('threads probes its hosts in priority order until one yields media', async () => {
@@ -899,12 +915,58 @@ describe('facebook share-link resolution + card fallback', () => {
     });
     const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
     expect(await build(provider, share)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyCanonical,
+      kind: 'card',
+      card: {
+        url: canonical,
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyCanonical },
       sourceUrl: share, // original link is carried, not the resolved canonical
     });
     expect(resolveCanonical).toHaveBeenCalledWith(share, 1000, 'facebook');
     expect(fetch).toHaveBeenCalledWith(proxyCanonical, 'facebook', 1000); // never the /share/ token
+  });
+
+  it('enriches a direct-video proxy response from Facebook without losing its video', async () => {
+    const { client } = makeFbClient({
+      resolve: { [share]: ok(canonical) },
+      fetchByUrl: {
+        [proxyCanonical]: ok(
+          meta({
+            video: 'https://cdn.example/video.mp4',
+            siteName: 'facebed by pi.kt\n👍 42 • 💬 3 • 🔁 1',
+          }),
+        ),
+        [share]: ok(
+          meta({
+            title: 'Post title',
+            description: 'Post text',
+            authorName: 'Example Author',
+            authorUrl: 'https://www.facebook.com/author',
+            images: [POST_IMAGE],
+          }),
+        ),
+      },
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    expect(await build(provider, share)).toEqual({
+      kind: 'card',
+      card: {
+        url: canonical,
+        title: 'Post title',
+        description: 'Post text',
+        imageUrl: POST_IMAGE,
+        siteName: 'Facebook',
+        engagement: { likes: 42, comments: 3, shares: 1 },
+        authorName: 'Example Author',
+        authorUrl: 'https://www.facebook.com/author',
+      },
+      media: { url: 'https://cdn.example/video.mp4', fallbackUrl: proxyCanonical },
+      sourceUrl: share,
+    });
   });
 
   it('drops the share-attribution query from the resolved URL before probing', async () => {
@@ -914,10 +976,80 @@ describe('facebook share-link resolution + card fallback', () => {
     });
     const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
     expect(await build(provider, share)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyCanonical,
+      kind: 'card',
+      card: {
+        url: canonical,
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyCanonical },
       sourceUrl: share,
     });
+  });
+
+  it('retries the source-owned OpenGraph permalink when the browser share chase fails', async () => {
+    const { client, fetch } = makeFbClient({
+      resolve: { [share]: err(invalidResponseError('facebook')) },
+      fetchByUrl: {
+        [proxyShare]: ok(meta({ title: 'Log in or sign up to view' })),
+        [share]: ok(meta({ title: 'Source title', images: [POST_IMAGE], url: canonical })),
+        [proxyCanonical]: ok(
+          meta({
+            title: 'Proxy title',
+            description: 'Post text',
+            video: 'https://cdn.example/video.mp4',
+            siteName: 'facebed by pi.kt\n👍 708 • 💬 10 • 🔁 5',
+          }),
+        ),
+      },
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    expect(await build(provider, share)).toEqual({
+      kind: 'card',
+      card: {
+        url: canonical,
+        title: 'Proxy title',
+        description: 'Post text',
+        imageUrl: POST_IMAGE,
+        siteName: 'Facebook',
+        engagement: { likes: 708, comments: 10, shares: 5 },
+      },
+      media: { url: 'https://cdn.example/video.mp4', fallbackUrl: proxyCanonical },
+      sourceUrl: share,
+    });
+    expect(fetch.mock.calls.map((call) => call[0])).toEqual([proxyShare, share, proxyCanonical]);
+  });
+
+  it('does not retry an off-site OpenGraph URL', async () => {
+    const { client, fetch } = makeFbClient({
+      resolve: { [share]: err(invalidResponseError('facebook')) },
+      fetchByUrl: {
+        [proxyShare]: ok(meta({ title: 'Log in or sign up to view' })),
+        [share]: ok(
+          meta({
+            title: 'Post title',
+            images: [POST_IMAGE],
+            url: 'https://untrusted.example/reel/1',
+            authorUrl: 'https://untrusted.example/author',
+          }),
+        ),
+      },
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    expect(await build(provider, share)).toEqual({
+      kind: 'card',
+      card: {
+        url: share,
+        title: 'Post title',
+        description: undefined,
+        imageUrl: POST_IMAGE,
+        siteName: 'Facebook',
+      },
+      sourceUrl: share,
+    });
+    expect(fetch.mock.calls.map((call) => call[0])).toEqual([proxyShare, share]);
   });
 
   it('falls back to a Facebook OpenGraph card when resolution fails and the proxy is a login wall', async () => {
@@ -970,8 +1102,15 @@ describe('facebook share-link resolution + card fallback', () => {
     });
     const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
     expect(await build(provider, post)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPost,
+      kind: 'card',
+      card: {
+        url: post,
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyPost },
       sourceUrl: post,
     });
     expect(resolveCanonical).not.toHaveBeenCalled();
@@ -1027,8 +1166,14 @@ describe('facebook legacy album-photo normalisation', () => {
     // content filter can detect — only the ids name the right photo.
     const { provider, fetch } = providerWith({ [idForm]: ok(meta({ images: [POST_IMAGE] })) });
     expect(await build(provider, legacy)).toEqual({
-      kind: 'rewritten-url',
-      url: idForm,
+      kind: 'card',
+      card: {
+        url: idForm.replace('facebed.com', 'www.facebook.com'),
+        title: undefined,
+        description: undefined,
+        imageUrl: POST_IMAGE,
+        siteName: 'Facebook',
+      },
       sourceUrl: legacy,
     });
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([idForm]);
@@ -1039,11 +1184,18 @@ describe('facebook legacy album-photo normalisation', () => {
     const expected = `https://facebed.com/photo/?fbid=${PHOTO_ID}&set=a.101.202.303`;
     const { provider, fetch } = providerWith({ [expected]: ok(meta({ video: 'v.mp4' })) });
     expect(await build(provider, multiPart)).toEqual({
-      kind: 'rewritten-url',
-      url: expected,
+      kind: 'card',
+      card: {
+        url: expected.replace('facebed.com', 'www.facebook.com'),
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'v.mp4', fallbackUrl: expected },
       sourceUrl: multiPart,
     });
-    expect(fetch.mock.calls.map((c) => c[0])).toEqual([expected]);
+    expect(fetch.mock.calls.map((c) => c[0])).toEqual([expected, multiPart]);
   });
 
   it('probes every other Facebook path shape unchanged', async () => {
@@ -1060,11 +1212,18 @@ describe('facebook legacy album-photo normalisation', () => {
     for (const [source, expected] of cases) {
       const { provider, fetch } = providerWith({ [expected]: ok(meta({ video: 'v.mp4' })) });
       expect(await build(provider, source)).toEqual({
-        kind: 'rewritten-url',
-        url: expected,
+        kind: 'card',
+        card: {
+          url: source,
+          title: undefined,
+          description: undefined,
+          imageUrl: undefined,
+          siteName: 'Facebook',
+        },
+        media: { url: 'v.mp4', fallbackUrl: expected },
         sourceUrl: source,
       });
-      expect(fetch.mock.calls.map((c) => c[0])).toEqual([expected]);
+      expect(fetch.mock.calls.map((c) => c[0])).toEqual([expected, source]);
     }
   });
 });

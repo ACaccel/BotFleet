@@ -54,6 +54,19 @@ const streamResponse = (
 });
 
 describe('parseOpenGraph', () => {
+  it('retains only explicitly supplied author metadata', () => {
+    const meta = parseOpenGraph(
+      html(
+        '<meta name="author" content="Example Author"><meta property="article:author" content="https://www.facebook.com/author">',
+      ),
+    );
+    expect(meta.authorName).toBe('Example Author');
+    expect(meta.authorUrl).toBe('https://www.facebook.com/author');
+    expect(
+      parseOpenGraph(html('<meta property="og:title" content="Reel by Example">')).authorName,
+    ).toBeUndefined();
+  });
+
   it('maps og:title / description / image / url / site_name', () => {
     const meta = parseOpenGraph(
       html(

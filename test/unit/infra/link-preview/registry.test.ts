@@ -44,6 +44,11 @@ const rewriteOf = async (
   source: string,
 ): Promise<string> => {
   const result = await registry.findProvider(u(source))?.build(u(source), { timeoutMs: 1_000 });
+  if (result?.ok === true && result.value?.kind === 'card' && result.value.media !== undefined) {
+    expect(result.value.card.siteName).toBe('Facebook');
+    expect(result.value.media.url).toBe('v.mp4');
+    return result.value.media.fallbackUrl;
+  }
   if (result?.ok !== true || result.value?.kind !== 'rewritten-url') {
     throw new Error(`expected a rewritten-url result for ${source}`);
   }

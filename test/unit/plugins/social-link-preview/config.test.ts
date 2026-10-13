@@ -52,6 +52,8 @@ describe('parseSocialLinkPreviewConfig', () => {
     expect(config.originalMessageStrategy).toBe('suppress');
     expect(config.maxUrlsPerMessage).toBe(1);
     expect(config.timeoutMs).toBe(4000);
+    expect(config.maxVideoBytes).toBe(8 * 1024 * 1024);
+    expect(config.videoTimeoutMs).toBe(15_000);
     expect(config.providers).toBeUndefined();
     expect(config.allowedBotIds).toEqual([]);
     // No host list is invented in code: a disabled feature probes nothing.
@@ -133,6 +135,17 @@ describe('parseSocialLinkPreviewConfig', () => {
     expect(
       issuePaths(parseFailure({ enabled: true, ...proxyHosts(), redditProxyHosts: [] })),
     ).toContain('redditProxyHosts');
+  });
+
+  it.each([0, -1, 1.5, 25 * 1024 * 1024 + 1])(
+    'rejects an invalid video byte limit: %s',
+    (maxVideoBytes) => {
+      expect(issuePaths(parseFailure({ maxVideoBytes }))).toContain('maxVideoBytes');
+    },
+  );
+
+  it.each([0, -1, 1.5, 60_001])('rejects an invalid video timeout: %s', (videoTimeoutMs) => {
+    expect(issuePaths(parseFailure({ videoTimeoutMs }))).toContain('videoTimeoutMs');
   });
 
   it('rejects an out-of-range timeout and an invalid provider name', () => {

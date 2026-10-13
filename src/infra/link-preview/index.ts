@@ -23,6 +23,7 @@ export { LinkPreviewProviderRegistry } from './registry';
 export { createDefaultLinkPreviewRegistry } from './default-registry';
 
 export { OgClient, parseOpenGraph, type OpenGraphMeta } from './og-client';
+export { downloadPreviewVideo, type PreviewVideo } from './video-client';
 export { translateLinkPreviewError, invalidResponseError } from './error-translator';
 
 export { createRewriteProvider } from './providers/rewrite-provider';

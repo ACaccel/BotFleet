@@ -114,6 +114,14 @@ connections and bounded retries. See [database recovery](contributing/operations
 and [persisted models](contributing/persisted-models.md).
 
 LLM, link-preview and social-feed strategies isolate provider behavior and errors.
+Facebook preview providers retain OpenGraph metadata from proxies or the source
+site for custom card rendering; Facebook-specific parsing maps the proxy's source
+summary to optional engagement counts. Direct videos use a dedicated downloader with the shared host validation and
+bounded DNS resolver, plus address checks, deadlines and a concurrency limit;
+the plugin sends a separate attachment and falls back if Discord rejects it.
+Missing or failed media delivery keeps the card and adds a fallback link. See
+[preview configuration](configuration.md#social-previews-and-feeds) for supported
+media, limits and metadata availability.
 Feed polling shares account reads; delivery and cursors remain per subscription.
 Cursors advance after successful delivery; post IDs stay strings.
 

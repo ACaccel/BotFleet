@@ -73,6 +73,8 @@ const registryReturning = (
 const config = {
   originalMessageStrategy: 'suppress' as const,
   timeoutMs: 1000,
+  maxVideoBytes: 8 * 1024 * 1024,
+  videoTimeoutMs: 15_000,
   maxUrlsPerMessage: 1,
 };
 

@@ -12,14 +12,13 @@
  * Two preview mechanisms, one uniform result (discriminated union):
  *   - `rewritten-url`: reply with a proxy-domain URL and let DISCORD
  *     unfurl it into a playable video embed. A bot-authored embed cannot
- *     render playable video, so this is the only path that yields one.
+ *     render playable video; attachments are sent separately.
  *     Rewrite providers VALIDATE before returning: they probe a priority
  *     list of proxy hosts (fetching each candidate's OpenGraph with the
  *     Discord crawler UA) and return the first that yields media — so a
  *     dead/empty proxy is never posted as a bare link.
- *   - `card`: neutral OpenGraph data the plugin renders into a static
- *     `EmbedBuilder` (used for sources without a public proxy, e.g.
- *     Bahamut).
+ *   - `card`: neutral OpenGraph data rendered with `EmbedBuilder`, optionally
+ *     carrying video metadata for separate attachment delivery (Facebook).
  *
  * Adding a new provider:
  *   1. Implement {@link LinkPreviewProvider} (or reuse `createRewriteProvider`
@@ -84,6 +83,15 @@ export interface PreviewCard {
   readonly imageUrl?: string;
   /** Human-readable source label (e.g. `Bahamut`) for the embed footer. */
   readonly siteName?: string;
+  /** Source-provided author details; omitted when unavailable. */
+  readonly authorName?: string;
+  readonly authorUrl?: string;
+  /** Source-provided totals; compact strings preserve upstream rounding. */
+  readonly engagement?: {
+    readonly likes?: number | string;
+    readonly comments?: number | string;
+    readonly shares?: number | string;
+  };
 }
 
 /**
@@ -92,7 +100,12 @@ export interface PreviewCard {
  */
 export type LinkPreviewResult =
   | { readonly kind: 'rewritten-url'; readonly url: string; readonly sourceUrl: string }
-  | { readonly kind: 'card'; readonly card: PreviewCard; readonly sourceUrl: string };
+  | {
+      readonly kind: 'card';
+      readonly card: PreviewCard;
+      readonly sourceUrl: string;
+      readonly media?: { readonly url: string; readonly fallbackUrl: string };
+    };
 
 /** Per-call collaborators handed to {@link LinkPreviewProvider.build}. */
 export interface LinkPreviewBuildContext {

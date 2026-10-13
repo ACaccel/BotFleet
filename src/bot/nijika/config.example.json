@@ -36,6 +36,8 @@
     "originalMessageStrategy": "suppress",
     "providers": ["twitter", "instagram", "threads", "facebook", "reddit", "bahamut", "bilibili"],
     "timeoutMs": 4000,
+    "maxVideoBytes": 8388608,
+    "videoTimeoutMs": 15000,
     "maxUrlsPerMessage": 1,
     "twitterProxyHosts": ["vxtwitter.com", "fxtwitter.com", "fixupx.com"],
     "instagramProxyHosts": [

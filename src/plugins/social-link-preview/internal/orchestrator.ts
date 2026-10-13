@@ -31,7 +31,11 @@ interface RunSocialLinkPreviewDeps {
   readonly registry: LinkPreviewProviderRegistry;
   readonly config: Pick<
     SocialLinkPreviewPluginConfig,
-    'originalMessageStrategy' | 'timeoutMs' | 'maxUrlsPerMessage'
+    | 'originalMessageStrategy'
+    | 'timeoutMs'
+    | 'maxUrlsPerMessage'
+    | 'maxVideoBytes'
+    | 'videoTimeoutMs'
   >;
   readonly translator: Translator;
   readonly logger: Logger;
@@ -62,7 +66,10 @@ export const runSocialLinkPreview = async (
     if (result.value === null) continue; // matched host but not previewable
 
     try {
-      await renderPreview(message, result.value, deps.translator);
+      await renderPreview(message, result.value, deps.translator, {
+        maxVideoBytes: deps.config.maxVideoBytes,
+        videoTimeoutMs: deps.config.videoTimeoutMs,
+      });
       await applyOriginalMessageStrategy(message, deps.config.originalMessageStrategy, deps.logger);
       previewed += 1;
     } catch (err: unknown) {

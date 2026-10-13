@@ -36,8 +36,8 @@
  * length times the timeout — the operator keeps the lists short.
  *
  * The per-source files supply `matches` (pure predicate), the `proxyHosts`
- * list, and `toProxyUrl`. This file performs network I/O but returns only a
- * URL string — it must NOT import discord.js.
+ * list, and `toProxyUrl`. Results stay neutral, optionally retaining metadata
+ * for a custom card; this boundary must not import discord.js.
  */
 import { ok, type Result } from '../../../core/result';
 
@@ -199,6 +199,8 @@ interface RewriteSpec {
   readonly isPlaceholder?: (meta: OpenGraphMeta) => boolean;
   /** Shared validation fetcher. */
   readonly ogClient: OgClient;
+  /** Retain validated metadata when a source renders its own card. */
+  readonly toResult?: (url: URL, candidate: string, meta: OpenGraphMeta) => LinkPreviewResult;
 }
 
 const validate = async (
@@ -206,9 +208,9 @@ const validate = async (
   url: URL,
   ctx: LinkPreviewBuildContext,
 ): Promise<Result<LinkPreviewResult | null, LinkPreviewFailure>> => {
-  let bestImage: string | undefined; // candidate whose OG had >=1 post image
-  let bestWeakImage: string | undefined; // candidate whose images were all stand-ins
-  let bestText: string | undefined; // candidate whose OG had only a title
+  let bestImage: LinkPreviewResult | undefined;
+  let bestWeakImage: LinkPreviewResult | undefined;
+  let bestText: LinkPreviewResult | undefined;
 
   for (const host of spec.proxyHosts) {
     const candidate = spec.toProxyUrl(url, host);
@@ -232,24 +234,27 @@ const validate = async (
     }
     if (spec.isPlaceholder?.(res.value) === true) continue;
     const quality = scoreMeta(res.value, spec.lowValueImagePatterns);
+    const preview = spec.toResult?.(url, candidate, res.value) ?? {
+      kind: 'rewritten-url' as const,
+      url: candidate,
+      sourceUrl: url.href,
+    };
     if (quality === 'video') {
       // Best possible — playable video. Short-circuit.
-      return ok({ kind: 'rewritten-url', url: candidate, sourceUrl: url.href });
+      return ok(preview);
     }
     // Neither image tier short-circuits: a later host may still hold the video.
     if (quality === 'image' && bestImage === undefined) {
-      bestImage = candidate;
+      bestImage = preview;
     } else if (quality === 'weak-image' && bestWeakImage === undefined) {
-      bestWeakImage = candidate; // only worth posting if no real image turns up
+      bestWeakImage = preview;
     } else if (quality === 'text' && bestText === undefined) {
-      bestText = candidate; // weakest fallback
+      bestText = preview;
     }
   }
 
   const chosen = bestImage ?? bestWeakImage ?? bestText;
-  return ok(
-    chosen === undefined ? null : { kind: 'rewritten-url', url: chosen, sourceUrl: url.href },
-  );
+  return ok(chosen ?? null);
 };
 
 export const createRewriteProvider = (spec: RewriteSpec): LinkPreviewProvider => ({

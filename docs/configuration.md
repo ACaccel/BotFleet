@@ -79,6 +79,34 @@ Enabled previews require all six proxy-host lists: `twitterProxyHosts`,
 `redditProxyHosts` and `bilibiliProxyHosts`. Hosts are tried in order; maintain
 short lists of working hosts.
 
+Facebook previews use a custom card with a Facebook header, a title linking to
+the source post, and available OpenGraph text and images. The body is capped at 350 Unicode
+code points, including the trailing `...` when truncated. Metadata comes from
+the configured proxies, with Facebook's own OpenGraph as a fallback. Author
+details depend on the source. Facebed's source summary supplies total reactions
+(shown with a thumbs-up icon), comments and shares for the card footer. Each
+unavailable count is omitted; reported zeroes and compact values such as `1.2K`
+are preserved. Counts reflect the upstream response and preview cache rather
+than live updates after the message is sent.
+If browser redirects cannot expand a share link, the provider also tries the
+source-owned permalink from Facebook's OpenGraph before falling back to a card.
+
+When metadata includes a supported direct video URL, the bot downloads it and
+uploads a separate Discord attachment. Video downloads accept only HTTPS URLs
+with `video/mp4` or `video/quicktime` content types, validate DNS and redirects
+against private-network access, and allow at most two concurrent downloads.
+
+| `social_link_preview` field | Default           | Allowed values                                | Purpose                                                                 |
+| --------------------------- | ----------------- | --------------------------------------------- | ----------------------------------------------------------------------- |
+| `maxVideoBytes`             | `8388608` (8 MiB) | Positive integer, at most `26214400` (25 MiB) | Maximum downloaded video size; Discord may enforce a lower upload limit |
+| `videoTimeoutMs`            | `15000`           | Positive integer, at most `60000`             | Total video download deadline in milliseconds                           |
+
+Missing direct video metadata, unsupported media, oversized files, download
+failures and rejected attachments fall back to the custom card and a clickable
+link with automatic embedding suppressed. Static cards retain their preview
+image. No Facebook login or additional scraper service is required; previews
+depend on publicly available metadata and media URLs.
+
 `social_link_preview.allowedBotIds` is an array of Discord bot user ID strings,
 defaulting to `[]`. Add a source bot's user ID to let its links trigger previews;
 for example, put gopher's user ID in nijika's allow list to preview gopher's links.

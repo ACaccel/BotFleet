@@ -79,6 +79,8 @@ export interface OpenGraphMeta {
   readonly video?: string;
   readonly url?: string;
   readonly siteName?: string;
+  readonly authorName?: string;
+  readonly authorUrl?: string;
   /**
    * URL the response was ultimately served from, after redirects (the
    * requested URL when there were none). Absent from a pure
@@ -463,6 +465,8 @@ export const parseOpenGraph = (html: string): OpenGraphMeta => {
     video: pick('og:video:secure_url', 'og:video:url', 'og:video'),
     url: pick('og:url'),
     siteName: pick('og:site_name'),
+    ...(pick('author') === undefined ? {} : { authorName: pick('author') }),
+    ...(pick('article:author') === undefined ? {} : { authorUrl: pick('article:author') }),
   };
 };
 

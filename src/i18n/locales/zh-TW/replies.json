@@ -452,6 +452,9 @@
     "alert": "# <@&{{role}}> 台北強震警報!!! (4級以上)\n> 為什麼要地震!?"
   },
   "social_link_preview": {
+    "engagement_likes": "👍 {{count}}",
+    "engagement_comments": "💬 {{count}}",
+    "engagement_shares": "🔄 {{count}}",
     "embed_footer": "預覽來源:{{provider}}"
   },
   "feed": {

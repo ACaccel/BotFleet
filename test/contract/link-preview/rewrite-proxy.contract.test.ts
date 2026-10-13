@@ -212,8 +212,15 @@ describe('facebook share-link resolution contract', () => {
       .reply(200, ogHtml(VIDEO_HEAD));
 
     expect(await buildFb(SHARE)).toEqual({
-      kind: 'rewritten-url',
-      url: PROXY_CANON,
+      kind: 'card',
+      card: {
+        url: CANON,
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'https://cdn.example/v.mp4', fallbackUrl: PROXY_CANON },
       sourceUrl: SHARE.href,
     });
   });
@@ -249,6 +256,35 @@ describe('facebook share-link resolution contract', () => {
         siteName: 'Facebook',
       },
       sourceUrl: SHARE.href,
+    });
+  });
+  it('retains proxy engagement metadata in the Facebook card at the HTTP boundary', async () => {
+    const path = '/example/posts/1';
+    const source = `https://www.facebook.com${path}`;
+    nock('https://facebed.com')
+      .get(path)
+      .reply(
+        200,
+        ogHtml(
+          [
+            '<meta property="og:title" content="Example Author">',
+            '<meta property="og:description" content="Example post">',
+            '<meta property="og:image" content="https://cdn.example/post.jpg">',
+            '<meta property="og:site_name" content="facebed by pi.kt&#10;👍 🤗 708 • 💬 10 • 🔁 5">',
+          ].join(''),
+        ),
+      );
+    expect(await buildFb(new URL(source))).toEqual({
+      kind: 'card',
+      card: {
+        url: source,
+        title: 'Example Author',
+        description: 'Example post',
+        imageUrl: 'https://cdn.example/post.jpg',
+        siteName: 'Facebook',
+        engagement: { likes: 708, comments: 10, shares: 5 },
+      },
+      sourceUrl: source,
     });
   });
 });

@@ -42,6 +42,14 @@ const proxyHostList = (key: string): z.ZodArray<z.ZodString, 'atleastone'> =>
 
 /** Fields shared by both branches; all defaulted, none operator-mandatory. */
 const commonShape = {
+  /** Attachment downloads are bounded independently of metadata probes. */
+  maxVideoBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(25 * 1024 * 1024)
+    .default(8 * 1024 * 1024),
+  videoTimeoutMs: z.number().int().positive().max(60_000).default(15_000),
   /** Other bots whose messages may trigger previews; self messages are always ignored. */
   allowedBotIds: z
     .array(

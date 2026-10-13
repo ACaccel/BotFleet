@@ -32,3 +32,13 @@ instances with `ctx.registerInstance(token, instance)` **only inside `init`**;
 duplicate registrations fail. Add new tokens to that catalog.
 ESLint forbids `@core/ioc` and every `src/bot` module except `tokens` and `guild-registry`.
 Do not cast the context to access the container.
+
+## Social preview media
+
+Keep provider metadata retrieval separate from Discord rendering and delivery.
+Facebook custom cards use existing OpenGraph retrieval; direct video attachments
+share its host validation and bounded DNS resolver with address checks, download sizes,
+deadlines and concurrency. Preserve the card and a clickable fallback link when
+media cannot be delivered. Test download rejection and attachment-send failures
+without live Facebook requests. See [preview configuration](../configuration.md#social-previews-and-feeds)
+for the supported metadata and operator limits.

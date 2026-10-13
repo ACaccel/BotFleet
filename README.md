@@ -49,7 +49,10 @@ Every bot shares the framework capabilities:
 - **Community tools.** Giveaways, activities, temporary notification roles,
   role-claim messages, level roles, weather forecasts and restaurant picks.
 - **Social media.** Rich previews for shared links and per-channel subscriptions to
-  social feeds.
+  social feeds. Facebook uses custom cards with truncated text and separate video
+  attachments and engagement counts when available; the title links to the post,
+  and failed video delivery falls back to a link. See
+  [preview configuration](docs/configuration.md#social-previews-and-feeds).
 - **Message archive.** msg-archive captures messages, edits (up to 50 previous
   versions), deletions and complete reaction memberships. Administrators run a
   resumable [full backup](docs/message-archive.md#full-backup) after one
