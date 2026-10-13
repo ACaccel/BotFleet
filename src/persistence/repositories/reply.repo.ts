@@ -20,11 +20,14 @@ export interface ReplyRepo {
   /** All replies registered under `input`. */
   findByInput(input: string): Promise<Result<readonly ReplyDoc[], DatabaseError>>;
 
+  /** Every pair in the guild, for the keyword overview. */
+  listAll(): Promise<Result<readonly ReplyDoc[], DatabaseError>>;
+
   /** Find by Mongoose `_id` rendered as a string (delete_reply SSM). */
   findById(id: string): Promise<Result<ReplyDoc | undefined, DatabaseError>>;
 
-  /** Create a new pair and return the persisted doc. */
-  create(input: string, reply: string): Promise<Result<ReplyDoc, DatabaseError>>;
+  /** Create a new pair, recording who added it, and return the persisted doc. */
+  create(input: string, reply: string, createdBy: string): Promise<Result<ReplyDoc, DatabaseError>>;
 
   /** Delete by `_id`; `ok(true)` when a document was removed. */
   deleteById(id: string): Promise<Result<boolean, DatabaseError>>;
@@ -56,6 +59,14 @@ export class MongoReplyRepo implements ReplyRepo {
     }
   }
 
+  public async listAll(): Promise<Result<readonly ReplyDoc[], DatabaseError>> {
+    try {
+      return ok(await this.conn.models.Reply.find({}).lean<ReplyDoc[]>().exec());
+    } catch (rawErr: unknown) {
+      return err(databaseErrorFrom(rawErr, { operation: 'MongoReplyRepo.listAll' }));
+    }
+  }
+
   public async findById(id: string): Promise<Result<ReplyDoc | undefined, DatabaseError>> {
     try {
       const doc = await this.conn.models.Reply.findById(id).lean<ReplyDoc>().exec();
@@ -67,9 +78,13 @@ export class MongoReplyRepo implements ReplyRepo {
     }
   }
 
-  public async create(input: string, reply: string): Promise<Result<ReplyDoc, DatabaseError>> {
+  public async create(
+    input: string,
+    reply: string,
+    createdBy: string,
+  ): Promise<Result<ReplyDoc, DatabaseError>> {
     try {
-      const doc = await this.conn.models.Reply.create({ input, reply });
+      const doc = await this.conn.models.Reply.create({ input, reply, created_by: createdBy });
       return ok(doc.toObject<ReplyDoc>());
     } catch (rawErr: unknown) {
       return err(

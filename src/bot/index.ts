@@ -345,6 +345,17 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   protected helpMessageKey?: string;
 
+  /**
+   * Catalog section (for example `replies:nijika`) holding this bot's
+   * `persona_name` and `vote_flavor`, so shared command text can speak
+   * as the right character. Unset falls back to `replies:persona`.
+   */
+  protected personaSection?: string;
+  /** How shared command text refers to this bot, such as "虹夏大天使". */
+  public personaName = '';
+  /** The bot's closing line on a `/ban_user` vote call; may be empty. */
+  public voteFlavor = '';
+
   /** Archive mutation authority is granted only by the worker composition root. */
   protected archiveOwner(): ArchiveOwner | undefined {
     return undefined;
@@ -669,10 +680,6 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     }
   };
 
-  public reLogin = async (): Promise<void> => {
-    await this.client.login(this.token);
-  };
-
   /**
    * Open (or reuse) the per-guild MongoDB connection and populate
    * `guildInfo[g].repos`. Delegates to the {@link GuildDbConnector}
@@ -779,6 +786,9 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     if (this.helpMessageKey !== undefined) {
       this.helpMessage = translator.t(this.helpMessageKey);
     }
+    const personaSection = this.personaSection ?? 'replies:persona';
+    this.personaName = translator.t(`${personaSection}.persona_name`);
+    this.voteFlavor = translator.t(`${personaSection}.vote_flavor`);
     // Assemble the Chain-of-Responsibility interaction router: the
     // terminal dispatch stage followed by the observability stage.
     this.interactionRouter = new InteractionRouter();

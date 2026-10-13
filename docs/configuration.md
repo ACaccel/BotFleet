@@ -95,6 +95,11 @@ Plugin settings are validated at startup; strict schemas reject unknown keys.
 
 Invalid role or restaurant settings disable the affected command.
 
+`/change_avatar` reads each persona's image from `data/avatars/<avatar_file>`, with
+names from [`identity.json`](../src/handlers/commands/change_avatar/identity.json).
+`data/` is shared across releases and kept out of version control, so artwork is
+never published with the source; a missing file is reported and nothing changes.
+
 ### Social previews and feeds
 
 Enabled previews require all six proxy-host lists: `twitterProxyHosts`,

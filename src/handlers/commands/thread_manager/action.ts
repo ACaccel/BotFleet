@@ -7,6 +7,7 @@ import {
   assertThreadApplicant,
   requireThreadRepo,
   resolveManagedThread,
+  targetThreadId,
   ThreadManagementError,
   threadManagementFailure,
 } from '../../thread-management-common';
@@ -14,7 +15,7 @@ import {
 export default class thread_manager extends Command {
   constructor() {
     super();
-    const thread = [{ name: 'thread', required: true }];
+    const thread = [{ name: 'thread', required: false }];
     const user = [{ name: 'user', required: true }];
     this.setConfig({
       name: 'thread_manager',
@@ -40,10 +41,7 @@ export default class thread_manager extends Command {
       if (!bot.isAdmin(interaction.user.id)) throw new ThreadManagementError('manager_admin_only');
       if (!interaction.guild) throw new ThreadManagementError('thread_only');
       const repo = requireThreadRepo(bot, interaction.guild.id);
-      const thread = await resolveManagedThread(
-        interaction.guild,
-        interaction.options.getChannel('thread', true).id,
-      );
+      const thread = await resolveManagedThread(interaction.guild, targetThreadId(interaction));
       const action = interaction.options.getSubcommand();
       if (action === 'list') {
         const users = [...unwrap(await repo.listManagers(bot.clientId, thread.id))].sort();

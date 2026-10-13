@@ -1,10 +1,13 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
-import Mee6LevelsApi from 'mee6-levels-api';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
 
+import { logError } from '@core/logger';
 import { replyForError } from '../../../infra/discord/reply-for-error';
-import { getRequiredNumber } from '../../../infra/discord/options';
+import { getOptionalNumber, getRequiredNumber } from '../../../infra/discord/options';
+import { fetchMee6Leaderboard, type Mee6Player } from '../mee6-shared/leaderboard';
+import { formatLevelDetails, MAX_RANKS } from './format';
+
 export default class level_detail extends Command {
   constructor() {
     super();
@@ -14,14 +17,8 @@ export default class level_detail extends Command {
       guildOnly: true,
       options: {
         integer: [
-          {
-            name: 'left',
-            required: true,
-          },
-          {
-            name: 'right',
-            required: true,
-          },
+          { name: 'rank_from', required: true, min: 1, max: 1000 },
+          { name: 'count', required: false, min: 1, max: MAX_RANKS },
         ],
       },
     });
@@ -32,50 +29,40 @@ export default class level_detail extends Command {
     bot: BaseBot,
   ): Promise<void> {
     await interaction.deferReply();
+    const t = (key: string, params?: Record<string, string | number>): string =>
+      bot.translator?.t(`replies:level_detail.${key}`, params) ?? '';
     try {
-      const left = getRequiredNumber(interaction, 'left');
-      const right = getRequiredNumber(interaction, 'right');
-      const rangeSize = right - left;
+      const guildId = interaction.guildId;
+      if (guildId === null) return;
+      const rankFrom = getRequiredNumber(interaction, 'rank_from');
+      const count = getOptionalNumber(interaction, 'count') ?? MAX_RANKS;
 
-      if (rangeSize <= 10) {
-        let content = '';
-        const leaderboard = await Mee6LevelsApi.getLeaderboardPage(interaction.guild?.id as string);
-
-        leaderboard.slice(left - 1, right).forEach((e) => {
-          const averageXp = (e.xp.totalXp / e.messageCount).toPrecision(6);
-          content += `> **${e.rank} - ${e.username}﹝Level ${e.level}﹞**\n`;
-          content +=
-            bot.translator?.t('replies:level_detail.message_count', { count: e.messageCount }) ??
-            '';
-          content +=
-            bot.translator?.t('replies:level_detail.current_xp', {
-              userXp: e.xp.userXp,
-              levelXp: e.xp.levelXp,
-            }) ?? '';
-          content +=
-            bot.translator?.t('replies:level_detail.total_xp', { totalXp: e.xp.totalXp }) ?? '';
-          content += bot.translator?.t('replies:level_detail.average_xp', { averageXp }) ?? '';
-        });
-
-        if (content.length < 2000) {
-          await interaction.editReply({ content });
-        } else {
-          await interaction.editReply({
-            content: bot.translator?.t('replies:level_detail.too_long') ?? '',
-          });
-        }
-      } else {
-        await interaction.editReply({
-          content: bot.translator?.t('replies:level_detail.too_long') ?? '',
-        });
+      let leaderboard: readonly Mee6Player[];
+      try {
+        leaderboard = await fetchMee6Leaderboard(guildId);
+      } catch (error) {
+        // Usually a private leaderboard or a changed MEE6 endpoint.
+        logError(bot.logger, guildId, error);
+        await interaction.editReply({ content: t('unavailable') });
+        return;
       }
+
+      const players = leaderboard.slice(rankFrom - 1, rankFrom - 1 + count);
+      if (players.length === 0) {
+        await interaction.editReply({ content: t('out_of_range', { total: leaderboard.length }) });
+        return;
+      }
+      await interaction.editReply({
+        content: formatLevelDetails(players, bot.translator),
+        allowedMentions: { parse: [] },
+      });
     } catch (error) {
       await replyForError(
         interaction,
         bot,
         error,
         'replies:level_detail.failed',
-        interaction.guild?.id,
+        interaction.guildId,
       );
     }
   }

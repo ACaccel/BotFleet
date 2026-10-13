@@ -645,10 +645,9 @@ users, not roles or @everyone/@here. A reply that also mentions its recipient co
 only as a reply in this ranking.
 
 Shared options: `range` (`24h`, `7d`, `30d`, `90d`, `365d`; default `7d`, `30d` for
-emoji and stickers), `visibility` (`public` by default, or `ephemeral`), and `top_n`
-(at most the rows a dashboard draws: 5 for member, channel and app rankings, where
-`top_n` sizes the app ranking of `apps` and its member ranking stays a top 5; 20 for
-emoji, 12 for stickers). `24h`
+emoji and stickers) and `visibility` (`public` by default, `ephemeral` by default for
+`user`, which reports on another member). Rankings draw 5 rows for members, channels
+and apps; only `emoji` and `sticker` take `top_n` (up to 20 and 12) to show fewer. `24h`
 is a rolling window; the other ranges are whole local days ending today, so `7d`
 shows seven daily points with today last, compared with the same span one range
 earlier.

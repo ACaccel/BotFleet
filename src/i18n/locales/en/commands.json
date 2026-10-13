@@ -1,12 +1,12 @@
 {
   "ban_user": {
-    "description": "Temporarily time out a user (ban_threshold: 5 votes, judge_time: 1 min)",
+    "description": "Start a vote; 5 votes within 1 minute time the member out for 1-5 minutes",
     "options": {
       "user": {
-        "description": "The user to time out"
+        "description": "Member to vote on"
       },
       "duration": {
-        "description": "Timeout duration (unit: minutes, max: 5)"
+        "description": "Timeout length in minutes (1-5, default 1)"
       }
     }
   },
@@ -19,10 +19,10 @@
     }
   },
   "change_avatar": {
-    "description": "Switch persona",
+    "description": "Switch the bot's persona (avatar, nickname and colour)",
     "options": {
       "identity": {
-        "description": "The identity to switch to"
+        "description": "Persona to switch to"
       }
     }
   },
@@ -41,13 +41,13 @@
     "description": "Show the command list and help"
   },
   "level_detail": {
-    "description": "View detailed level information",
+    "description": "Show MEE6 leaderboard details for a range of ranks",
     "options": {
-      "left": {
-        "description": "Left bound"
+      "rank_from": {
+        "description": "First rank to show"
       },
-      "right": {
-        "description": "Right bound"
+      "count": {
+        "description": "How many ranks to show (1-10, default 10)"
       }
     }
   },
@@ -70,13 +70,13 @@
         "description": "Restaurant address keyword"
       },
       "budget": {
-        "description": "Budget (integer)"
+        "description": "Maximum budget (TWD)"
       },
       "min_rating": {
-        "description": "Minimum rating"
+        "description": "Minimum rating (0-5, decimals allowed)"
       },
       "max_rating": {
-        "description": "Maximum rating"
+        "description": "Maximum rating (0-5, decimals allowed)"
       }
     }
   },
@@ -212,18 +212,18 @@
     "description": "Manage automatic replies",
     "subcommands": {
       "add": {
-        "description": "Add an auto-reply",
+        "description": "Add an auto-reply: the bot answers messages that exactly match the keyword",
         "options": {
           "keyword": {
-            "description": "Keyword"
+            "description": "The exact message that triggers it; [*] means a random interjection"
           },
           "reply": {
-            "description": "Reply"
+            "description": "What the bot replies with"
           }
         }
       },
       "delete": {
-        "description": "Delete an auto-reply",
+        "description": "Delete a keyword's auto-replies",
         "options": {
           "keyword": {
             "description": "Keyword"
@@ -234,7 +234,7 @@
         "description": "List auto-replies",
         "options": {
           "keyword": {
-            "description": "Keyword"
+            "description": "Only this keyword (omit to list every keyword)"
           }
         }
       }
@@ -271,7 +271,7 @@
     "description": "Manage giveaways",
     "subcommands": {
       "create": {
-        "description": "Create a giveaway",
+        "description": "Create a giveaway (opens a form for the prize, winners and duration)",
         "options": {
           "destination": {
             "description": "Where to publish the giveaway (default: current channel)",
@@ -283,7 +283,7 @@
         }
       },
       "delete": {
-        "description": "Delete a giveaway"
+        "description": "Cancel an active giveaway"
       }
     }
   },
@@ -349,13 +349,13 @@
         }
       },
       "list": {
-        "description": "List users banned by this bot in the current thread"
+        "description": "List users this bot restricts in the current thread"
       },
       "claim": {
         "description": "Request delegated management of a thread",
         "options": {
           "thread": {
-            "description": "Thread to manage"
+            "description": "Thread to manage (defaults to the current thread)"
           },
           "reason": {
             "description": "Reason for the request (1–1000 characters)"
@@ -371,7 +371,7 @@
             "description": "Grant thread management",
             "options": {
               "thread": {
-                "description": "Target thread"
+                "description": "Target thread (defaults to the current thread)"
               },
               "user": {
                 "description": "Target user"
@@ -382,7 +382,7 @@
             "description": "Revoke thread management",
             "options": {
               "thread": {
-                "description": "Target thread"
+                "description": "Target thread (defaults to the current thread)"
               },
               "user": {
                 "description": "Target user"
@@ -390,10 +390,10 @@
             }
           },
           "list": {
-            "description": "List delegated thread managers",
+            "description": "List a thread's delegated managers",
             "options": {
               "thread": {
-                "description": "Target thread"
+                "description": "Target thread (defaults to the current thread)"
               },
               "page": {
                 "description": "Page number (20 users per page)"
@@ -426,9 +426,6 @@
               "ephemeral": "Only you",
               "public": "Everyone"
             }
-          },
-          "top_n": {
-            "description": "How many entries to rank (optional, 1-5, default: 5)"
           }
         }
       },
@@ -457,9 +454,6 @@
               "ephemeral": "Only you",
               "public": "Everyone"
             }
-          },
-          "top_n": {
-            "description": "How many entries to rank (optional, 1-5, default: 5)"
           }
         }
       },
@@ -482,9 +476,6 @@
               "ephemeral": "Only you",
               "public": "Everyone"
             }
-          },
-          "top_n": {
-            "description": "How many entries to rank (optional, 1-5, default: 5)"
           }
         }
       },
@@ -505,14 +496,11 @@
             }
           },
           "visibility": {
-            "description": "Who can see the reply (optional, default: public)",
+            "description": "Who can see the reply (optional, default: ephemeral)",
             "choices": {
               "ephemeral": "Only you",
               "public": "Everyone"
             }
-          },
-          "top_n": {
-            "description": "How many entries to rank (optional, 1-5, default: 5)"
           }
         }
       },
@@ -538,9 +526,6 @@
               "ephemeral": "Only you",
               "public": "Everyone"
             }
-          },
-          "top_n": {
-            "description": "How many apps to rank (optional, 1-5, default: 5)"
           }
         }
       },

@@ -8,14 +8,18 @@
     }
   },
   "nijika": {
-    "help_message": "### 目前支援的功能：\n1. auto reply: bot會根據資料庫的message pair回覆訊息\n2. roll dice: 輸入範例-> `2d5`, 在1~5隨機選擇兩個數字\n"
+    "help_message": "### 目前支援的功能：\n1. auto reply: bot會根據資料庫的message pair回覆訊息\n2. roll dice: 輸入範例-> `2d5`, 在1~5隨機選擇兩個數字\n",
+    "persona_name": "虹夏大天使",
+    "vote_flavor": "被下北澤大天使的煙蒂燙吧!"
   },
   "gopher": {
     "help_message": "### 老鼠人\n會偶爾根據最近的對話自動回覆訊息。"
   },
   "tomori": {
     "presence_text": "一定是三角初華的陰謀!",
-    "help_message": "嗨,我是 Tomori!以下是你可以使用的指令,依用途分類整理:"
+    "help_message": "嗨,我是 Tomori!以下是你可以使用的指令,依用途分類整理:",
+    "persona_name": "初華大人",
+    "vote_flavor": "讓他看看豐川家的黑暗!"
   },
   "konata": {
     "presence_text": "貧乳はステータスだ、希少価値だ！"
@@ -25,13 +29,18 @@
     "cost_unknown": "~$?(未知 model 計價)"
   },
   "menu_get_avatar": {
-    "avatar_url_field": "頭像連結",
+    "avatar_url_field": "個人頭像連結",
     "failed": "唔...抓不到這位的頭像耶,稍後再試一次看看吧!(錯誤代碼:{{traceId}})",
-    "title": "{{user}} 的頭像 URL"
+    "title": "{{user}} 的頭像",
+    "server_avatar_field": "伺服器頭像連結"
   },
   "menu_get_sticker": {
-    "not_found": "此訊息沒有貼圖或單一 emoji",
-    "failed": "唔...這個貼圖/emoji 我拿不到耶,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
+    "not_found": "這則訊息沒有貼圖或自訂表情",
+    "failed": "唔...這個貼圖/emoji 我拿不到耶,稍後再試一次看看吧!(錯誤代碼:{{traceId}})",
+    "sticker_title": "貼圖:{{name}}",
+    "emoji_title": "表情:{{name}}",
+    "lottie_note": "這是動畫(Lottie)貼圖,無法顯示為圖片,請點標題開啟原始檔。",
+    "more_omitted": "只顯示前 {{count}} 個。"
   },
   "auto_reply": {
     "goodnight_reply": "健康に良くない！<:ave_mortis_bad_for_health:1333052644368846878>",
@@ -86,13 +95,13 @@
   "ban_user": {
     "cannot_get_votes": "無法取得投票數",
     "cannot_ban_bot": "還想ban機器人阿",
-    "cannot_timeout": "雖然初華大人無法禁言他,但將予以無限刪除之審判,即刻裁決!",
+    "cannot_timeout": "雖然{{persona}}無法禁言他,但將予以無限刪除之審判,即刻裁決!",
     "failed": "無法禁言使用者 (錯誤代碼:{{traceId}})",
     "vote_call": "**{{initiator}}** 發起了審判!\n是否禁言 **{{target}}** {{duration}} 分鐘?\n**{{judgeTime}}** 分鐘後累積 **{{threshold}}** 票則禁言!",
-    "vote_ping": "<@&{{role}}> 讓他看看豐川家的黑暗!",
-    "timed_out": "{{user}} 已被初華大人禁言 {{duration}} 分鐘",
+    "vote_ping": "<@&{{role}}> {{flavor}}",
+    "timed_out": "{{user}} 已被{{persona}}禁言 {{duration}} 分鐘",
     "vote_failed": "投票數 {{count}} 票,未達到禁言門檻 {{threshold}} 票",
-    "timeout_reason": "初華大人的禁言裁決!"
+    "timeout_reason": "{{persona}}的禁言裁決!"
   },
   "bug_report": {
     "empty_content": "請輸入內容",
@@ -101,17 +110,20 @@
     "admin_dm": "問題回報來自 {{reporter}}:{{content}}"
   },
   "change_avatar": {
-    "no_role_config": "沒有身份組設定",
     "new_role_not_found": "找不到新身份",
     "failed": "更改失敗 (錯誤代碼:{{traceId}})",
-    "changed": "{{oldName}}已死,現在正是{{newName}}復權的時刻"
+    "changed": "{{oldName}}已死,現在正是{{newName}}復權的時刻",
+    "avatar_missing": "找不到這個人格的頭像檔案,請管理員把圖片放進 data/avatars/",
+    "rate_limited": "Discord 限制了頭像更換頻率,請過幾分鐘再試"
   },
   "delete_reply": {
     "failed": "無法刪除訊息回覆配對 (錯誤代碼:{{traceId}})",
     "record_not_found": "找不到該回覆紀錄",
     "select_placeholder": "選擇要刪除的回覆",
     "image_preview_header": "圖片預覽:\n",
-    "deleted": "已刪除回覆:{{key}} => {{reply}}"
+    "deleted": "已刪除回覆:{{key}} => {{reply}}",
+    "not_found": "找不到關鍵字「{{keyword}}」的自動回覆",
+    "none_deletable": "你只能刪除自己新增的自動回覆;需要管理訊息權限才能刪除別人的"
   },
   "help": {
     "no_commands": "沒有指令清單",
@@ -130,17 +142,20 @@
     }
   },
   "level_detail": {
-    "too_long": "太長了...請選短一點的範圍",
     "failed": "無法取得等級詳情 (錯誤代碼:{{traceId}})",
     "message_count": "**訊息總數:** {{count}} ",
     "current_xp": "**當前經驗值:** {{userXp}} / {{levelXp}} ",
     "total_xp": "**總經驗值:** {{totalXp}} ",
-    "average_xp": "**平均經驗值:** {{averageXp}} \n\n"
+    "average_xp": "**平均經驗值:** {{averageXp}} \n\n",
+    "unavailable": "無法讀取 MEE6 排行榜,可能是排行榜未公開或 MEE6 介面變動。",
+    "out_of_range": "排行榜只有 {{total}} 名,請選擇較前面的名次。"
   },
   "list_reply": {
     "failed": "無法列出訊息回覆配對 (錯誤代碼:{{traceId}})",
     "not_found": "找不到 輸入:{{keyword}} 的回覆!",
-    "header": "輸入:{{keyword}} 的回覆:\n"
+    "header": "輸入:{{keyword}} 的回覆:\n",
+    "empty": "這個伺服器還沒有自動回覆",
+    "keywords_header": "自動回覆關鍵字(共 {{count}} 則回覆,括號內為回覆數):"
   },
   "random_restaurant": {
     "midnight": "現在半夜 餐廳都關門了啦🈹",
@@ -154,30 +169,30 @@
     "failed": "唔...餐廳抽取失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
   },
   "role_message": {
-    "no_permission": "你沒有權限發送身份組領取訊息",
+    "no_permission": "你沒有權限發送身分組領取訊息",
     "format_error": "格式錯誤!regex: match(/^<@&\\d+>(\\s*<@&\\d+>)*$/)",
-    "no_valid_id": "請至少提供一個有效的身份組ID",
-    "prompt": "請選擇你要領取的身份組:",
-    "failed": "無法發送身份組領取訊息 (錯誤代碼:{{traceId}})",
-    "role_not_found": "找不到ID為 {{id}} 的身份組, 請確認ID是否正確",
+    "no_valid_id": "請至少提供一個有效的身分組ID",
+    "prompt": "請選擇你要領取的身分組:",
+    "failed": "無法發送身分組領取訊息 (錯誤代碼:{{traceId}})",
+    "role_not_found": "找不到ID為 {{id}} 的身分組, 請確認ID是否正確",
     "role_not_assignable": "身分組 <@&{{id}}> 無法放上面板：它必須低於你和機器人的最高身分組，且不能含管理類權限。"
   },
   "roll_call": {
     "missing_target": "請提供被點名者 (users) 或活動ID (activity_id)",
     "no_participants": "該活動目前沒有參與者",
-    "format_error": "格式錯誤!請用 @ 提及使用者或身份組 (例如 @user1 @role1)",
+    "format_error": "格式錯誤!請用 @ 提及使用者或身分組 (例如 @user1 @role1)",
     "no_valid_id": "請至少提供一個有效的使用者ID",
     "sent": "點名已發送!",
     "failed": "無法進行點名 (錯誤代碼:{{traceId}})",
     "activity_not_found": "找不到活動ID為 {{id}} 的活動",
     "activity_already_consumed": "活動 {{id}} 已經被另一次點名指令消化過了。",
     "user_not_found": "找不到ID為 {{id}} 的使用者, 請確認ID是否正確",
-    "role_no_members": "身份組 <@&{{id}}> 沒有可點名的成員 (機器人不算喔)。",
-    "everyone_not_allowed": "初華大人不准點 @everyone 啦!請改點特定的人或身份組。",
-    "too_many_targets": "點名人數太多啦!最多只能點 {{max}} 人,但這次有 {{count}} 人,請減少身份組或人數~",
-    "announcement_header": "初華大人的點名簿:<@{{userId}}> 發起了點名!\n",
+    "role_no_members": "身分組 <@&{{id}}> 沒有可點名的成員 (機器人不算喔)。",
+    "everyone_not_allowed": "{{persona}}不准點 @everyone 啦!請改點特定的人或身分組。",
+    "too_many_targets": "點名人數太多啦!最多只能點 {{max}} 人,但這次有 {{count}} 人,請減少身分組或人數~",
+    "announcement_header": "{{persona}}的點名簿:<@{{userId}}> 發起了點名!\n",
     "activity_id_line": "(活動ID: {{id}})\n",
-    "trigger_prefix": "初華大人的點名簿"
+    "trigger_prefix": "{{persona}}的點名簿"
   },
   "talk": {
     "missing_args": "請輸入頻道和內容",
@@ -418,7 +433,7 @@
   "update_role": {
     "no_config": "設定檔中未找到等級身分組配置",
     "done": "更新完成",
-    "failed": "無法更新身份組 (錯誤代碼:{{traceId}})",
+    "failed": "無法更新身分組 (錯誤代碼:{{traceId}})",
     "removed": "[ SYSTEM ] {{name}}, 移除: {{role}}",
     "granted": "[ SYSTEM ] {{name}}, 獲得: {{role}}"
   },
@@ -490,14 +505,14 @@
   },
   "giveaway": {
     "missing_required_fields": "請輸入持續時間、得獎人數和獎品",
-    "invalid_duration": "無效的持續時間",
+    "invalid_duration": "無效的持續時間,請輸入 1 分鐘到 30 天之間,例如 30m、2h、1d",
     "invalid_winner_num": "中獎人數必須是正整數",
     "create_announce_failed": "無法建立抽獎",
     "create_failed": "無法抽獎",
     "missing_message_id": "請提供抽獎訊息ID",
-    "delete_success": "抽獎已刪除",
+    "delete_success": "抽獎已取消",
     "no_active_giveaways": "目前沒有進行中的抽獎",
-    "delete_select_placeholder": "選擇要刪除的抽獎",
+    "delete_select_placeholder": "選擇要取消的抽獎",
     "delete_option_label": "{{prize}} — 結束於 {{endTime}}",
     "modal_title": "建立抽獎",
     "modal_duration_label": "持續時間",
@@ -516,7 +531,10 @@
     "announce_footer": "點擊 🎉 表情符號參加抽獎!",
     "result_with_winners": "🎉 **抽獎結束!** 🎉\n\n**獎品: {{prize}}**\n\n🏆 **得獎者:**\n{{winners}}\n\n恭喜以上得獎者！請與 <@{{ownerId}}> 聯繫領取獎品!",
     "result_no_participants": "🎉 **抽獎結束!** 🎉\n\n**獎品: {{prize}}**\n\n😢 **沒有人參加抽獎**",
-    "failed": "唔...抽獎操作失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
+    "failed": "唔...抽獎操作失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})",
+    "cancelled_footer": "此抽獎已取消",
+    "delete_not_found": "找不到這個抽獎,可能已經結束或被取消",
+    "delete_forbidden": "只有抽獎建立者或管理員可以取消這個抽獎"
   },
   "activity": {
     "invalid_duration": "無效的持續時間",
@@ -533,19 +551,19 @@
     "failed": "唔...活動操作失敗了,稍後再試一次看看吧!(錯誤代碼:{{traceId}})"
   },
   "temp_role": {
-    "created": "🔔 暫時通知身份組 {{role}} 已建立!將於 {{expiry}} 自動刪除。點下方按鈕領取或取消身份組。",
-    "button_label": "領取 / 取消身份組",
-    "expired": "⌛ 暫時通知身份組「{{role}}」已到期並被刪除。",
-    "at_role_limit": "本伺服器的身份組數量已達上限 ({{max}}),無法建立新的暫時身份組。",
+    "created": "🔔 暫時通知身分組 {{role}} 已建立!將於 {{expiry}} 自動刪除。點下方按鈕領取或取消身分組。",
+    "button_label": "領取 / 取消身分組",
+    "expired": "⌛ 暫時通知身分組「{{role}}」已到期並被刪除。",
+    "at_role_limit": "本伺服器的身分組數量已達上限 ({{max}}),無法建立新的暫時身分組。",
     "invalid_duration": "存活天數必須是 1 到 {{max}} 之間的整數。",
-    "missing_name": "請提供身份組名稱。",
-    "announce_failed": "無法在此頻道發送領取訊息,暫時身份組未建立。",
-    "failed": "無法建立暫時身份組 (錯誤代碼:{{traceId}})"
+    "missing_name": "請提供身分組名稱。",
+    "announce_failed": "無法在此頻道發送領取訊息,暫時身分組未建立。",
+    "failed": "無法建立暫時身分組 (錯誤代碼:{{traceId}})"
   },
   "toggle_role": {
-    "role_not_found": "找不到該身份組,可能已被刪除。",
-    "added": "已為你加上身份組 {{role}}。",
-    "removed": "已為你移除身份組 {{role}}。",
+    "role_not_found": "找不到該身分組,可能已被刪除。",
+    "added": "已為你加上身分組 {{role}}。",
+    "removed": "已為你移除身分組 {{role}}。",
     "role_not_assignable": "這個身分組目前無法自行領取，請聯絡管理員。"
   },
   "archive": {
@@ -771,5 +789,9 @@
     "claim_rejected": "討論串管理權申請已拒絕。",
     "claim_failed": "無法完成討論串管理操作，請稍後再試。（追蹤 ID：{{traceId}}）",
     "claim_delivering": "此申請仍在完成投遞，請稍後再按審核按鈕。"
+  },
+  "persona": {
+    "persona_name": "機器人",
+    "vote_flavor": ""
   }
 }

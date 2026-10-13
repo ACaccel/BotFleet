@@ -46,10 +46,10 @@ describe('catalog runtime behaviour', () => {
       loadCatalogResources({ localesDir: LOCALES_DIR }),
     );
     expect(translator.t('commands:reply.subcommands.add.description', undefined, 'en')).toBe(
-      'Add an auto-reply',
+      'Add an auto-reply: the bot answers messages that exactly match the keyword',
     );
     expect(translator.t('commands:reply.subcommands.add.description', undefined, 'zh-TW')).toBe(
-      '新增自動回覆',
+      '新增自動回覆:有人發出與關鍵字完全相同的訊息時,bot 會回覆',
     );
   });
 

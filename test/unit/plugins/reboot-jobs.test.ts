@@ -2,7 +2,8 @@
  * Boot-time job rebuild for the activity and giveaway plugins.
  *
  * Startup and guild database recovery repopulate the scheduler: rows whose deadline is still ahead become scheduled jobs,
- * rows already past their deadline are reaped, and a guild whose
+ * rows already past their deadline are settled (a giveaway is drawn,
+ * which reaps it when its announcement is gone), and a guild whose
  * `listAll` fails must not take the remaining guilds' jobs down with
  * it. The registry here holds two guilds with real rows so those three
  * outcomes are observable in the job map and the repos.
@@ -115,12 +116,22 @@ const buildRegistry = (repos: ReadonlyMap<string, FakeGuildRepos>): GuildRegistr
  * `deleteGiveaway`) short-circuits on a guild the client does not know.
  */
 const buildCtx = (registry: GuildRegistry, jobMap: Map<string, Job>): PluginRuntimeContext => {
-  const guilds = new Map<string, unknown>(registry.listGuildIds().map((id) => [id, { id }]));
+  const guilds = new Map<string, unknown>(
+    registry
+      .listGuildIds()
+      .map((id) => [id, { id, channels: { cache: new Map() }, members: { cache: new Map() } }]),
+  );
   const container = createContainer();
   container.registerSingleton(TOKENS.GuildRegistry, () => registry);
   container.registerSingleton(
     TOKENS.DiscordClient,
-    () => ({ user: { id: 'bot-1' }, guilds: { cache: guilds } }) as never,
+    () =>
+      ({
+        user: { id: 'bot-1' },
+        guilds: { cache: guilds },
+        // The rows' channels no longer exist, so an overdue draw cannot be announced.
+        channels: { fetch: async () => Promise.reject(new Error('Unknown Channel')) },
+      }) as never,
   );
   container.registerSingleton(TOKENS.JobMap, () => jobMap);
   return {
@@ -179,7 +190,7 @@ describe.each([
     expect(repos.deleted).toEqual([]);
   });
 
-  it('reaps a row whose deadline already passed instead of scheduling it', async () => {
+  it('settles a row whose deadline already passed instead of scheduling it', async () => {
     const repos = new FakeGuildRepos([
       { id: 'stale', deadline: past() },
       { id: 'live', deadline: future() },

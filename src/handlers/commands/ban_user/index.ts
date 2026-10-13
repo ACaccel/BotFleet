@@ -13,7 +13,7 @@ export default class ban_user extends Command {
     super();
     this.setConfig({
       name: 'ban_user',
-      category: 'admin',
+      category: 'fun',
       guildOnly: true,
       options: {
         user: [
@@ -22,12 +22,7 @@ export default class ban_user extends Command {
             required: true,
           },
         ],
-        integer: [
-          {
-            name: 'duration',
-            required: false,
-          },
-        ],
+        integer: [{ name: 'duration', required: false, min: 1, max: 5 }],
       },
     });
   }
@@ -56,10 +51,8 @@ export default class ban_user extends Command {
         return;
       }
 
-      let duration = getOptionalNumber(interaction, 'duration') ?? 0;
-      if (!duration) duration = 1; // 1 minutes
-      if (duration > 5) duration = 5; // max 5 minutes
-      if (duration < 1) duration = 1; // min 1 minute
+      // Discord bounds the option to 1-5; clamp again for direct API calls.
+      const duration = Math.min(5, Math.max(1, getOptionalNumber(interaction, 'duration') ?? 1));
 
       const initiator = (interaction.member as GuildMember) || interaction.user;
       await interaction.deleteReply();
@@ -73,6 +66,7 @@ export default class ban_user extends Command {
           judgeTime: JUDGE_TIME,
           threshold: BAN_THRESHOLD,
           voterRoleId,
+          flavor: bot.voteFlavor,
         }),
       );
       await msgReact(judge_msg, ['👍'], bot.logger, bot.clientId);
@@ -93,10 +87,12 @@ export default class ban_user extends Command {
           try {
             await member.timeout(
               duration * 60 * 1000,
-              bot.translator?.t('replies:ban_user.timeout_reason') ?? '',
+              bot.translator?.t('replies:ban_user.timeout_reason', { persona: bot.personaName }) ??
+                '',
             );
             await judge_msg.reply(
               bot.translator?.t('replies:ban_user.timed_out', {
+                persona: bot.personaName,
                 user: member.user.tag,
                 duration,
               }) ?? '',
@@ -107,7 +103,10 @@ export default class ban_user extends Command {
             // fallback below still runs, but the operator needs
             // to see which one it was.
             logError(bot.logger, interaction.guild?.id, timeoutErr);
-            await judge_msg.reply(bot.translator?.t('replies:ban_user.cannot_timeout') ?? '');
+            await judge_msg.reply(
+              bot.translator?.t('replies:ban_user.cannot_timeout', { persona: bot.personaName }) ??
+                '',
+            );
             startMessageDeletionFallback({
               client: bot.client,
               logger: bot.logger,

@@ -53,6 +53,7 @@ export class Tomori extends BaseBot<TomoriConfig> {
     // Intro paragraph rendered at the top of the `/help` embed; the
     // key is resolved once the translator is loaded (see BaseBot.run).
     this.helpMessageKey = 'replies:tomori.help_message';
+    this.personaSection = 'replies:tomori';
     // Tomori opts into auto-reply, guild-event mirroring, social-link
     // preview, giveaway, activity and temporary-role behaviour
     // by registering the corresponding plugins explicitly. Plugins

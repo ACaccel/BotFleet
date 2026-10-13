@@ -10,6 +10,7 @@ import { logError } from '@core/logger';
 import { PROVIDER_CHOICES, type UserApiDoc } from './provider-choices';
 import { checkAiSettingsReady } from './validate-ai-settings';
 import { buildSettingsModal } from './build-settings-modal';
+import { loadModelOptions } from './model-options';
 
 export default class ai_settings extends Command {
   constructor() {
@@ -46,9 +47,9 @@ export default class ai_settings extends Command {
       return;
     }
 
-    // modelCatalog.list is sync: a miss returns []. We surface an
-    // honest "model list unavailable" reply rather than a guessed list.
-    const modelOptions = bot.modelCatalog?.list(provider) ?? [];
+    // An empty list still gets an honest "model list unavailable" reply
+    // rather than a guessed list.
+    const modelOptions = [...(await loadModelOptions(bot.modelCatalog, provider))];
     const check = checkAiSettingsReady(docResult.value as UserApiDoc | undefined, modelOptions);
     if (!check.ok) {
       const key =

@@ -12,6 +12,7 @@ import {
   assertThreadApplicant,
   requireThreadRepo,
   resolveManagedThread,
+  targetThreadId,
   ThreadManagementError,
   threadManagementFailure,
 } from '../../thread-management-common';
@@ -24,8 +25,8 @@ export default class thread_claim extends Command {
       category: 'admin',
       guildOnly: true,
       options: {
-        channel: [{ name: 'thread', required: true }],
-        string: [{ name: 'reason', required: true }],
+        channel: [{ name: 'thread', required: false }],
+        string: [{ name: 'reason', required: true, minLength: 1, maxLength: 1000 }],
       },
     });
   }
@@ -38,10 +39,7 @@ export default class thread_claim extends Command {
     try {
       if (!interaction.guild) throw new ThreadManagementError('thread_only');
       const repo = requireThreadRepo(bot, interaction.guild.id);
-      const thread = await resolveManagedThread(
-        interaction.guild,
-        interaction.options.getChannel('thread', true).id,
-      );
+      const thread = await resolveManagedThread(interaction.guild, targetThreadId(interaction));
       await assertThreadApplicant(thread, interaction.user.id);
       if (!thread.ownerId) throw new ThreadManagementError('claim_owner_missing');
       if (await canManageThread(bot, interaction.guild.id, thread, interaction.user.id)) {

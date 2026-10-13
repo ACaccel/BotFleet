@@ -99,6 +99,7 @@ Text that members author and the bot re-posts carries explicit `allowedMentions`
   unsigned `/talk` is limited to bot admins.
 - A `/ban_user` vote pings only the guild's `roles.ban_user`, and nobody when it is
   unset; bots cannot be voted on.
+- Giveaway results ping only the winners and the prize owner; the prize text cannot.
 
 Self-service role buttons grant only roles that pass
 [`isSelfAssignableRole`](../src/infra/discord/self-assignable-role.ts): below the

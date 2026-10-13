@@ -24,6 +24,30 @@ retired IDs before deploying. These commands are removed without aliases:
 Buttons, menus and forms on archive panels from before the `/archive` redesign no
 longer answer; run `/archive` again.
 
+Behaviour changes in the remaining commands:
+
+- **`/change_avatar`** is open to every member and reads persona images from
+  `data/avatars/` instead of an external host; copy each `avatar_file` named in
+  [`identity.json`](../src/handlers/commands/change_avatar/identity.json) there
+  before deploying.
+- **`/level_detail`** takes `rank_from` and `count` (1-10) instead of `left` and
+  `right`.
+- **`/giveaway`** limits durations to 1 minute-30 days and draws overdue giveaways
+  after a restart instead of discarding them. `/giveaway delete` cancels only your
+  own giveaways unless you can manage messages or events, and marks the
+  announcement cancelled.
+- **`/reply`** records who added each pair. `delete` and `list` answer privately,
+  `delete` removes only your own pairs unless you can manage messages, and `list`
+  without a keyword lists every keyword.
+- **`/traffic user`** answers privately unless `visibility: public` is chosen;
+  `top_n` remains only on `emoji` and `sticker`.
+- **`/thread claim`** and **`/thread manager`** default `thread` to the current
+  thread.
+- `/ban_user` and `/roll_call` speak as each bot's persona; Nijika's vote call ends
+  with its own line.
+
+Register commands again after deploying so Discord shows the new options.
+
 ## Grouped slash commands
 
 Related commands now use subcommands. The old standalone slash commands and

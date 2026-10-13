@@ -35,7 +35,8 @@ const rollCallReact = async (
   _user: User,
   bot: BaseBot,
 ): Promise<void> => {
-  const triggerPrefix = bot.translator?.t('replies:roll_call.trigger_prefix') ?? '';
+  const triggerPrefix =
+    bot.translator?.t('replies:roll_call.trigger_prefix', { persona: bot.personaName }) ?? '';
   if (triggerPrefix.length === 0) return;
   if (!reaction.message.content?.startsWith(triggerPrefix)) return;
 

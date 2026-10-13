@@ -153,15 +153,14 @@ describe('/traffic subcommands', () => {
     },
   );
 
-  it('caps member, channel and app rankings at 5', async () => {
+  it('caps member, channel and app rankings at 5 without a top_n option', async () => {
     const topN = (Action: { new (): { config: { options?: { integer?: unknown[] } } } }) =>
       new Action().config.options?.integer?.find(
         (option) => (option as { name: string }).name === 'top_n',
       );
-    for (const Action of [TrafficOverview, TrafficChannel, TrafficMe, TrafficUser])
-      expect(topN(Action)).toMatchObject({ min: 1, max: RANK_ROW_LIMIT });
+    for (const Action of [TrafficOverview, TrafficChannel, TrafficMe, TrafficUser, TrafficApps])
+      expect(topN(Action)).toBeUndefined();
     expect(RANK_ROW_LIMIT).toBe(5);
-    expect(topN(TrafficApps)).toMatchObject({ min: 1, max: APP_RANK_LIMIT });
     expect(APP_RANK_LIMIT).toBe(5);
 
     for (const [subcommand, sections] of [
@@ -172,8 +171,7 @@ describe('/traffic subcommands', () => {
       const limits = stats.calls.find((call) => call.method === 'activity')?.limits ?? {};
       for (const section of sections) expect(limits[section], section).toBe(5);
     }
-    // `top_n` sizes the app ranking only; the member list stays a top 5.
-    const apps = await run({ subcommand: 'apps', values: { top_n: 8 } });
+    const apps = await run({ subcommand: 'apps' });
     const usage = apps.stats.calls.filter((call) => call.method === 'appUsage');
     expect(usage[0]?.limits?.members).toBe(RANK_ROW_LIMIT);
   });
@@ -182,6 +180,12 @@ describe('/traffic subcommands', () => {
     expect((await run({ subcommand: 'overview' })).deferred[0]).toEqual({});
     const hidden = await run({ subcommand: 'overview', values: { visibility: 'ephemeral' } });
     expect(hidden.deferred[0]).toEqual({ flags: 64 });
+  });
+
+  it("keeps another member's report private unless asked to share it", async () => {
+    expect((await run({ subcommand: 'user' })).deferred[0]).toEqual({ flags: 64 });
+    const shared = await run({ subcommand: 'user', values: { visibility: 'public' } });
+    expect(shared.deferred[0]).toEqual({});
   });
 
   it('counts only the invoker-visible channels for member statistics', async () => {
@@ -271,10 +275,14 @@ describe('/traffic subcommands', () => {
     ['overview', 'replies:traffic.no_data'],
     ['channel', 'replies:traffic.no_data'],
     ['me', 'replies:traffic.person_no_data'],
-    ['user', 'replies:traffic.person_no_data'],
   ])('answers %s without activity with a notice and no image', async (subcommand, key) => {
     const { replies } = await run({ subcommand }, fakeStatsRepo({ messages: 0 }));
     expect(replies).toEqual(privately(key));
+  });
+
+  it('answers user without activity in its private reply', async () => {
+    const { replies } = await run({ subcommand: 'user' }, fakeStatsRepo({ messages: 0 }));
+    expect(replies).toEqual([{ content: 'replies:traffic.person_no_data' }]);
   });
 
   it('answers apps without interaction records with a notice', async () => {

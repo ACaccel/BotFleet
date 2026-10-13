@@ -22,12 +22,16 @@ const dbErr = () => err(databaseErrorFrom(new Error('boom'), { operation: 'test'
 
 interface ReplyRepoInput {
   /** The row `findById` resolves; `undefined` means already deleted. */
-  readonly row?: { readonly reply: string };
+  readonly row?: { readonly input: string; readonly reply: string; readonly created_by?: string };
   readonly findFails?: boolean;
   readonly deleteFails?: boolean;
+  /** Whether the clicker can manage messages. */
+  readonly manager?: boolean;
 }
 
-const build = (input: ReplyRepoInput = { row: { reply: 'pong' } }) => {
+const OWN_ROW = { input: 'ping', reply: 'pong', created_by: 'u-1' };
+
+const build = (input: ReplyRepoInput = { row: OWN_ROW }) => {
   const deleteById = vi.fn(async () => (input.deleteFails === true ? dbErr() : ok(true)));
   const repos = {
     reply: {
@@ -37,6 +41,7 @@ const build = (input: ReplyRepoInput = { row: { reply: 'pong' } }) => {
   } as unknown as Repos;
 
   const { bot } = buildFakeBot({
+    isAdmin: () => false,
     translator: echoTranslatorWithParams(),
     connectionManager: undefined,
     getRepos: (guildId: string) => (guildId === GUILD_ID ? repos : undefined),
@@ -44,8 +49,10 @@ const build = (input: ReplyRepoInput = { row: { reply: 'pong' } }) => {
 
   const reply = vi.fn().mockResolvedValue(undefined);
   const interaction = {
-    customId: 'delete_reply|ping',
+    customId: 'delete_reply|0',
     values: [RECORD_ID],
+    user: { id: 'u-1' },
+    memberPermissions: { has: () => input.manager === true },
     guild: { id: GUILD_ID },
     guildId: GUILD_ID,
     deferred: false,
@@ -64,9 +71,28 @@ describe('delete_reply select menu', () => {
     await new delete_reply().execute(interaction, bot);
 
     expect(deleteById).toHaveBeenCalledWith(RECORD_ID);
-    expect(reply).toHaveBeenCalledWith({
-      content: 'replies:delete_reply.deleted:{"key":"ping","reply":"pong"}',
-    });
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'replies:delete_reply.deleted:{"key":"ping","reply":"pong"}',
+        allowedMentions: { parse: [] },
+      }),
+    );
+  });
+
+  it("refuses another member's reply unless the clicker manages messages", async () => {
+    const othersRow = { ...OWN_ROW, created_by: 'someone-else' };
+    const refused = build({ row: othersRow });
+
+    await new delete_reply().execute(refused.interaction, refused.bot);
+
+    expect(refused.deleteById).not.toHaveBeenCalled();
+    expect(refused.reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'replies:delete_reply.none_deletable' }),
+    );
+
+    const manager = build({ row: othersRow, manager: true });
+    await new delete_reply().execute(manager.interaction, manager.bot);
+    expect(manager.deleteById).toHaveBeenCalledWith(RECORD_ID);
   });
 
   it('answers record_not_found and deletes nothing when the row is already gone', async () => {
@@ -88,7 +114,7 @@ describe('delete_reply select menu', () => {
   });
 
   it('propagates a delete failure rather than confirming it', async () => {
-    const { bot, interaction, reply } = build({ row: { reply: 'pong' }, deleteFails: true });
+    const { bot, interaction, reply } = build({ row: OWN_ROW, deleteFails: true });
 
     await expect(new delete_reply().execute(interaction, bot)).rejects.toThrow();
     expect(reply).not.toHaveBeenCalled();

@@ -14,14 +14,8 @@ export default class add_reply extends Command {
       category: 'auto_reply',
       options: {
         string: [
-          {
-            name: 'keyword',
-            required: true,
-          },
-          {
-            name: 'reply',
-            required: true,
-          },
+          { name: 'keyword', required: true, maxLength: 100 },
+          { name: 'reply', required: true, maxLength: 2000 },
         ],
       },
     });
@@ -46,14 +40,16 @@ export default class add_reply extends Command {
       const existPair = existPairResult.value;
 
       if (existPair.length === 0) {
-        const createResult = await repos.reply.create(input, reply);
+        const createResult = await repos.reply.create(input, reply, interaction.user.id);
         if (!createResult.ok) throw createResult.error;
         await interaction.editReply({
           content: bot.translator?.t('replies:add_reply.added', { input, reply }) ?? '',
+          allowedMentions: { parse: [] },
         });
       } else {
         await interaction.editReply({
           content: bot.translator?.t('replies:add_reply.already_exists', { input, reply }) ?? '',
+          allowedMentions: { parse: [] },
         });
       }
     } catch (error) {

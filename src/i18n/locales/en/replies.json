@@ -8,14 +8,18 @@
     }
   },
   "nijika": {
-    "help_message": "### Currently supported features:\n1. auto reply: the bot replies based on message pairs in the database\n2. roll dice: example input -> `2d5`, randomly picks two numbers between 1 and 5\n"
+    "help_message": "### Currently supported features:\n1. auto reply: the bot replies based on message pairs in the database\n2. roll dice: example input -> `2d5`, randomly picks two numbers between 1 and 5\n",
+    "persona_name": "Angel Nijika",
+    "vote_flavor": "Let the Shimokitazawa angel's cigarette butt burn them!"
   },
   "gopher": {
     "help_message": "### Gopher\nOccasionally replies automatically based on the recent conversation."
   },
   "tomori": {
     "presence_text": "It must be Misumi Uika's conspiracy!",
-    "help_message": "Hi, I'm Tomori! Here are the commands you can use, grouped by purpose:"
+    "help_message": "Hi, I'm Tomori! Here are the commands you can use, grouped by purpose:",
+    "persona_name": "Lady Uika",
+    "vote_flavor": "Show them the darkness of the Togawa family!"
   },
   "konata": {
     "presence_text": "Small breasts are a status symbol, a rare commodity!"
@@ -25,13 +29,18 @@
     "cost_unknown": "~$? (unknown model pricing)"
   },
   "menu_get_avatar": {
-    "avatar_url_field": "Avatar URL",
+    "avatar_url_field": "Profile avatar URL",
     "failed": "Hmm... I couldn't grab this user's avatar. Give it another try later! (error code: {{traceId}})",
-    "title": "{{user}}'s avatar URL"
+    "title": "{{user}}'s avatar",
+    "server_avatar_field": "Server avatar URL"
   },
   "menu_get_sticker": {
-    "not_found": "This message has no sticker or single emoji.",
-    "failed": "Hmm... I couldn't grab that sticker/emoji. Give it another try later! (error code: {{traceId}})"
+    "not_found": "This message has no sticker or custom emoji.",
+    "failed": "Hmm... I couldn't grab that sticker/emoji. Give it another try later! (error code: {{traceId}})",
+    "sticker_title": "Sticker: {{name}}",
+    "emoji_title": "Emoji: {{name}}",
+    "lottie_note": "This is an animated (Lottie) sticker that cannot be shown as an image; open the title link for the source file.",
+    "more_omitted": "Showing the first {{count}} only."
   },
   "auto_reply": {
     "goodnight_reply": "Not good for your health! <:ave_mortis_bad_for_health:1333052644368846878>",
@@ -86,13 +95,13 @@
   "ban_user": {
     "cannot_get_votes": "Could not get the vote count.",
     "cannot_ban_bot": "You want to ban a bot, huh?",
-    "cannot_timeout": "Lady Sakiko cannot time them out, but they shall be sentenced to endless deletion, judged at once!",
+    "cannot_timeout": "{{persona}} cannot time them out, but they shall be sentenced to endless deletion, judged at once!",
     "failed": "Could not time out the user. (error code: {{traceId}})",
     "vote_call": "**{{initiator}}** has called a trial!\nTime out **{{target}}** for {{duration}} minutes?\nIf **{{threshold}}** votes accumulate within **{{judgeTime}}** minutes they will be timed out.",
-    "vote_ping": "<@&{{role}}>, show them the darkness of the Toyokawa family!",
-    "timed_out": "{{user}} has been timed out by Lady Sakiko for {{duration}} minutes.",
+    "vote_ping": "<@&{{role}}> {{flavor}}",
+    "timed_out": "{{user}} has been timed out by {{persona}} for {{duration}} minutes.",
     "vote_failed": "{{count}} votes — the timeout threshold of {{threshold}} votes was not reached.",
-    "timeout_reason": "Lady Sakiko's timeout verdict!"
+    "timeout_reason": "{{persona}}'s timeout verdict!"
   },
   "bug_report": {
     "empty_content": "Please enter some content.",
@@ -101,17 +110,20 @@
     "admin_dm": "Bug report from {{reporter}}: {{content}}"
   },
   "change_avatar": {
-    "no_role_config": "No role configuration found.",
     "new_role_not_found": "New identity not found.",
     "failed": "Change failed. (error code: {{traceId}})",
-    "changed": "{{oldName}} is gone; now is the time for {{newName}} to reclaim the throne."
+    "changed": "{{oldName}} is gone; now is the time for {{newName}} to reclaim the throne.",
+    "avatar_missing": "This persona's avatar file is missing; ask an admin to add it under data/avatars/.",
+    "rate_limited": "Discord is limiting how often the avatar can change; try again in a few minutes."
   },
   "delete_reply": {
     "failed": "Could not delete the auto-reply pair. (error code: {{traceId}})",
     "record_not_found": "That reply record was not found.",
     "select_placeholder": "Select the reply to delete",
     "image_preview_header": "Image preview:\n",
-    "deleted": "Deleted reply: {{key}} => {{reply}}"
+    "deleted": "Deleted reply: {{key}} => {{reply}}",
+    "not_found": "No auto-replies found for \"{{keyword}}\".",
+    "none_deletable": "You can only delete auto-replies you added; deleting others' needs Manage Messages."
   },
   "help": {
     "no_commands": "No command list available.",
@@ -130,17 +142,20 @@
     }
   },
   "level_detail": {
-    "too_long": "Too long... please choose a shorter range.",
     "failed": "Could not get the level details. (error code: {{traceId}})",
     "message_count": "**Total messages:** {{count}} ",
     "current_xp": "**Current XP:** {{userXp}} / {{levelXp}} ",
     "total_xp": "**Total XP:** {{totalXp}} ",
-    "average_xp": "**Average XP:** {{averageXp}} \n\n"
+    "average_xp": "**Average XP:** {{averageXp}} \n\n",
+    "unavailable": "Could not read the MEE6 leaderboard; it may be private, or MEE6 may have changed its interface.",
+    "out_of_range": "The leaderboard only has {{total}} ranks; pick an earlier rank."
   },
   "list_reply": {
     "failed": "Could not list the auto-reply pairs. (error code: {{traceId}})",
     "not_found": "No replies found for input: {{keyword}}!",
-    "header": "Replies for input: {{keyword}}:\n"
+    "header": "Replies for input: {{keyword}}:\n",
+    "empty": "This server has no auto-replies yet.",
+    "keywords_header": "Auto-reply keywords ({{count}} replies; reply counts in parentheses):"
   },
   "random_restaurant": {
     "midnight": "It's the middle of the night — the restaurants are all closed 🈹",
@@ -173,11 +188,11 @@
     "activity_already_consumed": "Activity {{id}} has already been consumed by another roll-call command.",
     "user_not_found": "No user found with ID {{id}}. Please verify the ID is correct.",
     "role_no_members": "Role <@&{{id}}> has no callable members (bots don't count).",
-    "everyone_not_allowed": "Lady Sakiko won't let you roll-call @everyone! Pick specific members or roles instead.",
+    "everyone_not_allowed": "{{persona}} won't let you roll-call @everyone! Pick specific members or roles instead.",
     "too_many_targets": "Too many people for one roll call! The limit is {{max}}, but this call has {{count}}. Trim some roles or users.",
-    "announcement_header": "Lady Sakiko's roll-call list: <@{{userId}}> has started a roll call!\n",
+    "announcement_header": "{{persona}}'s roll-call list: <@{{userId}}> has started a roll call!\n",
     "activity_id_line": "(Activity ID: {{id}})\n",
-    "trigger_prefix": "Lady Sakiko's roll-call list"
+    "trigger_prefix": "{{persona}}'s roll-call list"
   },
   "talk": {
     "missing_args": "Please enter a channel and content.",
@@ -490,14 +505,14 @@
   },
   "giveaway": {
     "missing_required_fields": "Please enter the duration, number of winners, and prize.",
-    "invalid_duration": "Invalid duration.",
+    "invalid_duration": "Invalid duration; enter between 1 minute and 30 days, such as 30m, 2h or 1d.",
     "invalid_winner_num": "Number of winners must be a positive integer.",
     "create_announce_failed": "Could not create the giveaway.",
     "create_failed": "Could not run the giveaway.",
     "missing_message_id": "Please provide the giveaway message ID.",
-    "delete_success": "Giveaway deleted.",
+    "delete_success": "Giveaway cancelled.",
     "no_active_giveaways": "There are no active giveaways.",
-    "delete_select_placeholder": "Select a giveaway to delete",
+    "delete_select_placeholder": "Choose a giveaway to cancel",
     "delete_option_label": "{{prize}} — ends at {{endTime}}",
     "modal_title": "Create a giveaway",
     "modal_duration_label": "Duration",
@@ -516,7 +531,10 @@
     "announce_footer": "Click the 🎉 emoji to enter the giveaway!",
     "result_with_winners": "🎉 **Giveaway ended!** 🎉\n\n**Prize: {{prize}}**\n\n🏆 **Winners:**\n{{winners}}\n\nCongratulations to the winners above! Please contact <@{{ownerId}}> to claim your prize!",
     "result_no_participants": "🎉 **Giveaway ended!** 🎉\n\n**Prize: {{prize}}**\n\n😢 **No one entered the giveaway**",
-    "failed": "Hmm... the giveaway operation failed. Give it another try later! (error code: {{traceId}})"
+    "failed": "Hmm... the giveaway operation failed. Give it another try later! (error code: {{traceId}})",
+    "cancelled_footer": "This giveaway was cancelled.",
+    "delete_not_found": "That giveaway no longer exists; it may have ended or been cancelled.",
+    "delete_forbidden": "Only the giveaway's creator or a moderator can cancel it."
   },
   "activity": {
     "invalid_duration": "Invalid duration.",
@@ -771,5 +789,9 @@
     "claim_rejected": "The thread management request was rejected.",
     "claim_failed": "Could not complete thread management. Please try again later. (ID: {{traceId}})",
     "claim_delivering": "This request is still being delivered. Try this review button again shortly."
+  },
+  "persona": {
+    "persona_name": "the bot",
+    "vote_flavor": ""
   }
 }

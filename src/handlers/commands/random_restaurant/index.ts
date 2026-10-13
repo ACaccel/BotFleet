@@ -41,28 +41,13 @@ export default class random_restaurant extends Command {
               value: type,
             })),
           },
-          {
-            name: 'name_keyword',
-            required: false,
-          },
-          {
-            name: 'address_keyword',
-            required: false,
-          },
+          { name: 'name_keyword', required: false, maxLength: 100 },
+          { name: 'address_keyword', required: false, maxLength: 100 },
         ],
-        integer: [
-          {
-            name: 'budget',
-            required: false,
-          },
-          {
-            name: 'min_rating',
-            required: false,
-          },
-          {
-            name: 'max_rating',
-            required: false,
-          },
+        integer: [{ name: 'budget', required: false, min: 0, max: 100_000 }],
+        float: [
+          { name: 'min_rating', required: false, min: 0, max: 5 },
+          { name: 'max_rating', required: false, min: 0, max: 5 },
         ],
       },
     });

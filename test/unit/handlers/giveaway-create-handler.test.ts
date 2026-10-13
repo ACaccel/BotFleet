@@ -177,6 +177,35 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     expect(interaction.deleteReply).not.toHaveBeenCalled();
   });
 
+  it.each(['30s', '31d'])('rejects a %s duration outside 1 minute to 30 days', async (duration) => {
+    const repos = makeRepos();
+    const channel = makeChannel(true);
+    const interaction = makeInteraction(channel, { ...DEFAULT_FIELDS, duration });
+
+    await handleGiveawayCreate(interaction, makeBot(repos, scheduledJobs));
+
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'replies:giveaway.invalid_duration',
+    });
+    expect(channel.send).not.toHaveBeenCalled();
+  });
+
+  it('withdraws the announcement when the record cannot be stored', async () => {
+    const repos = makeRepos();
+    repos.giveaway.create.mockResolvedValueOnce({ ok: false, error: new Error('db down') });
+    const channel = Object.assign(makeChannel(true), {
+      messages: { delete: vi.fn().mockResolvedValue(undefined) },
+    });
+    const interaction = makeInteraction(channel);
+
+    await handleGiveawayCreate(interaction, makeBot(repos, scheduledJobs));
+
+    expect(channel.messages.delete).toHaveBeenCalledWith(MESSAGE_ID);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'replies:giveaway.create_failed',
+    });
+  });
+
   it('rejects ephemerally when required fields are blank', async () => {
     const repos = makeRepos();
     const channel = makeChannel(true);

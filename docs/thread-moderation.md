@@ -64,6 +64,9 @@ A replacement account can request management from any accessible guild channel:
 /thread claim thread:<thread> reason:<explanation>
 ```
 
+`thread` is optional here and in `/thread manager`: run inside the thread to
+target it directly.
+
 The applicant must still be a guild member and able to view the target thread;
 private-thread membership is checked when required. Reasons accept 1–1000
 characters. Existing owners, admins and delegates do not need to apply. This is

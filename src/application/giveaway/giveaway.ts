@@ -8,9 +8,11 @@
  * container (`ctx.resolve(...)`), and the handlers build it from their
  * `BaseBot` reference (`deps-from-bot.ts` beside them).
  */
+import { randomInt } from 'node:crypto';
+
 import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
-import type { Client, GuildMember, Channel } from 'discord.js';
-import { EmbedBuilder } from 'discord.js';
+import type { Client, Guild, GuildMember, Channel, MessageReaction } from 'discord.js';
+import { EmbedBuilder, time, TimestampStyles } from 'discord.js';
 import type { Job } from 'node-schedule';
 
 import type { GuildLookup } from '../guild-lookup';
@@ -78,7 +80,9 @@ type ScheduleGiveawayOutcome =
 type DeleteGiveawayOutcome =
   | { readonly status: 'deleted' }
   | { readonly status: 'guild_not_found' }
-  | { readonly status: 'no_db' };
+  | { readonly status: 'no_db' }
+  | { readonly status: 'giveaway_not_found' }
+  | { readonly status: 'forbidden' };
 
 export const giveawayAnnouncement = async (
   channel: Channel,
@@ -100,7 +104,8 @@ export const giveawayAnnouncement = async (
       { name: t('replies:giveaway.announce_field_winners'), value: winner_num.toString() },
       {
         name: t('replies:giveaway.announce_field_endtime'),
-        value: end_time_date.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }),
+        // Discord renders timestamps in each reader's own time zone.
+        value: `${time(end_time_date, TimestampStyles.LongDateTime)} (${time(end_time_date, TimestampStyles.RelativeTime)})`,
       },
       {
         name: t('replies:giveaway.announce_field_description'),
@@ -163,25 +168,9 @@ export const scheduleGiveaway = async (
   if (!message) return { status: 'message_not_found' };
 
   const reaction = message.reactions.cache.get('🎉');
-  const users = await reaction?.users.fetch().catch(() => null);
-
-  const participantsMembers: GuildMember[] = [];
-  if (users) {
-    for (const [, user] of users) {
-      if (user.bot) continue;
-      const member = guild.members.cache.get(user.id);
-      if (member) {
-        participantsMembers.push(member);
-      }
-    }
-  }
-  const participantsArray = participantsMembers;
-
-  let winners: GuildMember[] = [];
-  if (participantsArray.length > 0) {
-    const shuffled = [...participantsArray].sort(() => 0.5 - Math.random());
-    winners = shuffled.slice(0, Math.min(giveaway.winner_num, shuffled.length));
-  }
+  const participants =
+    reaction === undefined ? [] : await fetchParticipants(guild, reaction, deps.logger);
+  const winners = drawWinners(participants, giveaway.winner_num);
 
   const t = bindTranslator(deps.translator);
   const resultContent =
@@ -192,7 +181,13 @@ export const scheduleGiveaway = async (
           ownerId: giveaway.prize_owner_id,
         })
       : t('replies:giveaway.result_no_participants', { prize: giveaway.prize });
-  await giveawayChannel.send({ content: resultContent });
+  // The prize is member-written; only the winners and the owner may be pinged.
+  await giveawayChannel.send({
+    content: resultContent,
+    allowedMentions: {
+      users: winners.length > 0 ? [...winners.map((w) => w.id), giveaway.prize_owner_id] : [],
+    },
+  });
 
   const deleteResult = await repos.giveaway.deleteByMessageId(message_id);
   if (!deleteResult.ok) throw deleteResult.error;
@@ -200,21 +195,103 @@ export const scheduleGiveaway = async (
   return { status: 'completed' };
 };
 
+/**
+ * Cancel a giveaway: drop its job and record, and mark the announcement
+ * cancelled so members stop entering. `canCancel` decides from the
+ * record's owner whether the requester may cancel it.
+ */
 export const deleteGiveaway = async (
   deps: GiveawayDeps,
   guild_id: string,
   message_id: string,
+  canCancel: (ownerId: string) => boolean = () => true,
 ): Promise<DeleteGiveawayOutcome> => {
   const guild = deps.client.guilds.cache.get(guild_id);
   if (!guild) return { status: 'guild_not_found' };
   const repos = deps.registry.getRepos(guild_id);
   if (!repos) return { status: 'no_db' };
 
-  new JobManager(deps.jobMap).cancel(giveawayJobKey(message_id));
   // An `err` is re-thrown for the caller's surrounding catch.
+  const found = await repos.giveaway.findByMessageId(message_id);
+  if (!found.ok) throw found.error;
+  const giveaway = found.value;
+  if (!giveaway) return { status: 'giveaway_not_found' };
+  if (!canCancel(giveaway.prize_owner_id)) return { status: 'forbidden' };
+
+  new JobManager(deps.jobMap).cancel(giveawayJobKey(message_id));
   const deleteResult = await repos.giveaway.deleteByMessageId(message_id);
   if (!deleteResult.ok) throw deleteResult.error;
+  await markAnnouncementCancelled(deps, guild, giveaway.channel_id, message_id);
   return { status: 'deleted' };
+};
+
+/** Best effort: a deleted announcement or channel leaves nothing to mark. */
+const markAnnouncementCancelled = async (
+  deps: GiveawayDeps,
+  guild: Guild,
+  channelId: string,
+  messageId: string,
+): Promise<void> => {
+  try {
+    const channel =
+      guild.channels.cache.get(channelId) ?? (await deps.client.channels.fetch(channelId));
+    if (!channel?.isSendable()) return;
+    const message = await channel.messages.fetch(messageId);
+    const announced = message.embeds[0];
+    if (announced === undefined) return;
+    const t = bindTranslator(deps.translator);
+    await message.edit({
+      embeds: [
+        EmbedBuilder.from(announced)
+          .setColor(EMBED_COLORS.neutral)
+          .setFooter({ text: t('replies:giveaway.cancelled_footer') }),
+      ],
+    });
+    await message.reactions.removeAll().catch(() => undefined);
+  } catch (error) {
+    deps.logger.warn(
+      { err: error, guildId: guild.id, messageId },
+      'could not mark giveaway cancelled',
+    );
+  }
+};
+
+/** Discord pages reaction users 100 at a time. */
+const REACTION_PAGE_SIZE = 100;
+
+/** Every non-bot member who entered, fetching members the cache lacks. */
+const fetchParticipants = async (
+  guild: Guild,
+  reaction: MessageReaction,
+  logger: Logger,
+): Promise<GuildMember[]> => {
+  const userIds: string[] = [];
+  let after: string | undefined;
+  for (;;) {
+    const page = await reaction.users.fetch({ limit: REACTION_PAGE_SIZE, after });
+    for (const user of page.values()) if (!user.bot) userIds.push(user.id);
+    if (page.size < REACTION_PAGE_SIZE) break;
+    after = page.lastKey();
+  }
+  const missing = userIds.filter((id) => !guild.members.cache.has(id));
+  for (let i = 0; i < missing.length; i += REACTION_PAGE_SIZE) {
+    await guild.members
+      .fetch({ user: missing.slice(i, i + REACTION_PAGE_SIZE) })
+      .catch((error: unknown) => logger.warn({ err: error }, 'could not fetch giveaway entrants'));
+  }
+  // Members who left the guild are not eligible.
+  return userIds.flatMap((id) => guild.members.cache.get(id) ?? []);
+};
+
+/** Up to `count` distinct winners, each entrant equally likely (Fisher–Yates). */
+export const drawWinners = <T>(entrants: readonly T[], count: number): T[] => {
+  const pool = [...entrants];
+  const picks = Math.min(count, pool.length);
+  for (let i = 0; i < picks; i += 1) {
+    const j = i + randomInt(pool.length - i);
+    [pool[i], pool[j]] = [pool[j] as T, pool[i] as T];
+  }
+  return pool.slice(0, picks);
 };
 
 /**
@@ -230,6 +307,11 @@ export const runGiveawayDraw = async (
 ): Promise<void> => {
   const outcome = await scheduleGiveaway(deps, guildId, messageId);
   if (outcome.status === 'completed') return;
+  if (outcome.status === 'message_not_found' || outcome.status === 'channel_not_found') {
+    // The announcement or its channel is gone, so the draw can never be announced.
+    const removed = await deps.registry.getRepos(guildId)?.giveaway.deleteByMessageId(messageId);
+    if (removed !== undefined && !removed.ok) throw removed.error;
+  }
   deps.logger.warn(
     { guildId, messageId, outcome: outcome.status },
     'giveaway draw did not complete',
@@ -287,7 +369,8 @@ export const rebootGiveawayJobs = async (
                 }
               });
             } else {
-              await rebootRetry(() => deleteGiveaway(deps, guildId, g.message_id));
+              // Ended while the bot was down: draw now rather than drop it.
+              await runGiveawayDraw(deps, guildId, g.message_id);
             }
           } catch (rowErr) {
             logError(deps.logger, guildId, rowErr);

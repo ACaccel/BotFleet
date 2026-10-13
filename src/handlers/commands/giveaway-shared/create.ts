@@ -13,6 +13,9 @@ import {
 import { databaseUnavailableMessage } from './common';
 import { buildGiveawayDepsFromBot } from './deps-from-bot';
 
+const MIN_DURATION_MS = 60_000;
+const MAX_DURATION_MS = 30 * 24 * 60 * 60_000;
+
 export const handleGiveawayCreate = async (
   interaction: ModalSubmitInteraction,
   bot: BaseBot,
@@ -68,7 +71,7 @@ export const handleGiveawayCreate = async (
     }
 
     const durationMs = parseDuration(duration);
-    if (durationMs === null) {
+    if (durationMs === null || durationMs < MIN_DURATION_MS || durationMs > MAX_DURATION_MS) {
       await interaction.editReply({ content: t('replies:giveaway.invalid_duration') });
       return;
     }
@@ -105,7 +108,11 @@ export const handleGiveawayCreate = async (
       participants: [],
       message_id,
     });
-    if (!createResult.ok) throw createResult.error;
+    if (!createResult.ok) {
+      // Without a record the giveaway would never be drawn; withdraw it.
+      await channel.messages.delete(message_id).catch(() => undefined);
+      throw createResult.error;
+    }
 
     if (await findGiveaway(deps, guild.id, message_id)) {
       new JobManager(deps.jobMap, deps.logger).schedule(

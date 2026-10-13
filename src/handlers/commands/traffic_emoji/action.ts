@@ -12,7 +12,11 @@ import {
 import { runTrafficAction } from '../traffic-shared/run';
 import { USAGE_ORDERS } from '../traffic-shared/usage-ranking';
 
-const OPTIONS: TrafficOptionSpec = { defaultRange: '30d', maxTopN: EMOJI_RANK_LIMIT };
+const OPTIONS: TrafficOptionSpec = {
+  defaultRange: '30d',
+  maxTopN: EMOJI_RANK_LIMIT,
+  adjustableTopN: true,
+};
 
 const choices = (values: readonly string[]) => values.map((value) => ({ value }));
 

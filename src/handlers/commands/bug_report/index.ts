@@ -10,7 +10,7 @@ export default class bug_report extends Command {
     super();
     this.setConfig({
       name: 'bug_report',
-      category: 'admin',
+      category: 'utility',
       options: {
         string: [
           {

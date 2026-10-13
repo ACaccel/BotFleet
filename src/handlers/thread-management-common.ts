@@ -15,6 +15,11 @@ export class ThreadManagementError extends Error {
   }
 }
 
+/** The `thread` option's thread, or the channel the command ran in when it is omitted. */
+export const targetThreadId = (
+  interaction: Pick<ChatInputCommandInteraction, 'options' | 'channelId'>,
+): string => interaction.options.getChannel('thread')?.id ?? interaction.channelId;
+
 export const resolveManagedThread = async (
   guild: Guild,
   threadId: string,

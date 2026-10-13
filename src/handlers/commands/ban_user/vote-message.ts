@@ -10,6 +10,8 @@ interface VoteMessageInput {
   readonly threshold: number;
   /** The guild's configured voter role; omitted means nobody is pinged. */
   readonly voterRoleId?: string;
+  /** The bot's closing line; empty adds nothing. */
+  readonly flavor: string;
 }
 
 /**
@@ -18,10 +20,12 @@ interface VoteMessageInput {
  */
 export const buildVoteMessage = (
   translator: Translator | undefined,
-  { voterRoleId, ...params }: VoteMessageInput,
+  { voterRoleId, flavor, ...params }: VoteMessageInput,
 ): Pick<MessageCreateOptions, 'content' | 'allowedMentions'> => {
   const call = translator?.t('replies:ban_user.vote_call', params) ?? '';
-  if (!voterRoleId) return { content: call, allowedMentions: { parse: [] } };
-  const ping = translator?.t('replies:ban_user.vote_ping', { role: voterRoleId }) ?? '';
-  return { content: `${call}\n${ping}`, allowedMentions: { roles: [voterRoleId] } };
+  if (!voterRoleId) {
+    return { content: flavor ? `${call}\n${flavor}` : call, allowedMentions: { parse: [] } };
+  }
+  const ping = translator?.t('replies:ban_user.vote_ping', { role: voterRoleId, flavor }) ?? '';
+  return { content: `${call}\n${ping.trimEnd()}`, allowedMentions: { roles: [voterRoleId] } };
 };

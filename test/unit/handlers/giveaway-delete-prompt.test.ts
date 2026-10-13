@@ -16,7 +16,12 @@ const GUILD_ID = 'guild-1';
 const translator = { t: (key: string) => key } as unknown as BaseBot['translator'];
 
 const makeRepos = (
-  giveaways: ReadonlyArray<{ message_id: string; prize: string; end_time: number }>,
+  giveaways: ReadonlyArray<{
+    message_id: string;
+    prize: string;
+    end_time: number;
+    prize_owner_id?: string;
+  }>,
 ) => ({
   giveaway: {
     listAll: vi.fn().mockResolvedValue(ok(giveaways)),
@@ -34,15 +39,20 @@ const makeBot = (repos: ReturnType<typeof makeRepos>) =>
       listGuildIds: () => [],
     },
     jobMap: new Map(),
+    config: {},
+    timeZone: 'UTC',
+    isAdmin: () => false,
     requireLogger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
     translator,
   }) as unknown as BaseBot;
 
-const makeInteraction = () =>
+const makeInteraction = (manager = true) =>
   ({
     deferReply: vi.fn().mockResolvedValue(undefined),
     editReply: vi.fn().mockResolvedValue(undefined),
     guild: { id: GUILD_ID },
+    user: { id: 'owner-1' },
+    memberPermissions: { has: () => manager },
   }) as unknown as ChatInputCommandInteraction;
 
 afterEach(() => vi.clearAllMocks());
@@ -75,6 +85,23 @@ describe('handleGiveawayDeletePrompt', () => {
     expect(interaction.editReply).toHaveBeenCalledWith({
       content: 'replies:giveaway.no_active_giveaways',
     });
+  });
+
+  it('offers a member without moderation rights only their own giveaways', async () => {
+    const repos = makeRepos([
+      { message_id: 'm1', prize: 'Mine', end_time: 4_102_444_800_000, prize_owner_id: 'owner-1' },
+      { message_id: 'm2', prize: 'Theirs', end_time: 4_102_444_800_000, prize_owner_id: 'x' },
+    ]);
+    const interaction = makeInteraction(false);
+
+    await handleGiveawayDeletePrompt(interaction, makeBot(repos));
+
+    const editReply = interaction.editReply as unknown as ReturnType<typeof vi.fn>;
+    const arg = editReply.mock.calls[0]?.[0] as {
+      components: { components: { options: { data: { value: string } }[] }[] }[];
+    };
+    const values = arg.components[0]?.components[0]?.options.map((option) => option.data.value);
+    expect(values).toEqual(['m1']);
   });
 });
 

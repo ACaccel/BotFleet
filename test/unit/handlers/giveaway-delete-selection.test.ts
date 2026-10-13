@@ -16,15 +16,24 @@ const MESSAGE_ID = 'm1';
 
 const translator = { t: (key: string) => key } as unknown as BaseBot['translator'];
 
-const makeRepos = () => ({
+const makeRepos = (ownerId = 'owner-1') => ({
   giveaway: {
+    findByMessageId: vi
+      .fn()
+      .mockResolvedValue(
+        ok({ message_id: MESSAGE_ID, prize_owner_id: ownerId, channel_id: 'chan-1' }),
+      ),
     deleteByMessageId: vi.fn().mockResolvedValue(ok(true)),
   },
 });
 
 const makeBot = (repos: ReturnType<typeof makeRepos>) =>
   ({
-    client: { guilds: { cache: new Map([[GUILD_ID, {}]]) } },
+    client: {
+      guilds: { cache: new Map([[GUILD_ID, { id: GUILD_ID, channels: { cache: new Map() } }]]) },
+      channels: { fetch: vi.fn().mockResolvedValue(null) },
+    },
+    isAdmin: () => false,
     getRepos: (guildId: string) => (guildId === GUILD_ID ? repos : undefined),
     guildRegistry: {
       getRepos: (guildId: string) => (guildId === GUILD_ID ? repos : undefined),
@@ -37,11 +46,13 @@ const makeBot = (repos: ReturnType<typeof makeRepos>) =>
     translator,
   }) as unknown as BaseBot;
 
-const makeInteraction = (values: string[]) =>
+const makeInteraction = (values: string[], manager = false) =>
   ({
     deferReply: vi.fn().mockResolvedValue(undefined),
     editReply: vi.fn().mockResolvedValue(undefined),
     guild: { id: GUILD_ID },
+    user: { id: 'owner-1' },
+    memberPermissions: { has: () => manager },
     values,
   }) as unknown as StringSelectMenuInteraction;
 
@@ -59,6 +70,18 @@ describe('handleGiveawayDeleteSelection', () => {
     expect(repos.giveaway.deleteByMessageId).toHaveBeenCalledWith(MESSAGE_ID);
     expect(interaction.editReply).toHaveBeenCalledWith({
       content: 'replies:giveaway.delete_success',
+    });
+  });
+
+  it("refuses someone else's giveaway without moderation rights", async () => {
+    const repos = makeRepos('someone-else');
+    const interaction = makeInteraction([MESSAGE_ID]);
+
+    await handleGiveawayDeleteSelection(interaction, makeBot(repos));
+
+    expect(repos.giveaway.deleteByMessageId).not.toHaveBeenCalled();
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'replies:giveaway.delete_forbidden',
     });
   });
 

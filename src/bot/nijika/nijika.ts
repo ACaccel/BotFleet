@@ -79,6 +79,7 @@ export class Nijika extends BaseBot<NijikaConfig> {
     // `helpMessage` is resolved from this key inside BaseBot.run()
     // once the translator is loaded.
     this.helpMessageKey = 'replies:nijika.help_message';
+    this.personaSection = 'replies:nijika';
 
     // Plugin registration. Channel suppression (which channels each
     // feature acts on) is resolved from the per-guild `permission_rank`

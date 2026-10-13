@@ -1,12 +1,12 @@
 {
   "ban_user": {
-    "description": "暫時禁言使用者(ban_threshold: 5 votes, judge_time: 1 min)",
+    "description": "發起投票,1 分鐘內滿 5 票即禁言對方 1-5 分鐘",
     "options": {
       "user": {
-        "description": "被禁言的使用者"
+        "description": "要投票禁言的成員"
       },
       "duration": {
-        "description": "禁言時限 (單位: 分鐘, max: 5)"
+        "description": "禁言分鐘數(1-5,預設 1)"
       }
     }
   },
@@ -19,10 +19,10 @@
     }
   },
   "change_avatar": {
-    "description": "人格變換",
+    "description": "切換 bot 的人格(頭像、暱稱與代表色)",
     "options": {
       "identity": {
-        "description": "就是身分"
+        "description": "要切換成的人格"
       }
     }
   },
@@ -41,13 +41,13 @@
     "description": "顯示指令清單與說明"
   },
   "level_detail": {
-    "description": "查看等級詳細資訊",
+    "description": "查看 MEE6 等級排行中某段名次的詳細數據",
     "options": {
-      "left": {
-        "description": "左邊界"
+      "rank_from": {
+        "description": "從第幾名開始"
       },
-      "right": {
-        "description": "右邊界"
+      "count": {
+        "description": "顯示幾人(1-10,預設 10)"
       }
     }
   },
@@ -58,7 +58,7 @@
     "name": "取得表符/貼圖連結"
   },
   "random_restaurant": {
-    "description": "隨機餐廳抽取器 (台北/部分新北地區)",
+    "description": "隨機推薦餐廳(台北/部分新北地區)",
     "options": {
       "type": {
         "description": "餐廳種類"
@@ -70,21 +70,21 @@
         "description": "餐廳地址關鍵字"
       },
       "budget": {
-        "description": "預算（整數）"
+        "description": "預算上限(新台幣)"
       },
       "min_rating": {
-        "description": "最低評分"
+        "description": "最低評分(0-5,可有小數)"
       },
       "max_rating": {
-        "description": "最高評分"
+        "description": "最高評分(0-5,可有小數)"
       }
     }
   },
   "role_message": {
-    "description": "發送身份組領取訊息",
+    "description": "發送身分組領取訊息",
     "options": {
       "roles": {
-        "description": "可領取身份組id (ex: @身份組1 @身份組2...)"
+        "description": "可領取身分組id (ex: @身分組1 @身分組2...)"
       }
     }
   },
@@ -92,7 +92,7 @@
     "description": "點名",
     "options": {
       "users": {
-        "description": "被點名者或身份組 (ex: @user1 @role1 @user2...)"
+        "description": "被點名者或身分組 (ex: @user1 @role1 @user2...)"
       },
       "activity_id": {
         "description": "活動ID (用於連動活動參與者點名)"
@@ -119,10 +119,10 @@
     }
   },
   "temp_role": {
-    "description": "建立一個暫時性的通知身份組,任何人都能領取,到期後自動刪除",
+    "description": "建立一個暫時性的通知身分組,任何人都能領取,到期後自動刪除",
     "options": {
       "name": {
-        "description": "身份組名稱"
+        "description": "身分組名稱"
       },
       "days": {
         "description": "存活天數 (1-30,預設 30)"
@@ -212,18 +212,18 @@
     "description": "管理自動回覆",
     "subcommands": {
       "add": {
-        "description": "新增自動回覆",
+        "description": "新增自動回覆:有人發出與關鍵字完全相同的訊息時,bot 會回覆",
         "options": {
           "keyword": {
-            "description": "關鍵字"
+            "description": "觸發用的完整訊息;填 [*] 代表隨機插話"
           },
           "reply": {
-            "description": "回覆"
+            "description": "bot 要回覆的內容"
           }
         }
       },
       "delete": {
-        "description": "刪除自動回覆",
+        "description": "刪除某個關鍵字的自動回覆",
         "options": {
           "keyword": {
             "description": "關鍵字"
@@ -234,7 +234,7 @@
         "description": "列出自動回覆",
         "options": {
           "keyword": {
-            "description": "關鍵字"
+            "description": "只列出這個關鍵字(不填則列出全部)"
           }
         }
       }
@@ -271,7 +271,7 @@
     "description": "管理抽獎",
     "subcommands": {
       "create": {
-        "description": "建立抽獎",
+        "description": "建立抽獎(會開啟表單,填寫獎品、名額與時間)",
         "options": {
           "destination": {
             "description": "抽獎發布頻道（預設為當前頻道）",
@@ -283,7 +283,7 @@
         }
       },
       "delete": {
-        "description": "刪除抽獎"
+        "description": "取消進行中的抽獎"
       }
     }
   },
@@ -349,13 +349,13 @@
         }
       },
       "list": {
-        "description": "列出此 bot 在目前討論串禁止的使用者"
+        "description": "列出目前討論串中被此 bot 禁止的使用者"
       },
       "claim": {
         "description": "申請成為討論串代理管理者",
         "options": {
           "thread": {
-            "description": "要申請管理的討論串"
+            "description": "要申請管理的討論串(預設為目前的討論串)"
           },
           "reason": {
             "description": "申請原因（1–1000 字）"
@@ -371,7 +371,7 @@
             "description": "授予討論串代理管理權",
             "options": {
               "thread": {
-                "description": "目標討論串"
+                "description": "目標討論串(預設為目前的討論串)"
               },
               "user": {
                 "description": "指定使用者"
@@ -382,7 +382,7 @@
             "description": "撤銷討論串代理管理權",
             "options": {
               "thread": {
-                "description": "目標討論串"
+                "description": "目標討論串(預設為目前的討論串)"
               },
               "user": {
                 "description": "指定使用者"
@@ -390,10 +390,10 @@
             }
           },
           "list": {
-            "description": "查看討論串代理管理者",
+            "description": "列出討論串的代理管理者",
             "options": {
               "thread": {
-                "description": "目標討論串"
+                "description": "目標討論串(預設為目前的討論串)"
               },
               "page": {
                 "description": "頁碼（每頁 20 位）"
@@ -426,9 +426,6 @@
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
-          },
-          "top_n": {
-            "description": "排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },
@@ -457,9 +454,6 @@
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
-          },
-          "top_n": {
-            "description": "排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },
@@ -482,9 +476,6 @@
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
-          },
-          "top_n": {
-            "description": "排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },
@@ -505,14 +496,11 @@
             }
           },
           "visibility": {
-            "description": "誰能看到回覆 (optional,預設:public)",
+            "description": "誰能看到回覆 (optional,預設:ephemeral)",
             "choices": {
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
-          },
-          "top_n": {
-            "description": "排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },
@@ -538,9 +526,6 @@
               "ephemeral": "僅你自己",
               "public": "所有人"
             }
-          },
-          "top_n": {
-            "description": "應用程式排行顯示幾名 (optional,1-5,預設:5)"
           }
         }
       },

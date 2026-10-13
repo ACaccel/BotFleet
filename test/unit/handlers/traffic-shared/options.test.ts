@@ -20,7 +20,8 @@ const interactionWith = (
   }) as unknown as Pick<ChatInputCommandInteraction, 'options'>;
 
 const ACTIVITY = { defaultRange: '7d', maxTopN: 10 } as const;
-const EMOJI = { defaultRange: '30d', maxTopN: 20 } as const;
+const EMOJI = { defaultRange: '30d', maxTopN: 20, adjustableTopN: true } as const;
+const RANKED = { defaultRange: '7d', maxTopN: 10, adjustableTopN: true } as const;
 
 describe('trafficCommandOptions', () => {
   it('declares every range, both audiences and the subcommand top_n ceiling', () => {
@@ -36,6 +37,10 @@ describe('trafficCommandOptions', () => {
       '365d',
     ]);
     expect(options.integer).toEqual([{ name: 'top_n', required: false, min: 1, max: 20 }]);
+  });
+
+  it('omits top_n when the subcommand always draws its full ranking', () => {
+    expect(trafficCommandOptions(ACTIVITY).integer).toBeUndefined();
   });
 });
 
@@ -65,7 +70,19 @@ describe('readTrafficOptions', () => {
     [25, 10],
     [Number.NaN, 10],
   ])('clamps top_n %p to %p', (raw, expected) => {
-    expect(readTrafficOptions(interactionWith({ top_n: raw }), ACTIVITY).topN).toBe(expected);
+    expect(readTrafficOptions(interactionWith({ top_n: raw }), RANKED).topN).toBe(expected);
+  });
+
+  it('ignores top_n on a subcommand that does not offer it', () => {
+    expect(readTrafficOptions(interactionWith({ top_n: 3 }), ACTIVITY).topN).toBe(10);
+  });
+
+  it("uses the subcommand's default audience", () => {
+    const privateByDefault = { ...ACTIVITY, defaultVisibility: 'ephemeral' } as const;
+    expect(readTrafficOptions(interactionWith({}), privateByDefault).visibility).toBe('ephemeral');
+    expect(
+      readTrafficOptions(interactionWith({ visibility: 'public' }), privateByDefault).visibility,
+    ).toBe('public');
   });
 });
 

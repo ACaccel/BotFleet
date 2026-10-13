@@ -5,6 +5,10 @@ import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
 
 import { replyForError } from '../../../infra/discord/reply-for-error';
+
+/** Discord's largest avatar size; animated avatars keep their GIF format. */
+const AVATAR_SIZE = 4096;
+
 export default class menu_get_avatar extends Command {
   constructor() {
     super();
@@ -22,18 +26,24 @@ export default class menu_get_avatar extends Command {
     bot: BaseBot,
   ): Promise<void> {
     await interaction.deferReply();
+    const t = (key: string, params?: Record<string, string>): string =>
+      bot.translator?.t(`replies:menu_get_avatar.${key}`, params) ?? '';
     try {
       const user = interaction.targetUser;
-      const avatarUrl = user.displayAvatarURL({ extension: 'png', size: 1024 });
+      const member =
+        (await interaction.guild?.members.fetch(user.id).catch(() => null)) ?? undefined;
+      const globalUrl = user.displayAvatarURL({ size: AVATAR_SIZE });
+      // A server profile avatar takes precedence, as Discord shows it in that server.
+      const serverUrl = member?.avatar ? member.displayAvatarURL({ size: AVATAR_SIZE }) : undefined;
 
       const embed = new EmbedBuilder()
-        .setTitle(bot.translator?.t('replies:menu_get_avatar.title', { user: user.username }) ?? '')
+        .setTitle(t('title', { user: member?.displayName ?? user.displayName }))
         .setColor(EMBED_COLORS.info)
-        .setImage(avatarUrl)
-        .addFields({
-          name: bot.translator?.t('replies:menu_get_avatar.avatar_url_field') ?? '',
-          value: avatarUrl,
-        });
+        .setImage(serverUrl ?? globalUrl);
+      if (serverUrl !== undefined) {
+        embed.addFields({ name: t('server_avatar_field'), value: serverUrl });
+      }
+      embed.addFields({ name: t('avatar_url_field'), value: globalUrl });
 
       await interaction.editReply({ embeds: [embed] });
     } catch (error) {
@@ -42,7 +52,7 @@ export default class menu_get_avatar extends Command {
         bot,
         error,
         'replies:menu_get_avatar.failed',
-        interaction.guild?.id,
+        interaction.guildId,
       );
     }
   }

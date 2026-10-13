@@ -86,7 +86,9 @@ export default class roll_call extends Command {
         const outcome = resolveRollCallTargets(users, source, ROLL_CALL_MAX_TARGETS);
         if (outcome.status !== 'ok') {
           const { key, params } = rollCallOutcomeReply(outcome);
-          await interaction.editReply({ content: bot.translator?.t(key, params) ?? '' });
+          await interaction.editReply({
+            content: bot.translator?.t(key, { persona: bot.personaName, ...params }) ?? '',
+          });
           return;
         }
         validUsers.push(...outcome.members);
@@ -95,6 +97,7 @@ export default class roll_call extends Command {
       let announcement =
         bot.translator?.t('replies:roll_call.announcement_header', {
           userId: interaction.user.id,
+          persona: bot.personaName,
         }) ?? '';
       if (activity_id) {
         announcement +=

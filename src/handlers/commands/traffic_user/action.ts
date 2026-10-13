@@ -7,7 +7,12 @@ import { trafficCommandOptions, type TrafficOptionSpec } from '../traffic-shared
 import { buildPersonReport } from '../traffic-shared/person-report';
 import { runTrafficAction } from '../traffic-shared/run';
 
-const OPTIONS: TrafficOptionSpec = { defaultRange: '7d', maxTopN: RANK_ROW_LIMIT };
+const OPTIONS: TrafficOptionSpec = {
+  defaultRange: '7d',
+  // Another member's activity is shown only to the invoker unless they choose otherwise.
+  defaultVisibility: 'ephemeral',
+  maxTopN: RANK_ROW_LIMIT,
+};
 
 /**
  * `/traffic user` — another member's activity, in the layout of `/traffic me`.

@@ -12,7 +12,11 @@ import { runTrafficAction } from '../traffic-shared/run';
 import { buildStickerReport } from '../traffic-shared/sticker-report';
 import { USAGE_ORDERS } from '../traffic-shared/usage-ranking';
 
-const OPTIONS: TrafficOptionSpec = { defaultRange: '30d', maxTopN: STICKER_RANK_LIMIT };
+const OPTIONS: TrafficOptionSpec = {
+  defaultRange: '30d',
+  maxTopN: STICKER_RANK_LIMIT,
+  adjustableTopN: true,
+};
 
 /**
  * `/traffic sticker` — use of the guild's stickers over every channel by
