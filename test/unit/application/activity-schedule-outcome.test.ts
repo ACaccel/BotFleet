@@ -10,7 +10,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ok } from '../../../src/core/result';
-import { scheduleActivity } from '../../../src/application/activity/activity';
+import type { Channel } from 'discord.js';
+import { activityAnnouncement, scheduleActivity } from '../../../src/application/activity/activity';
 import type { ActivityDeps } from '../../../src/application/activity/activity';
 
 const GUILD_ID = 'guild-1';
@@ -126,5 +127,35 @@ describe('scheduleActivity outcomes', () => {
     await expect(
       scheduleActivity(makeDeps({ messageFound: false }), GUILD_ID, ACTIVITY_ID),
     ).resolves.toEqual({ status: 'message_not_found' });
+  });
+});
+
+describe('activity announcement presentation', () => {
+  it('uses a celebration accent and preserves its title and end time', async () => {
+    const send = vi.fn().mockResolvedValue({ id: 'announcement', react: vi.fn() });
+    const channel = { isSendable: () => true, send } as unknown as Channel;
+    await expect(
+      activityAnnouncement(
+        ACTIVITY_ID,
+        channel,
+        'Movie night',
+        'Join us',
+        new Date('2026-10-13T12:00:00Z'),
+        makeDeps(),
+      ),
+    ).resolves.toBe('announcement');
+    const embed = send.mock.calls[0]?.[0].embeds[0].toJSON();
+    expect(embed).toMatchObject({ color: 0x9b59b6, title: 'replies:activity.announce_title' });
+    expect(embed.fields).toEqual(
+      expect.arrayContaining([
+        { name: 'replies:activity.announce_field_description', value: 'Join us' },
+        {
+          name: 'replies:activity.announce_field_endtime',
+          value: new Date('2026-10-13T12:00:00Z').toLocaleString('zh-TW', {
+            timeZone: 'Asia/Taipei',
+          }),
+        },
+      ]),
+    );
   });
 });

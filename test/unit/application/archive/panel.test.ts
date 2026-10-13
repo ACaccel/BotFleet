@@ -108,6 +108,7 @@ describe('archive panels', () => {
       [{ status: 'complete', result: { gaps: [] } }, 'complete'],
       [{ status: 'complete', result: { gaps: ['20: missing-view-channel'] } }, 'gaps'],
       [{ status: 'cancelled' }, 'stopped'],
+      [{ status: 'partial', result: { reason: 'permission' } }, 'failed'],
       [{ status: 'failed', result: { reason: 'capacity' } }, 'failed'],
     ];
     for (const [overrides, state] of states) {
@@ -120,6 +121,35 @@ describe('archive panels', () => {
       expectLocalized(panel);
       expect(panel.components[0]?.components.length).toBeLessThanOrEqual(5);
     }
+  });
+
+  it('preserves distinct partial outcomes for full and periodic backups', async () => {
+    const t = await translator('en');
+    const target = job({ status: 'partial', result: { reason: 'permission' } });
+    const full = renderArchiveBackupPanel(t, target, archiveJobProgress(target), {
+      now: 1_700_000_060_000,
+      latest: true,
+    });
+    expect(archiveBackupState(target)).toBe('failed');
+    expect(full.embeds[0]?.color).toBe(0xed4245);
+    expect(text(full)).toContain(t.t('replies:archive.reason_permission'));
+    expect(buttons(full)).toContain(`archive|resume|${JOB}`);
+
+    const partial = renderArchivePeriodicSummary(
+      t,
+      {
+        status: 'partial',
+        full: false,
+        cutoff: 1_700_000_000_000,
+        startedAt: 1_699_999_880_000,
+        finishedAt: 1_700_000_000_000,
+        gapCount: 0,
+        reason: 'permission',
+      },
+      null,
+    );
+    expect(partial.embeds[0]?.color).toBe(0xfee75c);
+    expect(partial.embeds[0]?.title).toBe(t.t('replies:archive.summary_title_partial'));
   });
 
   it('labels the covered range and counts time since the job first started', async () => {

@@ -18,7 +18,8 @@
  *     Implemented as a middleware so a bot that wants a different logging
  *     policy declares one instead of overriding the command dispatcher.
  */
-import { Colors, EmbedBuilder, MessageFlags, channelMention, userMention } from 'discord.js';
+import { EMBED_COLORS } from '../infra/discord/presentation-colors';
+import { EmbedBuilder, MessageFlags, channelMention, userMention } from 'discord.js';
 import type { BaseBot } from './index';
 import { executeAutocomplete, executeCommand } from '@cmd';
 import { executeButton } from '@button';
@@ -117,7 +118,7 @@ export const createChannelLoggingMiddleware = (
                   .join(' ')
               : interaction.commandName;
             const embed = new EmbedBuilder()
-              .setColor(Colors.Blurple)
+              .setColor(EMBED_COLORS.info)
               .setTitle(commandName)
               .addFields(
                 {

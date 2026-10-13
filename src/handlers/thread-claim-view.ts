@@ -7,6 +7,15 @@ import {
 } from 'discord.js';
 import type { BaseBot } from '@bot';
 import type { ThreadClaim } from '../persistence/repositories/thread-moderation.repo';
+import { EMBED_COLORS } from '../infra/discord/presentation-colors';
+
+const CLAIM_COLORS: Readonly<Record<ThreadClaim['status'] | 'expired', number>> = {
+  pending: EMBED_COLORS.warning,
+  approved: EMBED_COLORS.success,
+  rejected: EMBED_COLORS.neutral,
+  delivery_failed: EMBED_COLORS.error,
+  expired: EMBED_COLORS.neutral,
+};
 
 interface ThreadClaimCard {
   embeds: EmbedBuilder[];
@@ -26,6 +35,7 @@ export const buildThreadClaimCard = (
   const pending = claim.status === 'pending' && !expired;
   const status = expired && claim.status === 'pending' ? 'expired' : claim.status;
   const embed = new EmbedBuilder()
+    .setColor(CLAIM_COLORS[status])
     .setTitle(t('claim_title'))
     .setDescription(
       `https://discord.com/channels/${guildId}/${threadId}\n\n${t('claim_reason')}\n${escapeMarkdown(claim.reason)}`,

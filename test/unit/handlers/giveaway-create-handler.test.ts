@@ -106,6 +106,7 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     expect(interaction.deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
     // Announcement embed went to the channel the command was invoked in.
     expect(channel.send).toHaveBeenCalledTimes(1);
+    expect(channel.send.mock.calls[0]?.[0].embeds[0].toJSON().color).toBe(0x9b59b6);
     // The invoking channel id is persisted so reboot re-resolves it.
     expect(repos.giveaway.create).toHaveBeenCalledWith(
       expect.objectContaining({ channel_id: INVOKED_CHANNEL_ID, message_id: MESSAGE_ID }),

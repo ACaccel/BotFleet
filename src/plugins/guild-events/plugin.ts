@@ -41,6 +41,7 @@
  * (the repo-wide plugin-config convention) and keeps the returned object pure
  * data.
  */
+import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
 import {
   EmbedBuilder,
   type Guild,
@@ -286,7 +287,7 @@ export const createGuildEventsPlugin = (
         const removedRoleMentions = removedRoles.map((role) => `<@&${role.id}>`);
         if (eventChannel !== undefined) {
           const embed = new EmbedBuilder()
-            .setColor(0x0000ff)
+            .setColor(EMBED_COLORS.info)
             .setTitle('Role Update')
             .setAuthor({
               name: newMember.user.username,
@@ -385,7 +386,7 @@ const handleMessageUpdate = async (
     const eventChannel = resolveEventChannel(registry, newMessage.guildId);
     if (eventChannel !== undefined) {
       const embed = new EmbedBuilder()
-        .setColor(0x00ff00)
+        .setColor(EMBED_COLORS.info)
         .setTitle('Message Updated')
         .setAuthor({
           name: newMessage.author.displayName,
@@ -524,7 +525,7 @@ const handleMessageDelete = async (
     const eventChannel = resolveEventChannel(registry, message.guildId);
     if (eventChannel !== undefined) {
       const embed = new EmbedBuilder()
-        .setColor(0xff0000)
+        .setColor(EMBED_COLORS.neutral)
         .setTitle('Message Deleted')
         .setAuthor({
           name: message.author.displayName,

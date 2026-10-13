@@ -1,3 +1,4 @@
+import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
 import type { BaseBot } from '@bot';
@@ -38,7 +39,7 @@ export default class get_avatar extends Command {
           .setTitle('User Avatar')
           .setAuthor({ name: member.user.tag, iconURL: url })
           .setImage(url)
-          .setColor(member.displayHexColor);
+          .setColor(EMBED_COLORS.info);
 
         await interaction.editReply({ embeds: [embed] });
       } else {

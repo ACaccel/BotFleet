@@ -11,14 +11,12 @@
  * that registry; routing through the registry-free `command` module keeps
  * this helper out of that import cycle.
  */
+import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
 import { EmbedBuilder } from 'discord.js';
 
 import type { Translator } from '../../../core/i18n';
 import type { Command, CommandCategory } from '../command';
 import { localizeCommandConfig } from '../command';
-
-/** Discord brand blue — the repo's default embed colour. */
-const HELP_EMBED_COLOR = 0x5865f2;
 
 /** Discord's hard cap on a single embed field `value`. */
 const FIELD_VALUE_MAX = 1024;
@@ -90,7 +88,7 @@ export const buildHelpEmbed = (
 
   const authorName = `${options.botName} · ${t('replies:help.title')}`;
   const embed = new EmbedBuilder()
-    .setColor(HELP_EMBED_COLOR)
+    .setColor(EMBED_COLORS.info)
     .setAuthor(
       options.botAvatarUrl !== undefined
         ? { name: authorName, iconURL: options.botAvatarUrl }

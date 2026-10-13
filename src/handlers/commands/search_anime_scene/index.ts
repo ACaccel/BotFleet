@@ -1,3 +1,4 @@
+import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
 import type { BaseBot } from '@bot';
@@ -80,6 +81,7 @@ const buildMatchEmbed = (match: TraceMoeMatch, index: number, bot: BaseBot): Emb
   const t = (key: string, params?: Record<string, string | number>): string =>
     bot.translator?.t(key, params) ?? '';
   return new EmbedBuilder()
+    .setColor(EMBED_COLORS.info)
     .setTitle(match.filename)
     .setURL(match.video)
     .setDescription(

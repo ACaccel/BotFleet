@@ -62,6 +62,9 @@ and error paths; promote them to a lower layer only when another handler needs t
 
 ## Shared handler utilities
 
+Use the shared [presentation color tokens](../architecture.md#discord-presentation-colors)
+for embeds, with text or controls that identify the state.
+
 Use [typed options](../../src/infra/discord/options.ts) matching each declared
 `required` flag, [bounded HTTP](../../src/infra/http/index.ts) with zod validation,
 [paged replies](../../src/infra/discord/send-paged-reply.ts), and

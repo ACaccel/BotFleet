@@ -300,6 +300,8 @@ describe('guild-events disclosure gating by permission_rank', () => {
     const channel = fakeEventChannel();
     await fireUpdate('public', channel);
     expect(channel.send).toHaveBeenCalledTimes(1);
+    const payload = channel.send.mock.calls[0]?.[0] as { embeds: EmbedBuilder[] };
+    expect(payload.embeds[0]?.toJSON().color).toBe(0x5865f2);
     expect(logGuildEvent).toHaveBeenCalledTimes(1);
   });
 
@@ -338,6 +340,8 @@ describe('guild-events disclosure gating by permission_rank', () => {
     const channel = fakeEventChannel();
     await fireDelete('public', channel);
     expect(channel.send).toHaveBeenCalledTimes(1);
+    const payload = channel.send.mock.calls[0]?.[0] as { embeds: EmbedBuilder[] };
+    expect(payload.embeds[0]?.toJSON().color).toBe(0x99aab5);
     expect(logGuildEvent).toHaveBeenCalledTimes(1);
   });
 

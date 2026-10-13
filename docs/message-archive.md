@@ -143,6 +143,11 @@ second click or a replay returns the backup already created instead of a new one
 
 ### Full backup panel
 
+Panels use the shared [presentation color rules](architecture.md#discord-presentation-colors)
+without changing archive state classification. A full backup's `partial` result is
+red; a periodic pass's `partial` result is yellow. Completed backups with known
+gaps remain yellow.
+
 `/archive backup` opens one of three panels:
 
 - **No unfinished backup:** a confirmation showing the server, the readable channels

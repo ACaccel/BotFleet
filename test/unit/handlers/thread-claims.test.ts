@@ -135,6 +135,40 @@ const expectReply = (
   });
 };
 
+describe('thread claim card status', () => {
+  it.each([
+    ['pending', 86400_000, true, 'pending', 0xfee75c, false],
+    ['pending', 86400_000, false, 'pending', 0xfee75c, true],
+    ['pending', -1000, true, 'expired', 0x99aab5, true],
+    ['approved', 86400_000, true, 'approved', 0x57f287, true],
+    ['approved', -1000, true, 'approved', 0x57f287, true],
+    ['rejected', 86400_000, true, 'rejected', 0x99aab5, true],
+    ['delivery_failed', 86400_000, true, 'delivery_failed', 0xed4245, true],
+  ] as const)(
+    'renders %s with expiry offset %i and enabled=%s',
+    (status, expiryOffset, enabled, displayedStatus, color, disabled) => {
+      const f = build();
+      const card = buildThreadClaimCard(
+        f.bot,
+        GUILD,
+        THREAD,
+        { ...f.claim, status, expires_at: Date.now() + expiryOffset },
+        enabled,
+      );
+      const embed = card.embeds[0]!.toJSON();
+      expect(embed.color).toBe(color);
+      expect(embed.fields).toContainEqual({
+        name: 'replies:thread_moderation.claim_status',
+        value: `replies:thread_moderation.claim_status_${displayedStatus}`,
+      });
+      expect(card.components[0]!.toJSON().components.map((button) => button.disabled)).toEqual([
+        disabled,
+        disabled,
+      ]);
+    },
+  );
+});
+
 describe('thread_claim submission', () => {
   it('renders a maximum-length Markdown reason without exceeding embed limits', async () => {
     const f = build();

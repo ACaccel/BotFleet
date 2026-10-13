@@ -39,7 +39,7 @@ Every bot shares the framework capabilities:
 ## Features
 
 - **Slash commands and components.** Commands, context menus, buttons, modals and
-  select menus.
+  select menus, with shared [state-based embed colors](docs/architecture.md#discord-presentation-colors).
 - **LLM integration.** Chat through OpenAI, Anthropic, Gemini and xAI, with the
   user whitelist and settings managed through `/ai`; self-hosted auto-replies.
 - **Moderation.** [Temporary moderation](docs/contributing/operations.md#temporary-moderation)

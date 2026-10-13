@@ -5,6 +5,8 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 Use plugins for bot-scoped jobs and listeners; interactions belong in `src/handlers/`.
 Code a plugin shares with handlers lives in `src/application/`; see
 [layers and boundaries](../architecture.md#layers-and-boundaries).
+Render Discord embeds and Components V2 accents using the shared
+[presentation color rules](../architecture.md#discord-presentation-colors).
 
 1. Create `src/plugins/<name>/plugin.ts`: a private zod schema, inferred config
    type, and factory returning [`Plugin`](../../src/core/plugin/types.ts).

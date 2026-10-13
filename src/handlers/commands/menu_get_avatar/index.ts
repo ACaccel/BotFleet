@@ -1,3 +1,4 @@
+import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
 import type { ContextMenuCommandType, UserContextMenuCommandInteraction } from 'discord.js';
 import { EmbedBuilder, ApplicationCommandType } from 'discord.js';
 import type { BaseBot } from '@bot';
@@ -27,7 +28,7 @@ export default class menu_get_avatar extends Command {
 
       const embed = new EmbedBuilder()
         .setTitle(bot.translator?.t('replies:menu_get_avatar.title', { user: user.username }) ?? '')
-        .setColor(0x5865f2)
+        .setColor(EMBED_COLORS.info)
         .setImage(avatarUrl)
         .addFields({
           name: bot.translator?.t('replies:menu_get_avatar.avatar_url_field') ?? '',

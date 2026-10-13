@@ -90,6 +90,29 @@ configured debug channel after dispatch, including when dispatch throws.
 It applies the `channel_logging` permission-rank ceiling without suppressing the
 durable guild audit trail. See [command log presentation](configuration.md#common-bot-settings).
 
+## Discord presentation colors
+
+[`presentation-colors.ts`](../src/infra/discord/presentation-colors.ts) owns the
+shared `EMBED_COLORS` palette. Choose colors by state before feature identity;
+titles, text and buttons must also communicate the state.
+
+| Token         | Color     | Use                                                        |
+| ------------- | --------- | ---------------------------------------------------------- |
+| `info`        | `#5865F2` | Queries, help, reports, progress, role and message updates |
+| `success`     | `#57F287` | Completed operations and approved requests                 |
+| `warning`     | `#FEE75C` | Attention needed, known gaps and pending review            |
+| `neutral`     | `#99AAB5` | Stopped, rejected, expired and deletion records            |
+| `error`       | `#ED4245` | Failed operations                                          |
+| `celebration` | `#9B59B6` | Activity and giveaway announcements                        |
+
+Both avatar entry points and anime search use `info`. Archive renderers map their
+existing state rules through `ARCHIVE_COLORS`; a full backup's `partial` result is
+an error, while a periodic pass's `partial` result is a warning.
+Social cards retain source identity through `SOCIAL_COLORS` (X `#1D9BF0`, Facebook
+`#1877F2`), including Components V2 accents; generic previews use `info` and
+auxiliary gallery embeds omit color. Shared `replyForError` replies remain localized
+plain text.
+
 ## Temporary moderation and automatic replies
 
 Persistent [thread moderation](thread-moderation.md#implementation-contract) runs

@@ -5,13 +5,13 @@
  * first embed's text, where their jump links stay clickable and their
  * previews selectable; Discord draws the image under that text.
  */
+import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
 import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
 
 import type { TrafficOutcome } from './run';
 
 const DASHBOARD_FILE = 'traffic-dashboard.png';
 const DETAILS_FILE = 'traffic-details.png';
-const EMBED_COLOR = 0x3987e5;
 const TITLE_LIMIT = 256;
 
 const clip = (text: string, limit: number): string =>
@@ -28,14 +28,16 @@ export interface DashboardReply {
 
 export const dashboardReply = (reply: DashboardReply): TrafficOutcome => {
   const embed = new EmbedBuilder()
-    .setColor(EMBED_COLOR)
+    .setColor(EMBED_COLORS.info)
     .setTitle(clip(reply.title, TITLE_LIMIT))
     .setImage(`attachment://${DASHBOARD_FILE}`);
   if (reply.description !== undefined && reply.description.length > 0)
     embed.setDescription(reply.description);
   const files = [new AttachmentBuilder(reply.image, { name: DASHBOARD_FILE })];
   if (reply.details === undefined) return { kind: 'reply', embeds: [embed], files };
-  const details = new EmbedBuilder().setColor(EMBED_COLOR).setImage(`attachment://${DETAILS_FILE}`);
+  const details = new EmbedBuilder()
+    .setColor(EMBED_COLORS.info)
+    .setImage(`attachment://${DETAILS_FILE}`);
   return {
     kind: 'reply',
     embeds: [embed, details],

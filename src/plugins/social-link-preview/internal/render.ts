@@ -13,6 +13,7 @@
  * Every reply uses `allowedMentions: { parse: [] }` so preview content
  * can never trigger an @everyone / @role ping (matches `llm-chat`).
  */
+import { EMBED_COLORS, SOCIAL_COLORS } from '../../../infra/discord/presentation-colors';
 import {
   AttachmentBuilder,
   DiscordAPIError,
@@ -30,8 +31,6 @@ import { buildPostContainer, buildPostEmbeds, pickVideoVariants } from './render
 const NO_MENTIONS = { parse: [] as const };
 const DEFAULT_MAX_VIDEO_BYTES = 8 * 1024 * 1024;
 const DEFAULT_VIDEO_TIMEOUT_MS = 15_000;
-/** Neutral accent for bot-built preview cards. */
-const EMBED_COLOR = 0x2b90d9;
 const MAX_TITLE = 256;
 const MAX_DESCRIPTION = 350;
 const COMPACT_COUNT = /^(?:0|[1-9]\d*)(?:\.\d+)?[KMBT]$/i;
@@ -57,7 +56,7 @@ const truncateDescription = (text: string): string => {
 /** Build a static embed from a neutral preview card. Exported for tests. */
 export const buildCardEmbed = (card: PreviewCard, translator: Translator): EmbedBuilder => {
   const facebook = card.siteName === 'Facebook';
-  const embed = new EmbedBuilder().setColor(facebook ? 0x1877f2 : EMBED_COLOR);
+  const embed = new EmbedBuilder().setColor(facebook ? SOCIAL_COLORS.facebook : EMBED_COLORS.info);
   if (facebook) {
     embed.setAuthor({
       name: 'Facebook',

@@ -1,6 +1,7 @@
 import { escapeMarkdown } from 'discord.js';
 import type { Translator } from '../../core/i18n';
 import type { ArchiveGapReason } from '../../core/archive/progress';
+import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
 
 /** The translation function the panels need. */
 export type ArchiveText = Pick<Translator, 't'>;
@@ -65,9 +66,9 @@ export const archiveReason = (t: ArchiveText, reason: ArchiveGapReason | undefin
   t.t(REASON_KEYS[reason ?? 'other']);
 
 export const ARCHIVE_COLORS = {
-  running: 0x5865f2,
-  complete: 0x57f287,
-  gaps: 0xfee75c,
-  stopped: 0x99aab5,
-  failed: 0xed4245,
+  running: EMBED_COLORS.info,
+  complete: EMBED_COLORS.success,
+  gaps: EMBED_COLORS.warning,
+  stopped: EMBED_COLORS.neutral,
+  failed: EMBED_COLORS.error,
 } as const;

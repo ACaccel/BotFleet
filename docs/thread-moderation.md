@@ -76,6 +76,9 @@ buttons. No separate review channel is needed. Cards start disabled until their
 recipient/channel/message bindings are saved. At least one usable card must be
 delivered before the bot reports successful submission. Total delivery failure
 closes the request and lets the applicant retry after one minute.
+Review cards follow the shared [presentation color rules](architecture.md#discord-presentation-colors):
+pending is yellow, approved is green, rejected or expired is gray, and delivery
+failure is red. The card's text and buttons also identify its state.
 Delivery has a five-minute lease. If the process stops before recording completed
 delivery, another request after five minutes closes the abandoned delivery and
 starts a new one. A card briefly visible before delivery completion cannot be

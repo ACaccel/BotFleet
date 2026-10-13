@@ -1,3 +1,4 @@
+import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
 import type { ChatInputCommandInteraction, GuildMember } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
 import type { BaseBot } from '@bot';
@@ -96,7 +97,7 @@ export default class list_guild_members extends Command {
       const firstEmbed = new EmbedBuilder()
         .setTitle(title)
         .setDescription(chunks[0] ?? null)
-        .setColor(0x5865f2)
+        .setColor(EMBED_COLORS.info)
         .setFooter({
           text: t('replies:list_guild_members.footer', {
             totalText,
@@ -111,7 +112,7 @@ export default class list_guild_members extends Command {
         const pageEmbed = new EmbedBuilder()
           .setTitle(title)
           .setDescription(chunks[i] ?? null)
-          .setColor(0x5865f2)
+          .setColor(EMBED_COLORS.info)
           .setFooter({
             text: t('replies:list_guild_members.footer', {
               totalText,

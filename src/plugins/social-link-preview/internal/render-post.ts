@@ -12,6 +12,7 @@
  * (headings, masked links, spoilers). Counts are compacted (`1.2K`) to match
  * the platform's own display.
  */
+import { SOCIAL_COLORS } from '../../../infra/discord/presentation-colors';
 import {
   ContainerBuilder,
   EmbedBuilder,
@@ -24,8 +25,6 @@ import {
 import type { Translator } from '../../../core/i18n';
 import type { PostVideoVariant, SocialPost } from '../../../infra/link-preview';
 
-/** X brand accent. */
-const POST_COLOR = 0x1d9bf0;
 const SITE_LABEL = 'X';
 /** Discord renders at most four images per gallery card. */
 const MAX_IMAGES = 4;
@@ -109,7 +108,7 @@ export const buildPostEmbeds = (post: SocialPost, translator: Translator): Embed
   }
   const stats = statsLine(post, translator);
   const main = new EmbedBuilder()
-    .setColor(POST_COLOR)
+    .setColor(SOCIAL_COLORS.x)
     .setAuthor({
       name: `${post.author.name} (@${post.author.handle})`,
       url: post.author.url,
@@ -148,7 +147,7 @@ export const buildPostContainer = (
     .filter((part) => part.length > 0)
     .join(' · ');
 
-  const container = new ContainerBuilder().setAccentColor(POST_COLOR);
+  const container = new ContainerBuilder().setAccentColor(SOCIAL_COLORS.x);
   const avatar = post.author.avatarUrl;
   if (isHttps(avatar)) {
     container.addSectionComponents(

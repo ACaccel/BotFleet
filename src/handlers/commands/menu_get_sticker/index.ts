@@ -1,3 +1,4 @@
+import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
 import type { MessageContextMenuCommandInteraction, ContextMenuCommandType } from 'discord.js';
 import { EmbedBuilder, ApplicationCommandType } from 'discord.js';
 import type { BaseBot } from '@bot';
@@ -28,7 +29,7 @@ export default class menu_get_sticker extends Command {
 
       // Check for stickers first
       if (stickers.size > 0) {
-        const embed = new EmbedBuilder().setTitle('Sticker URL').setColor(0x5865f2);
+        const embed = new EmbedBuilder().setTitle('Sticker URL').setColor(EMBED_COLORS.info);
 
         stickers.forEach((sticker) => {
           embed.addFields({
@@ -53,10 +54,13 @@ export default class menu_get_sticker extends Command {
           ? `https://cdn.discordapp.com/emojis/${emojiId}.gif`
           : `https://cdn.discordapp.com/emojis/${emojiId}.png`;
 
-        const embed = new EmbedBuilder().setTitle('Emoji URL').setColor(0x5865f2).addFields({
-          name: emojiName,
-          value: emojiUrl,
-        });
+        const embed = new EmbedBuilder()
+          .setTitle('Emoji URL')
+          .setColor(EMBED_COLORS.info)
+          .addFields({
+            name: emojiName,
+            value: emojiUrl,
+          });
 
         await interaction.editReply({ embeds: [embed] });
         return;

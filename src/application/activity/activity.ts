@@ -8,6 +8,7 @@
  * container (`ctx.resolve(...)`), and the handlers build it from their
  * `BaseBot` reference (`deps-from-bot.ts` beside them).
  */
+import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
 import type { Client, GuildMember, Channel } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
 import type { Job } from 'node-schedule';
@@ -110,7 +111,7 @@ export const activityAnnouncement = async (
         value: end_time_date.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }),
       },
     )
-    .setColor('#00BFFF')
+    .setColor(EMBED_COLORS.celebration)
     .setFooter({ text: t('replies:activity.announce_footer') });
 
   const message = await channel.send({ embeds: [embed] });

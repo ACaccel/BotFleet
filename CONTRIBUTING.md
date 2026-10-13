@@ -102,6 +102,7 @@ run on GitHub only. The live `npm run smoke` check is separate from CI; see
    at release time, following the [release rules](docs/contributing/branching-and-releases.md#releasing).
 
 ESLint also enforces the [layer boundaries](docs/architecture.md#layers-and-boundaries).
+Discord renderers use the shared [presentation color rules](docs/architecture.md#discord-presentation-colors).
 
 ## Reporting a security vulnerability
 

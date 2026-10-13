@@ -43,6 +43,7 @@ describe('buildPostEmbeds', () => {
   it('shows the author, text, compact counts and post time', () => {
     const [embed, ...rest] = buildPostEmbeds(post(), translator);
     expect(rest).toEqual([]);
+    expect(embed?.data.color).toBe(0x1d9bf0);
     expect(embed?.data.author).toEqual({
       name: 'NASA (@NASA)',
       url: 'https://x.com/NASA',
@@ -69,6 +70,8 @@ describe('buildPostEmbeds', () => {
     );
     expect(embeds.map((e) => e.data.image?.url)).toEqual(images.slice(0, 4));
     expect(embeds.every((e) => e.data.url === 'https://x.com/NASA/status/1')).toBe(true);
+    expect(embeds[0]?.data.color).toBe(0x1d9bf0);
+    expect(embeds.slice(1).every((embed) => embed.data.color === undefined)).toBe(true);
   });
 
   it('escapes markdown in the post text', () => {
@@ -115,6 +118,7 @@ describe('buildPostEmbeds', () => {
 describe('buildPostContainer', () => {
   it('puts the text beside the avatar, then the video, then the counts', () => {
     const json = buildPostContainer(post(), translator, 'attachment://x-video.mp4').toJSON();
+    expect(json.accent_color).toBe(0x1d9bf0);
     const [section, gallery, footer] = json.components;
     expect(section?.type).toBe(ComponentType.Section);
     if (section?.type === ComponentType.Section) {

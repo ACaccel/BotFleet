@@ -216,6 +216,18 @@ describe('renderPreview', () => {
 });
 
 describe('buildCardEmbed', () => {
+  it('uses the information accent for generic preview cards', () => {
+    const embed = buildCardEmbed(
+      { url: 'https://example.test/post', title: 'Post', siteName: 'Example' },
+      makeTranslator(),
+    );
+    expect(embed.toJSON()).toMatchObject({
+      color: 0x5865f2,
+      title: 'Post',
+      url: 'https://example.test/post',
+    });
+  });
+
   it('links the Facebook author title to the post without adding a source link to the body', () => {
     const embed = buildCardEmbed(
       {
