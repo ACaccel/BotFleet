@@ -11,6 +11,7 @@ import { X_PLATFORM_DISPLAY_NAME } from '../../../../src/infra/social-feed/platf
 import { err, isErr, isOk, ok } from '../../../../src/core/result';
 import { FeedError } from '../../../../src/core/errors';
 import { buildFeedPost } from '../../../fixtures/social-feed/fake-platform';
+import { invalidResponseError, type OgClient } from '../../../../src/infra/link-preview';
 
 const EMBED_PROXY_HOST = 'fxtwitter.com';
 
@@ -19,6 +20,141 @@ const LIVE_POST_ID = '2092744659667673582';
 
 const makePlatform = (source?: XTimelineSource): XPlatform =>
   new XPlatform({ timeoutMs: 8000, embedProxyHost: EMBED_PROXY_HOST, source });
+
+describe('XPlatform.buildPreview', () => {
+  const post = buildFeedPost({ id: '42', url: 'https://x.com/NASA/status/42' });
+  const video = {
+    videos: [
+      {
+        duration: 10,
+        formats: [{ url: 'https://video.twimg.com/a.mp4', container: 'mp4', bitrate: 800_000 }],
+      },
+    ],
+  };
+
+  it.each([
+    {
+      name: 'photos',
+      media: { photos: [{ url: 'https://pbs.twimg.com/a.jpg' }] },
+      sensitive: false,
+      apiFails: false,
+      proxyVideo: false,
+      proxyFails: false,
+      kind: 'post',
+    },
+    {
+      name: 'playable video proxy',
+      media: video,
+      sensitive: false,
+      apiFails: false,
+      proxyVideo: true,
+      proxyFails: false,
+      kind: 'rewritten-url',
+    },
+    {
+      name: 'video upload fallback',
+      media: video,
+      sensitive: false,
+      apiFails: false,
+      proxyVideo: false,
+      proxyFails: false,
+      kind: 'post',
+    },
+    {
+      name: 'sensitive post',
+      media: {},
+      sensitive: true,
+      apiFails: false,
+      proxyVideo: false,
+      proxyFails: false,
+      kind: 'rewritten-url',
+    },
+    {
+      name: 'API failure',
+      media: {},
+      sensitive: false,
+      apiFails: true,
+      proxyVideo: false,
+      proxyFails: false,
+      kind: 'rewritten-url',
+    },
+    {
+      name: 'all preview sources unavailable',
+      media: {},
+      sensitive: false,
+      apiFails: true,
+      proxyVideo: false,
+      proxyFails: true,
+      kind: undefined,
+    },
+    {
+      name: 'sensitive post without a proxy',
+      media: {},
+      sensitive: true,
+      apiFails: false,
+      proxyVideo: false,
+      proxyFails: true,
+      kind: undefined,
+    },
+  ])('uses the shared hybrid policy for $name', async (scenario) => {
+    const fetchJson = vi.fn().mockResolvedValue(
+      scenario.apiFails
+        ? err(invalidResponseError('twitter'))
+        : ok({
+            status: {
+              url: post.url,
+              text: 'Post text',
+              created_timestamp: 1,
+              author: { name: 'NASA', screen_name: 'NASA' },
+              media: scenario.media,
+              possibly_sensitive: scenario.sensitive,
+            },
+          }),
+    );
+    const fetch = vi.fn().mockResolvedValue(
+      scenario.proxyFails
+        ? err(invalidResponseError('twitter'))
+        : ok({
+            images: ['https://pbs.twimg.com/a.jpg'],
+            ...(scenario.proxyVideo ? { video: 'https://video.twimg.com/a.mp4' } : {}),
+          }),
+    );
+    const platform = new XPlatform({
+      apiBaseUrl: 'https://api.example',
+      timeoutMs: 1234,
+      embedProxyHost: 'vx.example',
+      ogClient: { fetch, fetchJson } as unknown as OgClient,
+    });
+    const result = await platform.buildPreview(post);
+    if (!result.ok) throw new Error('expected a preview result');
+    expect(result.value?.kind).toBe(scenario.kind);
+    expect(fetchJson).toHaveBeenCalledWith('https://api.example/2/status/42', 'twitter', 1234);
+    if (
+      scenario.kind === 'rewritten-url' ||
+      scenario.apiFails ||
+      scenario.sensitive ||
+      scenario.media === video
+    ) {
+      expect(fetch).toHaveBeenCalledWith('https://vx.example/NASA/status/42', 'twitter', 1234);
+    } else {
+      expect(fetch).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each(['not-a-url', 'https://evil.example/NASA/status/42', 'https://x.com/NASA'])(
+    'rejects an unmatched permalink (%s)',
+    async (url) => {
+      const fetchJson = vi.fn();
+      const platform = new XPlatform({
+        timeoutMs: 1000,
+        embedProxyHost: EMBED_PROXY_HOST,
+        ogClient: { fetchJson } as unknown as OgClient,
+      });
+      expect((await platform.buildPreview({ ...post, url })).ok).toBe(false);
+      expect(fetchJson).not.toHaveBeenCalled();
+    },
+  );
+});
 
 describe('XPlatform.normalizeAccount', () => {
   it.each([

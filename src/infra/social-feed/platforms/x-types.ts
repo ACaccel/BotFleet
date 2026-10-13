@@ -2,10 +2,10 @@
  * Identity and injection seam shared by the X platform and its timeline
  * client.
  *
- * The two constants sit here rather than on {@link XPlatform} because
+ * Shared constants sit here rather than on {@link XPlatform} because
  * the client needs them too — every error it raises names the platform —
  * and importing them from the class would make the pair mutually
- * dependent for two string literals.
+ * dependent for shared configuration and identity.
  */
 import type { Result } from '../../../core/result';
 import { FEED_PLATFORM_DISPLAY_NAMES } from '../types';
@@ -13,6 +13,9 @@ import type { FeedFailure, FeedPost, FeedTimelineFetchOptions } from '../types';
 
 /** Registry key for the X platform. */
 export const X_PLATFORM_ID = 'x';
+
+/** Public API origin, overridable by the operator for all X feed reads. */
+export const DEFAULT_X_API_BASE_URL = 'https://api.fxtwitter.com';
 
 /**
  * Name shown to users and interpolated into `errors:feed.*` messages.

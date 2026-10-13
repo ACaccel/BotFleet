@@ -5,8 +5,8 @@
  * alongside `infra/llm/` and `infra/discord/`) because it is an outbound
  * boundary: providers either rewrite a URL to a third-party embed-proxy
  * domain or fetch a page's OpenGraph metadata. Discord-specific assembly
- * (building the embed, replying, suppressing the original) is the
- * consuming plugin's job — providers return neutral data only, so this
+ * is handled by the shared infra/discord renderer and consuming plugin's
+ * send/reply adapter — providers return neutral data only, so this
  * layer stays free of discord.js message I/O.
  *
  * Three preview mechanisms, one uniform result (discriminated union):
@@ -84,6 +84,8 @@ export interface PreviewCard {
   readonly description?: string;
   /** Absolute image URL shown in the embed. */
   readonly imageUrl?: string;
+  /** Complete image list in source order, when the card has multiple images. */
+  readonly imageUrls?: readonly string[];
   /** Human-readable source label (e.g. `Bahamut`) for the embed footer. */
   readonly siteName?: string;
   /** Source-provided author details; omitted when unavailable. */

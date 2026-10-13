@@ -35,12 +35,14 @@ import {
   type FeedPlatform,
   type FeedPlatformRegistry,
   type FeedPost,
+  type FeedPreview,
 } from '../../../infra/social-feed';
 import type { Repos } from '../../../persistence/repositories';
 import type { FeedSubscriptionDoc } from '../../../persistence/schemas/feed-subscription.schema';
 import type { SocialFeedPluginConfig } from '../config';
 import { selectPostsToForward } from './filter';
 import { buildFeedMessage, sendFeedPost } from './post';
+import { prepareFeedPreview } from './post';
 
 /** Log binding identifying this plugin in every warn line it emits. */
 const PLUGIN = 'social-feed';
@@ -97,6 +99,8 @@ interface SubscriptionPassInput {
    * would then be skipped forever.
    */
   readonly fetchedAtMs: number;
+  /** One preparation per post in this account pass, shared across destinations. */
+  readonly previewFor: (post: FeedPost) => Promise<FeedPreview | undefined>;
 }
 
 /**
@@ -254,7 +258,18 @@ const forwardPosts = async (
   let delivered: FeedPost | undefined;
   try {
     for (const post of posts) {
-      await sendFeedPost(channel, buildFeedMessage(deps.translator, input.platform, post));
+      const preview = await input.previewFor(post);
+      const url =
+        preview?.kind === 'rewritten-url'
+          ? preview.url
+          : preview === undefined
+            ? input.platform.toEmbedUrl(post)
+            : `<${post.url}>`;
+      await sendFeedPost(
+        channel,
+        buildFeedMessage(deps.translator, input.platform, post, url),
+        preview === undefined ? undefined : { result: preview, translator: deps.translator },
+      );
       delivered = post;
     }
   } finally {
@@ -367,11 +382,20 @@ export const runFeedPass = async (deps: FeedPassDeps, fullSweep: boolean): Promi
         continue;
       }
 
+      const previews = new Map<string, Promise<FeedPreview | undefined>>();
+      const previewFor = (post: FeedPost): Promise<FeedPreview | undefined> => {
+        let prepared = previews.get(post.id);
+        if (prepared === undefined) {
+          prepared = prepareFeedPreview(group.platform, post, deps.logger);
+          previews.set(post.id, prepared);
+        }
+        return prepared;
+      };
       for (const member of group.members) {
         try {
           await pollSubscription(
             deps,
-            { member, platform: group.platform, fetchedAtMs },
+            { member, platform: group.platform, fetchedAtMs, previewFor },
             fetched.value,
           );
         } catch (err: unknown) {

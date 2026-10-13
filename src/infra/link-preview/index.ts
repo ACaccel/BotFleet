@@ -6,8 +6,8 @@
  * URL onto a third-party embed-proxy domain, the Bahamut provider scrapes
  * OpenGraph via the SSRF-safe `OgClient`, and `error-translator` maps
  * HTTP failures into the shared domain taxonomy. Discord-specific
- * assembly (embeds, replies, suppression) belongs to the consuming
- * `src/plugins/social-link-preview/` plugin.
+ * rendering lives in `infra/discord/social-preview.ts`; consuming plugins
+ * own reply/send adapters and message suppression.
  */
 export type {
   LinkPreviewProvider,

@@ -38,11 +38,8 @@ import { z } from 'zod';
 import { isRetryableError, retryFetch } from '../../../core/retry';
 import { ok, err, type Result } from '../../../core/result';
 import { invalidResponseError, translateFeedError } from './error-translator';
-import { X_PLATFORM_DISPLAY_NAME, type XTimelineSource } from './x-types';
+import { DEFAULT_X_API_BASE_URL, X_PLATFORM_DISPLAY_NAME, type XTimelineSource } from './x-types';
 import type { FeedFailure, FeedPost, FeedPostMedia, FeedTimelineFetchOptions } from '../types';
-
-/** Public FxTwitter API host. Overridable to point at a self-hosted instance. */
-const DEFAULT_API_BASE_URL = 'https://api.fxtwitter.com';
 
 /**
  * Identifies the bot to the upstream operator so a misbehaving poller
@@ -179,7 +176,7 @@ export class FxTwitterTimelineSource implements XTimelineSource {
   public constructor(private readonly options: FxTwitterTimelineSourceOptions) {
     // Trailing slashes would produce `//2/profile/...`, which some
     // reverse proxies in front of a self-hosted instance reject.
-    this.apiBaseUrl = (options.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '');
+    this.apiBaseUrl = (options.apiBaseUrl ?? DEFAULT_X_API_BASE_URL).replace(/\/+$/, '');
     this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
   }
 

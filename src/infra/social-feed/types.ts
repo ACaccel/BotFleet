@@ -6,8 +6,8 @@
  * `infra/link-preview/` because it is an outbound boundary: an
  * implementation reads an account's recent posts over HTTP. Everything
  * returned here is neutral data — no discord.js types, no rendering —
- * so the consuming `src/plugins/social-feed/` plugin owns all Discord
- * assembly and a platform stays unit-testable without a client.
+ * so the consuming plugin orchestrates Discord delivery through shared
+ * adapters and a platform stays unit-testable without a client.
  *
  * Why a Strategy: the operations that differ between X, Bluesky, or any
  * later source are not just "fetch" but also how an account name is
@@ -24,6 +24,11 @@
  */
 import type { FeedError } from '../../core/errors';
 import type { Result } from '../../core/result';
+import type { Logger } from '../../core/logger';
+import type { LinkPreviewResult, LinkPreviewFailure } from '../link-preview';
+
+/** Feed previews must fit in one send so delivery-based cursors remain atomic. */
+export type FeedPreview = Exclude<LinkPreviewResult, { readonly kind: 'card' }>;
 
 /**
  * Platform ids the bot ships support for.
@@ -183,4 +188,9 @@ export interface FeedPlatform {
    * never has to know which platform needs one.
    */
   toEmbedUrl(post: FeedPost): string;
+  /** Optional neutral preview; absence preserves URL-only delivery for other platforms. */
+  buildPreview?(
+    post: FeedPost,
+    logger?: Logger,
+  ): Promise<Result<FeedPreview | null, LinkPreviewFailure>>;
 }

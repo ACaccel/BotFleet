@@ -131,6 +131,7 @@ const facebookPreview = (url: URL, fallbackUrl: string, og: OpenGraphMeta): Link
       title: og.title,
       description: og.description,
       imageUrl: og.images[0],
+      ...(og.images.length > 1 ? { imageUrls: og.images } : {}),
       siteName: SITE_LABEL,
       ...(og.authorName === undefined ? {} : { authorName: og.authorName }),
       ...(facebookLink(og.authorUrl) === undefined
@@ -254,6 +255,7 @@ export const createFacebookProvider = (opts: {
                   ...enriched.card,
                   url: facebookContentLink(source.value.url) ?? preview.card.url,
                   imageUrl: preview.card.imageUrl ?? enriched.card.imageUrl,
+                  imageUrls: preview.card.imageUrls ?? enriched.card.imageUrls,
                   ...(preview.card.engagement === undefined
                     ? {}
                     : {
@@ -286,6 +288,7 @@ export const createFacebookProvider = (opts: {
                 title: card.title ?? source.title,
                 description: card.description ?? source.description,
                 imageUrl: card.imageUrl ?? source.imageUrl,
+                imageUrls: card.imageUrls ?? source.imageUrls,
                 ...((card.engagement ?? source.engagement)
                   ? {
                       engagement: card.engagement ?? source.engagement,

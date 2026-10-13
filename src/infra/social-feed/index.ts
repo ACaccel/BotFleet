@@ -10,14 +10,14 @@
  * the `feed_*` commands, which are sibling layers that may not import
  * each other.
  *
- * Discord-specific assembly (resolving a channel, rendering, posting)
- * belongs to the consuming `src/plugins/social-feed/` plugin, and
- * subscription bookkeeping to the commands.
+ * The consuming plugin resolves channels and sends through the shared
+ * infra/discord renderer; subscription bookkeeping belongs to commands.
  */
 export type {
   FeedPlatform,
   FeedPlatformId,
   FeedPost,
+  FeedPreview,
   FeedPostMedia,
   FeedFailure,
   FeedTimelineFetchOptions,

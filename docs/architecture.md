@@ -160,10 +160,18 @@ and [persisted models](contributing/persisted-models.md).
 
 LLM, link-preview and social-feed strategies isolate provider behavior and errors.
 The X provider reads posts from a JSON API into a neutral post model and keeps
-the proxy rewrite only for videos a proxy can play; the plugin renders the post
-as classic embeds, or as a Components V2 card around an uploaded video.
+the proxy rewrite only for videos a proxy can play. Link previews and X feed
+subscriptions share this provider and the Discord renderer in
+[`infra/discord/social-preview.ts`](../src/infra/discord/social-preview.ts): classic
+embeds, or a Components V2 card around an uploaded video. Feed platforms return
+neutral single-message previews; each account pass shares post preparation
+across its destinations. Feed announcements and media use one send, and preview
+failure falls back to the existing proxy announcement. Feed configuration remains
+independent of the message-preview plugin.
 Facebook preview providers retain OpenGraph metadata from proxies or the source
-site for custom card rendering; Facebook-specific parsing maps the proxy's source
+site for custom card rendering, retaining the complete image list. The renderer
+sends all distinct HTTPS images in four-image gallery replies; only the first
+reply carries the post text. Facebook-specific parsing maps the proxy's source
 summary to optional engagement counts. Direct videos use a dedicated downloader with the shared host validation and
 bounded DNS resolver, plus address checks, deadlines and a concurrency limit;
 the plugin sends a separate attachment and falls back if Discord rejects it.

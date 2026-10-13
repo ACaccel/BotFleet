@@ -117,7 +117,12 @@ Links inside `<...>`, a code span or block, or a spoiler (`||...||`) are not
 previewed, and full-width punctuation directly after a link ends it.
 
 Facebook previews use a custom card with a Facebook header, a title linking to
-the source post, and available OpenGraph text and images. The body is capped at 350 Unicode
+the source post, and available OpenGraph text and images. All distinct HTTPS
+images are shown in source order, in galleries of up to four images per reply;
+additional galleries use separate replies without repeating the post text.
+Linked titles retain up to Discord's 256-character limit and wrap according to
+the client's available width; the bot does not impose a one-line cutoff.
+The body is capped at 350 Unicode
 code points, including the trailing `...` when truncated. Metadata comes from
 the configured proxies, with Facebook's own OpenGraph as a fallback. Author
 details depend on the source. Facebed's source summary supplies total reactions
@@ -168,6 +173,21 @@ subscriptions forward original posts from creation time, without backfill.
 `maxPostsPerPoll` defaults to `5` per subscription (maximum `20`); polling defaults
 to `300000` ms with a full sweep every `12` polls.
 See [feed migration](upgrading.md#migrating-from-x_media_feed-to-social_feed).
+
+X subscriptions use the same hybrid provider and card renderer as shared-link
+previews: text and photo posts become custom cards, playable videos use a proxy,
+and sensitive posts or failed status API reads use the proxy. When a video proxy
+cannot play the post, the bot tries a bounded video upload (8 MiB, 15 seconds),
+then falls back to a thumbnail and source link. The localized announcement and
+preview are sent together; video cards include the announcement inside their
+Components V2 container.
+
+Feeds use their own `social_feed.platforms.x.apiBaseUrl`, `timeoutMs` and
+`embedProxyHost`; they do not depend on `social_link_preview.enabled` or its
+provider lists. Status metadata is prepared once per post per account pass and
+shared across subscription channels. If no preview is available, delivery
+retains the existing proxy-link announcement. Cursors advance only after
+Discord accepts the complete message; send failures retry on the next pass.
 
 ### Giveaway destination
 

@@ -8,6 +8,7 @@
  * be raised in one place and missed in the other.
  */
 import { z } from 'zod';
+import { DEFAULT_X_API_BASE_URL } from './platforms/x-types';
 
 /** Hard cap so a typo cannot hold one upstream request open for minutes. */
 const MAX_TIMEOUT_MS = 30_000;
@@ -15,14 +16,12 @@ const MAX_TIMEOUT_MS = 30_000;
 const XPlatformConfigSchema = z
   .object({
     /** API origin. Point this at a self-hosted instance to avoid the public host. */
-    apiBaseUrl: z.string().url().default('https://api.fxtwitter.com'),
+    apiBaseUrl: z.string().url().default(DEFAULT_X_API_BASE_URL),
     /** Per-request timeout, in milliseconds. */
     timeoutMs: z.number().int().positive().max(MAX_TIMEOUT_MS).default(8_000),
     /**
-     * Host substituted for `x.com` in the posted link. Discord unfurls
-     * the proxy domain into a playable video embed, which a bot-authored
-     * embed cannot render — the same mechanism `social-link-preview`
-     * uses. Kept configurable so a dead proxy is a config edit.
+     * Proxy probed for playable videos and sensitive/API fallback posts.
+     * Text and photo posts use the shared custom-card renderer.
      */
     embedProxyHost: z.string().min(1).default('fxtwitter.com'),
   })

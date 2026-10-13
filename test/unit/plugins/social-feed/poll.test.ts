@@ -37,6 +37,7 @@ import type { FeedSubscriptionDoc } from '../../../../src/persistence/schemas/fe
 import { createFakeClock } from '../../../../src/core/time';
 import { ok, err } from '../../../../src/core/result';
 import { DatabaseError, FeedError } from '../../../../src/core/errors';
+import type { FeedPreview } from '../../../../src/infra/social-feed';
 
 const ACCOUNT = 'someaccount';
 const GUILD = 'guild-1';
@@ -672,6 +673,96 @@ describe('runFeedPass — forwarding', () => {
 });
 
 describe('runFeedPass — failure isolation', () => {
+  const previewOf = (item: FeedPost): FeedPreview => ({
+    kind: 'post',
+    sourceUrl: item.url,
+    post: {
+      url: item.url,
+      text: 'Post text',
+      createdAt: item.createdTimestamp * 1000,
+      author: {
+        name: item.authorAccount,
+        handle: item.authorAccount,
+        url: `https://x.com/${item.authorAccount}`,
+      },
+      images: ['https://cdn.example/photo.jpg'],
+      stats: {},
+    },
+  });
+
+  it.each([0, 1])(
+    'advances only over delivered custom cards when send %s fails',
+    async (successfulSends) => {
+      const send = makeSend();
+      send.mockRejectedValue(new Error('Missing Permissions'));
+      if (successfulSends === 1) send.mockResolvedValueOnce(undefined);
+      const sub = subscription({ last_seen_id: '5', last_seen_timestamp: 50 });
+      const { repos, cursorOf, advanceCursor } = makeRepos([sub]);
+      const { deps, errorLog } = harness({
+        posts: [post({ id: '10' }), post({ id: '20' })],
+        repos,
+        channel: makeChannel(send),
+      });
+      const platform = deps.platforms.get('fake')!;
+      platform.buildPreview = vi.fn(async (item) => ok(previewOf(item)));
+
+      await runFeedPass(deps, false);
+      expect(cursorOf(sub)?.id).toBe(successfulSends === 0 ? undefined : '10');
+      expect(advanceCursor).toHaveBeenCalledTimes(successfulSends);
+      expect(send).toHaveBeenCalledTimes(successfulSends + 1);
+      expect(errorLog).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('shares one preview read across destinations and prepares again on the next pass', async () => {
+    const first = subscription({ last_seen_id: '5', last_seen_timestamp: 50 });
+    const second = subscription({
+      channel_id: 'channel-2',
+      last_seen_id: '5',
+      last_seen_timestamp: 50,
+    });
+    const { repos, cursorOf } = makeRepos([first, second]);
+    const firstSend = makeSend().mockRejectedValue(new Error('Missing Permissions'));
+    const secondSend = makeSend();
+    const { deps } = harness({
+      posts: [post({ id: '10' })],
+      repos,
+      channels: new Map([
+        [CHANNEL, makeChannel(firstSend)],
+        ['channel-2', makeChannel(secondSend)],
+      ]),
+    });
+    const buildPreview = vi.fn(async (item: FeedPost) => ok(previewOf(item)));
+    deps.platforms.get('fake')!.buildPreview = buildPreview;
+
+    await runFeedPass(deps, false);
+    expect(buildPreview).toHaveBeenCalledTimes(1);
+    expect(cursorOf(first)).toBeUndefined();
+    expect(cursorOf(second)?.id).toBe('10');
+    expect(secondSend.mock.calls[0]?.[0]).toHaveProperty('embeds');
+    expect(secondSend.mock.calls[0]?.[0].content).toContain('<https://fake.invalid/');
+    expect(secondSend.mock.calls[0]?.[0].content).not.toContain('<<');
+
+    firstSend.mockResolvedValue(undefined);
+    await runFeedPass(deps, false);
+    expect(buildPreview).toHaveBeenCalledTimes(2);
+    expect(cursorOf(first)?.id).toBe('10');
+    expect(secondSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers the existing proxy announcement when every preview source is unavailable', async () => {
+    const send = makeSend();
+    const sub = subscription({ last_seen_id: '5', last_seen_timestamp: 50 });
+    const { repos, cursorOf } = makeRepos([sub]);
+    const { deps } = harness({ posts: [post({ id: '10' })], repos, channel: makeChannel(send) });
+    deps.platforms.get('fake')!.buildPreview = vi.fn(async () => ok(null));
+    await runFeedPass(deps, false);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]?.[0].content).toContain('https://fake.invalid/10');
+    expect(send.mock.calls[0]?.[0]).not.toHaveProperty('embeds');
+    expect(cursorOf(sub)?.id).toBe('10');
+  });
+
   it('advances the cursor to the last delivered post when a later send fails', async () => {
     const send = vi
       .fn<(payload: SendPayload) => Promise<undefined>>()

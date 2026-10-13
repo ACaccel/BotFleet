@@ -815,6 +815,20 @@ describe('rewrite URL construction', () => {
     );
   });
 
+  it('facebook retains every image from proxy metadata', async () => {
+    const images = ['https://cdn.example/first.jpg', 'https://cdn.example/second.jpg'];
+    const { client } = makeOgClient({
+      'https://facebed.com/page/posts/123': ok(meta({ images })),
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    const result = await provider.build(u('https://www.facebook.com/page/posts/123'), {
+      timeoutMs: 1000,
+    });
+    if (!isOk(result) || result.value?.kind !== 'card') throw new Error('expected a card');
+    expect(result.value.card.imageUrls).toEqual(images);
+    expect(result.value.card.imageUrl).toBe(images[0]);
+  });
+
   it('threads probes its hosts in priority order until one yields media', async () => {
     const third = 'https://threadsez.com/@user/post/Cabc';
     const { client, fetch } = makeOgClient({ [third]: ok(meta({ video: 'v.mp4' })) });

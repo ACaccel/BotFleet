@@ -436,9 +436,7 @@ export const parseOpenGraph = (html: string): OpenGraphMeta => {
 
   const values = new Map<string, string>();
   const imageKeys = new Set<string>(IMAGE_KEYS);
-  // All distinct image URLs in document order. Used only for "has an image?"
-  // (validation) and the first image (Bahamut card), so exact gallery
-  // de-duplication of secure_url/url variants is unnecessary.
+  // Preserve every distinct image URL in document order for gallery cards.
   const images: string[] = [];
   const imageSeen = new Set<string>();
 

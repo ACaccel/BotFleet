@@ -49,7 +49,9 @@ Every bot shares the framework capabilities:
 - **Community tools.** Giveaways, activities, temporary notification roles,
   role-claim messages, level roles and restaurant picks.
 - **Social media.** Rich previews for shared links and per-channel subscriptions to
-  social feeds. Facebook uses custom cards with truncated text and separate video
+  social feeds. X links and subscriptions use custom cards for text and photos,
+  proxies for playable videos, and bounded video uploads as a fallback.
+  Facebook uses custom cards with truncated text, complete image galleries and separate video
   attachments and engagement counts when available; the title links to the post,
   and failed video delivery falls back to a link. See
   [preview configuration](docs/configuration.md#social-previews-and-feeds).

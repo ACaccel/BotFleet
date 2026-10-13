@@ -86,6 +86,24 @@ describe('renderPreview', () => {
     expect(replies[0]?.content).toBeUndefined();
   });
 
+  it.each([true, false])(
+    'retains an optional announcement with Facebook video delivery (%s)',
+    async (uploadable) => {
+      const { message, replies } = makeMessage();
+      await renderPreview(message, facebookResult, makeTranslator(), {
+        announcement: 'Source announcement',
+        downloadVideo: vi
+          .fn()
+          .mockResolvedValue(
+            uploadable ? { data: Buffer.from('video'), name: 'preview.mp4' } : null,
+          ),
+      });
+      expect(replies[0]?.content).toBe(
+        uploadable ? 'Source announcement' : 'Source announcement\n<https://proxy.example/reel/1>',
+      );
+    },
+  );
+
   it('uses the configured download limits and falls back when the video is unavailable or oversized', async () => {
     const { message, replies } = makeMessage();
     const downloadVideo = vi.fn().mockResolvedValue(null);
@@ -213,9 +231,98 @@ describe('renderPreview', () => {
     expect(payload?.embeds).toHaveLength(1);
     expect(payload?.allowedMentions).toEqual({ parse: [] });
   });
+
+  it('retains an optional announcement only on the first gallery reply', async () => {
+    const { message, replies } = makeMessage();
+    await renderPreview(
+      message,
+      {
+        kind: 'card',
+        card: {
+          url: 'https://www.facebook.com/page/posts/1',
+          imageUrls: Array.from({ length: 5 }, (_, index) => `https://cdn.example/${index}.jpg`),
+        },
+        sourceUrl: 'https://www.facebook.com/page/posts/1',
+      },
+      makeTranslator(),
+      { announcement: 'Source announcement' },
+    );
+    expect(replies).toHaveLength(2);
+    expect(replies[0]?.content).toBe('Source announcement');
+    expect(replies[1]?.content).toBeUndefined();
+  });
+
+  it('keeps every distinct HTTPS image in order across gallery replies', async () => {
+    const { message, replies } = makeMessage();
+    const images = Array.from({ length: 9 }, (_, index) => `https://cdn.example/${index}.jpg`);
+    await renderPreview(
+      message,
+      {
+        kind: 'card',
+        card: {
+          url: 'https://www.facebook.com/page/posts/1',
+          title: 'Post title',
+          siteName: 'Facebook',
+          imageUrl: images[0],
+          imageUrls: [images[0]!, 'http://cdn.example/unsafe.jpg', ...images],
+        },
+        sourceUrl: 'https://www.facebook.com/page/posts/1',
+      },
+      makeTranslator(),
+    );
+
+    expect(replies.map((reply) => reply.embeds?.length)).toEqual([4, 4, 1]);
+    const embeds = replies.flatMap((reply) => reply.embeds ?? []) as {
+      data: { image?: { url: string }; title?: string; color?: number; url?: string };
+    }[];
+    expect(embeds.map((embed) => embed.data.image?.url)).toEqual(images);
+    expect(embeds[0]?.data.title).toBe('Post title');
+    expect(
+      embeds
+        .slice(1)
+        .every((embed) => embed.data.title === undefined && embed.data.color === undefined),
+    ).toBe(true);
+    expect(
+      embeds.every((embed) => embed.data.url === 'https://www.facebook.com/page/posts/1'),
+    ).toBe(true);
+    expect(replies.every((reply) => reply.allowedMentions?.parse.length === 0)).toBe(true);
+  });
+
+  it('retains all card images when video delivery falls back', async () => {
+    const { message, replies } = makeMessage();
+    if (facebookResult.kind !== 'card') throw new Error('expected a card');
+    const imageUrls = Array.from({ length: 5 }, (_, index) => `https://cdn.example/${index}.jpg`);
+    await renderPreview(
+      message,
+      {
+        ...facebookResult,
+        card: { ...facebookResult.card, imageUrl: imageUrls[0], imageUrls },
+      },
+      makeTranslator(),
+      { downloadVideo: vi.fn().mockResolvedValue(null) },
+    );
+
+    expect(replies.map((reply) => reply.embeds?.length)).toEqual([4, 1]);
+    expect(replies[0]?.content).toBe('<https://proxy.example/reel/1>');
+    expect(replies[1]?.content).toBeUndefined();
+  });
 });
 
 describe('buildCardEmbed', () => {
+  it('preserves long Facebook author titles so Discord can wrap them', () => {
+    const title = 'Author and community '.repeat(10).trim();
+    const embed = buildCardEmbed(
+      {
+        url: 'https://www.facebook.com/page/posts/1',
+        authorName: title,
+        siteName: 'Facebook',
+      },
+      makeTranslator(),
+    );
+    expect(embed.data.title).toBe(title);
+    expect(embed.toJSON().title).toBe(title);
+  });
+
   it('uses the information accent for generic preview cards', () => {
     const embed = buildCardEmbed(
       { url: 'https://example.test/post', title: 'Post', siteName: 'Example' },

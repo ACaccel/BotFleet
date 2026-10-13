@@ -10,10 +10,29 @@
  */
 import { err, ok, type Result } from '../../../core/result';
 import { FeedError } from '../../../core/errors';
+import type { Logger } from '../../../core/logger';
+import {
+  createTwitterProvider,
+  OgClient,
+  invalidResponseError,
+  type LinkPreviewProvider,
+  type LinkPreviewFailure,
+} from '../../link-preview';
 import { translateFeedError } from './error-translator';
 import { FxTwitterTimelineSource } from './fxtwitter-source';
-import { X_PLATFORM_DISPLAY_NAME, X_PLATFORM_ID, type XTimelineSource } from './x-types';
-import type { FeedFailure, FeedPlatform, FeedPost, FeedTimelineFetchOptions } from '../types';
+import {
+  DEFAULT_X_API_BASE_URL,
+  X_PLATFORM_DISPLAY_NAME,
+  X_PLATFORM_ID,
+  type XTimelineSource,
+} from './x-types';
+import type {
+  FeedFailure,
+  FeedPlatform,
+  FeedPost,
+  FeedPreview,
+  FeedTimelineFetchOptions,
+} from '../types';
 
 /**
  * X account names are ASCII letters, digits, and underscores, capped at
@@ -85,6 +104,8 @@ interface XPlatformOptions {
   readonly embedProxyHost: string;
   /** Injection seam for tests; production builds an {@link FxTwitterTimelineSource}. */
   readonly source?: XTimelineSource;
+  /** Shared preview HTTP boundary; injectable for deterministic hybrid tests. */
+  readonly ogClient?: OgClient;
 }
 
 export class XPlatform implements FeedPlatform {
@@ -93,6 +114,8 @@ export class XPlatform implements FeedPlatform {
 
   private readonly source: XTimelineSource;
   private readonly embedProxyHost: string;
+  private readonly previewProvider: LinkPreviewProvider;
+  private readonly timeoutMs: number;
 
   public constructor(options: XPlatformOptions) {
     this.source =
@@ -102,6 +125,30 @@ export class XPlatform implements FeedPlatform {
         timeoutMs: options.timeoutMs,
       });
     this.embedProxyHost = options.embedProxyHost;
+    this.timeoutMs = options.timeoutMs;
+    this.previewProvider = createTwitterProvider({
+      apiBaseUrls: [options.apiBaseUrl ?? DEFAULT_X_API_BASE_URL],
+      proxyHosts: [options.embedProxyHost],
+      ogClient: options.ogClient ?? new OgClient(),
+    });
+  }
+
+  /** Use the same hybrid decision as shared-link previews without Discord I/O. */
+  public async buildPreview(
+    post: FeedPost,
+    logger?: Logger,
+  ): Promise<Result<FeedPreview | null, LinkPreviewFailure>> {
+    let url: URL;
+    try {
+      url = new URL(post.url);
+    } catch {
+      return err(invalidResponseError('twitter'));
+    }
+    if (!this.previewProvider.canHandle(url)) return err(invalidResponseError('twitter'));
+    const result = await this.previewProvider.build(url, { timeoutMs: this.timeoutMs, logger });
+    if (!result.ok) return result;
+    if (result.value?.kind === 'card') return err(invalidResponseError('twitter'));
+    return ok(result.value);
   }
 
   /**
