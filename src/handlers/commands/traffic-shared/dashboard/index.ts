@@ -1,9 +1,8 @@
 /**
  * Public surface of the /traffic dashboard renderers. Each function takes
- * an already-aggregated, already-translated view model and returns the
- * PNG bytes of one dashboard image: side-by-side columns of equal height,
- * laid out near the 4:3 box Discord fits an embed image into so the text
- * displays as large as the content allows. The renderers hold no database, Discord
+ * an already-aggregated, already-translated view model and returns PNG
+ * bytes: side-by-side columns of equal height, one image (the activity
+ * dashboards return a summary and a details image). The renderers hold no database, Discord
  * client, or translator access. They throw when the canvas font is missing, and the
  * heatmap-bearing ones throw `RangeError` on a malformed heatmap grid.
  */

@@ -594,15 +594,24 @@ it.
 ## Activity reports
 
 `/traffic` reads the archive through the read-only statistics reader, so any bot can
-enable it; only msg-archive writes. Every subcommand defers its reply and sends one
-embed: a title naming the report and its range (for example "<server> · Server
+enable it; only msg-archive writes. Every subcommand defers its reply and sends an
+embed with a title naming the report and its range (for example "<server> · Server
 activity · Last 7 days") and a dashboard image in two columns. Discord fits an embed
-image into a box of about 4:3, so the dashboards are laid out near 4:3 for the largest
-displayed text: the activity and app dashboards fill exactly 4:3 (a taller trend uses
-any spare height), and the emoji and sticker dashboards are a little wider, where
-extra height would only add empty space. `overview` and `channel` also list the top 3
-messages in the embed text, under a bold heading; Discord shows that text above the
-image. The reply has no summary line and no footer.
+image into a box of about 4:3 and scales it to the embed width, so a narrower image
+displays larger text:
+
+- `overview`, `channel`, `me` and `user` send two embeds, each with one landscape image
+  of the same width at its natural height: a summary (headline numbers and tiles
+  beside the trend and interactions) and an untitled details embed (content types
+  and the heat map beside the two rankings). Split in two, the text is about 20%
+  larger than in one 4:3 image and the pair stays short.
+- `apps` fills exactly 4:3 (a taller trend uses any spare height); the emoji and
+  sticker dashboards are a little wider, where extra height would only add empty
+  space.
+
+`overview` and `channel` also list the top 3 messages in the first embed's text,
+under a bold heading; Discord shows that text above the image. The reply has no
+summary line and no footer.
 
 | Subcommand                                    | Shows                                                                                                                                                                                                                                                                                                     |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -622,8 +631,8 @@ is a rolling window; the other ranges are whole local days ending today, so `7d`
 shows seven daily points with today last, compared with the same span one range
 earlier.
 Trends are hourly for `24h`, weekly for `365d` and daily otherwise; trends, heat
-maps and day labels use the bot host's time zone. `24h` omits the heat map; the two
-rankings then stack instead of sitting side by side. A member
+maps and day labels use the bot host's time zone. `24h` omits the heat map from the
+details image. A member
 runs one report at a time, and a server runs one `90d` or `365d` report at a time;
 a request beyond that gets a private "busy" reply.
 
@@ -632,6 +641,8 @@ count, but no reply shows a deleted count; bot and webhook messages and system
 messages do not count (only types 0 and 19), except interaction records for `apps`.
 Threads under a text or announcement channel count toward that channel; forum and
 media posts stand alone. Names use the live guild name, then the last stored name.
+A forum post in a channel ranking carries its forum as a tag only while its name still
+fits whole beside it; the member dashboards' channel distribution shows names only.
 
 Visibility follows the [privacy rules](architecture.md#privacy-aware-data-commands)
 for every subcommand except `emoji` and `sticker`, which count every channel and show

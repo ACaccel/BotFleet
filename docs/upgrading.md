@@ -315,7 +315,7 @@ Run the rebuild one step at a time and check each report before the next step:
    shows every bot's new command list.
 8. **Verify.** Watch the first two periodic passes: the cutoff advances and the
    second pass is incremental. Run `/traffic overview` and `/traffic me` and check
-   on desktop and mobile that the dashboard image inside the embed stays readable.
+   on desktop and mobile that both dashboard images stay readable.
 
 ### Message schema 3
 

@@ -71,7 +71,7 @@ export const buildPersonReport = async (
   const records = channelRecordsOf(context.records);
   const sections = await personSections(context, data);
   const heatmap = heatmapOf(t, period, report.heatmap, `${K}.heatmap.title_person`);
-  const image = renderPersonDashboard({
+  const images = renderPersonDashboard({
     hero: heroOf(t, summary.messages, previous, [
       dailyAverage(t, summary.messages, period),
       {
@@ -99,8 +99,9 @@ export const buildPersonReport = async (
     content: sections.content,
     partners: sections.partners,
     partnerLegend: [t(`${K}.partners_reply`), t(`${K}.partners_mention`)],
+    // A member's channel distribution lists where they post, not the forum layout.
     channels: channelColumn(context, `${K}.person_channels_title`, report.channels, (row) =>
-      channelRow(context, records, row),
+      channelRow(context, records, row, { forumTag: false }),
     ),
     ...(heatmap === undefined ? {} : { heatmap }),
   });
@@ -109,6 +110,7 @@ export const buildPersonReport = async (
       user: subject.displayName,
       range: rangeLabel(t, period.range),
     }),
-    image,
+    image: images.summary,
+    details: images.details,
   });
 };

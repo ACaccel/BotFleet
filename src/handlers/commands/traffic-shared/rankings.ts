@@ -46,15 +46,19 @@ export const memberColumn = (
   };
 };
 
-/** A channel or thread row: the live or recorded name, and its forum as a tag for a post. */
+/**
+ * A channel or thread row: the live or recorded name, and its forum as a tag for a
+ * post unless `forumTag` is false.
+ */
 export const channelRow = (
   context: TrafficContext,
   records: ChannelRecords,
   row: ChannelRanking['rows'][number],
+  { forumTag = true }: { readonly forumTag?: boolean } = {},
 ): RankRow => {
   const { t, guild } = context;
   const name = channelName(guild, records, row.channelId, row.name) ?? t(`${K}.unknown_channel`);
-  if (row.forum === undefined) return { name, value: row.messages };
+  if (row.forum === undefined || !forumTag) return { name, value: row.messages };
   const forum = channelName(guild, records, row.forum.channelId, row.forum.name);
   return {
     name,

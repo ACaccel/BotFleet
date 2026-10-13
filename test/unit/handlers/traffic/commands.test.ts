@@ -90,13 +90,25 @@ const HOT_HEADING = 'replies:traffic.hot.heading';
 /** A notice after a public deferral: the placeholder is deleted, the answer is ephemeral. */
 const privately = (content: string): Reply[] => [{ deleted: true }, { content, flags: 64 }];
 
-/** One embed: title, image, no footer; the top messages are its text when `hot`. */
-const expectDashboard = (reply: Reply | undefined, hot: boolean): void => {
+/**
+ * An embed with title, image and no footer, whose text is the top messages when
+ * `hot`; with `details` (activity dashboards), a second embed with only its image.
+ */
+const expectDashboard = (reply: Reply | undefined, hot: boolean, details: boolean): void => {
   expect(reply?.content).toBeUndefined();
-  expect(reply?.embeds).toHaveLength(1);
+  expect(reply?.embeds).toHaveLength(details ? 2 : 1);
   const embed = embedOf(reply);
   const file = reply?.files?.[0];
-  expect(reply?.files).toHaveLength(1);
+  expect(reply?.files).toHaveLength(details ? 2 : 1);
+  if (details) {
+    const second = reply?.embeds?.[1]?.toJSON() as EmbedShape | undefined;
+    const detailsFile = reply?.files?.[1];
+    expect(second?.image?.url).toBe(`attachment://${String(detailsFile?.name)}`);
+    expect(detailsFile?.name).not.toBe(file?.name);
+    expect(second?.title).toBeUndefined();
+    expect(second?.description).toBeUndefined();
+    expect((detailsFile?.attachment as Buffer).subarray(0, 4).equals(PNG_SIGNATURE)).toBe(true);
+  }
   expect(embed?.image?.url).toBe(`attachment://${String(file?.name)}`);
   expect(embed?.title).toMatch(/^replies:traffic\.[a-z]+\.title$/);
   expect(embed?.footer).toBeUndefined();
@@ -115,27 +127,31 @@ const expectDashboard = (reply: Reply | undefined, hot: boolean): void => {
 
 describe('/traffic subcommands', () => {
   it.each([
-    ['overview', { subcommand: 'overview' }, true],
-    ['channel', { subcommand: 'channel', channel: 'c1' }, true],
+    ['overview', { subcommand: 'overview' }, true, true],
+    ['channel', { subcommand: 'channel', channel: 'c1' }, true, true],
     [
       'channel without threads',
       { subcommand: 'channel', channel: 'c2', values: { range: '30d' } },
       true,
+      true,
     ],
-    ['me', { subcommand: 'me', values: { range: '24h' } }, false],
-    ['user', { subcommand: 'user', values: { range: '365d' } }, false],
-    ['apps', { subcommand: 'apps' }, false],
-    ['apps for one app', { subcommand: 'apps', app: 'bot-a' }, false],
-    ['emoji', { subcommand: 'emoji' }, false],
-    ['sticker', { subcommand: 'sticker', values: { range: '90d' } }, false],
-  ] as const)('%s defers first and replies with the dashboard', async (_, options, hot) => {
-    const { replies, order } = await run(options);
-    expect(order[0]).toBe('defer');
-    expect(order.length).toBeGreaterThan(1);
-    expect(replies).toHaveLength(1);
-    expectDashboard(replies[0], hot);
-    expect(embedText(replies[0])).not.toMatch(/delet/i);
-  });
+    ['me', { subcommand: 'me', values: { range: '24h' } }, false, true],
+    ['user', { subcommand: 'user', values: { range: '365d' } }, false, true],
+    ['apps', { subcommand: 'apps' }, false, false],
+    ['apps for one app', { subcommand: 'apps', app: 'bot-a' }, false, false],
+    ['emoji', { subcommand: 'emoji' }, false, false],
+    ['sticker', { subcommand: 'sticker', values: { range: '90d' } }, false, false],
+  ] as const)(
+    '%s defers first and replies with the dashboard',
+    async (_, options, hot, details) => {
+      const { replies, order } = await run(options);
+      expect(order[0]).toBe('defer');
+      expect(order.length).toBeGreaterThan(1);
+      expect(replies).toHaveLength(1);
+      expectDashboard(replies[0], hot, details);
+      expect(embedText(replies[0])).not.toMatch(/delet/i);
+    },
+  );
 
   it('caps member, channel and app rankings at 5', async () => {
     const topN = (Action: { new (): { config: { options?: { number?: unknown[] } } } }) =>
@@ -214,7 +230,7 @@ describe('/traffic subcommands', () => {
       guild,
       values: { visibility: 'ephemeral' },
     });
-    expectDashboard(ephemeral.replies[0], true);
+    expectDashboard(ephemeral.replies[0], true, true);
     const publicly = await run({
       subcommand: 'channel',
       channel: 'secret',
@@ -401,9 +417,9 @@ describe('/traffic subcommands', () => {
     const otherShort = fakeInteraction({ subcommand: 'overview' });
     (otherShort.interaction.user as { id: string }).id = 'a1';
     await new Traffic().execute(otherShort.interaction, fakeBot(fakeStatsRepo()));
-    expectDashboard(otherShort.replies[0], true);
+    expectDashboard(otherShort.replies[0], true, true);
     releaseFirst?.();
-    expectDashboard((await first).replies[0], true);
-    expectDashboard((await run({ subcommand: 'me' })).replies[0], false);
+    expectDashboard((await first).replies[0], true, true);
+    expectDashboard((await run({ subcommand: 'me' })).replies[0], false, true);
   });
 });

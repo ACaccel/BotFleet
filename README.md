@@ -58,7 +58,8 @@ Every bot shares the framework capabilities:
   default) from the guild's debug channel.
 - **Activity reports.** Any bot can enable the read-only
   [`/traffic` dashboards](docs/message-archive.md#activity-reports) on the archive:
-  one embed with a dashboard image per report, public unless requested otherwise.
+  dashboard images in embeds (two for the activity reports), public unless requested
+  otherwise.
 
 ## Requirements
 

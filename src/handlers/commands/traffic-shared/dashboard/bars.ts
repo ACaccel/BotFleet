@@ -2,7 +2,9 @@
  * Horizontal bar lists: ranked rows (optional rank numbers, forum tag
  * chip, stacked segments) and plain labelled bars. Labels are capped to a
  * share of the column and truncated with an ellipsis so long names never
- * squeeze the bars away.
+ * squeeze the bars away. Ranked names take the larger share: a name is
+ * what the row is about, and the value beside the bar keeps it readable.
+ * A tag is dropped rather than truncate its row's name.
  */
 import { roundRect } from '../canvas-primitives';
 import type { Ctx } from './layout';
@@ -17,6 +19,7 @@ const BAR_HEIGHT = 12;
 const TAG_SIZE = 10;
 const TAG_MAX_WIDTH = 72;
 const LABEL_SHARE = 0.5;
+const RANK_LABEL_SHARE = 0.6;
 
 /** A row's bar total; a negative count draws as an empty bar, like a segment. */
 const rowTotal = (row: AnyRankRow): number =>
@@ -56,7 +59,7 @@ export const drawRankBars = (
     : 0;
   const natural = (r: AnyRankRow): number =>
     textWidth(ctx, r.name, SIZE) + (r.tag === undefined ? 0 : 6 + tagWidth(ctx, r.tag));
-  const labelW = Math.min(Math.max(...rows.map(natural)) + 10, (w - rankW) * LABEL_SHARE);
+  const labelW = Math.min(Math.max(...rows.map(natural)) + 10, (w - rankW) * RANK_LABEL_SHARE);
   const values = rows.map((r) => formatCount(rowTotal(r)));
   const valW = Math.max(...values.map((t) => textWidth(ctx, t, SIZE))) + 8;
   const barX = x + rankW + labelW;
@@ -65,12 +68,10 @@ export const drawRankBars = (
   rows.forEach((row, i) => {
     const cy = y + i * ROW_HEIGHT + ROW_HEIGHT / 2;
     if (ranked) drawText(ctx, String(rankStart + i), x, cy, { size: SIZE, color: COLOR.muted });
-    const tagReserve = row.tag === undefined ? 0 : 6 + tagWidth(ctx, row.tag);
-    const name = fitText(ctx, row.name, labelW - 10 - tagReserve, SIZE);
+    const tag = row.tag !== undefined && natural(row) <= labelW - 10 ? row.tag : undefined;
+    const name = fitText(ctx, row.name, labelW - 10, SIZE);
     drawText(ctx, name, x + rankW, cy, { size: SIZE, color: COLOR.ink });
-    if (row.tag !== undefined) {
-      drawTag(ctx, row.tag, x + rankW + textWidth(ctx, name, SIZE) + 6, cy);
-    }
+    if (tag !== undefined) drawTag(ctx, tag, x + rankW + textWidth(ctx, name, SIZE) + 6, cy);
     const len = (rowTotal(row) / max) * barMax;
     if (row.segments === undefined)
       hbar(ctx, barX, cy - BAR_HEIGHT / 2, len, BAR_HEIGHT, COLOR.current);

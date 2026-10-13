@@ -51,7 +51,9 @@ describe.each(['en', 'zh-TW'] as const)('/traffic catalog in %s', (locale) => {
       const replies = all.filter((reply) => reply.deleted !== true);
       expect(replies, options.subcommand).toHaveLength(1);
       if (replies[0]?.embeds === undefined) continue;
-      expect(replies[0].embeds, options.subcommand).toHaveLength(1);
+      // Activity reports add an untitled details embed under the titled one.
+      const activity = ['overview', 'channel', 'me', 'user'].includes(options.subcommand);
+      expect(replies[0].embeds, options.subcommand).toHaveLength(activity ? 2 : 1);
       const embed = replies[0].embeds[0]?.toJSON() as { description?: string } | undefined;
       // The top-messages text opens with a bold heading line.
       if (options.subcommand === 'overview')

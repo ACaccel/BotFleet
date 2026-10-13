@@ -55,7 +55,7 @@ export const buildOverviewReport = async (context: TrafficContext): Promise<Traf
         }),
   };
   const heatmap = heatmapOf(t, period, report.heatmap);
-  const image = renderOverviewDashboard({
+  const images = renderOverviewDashboard({
     hero: heroOf(t, summary.messages, previous, [
       dailyAverage(t, summary.messages, period),
       { label: t(`${K}.active_members`), value: formatCount(summary.activeMembers) },
@@ -77,7 +77,8 @@ export const buildOverviewReport = async (context: TrafficContext): Promise<Traf
   const hot = topMessagesText(context, report.topMessages);
   return dashboardReply({
     title: t(`${K}.overview.title`, { guild: guild.name, range: rangeLabel(t, period.range) }),
-    image,
+    image: images.summary,
+    details: images.details,
     ...(hot === undefined ? {} : { description: hot }),
   });
 };

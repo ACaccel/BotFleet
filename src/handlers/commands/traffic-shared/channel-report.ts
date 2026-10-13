@@ -99,7 +99,7 @@ export const buildChannelReport = async (
       )
     : weekdayAverages(t, period, report.heatmap);
   const heatmap = heatmapOf(t, period, report.heatmap);
-  const image = renderChannelDashboard({
+  const images = renderChannelDashboard({
     hero: heroOf(t, summary.messages, previous, [
       dailyAverage(t, summary.messages, period),
       { label: t(`${K}.active_members`), value: formatCount(summary.activeMembers) },
@@ -119,7 +119,8 @@ export const buildChannelReport = async (
       threads: threads.length > 0 ? t(`${K}.channel.with_threads`) : '',
       range: rangeLabel(t, period.range),
     }),
-    image,
+    image: images.summary,
+    details: images.details,
     ...(hot === undefined ? {} : { description: hot }),
   });
 };

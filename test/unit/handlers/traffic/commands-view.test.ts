@@ -27,7 +27,7 @@ vi.mock('../../../../src/infra/graphics/image-loader', () => ({
 
 vi.mock('../../../../src/handlers/commands/traffic-shared/dashboard', async (importOriginal) => {
   const actual = await importOriginal<typeof dashboard>();
-  const wrap = <F extends (...args: never[]) => Buffer>(render: F) => vi.fn(render);
+  const wrap = <F extends (...args: never[]) => unknown>(render: F) => vi.fn(render);
   return {
     ...actual,
     renderOverviewDashboard: wrap(actual.renderOverviewDashboard),

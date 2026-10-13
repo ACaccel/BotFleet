@@ -179,7 +179,7 @@ describe('inline emoji tokens', () => {
     const base = fixtures.person();
     const [first = [], second = []] = base.tileRows;
     const tiles = second.map((t, i) => (i === 0 ? { ...t, sub } : t));
-    return renderPersonDashboard({ ...base, tileRows: [first, tiles] });
+    return renderPersonDashboard({ ...base, tileRows: [first, tiles] }).summary;
   };
 
   it('draws the token image or its fallback name', async () => {
@@ -207,9 +207,9 @@ describe('colour-coded marks', () => {
   it('draws the gray previous-period line and legend only with a previous series', async () => {
     const base = fixtures.overview();
     const { previous: _previous, ...noPrevious } = base.trend;
-    const withPrevious = renderOverviewDashboard(base);
+    const withPrevious = renderOverviewDashboard(base).summary;
     expect(await countColor(withPrevious, COLOR.previous)).toBeGreaterThan(200);
-    const without = renderOverviewDashboard({ ...base, trend: noPrevious });
+    const without = renderOverviewDashboard({ ...base, trend: noPrevious }).summary;
     expect(await countColor(without, COLOR.previous)).toBe(0);
     // In a wide column the legend shares the title row.
     const trend = (t: typeof base.trend) =>
@@ -229,7 +229,7 @@ describe('colour-coded marks', () => {
   it('colours the hero delta by direction and omits the triangle when flat', async () => {
     const render = (delta: Delta | undefined): Buffer => {
       const base = fixtures.overview();
-      return renderOverviewDashboard({ ...base, hero: { ...base.hero, delta } });
+      return renderOverviewDashboard({ ...base, hero: { ...base.hero, delta } }).summary;
     };
     const delta = (direction: Delta['direction']): Delta => ({ direction, text: '8%', sub: 'x' });
     const up = render(delta('up'));
@@ -252,7 +252,10 @@ describe('colour-coded marks', () => {
     const render = (direction: Delta['direction'], color: string) => {
       const base = fixtures.overview();
       const delta = { direction, text: '', sub: '' };
-      const png = renderOverviewDashboard({ ...base, hero: { ...base.hero, value: '', delta } });
+      const png = renderOverviewDashboard({
+        ...base,
+        hero: { ...base.hero, value: '', delta },
+      }).summary;
       const x = PAD + 14 + 12;
       const y = PAD + 42;
       const band = {
