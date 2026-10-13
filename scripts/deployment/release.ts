@@ -69,7 +69,7 @@ function localFiles(root: string, release: string): void {
     rmSync(destination, { force: true });
     symlinkSync(source, destination);
   }
-  for (const name of ['data', 'logs', 'errors']) {
+  for (const name of ['data', 'logs']) {
     const source = join(root, name);
     mkdirSync(source, { recursive: true });
     symlinkSync(source, join(release, name));

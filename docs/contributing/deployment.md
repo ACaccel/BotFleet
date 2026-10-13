@@ -59,7 +59,7 @@ The database unit is `mongodb-botfleet.service`.
 
 Preparation validates configuration/runtime, types, Canvas and units, then snapshots
 source/dependencies in `.deploy/releases/<id>` without starting services. Review units
-and `manifest.json` before cutover. Configuration links, `data`, `logs`, and `errors`
+and `manifest.json` before cutover. Configuration links, `data`, and `logs`
 are shared. Private releases can contain configuration snapshots; retain any release
 referenced by units or recovery journals, including after undeploy.
 

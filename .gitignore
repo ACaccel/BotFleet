@@ -1,7 +1,6 @@
 /node_modules
 /dist
 /logs
-/errors
 /data
 *.log
 

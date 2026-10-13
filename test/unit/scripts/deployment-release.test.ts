@@ -75,6 +75,9 @@ describe('release preparation', () => {
       readFileSync(join(release.directory, 'node_modules/test-package/index.js'), 'utf8'),
     ).toContain('exports = 1');
     expect(lstatSync(join(release.directory, 'src/bot/tomori/.env')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(release.directory, 'data')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(release.directory, 'logs')).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(release.directory, 'errors'))).toBe(false);
     expect(readFileSync(join(release.directory, 'src/bot/tomori/config.json'), 'utf8')).toBe(
       '{"language":"en"}',
     );
