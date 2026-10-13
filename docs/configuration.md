@@ -108,6 +108,15 @@ than live updates after the message is sent.
 If browser redirects cannot expand a share link, the provider also tries the
 source-owned permalink from Facebook's OpenGraph before falling back to a card.
 
+With `twitterApiBaseUrls` set, X posts are read from an FxTwitter-compatible
+API and shown as a custom card: author, text, quoted post, up to four photos,
+reply/repost/like/view counts and post time. Video posts still use a proxy link
+when a proxy serves a playable video, so Discord plays it at full quality. When
+none does, the bot uploads the largest MP4 encoding estimated to fit
+`maxVideoBytes` inside a Components V2 card; failing that, the card shows the
+video thumbnail and a link. Posts the API marks possibly sensitive, and every
+post while no API answers, use a proxy link as before.
+
 When metadata includes a supported direct video URL, the bot downloads it and
 uploads a separate Discord attachment. Video downloads accept only HTTPS URLs
 with `video/mp4` or `video/quicktime` content types, validate DNS and redirects
@@ -117,6 +126,7 @@ against private-network access, and allow at most two concurrent downloads.
 | --------------------------- | ----------------- | --------------------------------------------- | ----------------------------------------------------------------------- |
 | `maxVideoBytes`             | `8388608` (8 MiB) | Positive integer, at most `26214400` (25 MiB) | Maximum downloaded video size; Discord may enforce a lower upload limit |
 | `videoTimeoutMs`            | `15000`           | Positive integer, at most `60000`             | Total video download deadline in milliseconds                           |
+| `twitterApiBaseUrls`        | Unset             | Non-empty list of HTTPS URLs                  | FxTwitter-compatible APIs for custom X cards, tried in order            |
 
 Missing direct video metadata, unsupported media, oversized files, download
 failures and rejected attachments fall back to the custom card and a clickable

@@ -7,9 +7,11 @@
  * Hybrid mechanism (see `src/infra/link-preview/`): video-capable
  * sources are rewritten to an embed-proxy domain so Discord unfurls a
  * playable video; Facebook retains metadata for custom cards and bounded
- * video attachments. Sources without a proxy (Bahamut) use static cards. The provider framework is
- * extensible — adding a source is one provider file plus one registry
- * line, with no change here.
+ * video attachments; X posts read from a JSON API become custom cards,
+ * keeping the proxy for videos it can play. Sources without a proxy
+ * (Bahamut) use static cards. The provider framework is extensible —
+ * adding a source is one provider file plus one registry line, with no
+ * change here.
  *
  * Factory pattern (mirrors `createLlmAutoReplyPlugin`): per-bot settings
  * are parsed once and the provider registry is captured in the closure,
@@ -56,6 +58,9 @@ export const createSocialLinkPreviewPlugin = (
     (config.enabled
       ? createDefaultLinkPreviewRegistry({
           twitterProxyHosts: config.twitterProxyHosts,
+          ...(config.twitterApiBaseUrls === undefined
+            ? {}
+            : { twitterApiBaseUrls: config.twitterApiBaseUrls }),
           instagramProxyHosts: config.instagramProxyHosts,
           threadsProxyHosts: config.threadsProxyHosts,
           facebookProxyHosts: config.facebookProxyHosts,

@@ -40,6 +40,8 @@ interface LinkPreviewRegistryDeps {
   readonly ogClient?: OgClient;
   /** Twitter/X embed-proxy hosts, probed in list order. */
   readonly twitterProxyHosts: readonly string[];
+  /** FxTwitter-compatible API bases for custom X cards; omit to proxy every tweet. */
+  readonly twitterApiBaseUrls?: readonly string[];
   /** Instagram embed-proxy hosts, probed in list order. */
   readonly instagramProxyHosts: readonly string[];
   /** Threads embed-proxy hosts, probed in list order. */
@@ -59,7 +61,11 @@ export const createDefaultLinkPreviewRegistry = (
 ): LinkPreviewProviderRegistry => {
   const ogClient = deps.ogClient ?? new OgClient({ cacheTtlMs: DEFAULT_OG_CACHE_TTL_MS });
   const all: readonly LinkPreviewProvider[] = [
-    createTwitterProvider({ proxyHosts: deps.twitterProxyHosts, ogClient }),
+    createTwitterProvider({
+      proxyHosts: deps.twitterProxyHosts,
+      ogClient,
+      ...(deps.twitterApiBaseUrls === undefined ? {} : { apiBaseUrls: deps.twitterApiBaseUrls }),
+    }),
     createInstagramProvider({ proxyHosts: deps.instagramProxyHosts, ogClient }),
     createThreadsProvider({ proxyHosts: deps.threadsProxyHosts, ogClient }),
     createFacebookProvider({ proxyHosts: deps.facebookProxyHosts, ogClient }),

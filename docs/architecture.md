@@ -119,6 +119,9 @@ connections and bounded retries. See [database recovery](contributing/operations
 and [persisted models](contributing/persisted-models.md).
 
 LLM, link-preview and social-feed strategies isolate provider behavior and errors.
+The X provider reads posts from a JSON API into a neutral post model and keeps
+the proxy rewrite only for videos a proxy can play; the plugin renders the post
+as classic embeds, or as a Components V2 card around an uploaded video.
 Facebook preview providers retain OpenGraph metadata from proxies or the source
 site for custom card rendering; Facebook-specific parsing maps the proxy's source
 summary to optional engagement counts. Direct videos use a dedicated downloader with the shared host validation and

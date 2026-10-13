@@ -5,7 +5,10 @@
  *   - `rewritten-url`: reply with the proxy URL as plain content so
  *     Discord unfurls it into a (playable) embed;
  *   - `card`: build an {@link EmbedBuilder} from the neutral OpenGraph
- *     card and attach Facebook video when a bounded download succeeds.
+ *     card and attach Facebook video when a bounded download succeeds;
+ *   - `post`: a custom X card (see `render-post.ts`). A video post uploads
+ *     the largest encoding that fits in a Components V2 card, and falls back
+ *     to a thumbnail embed linking the video when none can be uploaded.
  *
  * Every reply uses `allowedMentions: { parse: [] }` so preview content
  * can never trigger an @everyone / @role ping (matches `llm-chat`).
@@ -15,14 +18,18 @@ import {
   DiscordAPIError,
   EmbedBuilder,
   HTTPError,
+  MessageFlags,
   type Message,
 } from 'discord.js';
 
 import type { Translator } from '../../../core/i18n';
-import type { LinkPreviewResult, PreviewCard } from '../../../infra/link-preview';
+import type { LinkPreviewResult, PreviewCard, SocialPost } from '../../../infra/link-preview';
 import { downloadPreviewVideo } from '../../../infra/link-preview';
+import { buildPostContainer, buildPostEmbeds, pickVideoVariants } from './render-post';
 
 const NO_MENTIONS = { parse: [] as const };
+const DEFAULT_MAX_VIDEO_BYTES = 8 * 1024 * 1024;
+const DEFAULT_VIDEO_TIMEOUT_MS = 15_000;
 /** Neutral accent for bot-built preview cards. */
 const EMBED_COLOR = 0x2b90d9;
 const MAX_TITLE = 256;
@@ -105,6 +112,48 @@ const isUploadRejection = (error: unknown): boolean =>
       error.status === 413)) ||
   (error instanceof HTTPError && error.status === 413);
 
+/** Extension of a downloaded file name, defaulting to `mp4`. */
+const extensionOf = (name: string): string => /\.([a-z0-9]+)$/i.exec(name)?.[1] ?? 'mp4';
+
+/**
+ * Reply with a custom X card. A video is uploaded inside a Components V2
+ * card, trying the best encoding that fits and then the next one down when
+ * the download or the upload fails; with nothing uploadable the classic
+ * embed shows the thumbnail and links the video.
+ */
+const renderPost = async (
+  message: Message,
+  post: SocialPost,
+  translator: Translator,
+  options: PreviewRenderOptions,
+): Promise<void> => {
+  if (post.video !== undefined) {
+    const maxBytes = options.maxVideoBytes ?? DEFAULT_MAX_VIDEO_BYTES;
+    const download = options.downloadVideo ?? downloadPreviewVideo;
+    for (const variant of pickVideoVariants(post.video, maxBytes)) {
+      const video = await download(
+        variant.url,
+        maxBytes,
+        options.videoTimeoutMs ?? DEFAULT_VIDEO_TIMEOUT_MS,
+      ).catch(() => null);
+      if (video === null) continue;
+      const name = `x-video.${extensionOf(video.name)}`;
+      try {
+        await message.reply({
+          flags: MessageFlags.IsComponentsV2,
+          components: [buildPostContainer(post, translator, `attachment://${name}`)],
+          files: [new AttachmentBuilder(video.data, { name })],
+          allowedMentions: NO_MENTIONS,
+        });
+        return;
+      } catch (error) {
+        if (!isUploadRejection(error)) throw error;
+      }
+    }
+  }
+  await message.reply({ embeds: buildPostEmbeds(post, translator), allowedMentions: NO_MENTIONS });
+};
+
 export const renderPreview = async (
   message: Message,
   result: LinkPreviewResult,
@@ -115,13 +164,17 @@ export const renderPreview = async (
     await message.reply({ content: result.url, allowedMentions: NO_MENTIONS });
     return;
   }
+  if (result.kind === 'post') {
+    await renderPost(message, result.post, translator, options);
+    return;
+  }
   if (result.card.siteName === 'Facebook' && result.media !== undefined) {
-    const maxBytes = options.maxVideoBytes ?? 8 * 1024 * 1024;
+    const maxBytes = options.maxVideoBytes ?? DEFAULT_MAX_VIDEO_BYTES;
     const download = options.downloadVideo ?? downloadPreviewVideo;
     const video = await download(
       result.media.url,
       maxBytes,
-      options.videoTimeoutMs ?? 15_000,
+      options.videoTimeoutMs ?? DEFAULT_VIDEO_TIMEOUT_MS,
     ).catch(() => null);
     if (video !== null) {
       try {

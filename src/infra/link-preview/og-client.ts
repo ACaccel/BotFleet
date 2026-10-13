@@ -5,7 +5,8 @@
  *   - the rewrite providers, which fetch each candidate proxy URL to
  *     VALIDATE (before posting) that Discord will get media — using the
  *     Discord crawler UA so we observe exactly what Discord's unfurl sees;
- *   - the Bahamut provider, which scrapes the source page's OpenGraph.
+ *   - the Bahamut provider, which scrapes the source page's OpenGraph;
+ *   - the X provider, which reads a post from a JSON API ({@link OgClient.fetchJson}).
  * Modeled on `infra/llm/selfhosted-client.ts`: axios + Result + the shared
  * {@link translateLinkPreviewError}. Never throws a `DomainError` — every
  * failure lands on the Result's Err rail so the caller can stay silent.
@@ -160,6 +161,10 @@ const DEFAULT_CACHE_MAX_ENTRIES = 256;
  * a redirect loop cannot stall the probe.
  */
 const SAFE_MAX_REDIRECTS = 3;
+/** Ceiling on a JSON API body; a single post measures a few kilobytes. */
+const MAX_JSON_BYTES = 1024 * 1024;
+/** Identifies the bot to a JSON API operator (see {@link OgClient.fetchJson}). */
+const API_USER_AGENT = 'BotFleet-link-preview/1.0 (+https://github.com/ACaccel/BotFleet)';
 /** Only the head carries OpenGraph tags; cap parsing work regardless of body size. */
 const HEAD_SCAN_LIMIT = 128 * 1024;
 /** Once seen in the streamed body, the rest is irrelevant — stop reading. */
@@ -600,6 +605,41 @@ export class OgClient {
         this.writeCache(url, media);
         return ok(media);
       }
+      return err(translateLinkPreviewError(provider, e));
+    }
+  }
+
+  /**
+   * GET `url` from a JSON API and return the parsed body, unvalidated — the
+   * caller owns the schema. Used by the X provider to read a post from an
+   * operator-configured FxTwitter-compatible API.
+   *
+   * Same contract as {@link fetch}: `url` is built from an operator-supplied
+   * base and an id the caller already matched, every redirect hop is
+   * screened by {@link assertSafeRedirect}, names resolve through the
+   * bounded lookup, and the body is capped at {@link MAX_JSON_BYTES}. The
+   * request identifies the bot rather than impersonating Discord's crawler:
+   * an API needs no crawler UA, and a descriptive one lets the operator
+   * attribute the traffic. Responses are not cached.
+   */
+  public async fetchJson(
+    url: string,
+    provider: string,
+    timeoutMs: number,
+  ): Promise<Result<unknown, LinkPreviewFailure>> {
+    try {
+      const response = await axios.get<unknown>(url, {
+        responseType: 'json',
+        timeout: timeoutMs,
+        httpAgent: this.httpAgent,
+        httpsAgent: this.httpsAgent,
+        maxRedirects: SAFE_MAX_REDIRECTS,
+        maxContentLength: MAX_JSON_BYTES,
+        beforeRedirect: (options) => assertSafeRedirect(options),
+        headers: { 'User-Agent': API_USER_AGENT, Accept: 'application/json' },
+      });
+      return ok(response.data);
+    } catch (e: unknown) {
       return err(translateLinkPreviewError(provider, e));
     }
   }

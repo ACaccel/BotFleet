@@ -460,7 +460,14 @@
     "engagement_likes": "👍 {{count}}",
     "engagement_comments": "💬 {{count}}",
     "engagement_shares": "🔄 {{count}}",
-    "embed_footer": "預覽來源:{{provider}}"
+    "embed_footer": "預覽來源:{{provider}}",
+    "post_replies": "💬 {{count}}",
+    "post_reposts": "🔁 {{count}}",
+    "post_likes": "❤️ {{count}}",
+    "post_views": "👁️ {{count}}",
+    "post_quote": "↪ 引用 [{{name}} (@{{handle}})]({{url}})",
+    "post_watch_video": "▶ [在 X 上觀看影片]({{url}})",
+    "post_view_original": "[在 X 上查看]({{url}})"
   },
   "feed": {
     "post": "**@{{author}}** 在 {{platform}} 發布了新貼文\n{{url}}",

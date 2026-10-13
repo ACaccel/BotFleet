@@ -4,7 +4,13 @@
  * Message captures the reply payload; the translator is stubbed.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { DiscordAPIError, HTTPError, type AttachmentBuilder, type Message } from 'discord.js';
+import {
+  DiscordAPIError,
+  HTTPError,
+  MessageFlags,
+  type AttachmentBuilder,
+  type Message,
+} from 'discord.js';
 
 import {
   renderPreview,
@@ -29,6 +35,8 @@ const makeTranslator = (): Translator =>
 interface ReplyPayload {
   content?: string;
   embeds?: unknown[];
+  components?: unknown[];
+  flags?: number;
   files?: AttachmentBuilder[];
   allowedMentions?: { parse: readonly string[] };
 }
@@ -416,5 +424,120 @@ describe('buildCardEmbed', () => {
     const embed = buildCardEmbed({ url: 'https://e/1', title: long }, makeTranslator());
     expect(embed.data.title?.length).toBe(256);
     expect(embed.data.title?.endsWith('...')).toBe(true);
+  });
+});
+
+describe('renderPreview X post', () => {
+  const post = (video?: boolean): LinkPreviewResult => ({
+    kind: 'post',
+    sourceUrl: 'https://x.com/NASA/status/1',
+    post: {
+      url: 'https://x.com/NASA/status/1',
+      text: 'hello',
+      createdAt: 0,
+      author: { name: 'NASA', handle: 'NASA', url: 'https://x.com/NASA' },
+      images: ['https://pbs.twimg.com/1.jpg'],
+      stats: {},
+      ...(video === true
+        ? {
+            video: {
+              thumbnailUrl: 'https://pbs.twimg.com/t.jpg',
+              durationSeconds: 10,
+              variants: [
+                { url: 'https://video.twimg.com/high.mp4', bitrate: 2_000_000 },
+                { url: 'https://video.twimg.com/low.mp4', bitrate: 500_000 },
+              ],
+            },
+          }
+        : {}),
+    },
+  });
+  const uploadRejection = (): DiscordAPIError =>
+    new DiscordAPIError(
+      { code: 40005, message: 'Request entity too large' },
+      40005,
+      413,
+      'POST',
+      'https://discord.test/channels/1/messages',
+      {},
+    );
+
+  it('replies with embeds for a post without video', async () => {
+    const { message, replies } = makeMessage();
+    const downloadVideo = vi.fn();
+    await renderPreview(message, post(), makeTranslator(), { downloadVideo });
+    expect(downloadVideo).not.toHaveBeenCalled();
+    expect(replies).toHaveLength(1);
+    expect(replies[0]?.embeds).toHaveLength(1);
+    expect(replies[0]?.flags).toBeUndefined();
+    expect(replies[0]?.allowedMentions).toEqual({ parse: [] });
+  });
+
+  it('uploads the best fitting video inside a Components V2 card', async () => {
+    const { message, replies } = makeMessage();
+    const data = Buffer.from('video');
+    const downloadVideo = vi.fn().mockResolvedValue({ data, name: 'facebook.mp4' });
+    await renderPreview(message, post(true), makeTranslator(), { downloadVideo });
+    expect(downloadVideo).toHaveBeenCalledWith(
+      'https://video.twimg.com/high.mp4',
+      8 * 1024 * 1024,
+      15_000,
+    );
+    expect(replies).toHaveLength(1);
+    expect(replies[0]?.flags).toBe(MessageFlags.IsComponentsV2);
+    expect(replies[0]?.components).toHaveLength(1);
+    expect(replies[0]?.embeds).toBeUndefined();
+    expect(replies[0]?.files?.[0]?.name).toBe('x-video.mp4');
+    expect(replies[0]?.files?.[0]?.attachment).toEqual(data);
+  });
+
+  it('tries the next encoding when a download fails', async () => {
+    const { message, replies } = makeMessage();
+    const downloadVideo = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ data: Buffer.from('v'), name: 'facebook.mp4' });
+    await renderPreview(message, post(true), makeTranslator(), { downloadVideo });
+    expect(downloadVideo).toHaveBeenLastCalledWith(
+      'https://video.twimg.com/low.mp4',
+      8 * 1024 * 1024,
+      15_000,
+    );
+    expect(replies[0]?.flags).toBe(MessageFlags.IsComponentsV2);
+  });
+
+  it('tries the next encoding after an upload rejection, then falls back to embeds', async () => {
+    const { message, replies } = makeMessage();
+    vi.mocked(message.reply)
+      .mockRejectedValueOnce(uploadRejection())
+      .mockRejectedValueOnce(uploadRejection());
+    const downloadVideo = vi.fn().mockResolvedValue({ data: Buffer.from('v'), name: 'a.mp4' });
+    await renderPreview(message, post(true), makeTranslator(), { downloadVideo });
+    expect(downloadVideo).toHaveBeenCalledTimes(2);
+    expect(message.reply).toHaveBeenCalledTimes(3);
+    expect(replies[0]?.flags).toBeUndefined();
+    expect(replies[0]?.files).toBeUndefined();
+    expect(replies[0]?.embeds).toHaveLength(1);
+  });
+
+  it('falls back to embeds when no encoding fits the upload cap', async () => {
+    const { message, replies } = makeMessage();
+    const downloadVideo = vi.fn();
+    await renderPreview(message, post(true), makeTranslator(), {
+      downloadVideo,
+      maxVideoBytes: 1000,
+    });
+    expect(downloadVideo).not.toHaveBeenCalled();
+    expect(replies[0]?.embeds).toHaveLength(1);
+  });
+
+  it('rethrows a reply failure that is not an upload rejection', async () => {
+    const { message } = makeMessage();
+    const failure = new Error('network down');
+    vi.mocked(message.reply).mockRejectedValueOnce(failure);
+    const downloadVideo = vi.fn().mockResolvedValue({ data: Buffer.from('v'), name: 'a.mp4' });
+    await expect(
+      renderPreview(message, post(true), makeTranslator(), { downloadVideo }),
+    ).rejects.toBe(failure);
   });
 });

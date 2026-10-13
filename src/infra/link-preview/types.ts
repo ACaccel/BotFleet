@@ -9,7 +9,7 @@
  * consuming plugin's job — providers return neutral data only, so this
  * layer stays free of discord.js message I/O.
  *
- * Two preview mechanisms, one uniform result (discriminated union):
+ * Three preview mechanisms, one uniform result (discriminated union):
  *   - `rewritten-url`: reply with a proxy-domain URL and let DISCORD
  *     unfurl it into a playable video embed. A bot-authored embed cannot
  *     render playable video; attachments are sent separately.
@@ -19,6 +19,9 @@
  *     dead/empty proxy is never posted as a bare link.
  *   - `card`: neutral OpenGraph data rendered with `EmbedBuilder`, optionally
  *     carrying video metadata for separate attachment delivery (Facebook).
+ *   - `post`: a structured social post read from a JSON API (X), rendered as
+ *     a custom card. A video post becomes `post` only when no proxy yields a
+ *     playable video, so the renderer then uploads the video itself.
  *
  * Adding a new provider:
  *   1. Implement {@link LinkPreviewProvider} (or reuse `createRewriteProvider`
@@ -94,8 +97,54 @@ export interface PreviewCard {
   };
 }
 
+/** One downloadable encoding of a post's video. */
+export interface PostVideoVariant {
+  readonly url: string;
+  /** Bits per second; with the duration it estimates the file size before download. */
+  readonly bitrate: number;
+}
+
 /**
- * The two preview mechanisms, unified. `sourceUrl` is the original link
+ * Neutral, Discord-agnostic social post. Counts are the upstream totals at
+ * fetch time; an absent count was not reported and is not shown.
+ */
+export interface SocialPost {
+  /** Canonical post link. */
+  readonly url: string;
+  readonly text: string;
+  /** Creation time, epoch milliseconds. */
+  readonly createdAt: number;
+  readonly author: {
+    readonly name: string;
+    readonly handle: string;
+    readonly url: string;
+    readonly avatarUrl?: string;
+  };
+  /** Photo URLs in post order. */
+  readonly images: readonly string[];
+  readonly stats: {
+    readonly replies?: number;
+    readonly reposts?: number;
+    readonly likes?: number;
+    readonly views?: number;
+  };
+  readonly quote?: {
+    readonly url: string;
+    readonly text: string;
+    readonly authorName: string;
+    readonly authorHandle: string;
+  };
+  /** The post's first video, when it has one. */
+  readonly video?: {
+    readonly thumbnailUrl?: string;
+    readonly durationSeconds: number;
+    /** MP4 encodings, highest bitrate first. */
+    readonly variants: readonly PostVideoVariant[];
+  };
+}
+
+/**
+ * The preview mechanisms, unified. `sourceUrl` is the original link
  * that matched, carried for logging / de-duplication.
  */
 export type LinkPreviewResult =
@@ -105,7 +154,8 @@ export type LinkPreviewResult =
       readonly card: PreviewCard;
       readonly sourceUrl: string;
       readonly media?: { readonly url: string; readonly fallbackUrl: string };
-    };
+    }
+  | { readonly kind: 'post'; readonly post: SocialPost; readonly sourceUrl: string };
 
 /** Per-call collaborators handed to {@link LinkPreviewProvider.build}. */
 export interface LinkPreviewBuildContext {

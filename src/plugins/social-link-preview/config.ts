@@ -64,6 +64,21 @@ const commonShape = {
    */
   originalMessageStrategy: z.enum(['suppress', 'delete', 'leave']).default('suppress'),
   /**
+   * FxTwitter-compatible JSON API bases (e.g. `https://api.fxtwitter.com`),
+   * tried in order. Set to render X posts as custom cards; omit to rewrite
+   * every tweet onto an embed proxy. Like the proxy lists, these name
+   * third-party services and so are operator configuration with no default.
+   */
+  twitterApiBaseUrls: z
+    .array(
+      z
+        .string()
+        .url()
+        .refine((value) => value.startsWith('https://'), 'twitterApiBaseUrls must use https'),
+    )
+    .nonempty('twitterApiBaseUrls must list at least one API base when set')
+    .optional(),
+  /**
    * Allow-list of enabled providers. Omitted = all providers. Acts as a
    * per-source kill-switch when a proxy service is misbehaving.
    */

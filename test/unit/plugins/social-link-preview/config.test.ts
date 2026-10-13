@@ -152,4 +152,35 @@ describe('parseSocialLinkPreviewConfig', () => {
     expect(() => parseSocialLinkPreviewConfig({ timeoutMs: 999_999 })).toThrow(z.ZodError);
     expect(() => parseSocialLinkPreviewConfig({ providers: ['myspace'] })).toThrow(z.ZodError);
   });
+
+  describe('twitterApiBaseUrls', () => {
+    const enabled = (extra: Record<string, unknown>): unknown => ({
+      enabled: true,
+      ...proxyHosts(),
+      ...extra,
+    });
+
+    it('is optional, so X links stay on the proxies by default', () => {
+      expect(parseSocialLinkPreviewConfig(enabled({})).twitterApiBaseUrls).toBeUndefined();
+    });
+
+    it('accepts a list of https API bases', () => {
+      const config = parseSocialLinkPreviewConfig(
+        enabled({ twitterApiBaseUrls: ['https://api.fxtwitter.com'] }),
+      );
+      expect(config.twitterApiBaseUrls).toEqual(['https://api.fxtwitter.com']);
+    });
+
+    it('rejects an empty list, a non-https base and a non-URL', () => {
+      expect(issuePaths(parseFailure(enabled({ twitterApiBaseUrls: [] })))).toContain(
+        'twitterApiBaseUrls',
+      );
+      expect(
+        issuePaths(parseFailure(enabled({ twitterApiBaseUrls: ['http://api.fxtwitter.com'] }))),
+      ).toContain('twitterApiBaseUrls.0');
+      expect(issuePaths(parseFailure(enabled({ twitterApiBaseUrls: ['api'] })))).toContain(
+        'twitterApiBaseUrls.0',
+      );
+    });
+  });
 });

@@ -221,11 +221,17 @@ interface RewriteSpec {
   readonly toResult?: (url: URL, candidate: string, meta: OpenGraphMeta) => LinkPreviewResult;
 }
 
-const validate = async (
+/** The chosen candidate and the tier it scored. */
+export interface RewriteProbeResult {
+  readonly preview: LinkPreviewResult;
+  readonly quality: Exclude<CandidateQuality, 'none'>;
+}
+
+const probe = async (
   spec: RewriteSpec,
   url: URL,
   ctx: LinkPreviewBuildContext,
-): Promise<Result<LinkPreviewResult | null, LinkPreviewFailure>> => {
+): Promise<RewriteProbeResult | null> => {
   let bestImage: LinkPreviewResult | undefined;
   let bestWeakImage: LinkPreviewResult | undefined;
   let bestText: LinkPreviewResult | undefined;
@@ -259,7 +265,7 @@ const validate = async (
     };
     if (quality === 'video') {
       // Best possible — playable video. Short-circuit.
-      return ok(preview);
+      return { preview, quality };
     }
     // Neither image tier short-circuits: a later host may still hold the video.
     if (quality === 'image' && bestImage === undefined) {
@@ -271,12 +277,25 @@ const validate = async (
     }
   }
 
-  const chosen = bestImage ?? bestWeakImage ?? bestText;
-  return ok(chosen ?? null);
+  if (bestImage !== undefined) return { preview: bestImage, quality: 'image' };
+  if (bestWeakImage !== undefined) return { preview: bestWeakImage, quality: 'weak-image' };
+  if (bestText !== undefined) return { preview: bestText, quality: 'text' };
+  return null;
 };
+
+/**
+ * The probe loop alone, reporting the tier of the candidate it chose. For a
+ * source that decides between the proxy and its own rendering by what the
+ * proxy can offer (X: a playable video or nothing).
+ */
+export const createRewriteProbe =
+  (spec: RewriteSpec) =>
+  (url: URL, ctx: LinkPreviewBuildContext): Promise<RewriteProbeResult | null> =>
+    probe(spec, url, ctx);
 
 export const createRewriteProvider = (spec: RewriteSpec): LinkPreviewProvider => ({
   name: spec.name,
   canHandle: (url) => spec.matches(url),
-  build: (url, ctx) => validate(spec, url, ctx),
+  build: async (url, ctx): Promise<Result<LinkPreviewResult | null, LinkPreviewFailure>> =>
+    ok((await probe(spec, url, ctx))?.preview ?? null),
 });

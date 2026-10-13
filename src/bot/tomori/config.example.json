@@ -28,6 +28,7 @@
     "videoTimeoutMs": 15000,
     "maxUrlsPerMessage": 1,
     "twitterProxyHosts": ["vxtwitter.com", "fixvx.com", "fxtwitter.com", "fixupx.com"],
+    "twitterApiBaseUrls": ["https://api.fxtwitter.com"],
     "instagramProxyHosts": ["oginstagram.com", "zzinstagram.com", "fxig.seria.moe"],
     "threadsProxyHosts": ["fzthreads.com", "viewthreads.com"],
     "facebookProxyHosts": ["facebed.seria.moe", "facebed.com"],

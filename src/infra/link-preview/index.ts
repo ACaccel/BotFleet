@@ -16,6 +16,8 @@ export type {
   LinkPreviewBuildContext,
   LinkPreviewFailure,
   PreviewCard,
+  SocialPost,
+  PostVideoVariant,
 } from './types';
 export { LINK_PREVIEW_PROVIDER_NAMES } from './types';
 

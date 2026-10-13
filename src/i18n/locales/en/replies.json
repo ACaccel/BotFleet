@@ -460,7 +460,14 @@
     "engagement_likes": "👍 {{count}}",
     "engagement_comments": "💬 {{count}}",
     "engagement_shares": "🔄 {{count}}",
-    "embed_footer": "Preview via {{provider}}"
+    "embed_footer": "Preview via {{provider}}",
+    "post_replies": "💬 {{count}}",
+    "post_reposts": "🔁 {{count}}",
+    "post_likes": "❤️ {{count}}",
+    "post_views": "👁️ {{count}}",
+    "post_quote": "↪ Quoting [{{name}} (@{{handle}})]({{url}})",
+    "post_watch_video": "▶ [Watch the video on X]({{url}})",
+    "post_view_original": "[View on X]({{url}})"
   },
   "feed": {
     "post": "**@{{author}}** has a new post on {{platform}}\n{{url}}",
