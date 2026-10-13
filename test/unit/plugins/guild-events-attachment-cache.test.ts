@@ -188,6 +188,9 @@ describe('guild-events messageDelete archival source', () => {
     await fireDelete(message({ attachments: [attachment('a1')] }));
 
     expect(archiveDeletedAttachments).toHaveBeenCalledTimes(1);
+    // The message id is what names the archive directory, so the
+    // fallback must receive it.
+    expect(vi.mocked(archiveDeletedAttachments).mock.calls[0]?.slice(1, 3)).toEqual(['g1', 'm1']);
   });
 
   it('still downloads when the cache held only part of the message', async () => {

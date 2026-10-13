@@ -152,8 +152,12 @@ describe('guild-events attachment cache round trip', () => {
     return { plugin, ctx };
   };
 
-  const archived = (): string[] =>
-    fs.existsSync(path.join(archiveRoot, 'g1')) ? fs.readdirSync(path.join(archiveRoot, 'g1')) : [];
+  // Files land under <guild>/<messageId>/; the message directory is the
+  // id the audit line carries.
+  const archived = (): string[] => {
+    const dir = path.join(archiveRoot, 'g1', 'm-1');
+    return fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+  };
 
   it('archives from disk on delete, with no download and no cache left behind', async () => {
     const { plugin, ctx } = await initedPlugin();

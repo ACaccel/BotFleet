@@ -26,6 +26,8 @@ import path from 'path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
+import { formatFileStamp } from '../../core/time';
+
 /** Root of the forensic archive tree. `data/` is gitignored. */
 const ARCHIVE_ROOT = './data/deleted_attachments';
 
@@ -93,11 +95,13 @@ const httpStatusOf = (value: unknown): number | undefined => {
 };
 
 /**
- * Bytes left for the upload name after the cache's `<snowflake>-`
- * prefix, the archive's timestamp prefix, and a `.part` suffix, under
- * the 255-byte ceiling every mainstream filesystem imposes on one path
- * segment. Over it the write fails with `ENAMETOOLONG` and the
- * attachment is simply never archived.
+ * Bytes left for the upload name after the longer of the two prefixes
+ * that sit in front of it (the cache's 20-byte `<snowflake>-`, the
+ * archive's 20-byte `YYYY-MM-DD_HH-MM-SS_`), a collision ordinal of up
+ * to `-50`, and a `.part` suffix, under the 255-byte ceiling every
+ * mainstream filesystem imposes on one path segment. The worst case is
+ * 20 + 160 + 3 + 5 = 188. Over the ceiling the write fails with
+ * `ENAMETOOLONG` and the attachment is simply never archived.
  */
 const MAX_NAME_BYTES = 160;
 
@@ -123,25 +127,33 @@ export const sanitizeFileName = (name: string): string => {
   return base.length === 0 || base === '.' || base === '..' ? 'attachment' : capLength(base);
 };
 
-const tzDate = (): string => `${new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })} `;
-
 /**
  * Timestamp-prefixed archive file name. The prefix is what keeps two
- * deletions of the same file name from overwriting each other.
+ * deletions of the same file name from overwriting each other, and,
+ * being zero-padded and big-endian, makes a directory listing sort in
+ * time order.
  */
 const archiveFileName = (name: string): string =>
-  `${tzDate().replaceAll('/', '_').replaceAll(':', '_')}${sanitizeFileName(name)}`;
+  `${formatFileStamp(new Date())}_${sanitizeFileName(name)}`;
 
 /**
- * Destination an archived attachment lands at. Both the download path
- * and the cache path resolve it here, so there is one archive layout
- * rather than two that can drift.
+ * Destination an archived attachment lands at:
+ * `<root>/<guildId>/<messageId>/<YYYY-MM-DD_HH-MM-SS>_<name>`. Both the
+ * download path and the cache path resolve it here, so there is one
+ * archive layout rather than two that can drift.
+ *
+ * The message directory is what lets a file be reconciled with its
+ * `message_delete` audit line by id instead of by guessing from the
+ * time. The id crosses the same trust boundary as the name (it reaches
+ * the path from a gateway payload), so it goes through the same
+ * single-segment reduction rather than being joined raw.
  */
 export const archiveFilePath = (
   guildId: string,
+  messageId: string,
   name: string,
   archiveRoot: string = ARCHIVE_ROOT,
-): string => path.join(archiveRoot, guildId, archiveFileName(name));
+): string => path.join(archiveRoot, guildId, sanitizeFileName(messageId), archiveFileName(name));
 
 /**
  * Suffix of a file still being written. A reader that walks the tree

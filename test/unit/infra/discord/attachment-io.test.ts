@@ -64,15 +64,51 @@ describe('sanitizeFileName', () => {
 });
 
 describe('archiveFilePath', () => {
-  it('lands under <root>/<guildId>/ with a timestamped name', () => {
-    const result = archiveFilePath('g-1', 'pic.png', '/tmp/archive-root');
-    expect(path.dirname(result)).toBe(path.join('/tmp/archive-root', 'g-1'));
-    expect(path.basename(result).endsWith('pic.png')).toBe(true);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('lands at <root>/<guildId>/<messageId>/<stamp>_<name> in zero-padded local time', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // Local-time constructor, so the expectation holds in any host timezone.
+    vi.setSystemTime(new Date(2026, 0, 2, 3, 4, 5));
+
+    const result = archiveFilePath('g-1', 'm-1', 'pic.png', '/tmp/archive-root');
+
+    expect(result).toBe(
+      path.join('/tmp/archive-root', 'g-1', 'm-1', '2026-01-02_03-04-05_pic.png'),
+    );
+  });
+
+  it('sorts lexicographically in time order', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 9, 23, 59, 59));
+    const earlier = path.basename(archiveFilePath('g-1', 'm-1', 'a.png', '/r'));
+    vi.setSystemTime(new Date(2026, 9, 10, 0, 0, 0));
+    const later = path.basename(archiveFilePath('g-1', 'm-1', 'a.png', '/r'));
+
+    expect(earlier < later).toBe(true);
   });
 
   it('sanitises the name on the way out, not only on the way in', () => {
-    const result = archiveFilePath('g-1', '../../escape.png', '/tmp/archive-root');
-    expect(path.dirname(result)).toBe(path.join('/tmp/archive-root', 'g-1'));
+    const result = archiveFilePath('g-1', 'm-1', '../../escape.png', '/tmp/archive-root');
+    expect(path.dirname(result)).toBe(path.join('/tmp/archive-root', 'g-1', 'm-1'));
+    expect(path.basename(result).endsWith('_escape.png')).toBe(true);
+  });
+
+  it('reduces a hostile message id to a single path segment', () => {
+    for (const hostile of ['../../escape', '..', '', 'a/b']) {
+      const result = archiveFilePath('g-1', hostile, 'pic.png', '/tmp/archive-root');
+      expect(
+        path.relative(path.join('/tmp/archive-root', 'g-1'), result).split(path.sep),
+      ).toHaveLength(2);
+    }
+  });
+
+  it('keeps the longest allowed name, ordinal and .part suffix under 255 bytes', () => {
+    const name = `${'é'.repeat(300)}.png`;
+    const base = path.basename(archiveFilePath('g-1', 'm-1', name, '/r'));
+    expect(Buffer.byteLength(`${base}-50${PARTIAL_SUFFIX}`)).toBeLessThanOrEqual(255);
   });
 });
 

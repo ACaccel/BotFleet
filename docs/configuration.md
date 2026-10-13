@@ -193,7 +193,12 @@ See [data-command privacy](architecture.md#privacy-aware-data-commands).
 ## Attachment storage
 
 Guild-events caches non-bot attachments in `data/attachment_cache/` for 24 hours
-and moves deleted files to `data/deleted_attachments/<guildId>/`. Cache retention
+and moves deleted files to
+`data/deleted_attachments/<guildId>/<messageId>/<YYYY-MM-DD_HH-MM-SS>_<name>`,
+for example `data/deleted_attachments/123/456/2026-10-13_09-05-30_image.png`.
+The directory name is the `messageId` in the matching `message_delete` audit line;
+the stamp is the deletion time in the host's local timezone. Same-second duplicates
+get an ordinal (`..._image-2.png`); files are never overwritten. Cache retention
 does not expire the deleted-file archive. Disabling
 `guild_events.attachment_cache.enabled` attempts downloads only on deletion,
 when the source may already be unavailable.

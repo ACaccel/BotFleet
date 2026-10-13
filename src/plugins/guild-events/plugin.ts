@@ -604,7 +604,7 @@ const archiveDeletedMessageAttachments = async (
   if (archivedFromCache < message.attachments.size) {
     // Fire-and-forget: the helper bounds its own concurrency and has its own
     // try/catch per file.
-    void archiveDeletedAttachments(logger, guildId, message.attachments.values());
+    void archiveDeletedAttachments(logger, guildId, message.id, message.attachments.values());
   }
 };
 

@@ -358,6 +358,7 @@ describe('guild-events disclosure gating by permission_rank', () => {
     );
     expect(channel.send).not.toHaveBeenCalled(); // not disclosed to Discord
     expect(archiveDeletedAttachments).toHaveBeenCalledTimes(1); // binary archived
+    expect(vi.mocked(archiveDeletedAttachments).mock.calls[0]?.slice(1, 3)).toEqual(['g1', 'm1']);
     expect(logGuildEvent).toHaveBeenCalledTimes(1); // audit recorded
   });
 

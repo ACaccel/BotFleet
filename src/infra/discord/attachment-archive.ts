@@ -25,7 +25,7 @@ const HTTP_NOT_FOUND = 404;
 
 /**
  * Download `attachment` and save it under
- * `./data/deleted_attachments/<guildId>/`. Used by the guild-events
+ * `./data/deleted_attachments/<guildId>/<messageId>/`. Used by the guild-events
  * plugin's `messageDelete` audit path when the pre-delete cache missed.
  *
  * Attachments are binary, not text, so this is genuine file I/O —
@@ -37,16 +37,17 @@ const HTTP_NOT_FOUND = 404;
 export const archiveDeletedAttachment = async (
   logger: Logger | undefined,
   guildId: string,
+  messageId: string,
   attachment: Attachment,
 ): Promise<void> => {
-  const filePath = archiveFilePath(guildId, attachment.name);
+  const filePath = archiveFilePath(guildId, messageId, attachment.name);
 
   const primary = await downloadToFile(attachment.url, filePath);
   if (primary === undefined) return;
 
   if (primary.stage === 'mkdir') {
     logger?.error(
-      { err: primary.error, guildId },
+      { err: primary.error, guildId, messageId },
       'archiveDeletedAttachment: could not create the archive directory',
     );
     return;
@@ -56,7 +57,7 @@ export const archiveDeletedAttachment = async (
     // The body was already in hand, so the fault is local; a second
     // fetch would fail the same way and only waste the CDN round trip.
     logger?.error(
-      { err: primary.error, guildId, name: attachment.name },
+      { err: primary.error, guildId, messageId, name: attachment.name },
       'archiveDeletedAttachment: write failed',
     );
     return;
@@ -65,6 +66,7 @@ export const archiveDeletedAttachment = async (
   const context = {
     err: primary.error,
     guildId,
+    messageId,
     name: attachment.name,
     status: primary.status,
   };
@@ -115,6 +117,9 @@ export const archiveDeletedAttachment = async (
 export const archiveDeletedAttachments = async (
   logger: Logger | undefined,
   guildId: string,
+  messageId: string,
   attachments: Iterable<Attachment>,
 ): Promise<void> =>
-  runBounded(attachments, (attachment) => archiveDeletedAttachment(logger, guildId, attachment));
+  runBounded(attachments, (attachment) =>
+    archiveDeletedAttachment(logger, guildId, messageId, attachment),
+  );

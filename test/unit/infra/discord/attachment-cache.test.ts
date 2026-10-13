@@ -108,6 +108,9 @@ describe('createAttachmentCache', () => {
 
   const listOrEmpty = (dir: string): string[] => (fs.existsSync(dir) ? fs.readdirSync(dir) : []);
 
+  const archivedFiles = (guildId: string, messageId: string): string[] =>
+    listOrEmpty(path.join(archiveRoot, guildId, messageId));
+
   describe('store', () => {
     it('writes each attachment under <guild>/<message>/<attachmentId>-<name>', async () => {
       await cacheWith().store('g-1', 'm-1', [attachment(A1, 'pic.png'), attachment(A2, 'n.txt')]);
@@ -155,11 +158,14 @@ describe('createAttachmentCache', () => {
       expect((axios.get as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
         callsAfterStore,
       );
-      const archived = listOrEmpty(path.join(archiveRoot, 'g-1'));
+      // One directory per message, so a file reconciles with its audit
+      // line by id rather than by time.
+      expect(listOrEmpty(path.join(archiveRoot, 'g-1'))).toEqual(['m-1']);
+      const archived = archivedFiles('g-1', 'm-1');
       expect(archived).toHaveLength(1);
       // The `<attachmentId>-` prefix is a cache-layout detail; the
       // archive keeps the timestamped upload name.
-      expect(archived[0]).toMatch(/pic\.png$/);
+      expect(archived[0]).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_pic\.png$/);
       expect(archived[0]).not.toContain(A1);
     });
 
@@ -212,7 +218,7 @@ describe('createAttachmentCache', () => {
       await storing;
 
       expect(await archiving).toBe(2);
-      expect(listOrEmpty(path.join(archiveRoot, 'g-1'))).toHaveLength(2);
+      expect(archivedFiles('g-1', 'm-1')).toHaveLength(2);
     });
 
     it('never archives a file that is still being written', async () => {
@@ -227,11 +233,7 @@ describe('createAttachmentCache', () => {
       expect(listOrEmpty(path.join(archiveRoot, 'g-1'))).toEqual([]);
     });
 
-    it('archives two messages sharing an upload name without losing either', async () => {
-      // The archive name is timestamped only to the second, so two
-      // messages carrying `same.png` frequently resolve to one name.
-      // `publishFile`'s ordinal fallback is pinned directly in
-      // attachment-io.test.ts; this case guards the cache's use of it.
+    it('keeps two messages sharing an upload name in separate message directories', async () => {
       const cache = cacheWith();
       await cache.store('g-1', 'm-1', [attachment(A1, 'same.png')]);
       await cache.store('g-1', 'm-2', [attachment(A2, 'same.png')]);
@@ -239,7 +241,28 @@ describe('createAttachmentCache', () => {
       expect(await cache.archiveCached('g-1', 'm-1')).toBe(1);
       expect(await cache.archiveCached('g-1', 'm-2')).toBe(1);
 
-      expect(listOrEmpty(path.join(archiveRoot, 'g-1'))).toHaveLength(2);
+      expect(archivedFiles('g-1', 'm-1')).toHaveLength(1);
+      expect(archivedFiles('g-1', 'm-2')).toHaveLength(1);
+    });
+
+    it('archives two same-named files of one message without losing either', async () => {
+      // Within one message the name and (to the second) the timestamp
+      // collide by construction. `publishFile`'s ordinal fallback is
+      // pinned directly in attachment-io.test.ts; this guards the
+      // cache's use of it.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const cache = cacheWith();
+        await cache.store('g-1', 'm-1', [attachment(A1, 'same.png'), attachment(A2, 'same.png')]);
+
+        expect(await cache.archiveCached('g-1', 'm-1')).toBe(2);
+
+        const archived = archivedFiles('g-1', 'm-1').sort();
+        expect(archived).toHaveLength(2);
+        expect(archived.filter((n) => n.endsWith('_same-2.png'))).toHaveLength(1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('preserves an upload name that itself contains a hyphen', async () => {
@@ -248,7 +271,7 @@ describe('createAttachmentCache', () => {
 
       await cache.archiveCached('g-1', 'm-1');
 
-      expect(listOrEmpty(path.join(archiveRoot, 'g-1'))[0]).toMatch(/my-holiday-photo\.png$/);
+      expect(archivedFiles('g-1', 'm-1')[0]).toMatch(/my-holiday-photo\.png$/);
     });
 
     it('keeps the cache entry when one file could not be moved out', async () => {
@@ -481,7 +504,7 @@ describe('createAttachmentCache', () => {
       free = 0;
 
       expect(await cache.archiveCached('g-1', 'm-1')).toBe(1);
-      expect(listOrEmpty(path.join(archiveRoot, 'g-1'))).toHaveLength(1);
+      expect(archivedFiles('g-1', 'm-1')).toHaveLength(1);
     });
   });
 

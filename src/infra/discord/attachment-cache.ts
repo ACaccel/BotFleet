@@ -233,8 +233,13 @@ export const createAttachmentCache = (options: AttachmentCacheOptions): Attachme
     return true;
   };
 
-  const moveIntoArchive = async (guildId: string, source: string, name: string): Promise<void> => {
-    const destination = archiveFilePath(guildId, name, archiveRoot);
+  const moveIntoArchive = async (
+    guildId: string,
+    messageId: string,
+    source: string,
+    name: string,
+  ): Promise<void> => {
+    const destination = archiveFilePath(guildId, messageId, name, archiveRoot);
     await fs.promises.mkdir(path.dirname(destination), { recursive: true });
     await publishFile(source, destination);
   };
@@ -317,7 +322,7 @@ export const createAttachmentCache = (options: AttachmentCacheOptions): Attachme
     let moved = 0;
     for (const entry of entries) {
       try {
-        await moveIntoArchive(guildId, path.join(dir, entry), originalNameOf(entry));
+        await moveIntoArchive(guildId, messageId, path.join(dir, entry), originalNameOf(entry));
         moved += 1;
       } catch (e) {
         logger?.warn(

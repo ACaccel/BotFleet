@@ -350,3 +350,12 @@ in `archive_inbox`.
 
 `/traffic` reads schema 3; its statistics stay incomplete until the first full backup
 after the rebuild completes.
+
+## Deleted-attachment archive layout
+
+Newly archived files are stored at
+`data/deleted_attachments/<guildId>/<messageId>/<YYYY-MM-DD_HH-MM-SS>_<name>`
+(see [attachment storage](configuration.md#attachment-storage)). Files archived
+earlier keep the previous flat `data/deleted_attachments/<guildId>/<localized
+timestamp> <name>` naming; they are not moved or renamed, and retention is still
+unlimited. No configuration change is required.

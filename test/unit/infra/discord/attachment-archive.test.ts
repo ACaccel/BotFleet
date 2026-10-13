@@ -42,8 +42,11 @@ const requestedUrls = (): string[] =>
 
 const callCount = (fn: unknown): number => (fn as ReturnType<typeof vi.fn>).mock.calls.length;
 
-/** Archive directory the helper writes into for guild `g-1`. */
-const ARCHIVE_DIR = resolve('data/deleted_attachments/g-1');
+/** Guild directory the helper writes under; removed wholesale after each case. */
+const GUILD_DIR = resolve('data/deleted_attachments/g-1');
+
+/** Message directory the helper writes into for guild `g-1`, message `m-1`. */
+const ARCHIVE_DIR = resolve(GUILD_DIR, 'm-1');
 
 const setAxiosGet = (impl: (...args: unknown[]) => unknown): void => {
   (axios.get as unknown as ReturnType<typeof vi.fn>) = vi.fn(impl);
@@ -67,7 +70,7 @@ describe('archiveDeletedAttachment', () => {
   // in the working tree (`data/` is gitignored but should not be polluted).
   // `force` tolerates an already-absent directory.
   afterEach(() => {
-    rmSync(ARCHIVE_DIR, { recursive: true, force: true });
+    rmSync(GUILD_DIR, { recursive: true, force: true });
   });
 
   it('logs warn and does not retry when the fetch fails with no proxy URL to fall back to', async () => {
@@ -75,7 +78,7 @@ describe('archiveDeletedAttachment', () => {
     setAxiosGet(async () => {
       throw new Error('upstream 404');
     });
-    await archiveDeletedAttachment(logger, 'g-1', attachmentNamed('pic.png'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentNamed('pic.png'));
     expect((logger.warn as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
     expect(requestedUrls()).toHaveLength(1);
   });
@@ -87,7 +90,7 @@ describe('archiveDeletedAttachment', () => {
     });
     const same = 'https://cdn.invalid/same.png';
 
-    await archiveDeletedAttachment(logger, 'g-1', {
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', {
       name: 'same.png',
       url: same,
       proxyURL: same,
@@ -103,7 +106,7 @@ describe('archiveDeletedAttachment', () => {
       throw httpError(404);
     });
 
-    await archiveDeletedAttachment(logger, 'g-1', {
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', {
       name: 'blank.png',
       url: 'https://cdn.invalid/blank.png',
       proxyURL: '',
@@ -119,7 +122,7 @@ describe('archiveDeletedAttachment', () => {
       Object.assign(new Error('permission denied'), { code: 'EACCES' }),
     );
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentNamed('pic.png'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentNamed('pic.png'));
 
     expect(callCount(logger.error)).toBe(1);
     expect(requestedUrls()).toEqual([]);
@@ -130,7 +133,7 @@ describe('archiveDeletedAttachment', () => {
     const logger = fakeLogger();
     setAxiosGet(async () => ({ data: Readable.from(['payload']) }));
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentNamed('bounded.bin'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentNamed('bounded.bin'));
 
     const [, options] = (axios.get as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [
       string,
@@ -147,10 +150,29 @@ describe('archiveDeletedAttachment', () => {
     const logger = fakeLogger();
     setAxiosGet(async () => ({ data: Readable.from(['hello ', 'world']) }));
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentNamed('note.txt'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentNamed('note.txt'));
 
     const written = readFileSync(resolve(ARCHIVE_DIR, findOnlyFileName()), 'utf8');
     expect(written).toBe('hello world');
+  });
+
+  it('names the file <timestamp>_<name> inside a directory named for the message id', async () => {
+    const logger = fakeLogger();
+    setAxiosGet(async () => ({ data: Readable.from(['payload']) }));
+
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentNamed('layout.png'));
+
+    expect(readdirSync(GUILD_DIR)).toEqual(['m-1']);
+    expect(findOnlyFileName()).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_layout\.png$/);
+  });
+
+  it('keeps a hostile message id inside the guild directory', async () => {
+    const logger = fakeLogger();
+    setAxiosGet(async () => ({ data: Readable.from(['payload']) }));
+
+    await archiveDeletedAttachment(logger, 'g-1', '../../escape', attachmentNamed('x.png'));
+
+    expect(readdirSync(GUILD_DIR)).toEqual(['escape']);
   });
 
   it('resolves (and removes the partial file) when the source stream errors mid-transfer', async () => {
@@ -166,7 +188,7 @@ describe('archiveDeletedAttachment', () => {
 
     // The old `pipe` + `finish` listener never observed a source error, so
     // this promise stayed pending forever. It must settle.
-    await archiveDeletedAttachment(logger, 'g-1', attachmentNamed('truncated.bin'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentNamed('truncated.bin'));
 
     expect((logger.error as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
     expect(listArchiveFiles()).toEqual([]);
@@ -183,7 +205,7 @@ describe('archiveDeletedAttachment', () => {
  */
 describe('archiveDeletedAttachment proxyURL fallback', () => {
   afterEach(() => {
-    rmSync(ARCHIVE_DIR, { recursive: true, force: true });
+    rmSync(GUILD_DIR, { recursive: true, force: true });
   });
 
   it('retries the proxy URL and archives the body when the primary URL is purged', async () => {
@@ -193,7 +215,7 @@ describe('archiveDeletedAttachment proxyURL fallback', () => {
       return { data: Readable.from(['recovered']) };
     });
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentWithProxy('pic.png'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentWithProxy('pic.png'));
 
     expect(requestedUrls()).toEqual([
       'https://cdn.invalid/pic.png',
@@ -209,7 +231,7 @@ describe('archiveDeletedAttachment proxyURL fallback', () => {
       return { data: Readable.from(['recovered']) };
     });
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentWithProxy('pic.png'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentWithProxy('pic.png'));
 
     // A 404 at delete time is the documented race, not an incident;
     // warning on it trains operators to ignore the channel.
@@ -223,7 +245,7 @@ describe('archiveDeletedAttachment proxyURL fallback', () => {
       throw httpError(404);
     });
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentWithProxy('pic.png'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentWithProxy('pic.png'));
 
     expect(requestedUrls()).toHaveLength(2);
     expect(callCount(logger.info)).toBe(1);
@@ -237,7 +259,7 @@ describe('archiveDeletedAttachment proxyURL fallback', () => {
       throw String(url).startsWith('https://cdn.invalid/') ? httpError(404) : httpError(503);
     });
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentWithProxy('pic.png'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentWithProxy('pic.png'));
 
     // A proxy that is failing rather than empty is a real transport
     // problem and must stay visible.
@@ -252,7 +274,7 @@ describe('archiveDeletedAttachment proxyURL fallback', () => {
       return { data: Readable.from(['recovered']) };
     });
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentWithProxy('pic.png'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentWithProxy('pic.png'));
 
     // The file was saved, but a reset connection to the primary CDN is a
     // real transport fault — downgrading it to info would hide it.
@@ -267,7 +289,7 @@ describe('archiveDeletedAttachment proxyURL fallback', () => {
       throw new Error('ECONNRESET');
     });
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentWithProxy('pic.png'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentWithProxy('pic.png'));
 
     expect(requestedUrls()).toHaveLength(2);
     expect(callCount(logger.warn)).toBe(1);
@@ -285,7 +307,7 @@ describe('archiveDeletedAttachment proxyURL fallback', () => {
       }),
     }));
 
-    await archiveDeletedAttachment(logger, 'g-1', attachmentWithProxy('truncated.bin'));
+    await archiveDeletedAttachment(logger, 'g-1', 'm-1', attachmentWithProxy('truncated.bin'));
 
     expect(requestedUrls()).toHaveLength(1);
     expect(callCount(logger.error)).toBe(1);
@@ -295,7 +317,7 @@ describe('archiveDeletedAttachment proxyURL fallback', () => {
 
 describe('archiveDeletedAttachments', () => {
   afterEach(() => {
-    rmSync(ARCHIVE_DIR, { recursive: true, force: true });
+    rmSync(GUILD_DIR, { recursive: true, force: true });
   });
 
   it('bounds how many downloads run at once across a bulk delete', async () => {
@@ -311,7 +333,7 @@ describe('archiveDeletedAttachments', () => {
     });
 
     const attachments = Array.from({ length: 20 }, (_, i) => attachmentNamed(`bulk-${i}.bin`));
-    await archiveDeletedAttachments(logger, 'g-1', attachments);
+    await archiveDeletedAttachments(logger, 'g-1', 'm-1', attachments);
 
     expect((axios.get as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(20);
     // A bulk delete of 100 messages used to open every download at once.
