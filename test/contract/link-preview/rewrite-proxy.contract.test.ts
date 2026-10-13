@@ -241,7 +241,7 @@ describe('facebook share-link resolution contract', () => {
           [
             '<meta property="og:title" content="Lil mouse">',
             '<meta property="og:image" content="https://scontent.example/thumb.jpg">',
-            '<meta property="og:url" content="https://www.facebook.com/p/1/">',
+            '<meta property="og:url" content="https://www.facebook.com/page/posts/1/">',
           ].join(''),
         ),
       );
@@ -249,7 +249,7 @@ describe('facebook share-link resolution contract', () => {
     expect(await buildFb(SHARE)).toEqual({
       kind: 'card',
       card: {
-        url: 'https://www.facebook.com/p/1/',
+        url: 'https://www.facebook.com/page/posts/1/',
         title: 'Lil mouse',
         description: undefined,
         imageUrl: 'https://scontent.example/thumb.jpg',

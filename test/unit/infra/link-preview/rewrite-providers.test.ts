@@ -143,6 +143,18 @@ describe('instagram provider canHandle', () => {
   it('rejects profile URLs', () => {
     expect(provider.canHandle(u('https://www.instagram.com/someuser/'))).toBe(false);
   });
+
+  it('matches app share links, typed or not', () => {
+    expect(provider.canHandle(u('https://www.instagram.com/share/BAabcdEF1/'))).toBe(true);
+    expect(provider.canHandle(u('https://www.instagram.com/share/reel/BAabcdEF1/'))).toBe(true);
+    expect(provider.canHandle(u('https://instagram.com/share/p/BAabcdEF1'))).toBe(true);
+  });
+
+  it('rejects a token-less share path and nested share paths', () => {
+    expect(provider.canHandle(u('https://www.instagram.com/share/'))).toBe(false);
+    expect(provider.canHandle(u('https://www.instagram.com/share/reel/'))).toBe(false);
+    expect(provider.canHandle(u('https://www.instagram.com/share/stories/x/y/'))).toBe(false);
+  });
 });
 
 describe('threads provider canHandle', () => {
@@ -193,6 +205,19 @@ describe('facebook provider canHandle', () => {
   it('rejects bare profile URLs', () => {
     expect(provider.canHandle(u('https://www.facebook.com/someuser'))).toBe(false);
   });
+
+  it('matches single-photo viewers addressed by a numeric fbid, and group permalinks', () => {
+    expect(provider.canHandle(u('https://www.facebook.com/photo/?fbid=123&set=a.456'))).toBe(true);
+    expect(provider.canHandle(u('https://www.facebook.com/photo.php?fbid=123'))).toBe(true);
+    expect(provider.canHandle(u('https://www.facebook.com/groups/123/permalink/456/'))).toBe(true);
+  });
+
+  it('rejects a photo viewer without a numeric fbid, and other group pages', () => {
+    expect(provider.canHandle(u('https://www.facebook.com/photo/'))).toBe(false);
+    expect(provider.canHandle(u('https://www.facebook.com/photo/?fbid=abc'))).toBe(false);
+    expect(provider.canHandle(u('https://www.facebook.com/groups/123/'))).toBe(false);
+    expect(provider.canHandle(u('https://www.facebook.com/someone/photos/'))).toBe(false);
+  });
 });
 
 describe('reddit provider canHandle', () => {
@@ -206,6 +231,18 @@ describe('reddit provider canHandle', () => {
     expect(provider.canHandle(u('https://old.reddit.com/r/pics/comments/haucpf/slug/'))).toBe(true);
     expect(provider.canHandle(u('https://np.reddit.com/comments/abc123'))).toBe(true); // bare /comments/
     expect(provider.canHandle(u('https://www.reddit.com/r/videos/s/aB9xYz0Q'))).toBe(true); // share link
+    expect(provider.canHandle(u('https://sh.reddit.com/r/aww/comments/abc123/'))).toBe(true);
+  });
+
+  it('matches redd.it short links and gallery posts', () => {
+    expect(provider.canHandle(u('https://redd.it/g0xb6c'))).toBe(true);
+    expect(provider.canHandle(u('https://www.reddit.com/gallery/g0xb6c'))).toBe(true);
+  });
+
+  it('rejects v.redd.it assets and a bare redd.it host', () => {
+    expect(provider.canHandle(u('https://v.redd.it/9ukt2b9v4o1d1'))).toBe(false);
+    expect(provider.canHandle(u('https://redd.it/'))).toBe(false);
+    expect(provider.canHandle(u('https://redd.it/a/b'))).toBe(false);
   });
 
   it('rejects bare subreddit, user, and home URLs', () => {
@@ -351,6 +388,35 @@ describe('scoreMeta login-wall / junk rejection', () => {
     expect(scoreMeta(meta({ title: 'fix instagram embeds', description: 'Post not found' }))).toBe(
       'none',
     );
+  });
+
+  it('rejects a Bilibili proxy error page served under an error title', () => {
+    expect(scoreMeta(meta({ title: 'Error - Video Not Found', description: 'nothing here' }))).toBe(
+      'none',
+    );
+    // bembedfix reports the upstream failure after an HTTP status prefix.
+    expect(isJunkPreviewTitle('404: upstream request failed')).toBe(true);
+    expect(isJunkPreviewTitle('500 - Internal Server Error')).toBe(true);
+    expect(isJunkPreviewTitle('404 Days of Summer')).toBe(false);
+  });
+
+  it('rejects an EmbedEZ fallback whose description is the service blurb', () => {
+    expect(
+      scoreMeta(
+        meta({
+          title: 'someone (@r/pics)',
+          description: 'Learn about the purpose of EmbedEZ and how we strive to provide',
+        }),
+      ),
+    ).toBe('none');
+  });
+
+  it('rejects an InstaFix share link it could not resolve', () => {
+    expect(
+      scoreMeta(
+        meta({ title: 'InstaFix', description: 'Failed to get new postID from share URL' }),
+      ),
+    ).toBe('none');
   });
 
   it('rejects a vxReddit proxy-error page (title is the proxy name / description says failed)', () => {
@@ -681,6 +747,49 @@ describe('rewrite URL construction', () => {
       ogClient: client,
     });
     expect(await buildUrl(provider, 'https://www.instagram.com/reel/Cabc/?igsh=xyz')).toBe(url);
+  });
+
+  it('instagram passes a share link through unchanged for the proxy to resolve', async () => {
+    const url = 'https://oginstagram.com/share/reel/BAabcdEF1/';
+    const { client } = makeOgClient({ [url]: ok(meta({ video: 'v.mp4' })) });
+    const provider = createInstagramProvider({ proxyHosts: ['oginstagram.com'], ogClient: client });
+    expect(await buildUrl(provider, 'https://www.instagram.com/share/reel/BAabcdEF1/')).toBe(url);
+  });
+
+  it('reddit rewrites short links and gallery posts onto the permalink form', async () => {
+    const url = 'https://vxreddit.com/comments/g0xb6c';
+    const { client } = makeOgClient({ [url]: ok(meta({ video: 'v.mp4' })) });
+    const provider = createRedditProvider({ proxyHosts: ['vxreddit.com'], ogClient: client });
+    expect(await buildUrl(provider, 'https://redd.it/g0xb6c')).toBe(url);
+    expect(await buildUrl(provider, 'https://www.reddit.com/gallery/g0xb6c/')).toBe(url);
+  });
+
+  it('reddit keeps a permalink path as-is', async () => {
+    const url = 'https://vxreddit.com/r/aww/comments/abc123/';
+    const { client } = makeOgClient({ [url]: ok(meta({ video: 'v.mp4' })) });
+    const provider = createRedditProvider({ proxyHosts: ['vxreddit.com'], ogClient: client });
+    expect(await buildUrl(provider, 'https://www.reddit.com/r/aww/comments/abc123/?utm=x')).toBe(
+      url,
+    );
+  });
+
+  it('facebook links the card to the post, not to a hashtag page the proxy reports', async () => {
+    const url = 'https://facebed.com/page/posts/123';
+    const { client } = makeOgClient({
+      [url]: ok(
+        meta({
+          title: 'post',
+          images: ['https://cdn.example/a.jpg'],
+          url: 'https://www.facebook.com/hashtag/tag?__eep__=6',
+        }),
+      ),
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    const result = await provider.build(u('https://www.facebook.com/page/posts/123'), {
+      timeoutMs: 1000,
+    });
+    if (!isOk(result) || result.value?.kind !== 'card') throw new Error('expected a card');
+    expect(result.value.card.url).toBe('https://www.facebook.com/page/posts/123');
   });
 
   it('facebook PRESERVES the query string (watch ids live there)', async () => {
@@ -1063,7 +1172,7 @@ describe('facebook share-link resolution + card fallback', () => {
             title: 'Lil mouse',
             description: 'a clip',
             images: [fbImage],
-            url: 'https://www.facebook.com/p/1/',
+            url: 'https://www.facebook.com/page/posts/1/',
           }),
         ),
       },
@@ -1072,7 +1181,7 @@ describe('facebook share-link resolution + card fallback', () => {
     expect(await build(provider, share)).toEqual({
       kind: 'card',
       card: {
-        url: 'https://www.facebook.com/p/1/',
+        url: 'https://www.facebook.com/page/posts/1/',
         title: 'Lil mouse',
         description: 'a clip',
         imageUrl: fbImage,

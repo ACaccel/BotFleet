@@ -39,17 +39,11 @@
     "maxVideoBytes": 8388608,
     "videoTimeoutMs": 15000,
     "maxUrlsPerMessage": 1,
-    "twitterProxyHosts": ["vxtwitter.com", "fxtwitter.com", "fixupx.com"],
-    "instagramProxyHosts": [
-      "fxig.seria.moe",
-      "zzinstagram.com",
-      "mbdinstagram.com",
-      "toinstagram.com",
-      "uuinstagram.com"
-    ],
-    "threadsProxyHosts": ["viewthreads.com", "fzthreads.com", "fixthreads.seria.moe"],
-    "facebookProxyHosts": ["facebed.com"],
-    "redditProxyHosts": ["vxreddit.com", "redditez.com"],
+    "twitterProxyHosts": ["vxtwitter.com", "fixvx.com", "fxtwitter.com", "fixupx.com"],
+    "instagramProxyHosts": ["oginstagram.com", "zzinstagram.com", "fxig.seria.moe"],
+    "threadsProxyHosts": ["fzthreads.com", "viewthreads.com"],
+    "facebookProxyHosts": ["facebed.seria.moe", "facebed.com"],
+    "redditProxyHosts": ["vxreddit.com", "fxreddit.seria.moe", "redditez.com"],
     "bilibiliProxyHosts": [
       "vxbilibili.com",
       "fxbilibili.seria.moe",

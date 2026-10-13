@@ -30,7 +30,14 @@ const FACEBOOK_HOSTS: ReadonlySet<string> = new Set([
 ]);
 
 /** Path shapes that carry a previewable post/video/reel. */
-const POST_PATH = /\/(?:posts|videos|reel|reels|share|watch|permalink\.php|story\.php)\b/i;
+const POST_PATH =
+  /\/(?:posts|videos|reel|reels|share|watch|permalink\.php|story\.php)\b|^\/groups\/[^/]+\/permalink\/\d+/i;
+
+/**
+ * Single-photo viewer (`/photo/?fbid=<id>` or `/photo.php?fbid=<id>`). The
+ * photo id lives in the query, so the path alone does not identify content.
+ */
+const PHOTO_PATH = /^\/photo(?:\.php)?\/?$/i;
 
 /**
  * Legacy album-photo permalink: `/<owner>/photos/<album>/<photoId>/`, where the
@@ -41,9 +48,11 @@ const POST_PATH = /\/(?:posts|videos|reel|reels|share|watch|permalink\.php|story
  */
 const LEGACY_ALBUM_PHOTO_PATH = /^\/[^/]+\/photos\/(a\.\d+(?:\.\d+)*)\/(\d+)\/?$/i;
 
-/** A path that points at one previewable piece of content, not a listing or profile. */
-const isContentPath = (pathname: string): boolean =>
-  POST_PATH.test(pathname) || LEGACY_ALBUM_PHOTO_PATH.test(pathname);
+/** A URL that points at one previewable piece of content, not a listing or profile. */
+const isContentUrl = (url: URL): boolean =>
+  POST_PATH.test(url.pathname) ||
+  LEGACY_ALBUM_PHOTO_PATH.test(url.pathname) ||
+  (PHOTO_PATH.test(url.pathname) && /^\d+$/.test(url.searchParams.get('fbid') ?? ''));
 
 /** `fb.watch` short links are always a single video, regardless of path. */
 const isFbWatch = (host: string): boolean => host === 'fb.watch' || host === 'www.fb.watch';
@@ -51,7 +60,7 @@ const isFbWatch = (host: string): boolean => host === 'fb.watch' || host === 'ww
 const matches = (url: URL): boolean => {
   const host = url.hostname.toLowerCase();
   if (isFbWatch(host)) return true;
-  return FACEBOOK_HOSTS.has(host) && isContentPath(url.pathname);
+  return FACEBOOK_HOSTS.has(host) && isContentUrl(url);
 };
 
 /** A `facebook.com/share/<type>/<token>` short link that proxies cannot resolve. */
@@ -103,12 +112,22 @@ const facebookLink = (value: string | undefined): string | undefined => {
   }
 };
 
+/**
+ * A source-owned link that also names one piece of content. facebed can
+ * report a hashtag page as `og:url` when a post's text starts with a tag, and
+ * the card title must not link there instead of to the post.
+ */
+const facebookContentLink = (value: string | undefined): string | undefined => {
+  const link = facebookLink(value);
+  return link !== undefined && isContentUrl(new URL(link)) ? link : undefined;
+};
+
 const facebookPreview = (url: URL, fallbackUrl: string, og: OpenGraphMeta): LinkPreviewResult => {
   const engagement = parseFacebookEngagement(og.siteName);
   return {
     kind: 'card',
     card: {
-      url: facebookLink(og.url) ?? url.href,
+      url: facebookContentLink(og.url) ?? url.href,
       title: og.title,
       description: og.description,
       imageUrl: og.images[0],
@@ -152,10 +171,10 @@ const resolveShareLink = async (
   // Only trust a resolution that lands on a real Facebook content permalink
   // (not another /share/ hop, a profile, or an off-site host).
   if (!FACEBOOK_HOSTS.has(canonical.hostname.toLowerCase())) return undefined;
-  if (isShareLink(canonical) || !isContentPath(canonical.pathname)) return undefined;
-  // The resolved id lives in the path; the redirect's `share_url` / `rdid`
-  // query is attribution noise that can only confuse the proxy.
-  canonical.search = '';
+  if (isShareLink(canonical) || !isContentUrl(canonical)) return undefined;
+  // The redirect's `share_url` / `rdid` query is attribution noise that can
+  // only confuse the proxy. A photo viewer is the exception: its id is the query.
+  if (!PHOTO_PATH.test(canonical.pathname)) canonical.search = '';
   return canonical;
 };
 
@@ -233,7 +252,7 @@ export const createFacebookProvider = (opts: {
                 ...preview,
                 card: {
                   ...enriched.card,
-                  url: facebookLink(source.value.url) ?? preview.card.url,
+                  url: facebookContentLink(source.value.url) ?? preview.card.url,
                   imageUrl: preview.card.imageUrl ?? enriched.card.imageUrl,
                   ...(preview.card.engagement === undefined
                     ? {}

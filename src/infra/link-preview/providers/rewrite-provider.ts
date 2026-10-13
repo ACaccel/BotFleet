@@ -64,8 +64,12 @@ type CandidateQuality = 'video' | 'image' | 'weak-image' | 'text' | 'none';
  * generic Instagram logo as `og:image`, so without a marker it would score
  * as a usable image card. An Instagram proxy that cannot resolve a post
  * answers with its product name as the title and "Post not found" as the
- * description. Scoring any of these as a usable card would post a broken
- * embed.
+ * description, or "Failed to get new postID from share URL" for an
+ * unresolvable share link. A Bilibili proxy reports a removed or blocked
+ * video as "Error - Video Not Found". EmbedEZ proxies (redditez,
+ * bilibiliez, ...) that cannot render a post fall back to their own
+ * marketing blurb as the description. Scoring any of these as a usable
+ * card would post a broken embed.
  */
 const JUNK_MARKERS: readonly string[] = [
   'log in or sign up',
@@ -83,8 +87,20 @@ const JUNK_MARKERS: readonly string[] = [
   'content not found',
   'post not found',
   'page not found',
+  'video not found',
   'failed to get data from reddit',
+  'failed to get new postid from share url',
+  'learn about the purpose of embedez',
 ];
+
+/**
+ * A title that opens with an HTTP error status (`404: ...`, `500 - ...`).
+ * Some proxies render their upstream failure as the page title in whatever
+ * language the upstream used, so the status prefix is the only stable
+ * signal (bembedfix answers a missing video with `404:` and a Chinese
+ * API error message).
+ */
+const HTTP_ERROR_TITLE = /^\s*[45]\d\d\s*[:\-–]/;
 
 /**
  * Titles that are exactly an embed-proxy's own name — the placeholder it
@@ -103,7 +119,9 @@ const matchesJunkMarker = (text: string): boolean => {
  * placeholder rather than real post content. Pure + exported for unit tests.
  */
 export const isJunkPreviewTitle = (title: string): boolean =>
-  matchesJunkMarker(title) || JUNK_EXACT_TITLES.has(title.trim().toLowerCase());
+  matchesJunkMarker(title) ||
+  JUNK_EXACT_TITLES.has(title.trim().toLowerCase()) ||
+  HTTP_ERROR_TITLE.test(title);
 
 /**
  * A candidate whose only "content" is a junk placeholder (login-wall /

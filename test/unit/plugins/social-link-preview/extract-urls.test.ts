@@ -1,7 +1,7 @@
 /**
  * Unit tests for {@link extractUrls}: ordering, de-duplication,
- * angle-bracket skipping, trailing-punctuation trimming, and the hard
- * scan limit.
+ * angle-bracket / code / spoiler skipping, trailing and full-width
+ * punctuation trimming, and the hard scan limit.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -36,6 +36,35 @@ describe('extractUrls', () => {
     expect(hrefs('a <https://x.com/a/status/1> b https://x.com/b/status/2')).toEqual([
       'https://x.com/b/status/2',
     ]);
+  });
+
+  it('skips URLs inside a spoiler, so the preview cannot reveal hidden content', () => {
+    expect(hrefs('||https://x.com/a/status/1||')).toEqual([]);
+    expect(hrefs('|| https://x.com/a/status/1 ||')).toEqual([]);
+    expect(hrefs('||spoiler|| https://x.com/b/status/2')).toEqual(['https://x.com/b/status/2']);
+  });
+
+  it('skips URLs inside inline code and fenced code blocks', () => {
+    expect(hrefs('`https://x.com/a/status/1`')).toEqual([]);
+    expect(hrefs('```\nhttps://x.com/a/status/1\n```')).toEqual([]);
+    expect(hrefs('`code` https://x.com/b/status/2')).toEqual(['https://x.com/b/status/2']);
+  });
+
+  it('does not treat spoiler bars inside code as a spoiler', () => {
+    expect(hrefs('`a || b` https://x.com/b/status/2 `c || d`')).toEqual([
+      'https://x.com/b/status/2',
+    ]);
+  });
+
+  it('keeps a URL after an unmatched spoiler bar', () => {
+    expect(hrefs('a || b https://x.com/b/status/2')).toEqual(['https://x.com/b/status/2']);
+  });
+
+  it('ends a URL at full-width punctuation written directly after it', () => {
+    // Full-width comma, ideographic full stop and full-width right parenthesis.
+    expect(hrefs('https://x.com/a/status/1\uff0cmore')).toEqual(['https://x.com/a/status/1']);
+    expect(hrefs('https://x.com/a/status/1\u3002')).toEqual(['https://x.com/a/status/1']);
+    expect(hrefs('\uff08https://x.com/a/status/1\uff09')).toEqual(['https://x.com/a/status/1']);
   });
 
   it('trims trailing sentence punctuation', () => {

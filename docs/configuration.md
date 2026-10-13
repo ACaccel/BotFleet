@@ -85,7 +85,16 @@ Invalid role, weather or restaurant settings disable the affected command.
 Enabled previews require all six proxy-host lists: `twitterProxyHosts`,
 `instagramProxyHosts`, `threadsProxyHosts`, `facebookProxyHosts`,
 `redditProxyHosts` and `bilibiliProxyHosts`. Hosts are tried in order; maintain
-short lists of working hosts.
+short lists of working hosts. A host whose response is a login wall, an error
+page or a redirect back to the source site is skipped; when no host yields a
+usable preview, the message gets no reply.
+
+Previews cover post permalinks plus these short and share forms: Instagram
+`/share/` links, Threads `/share/` links, Facebook `/share/` links, `fb.watch`,
+`/photo/?fbid=` photos and group permalinks, Reddit `redd.it` short links,
+`/r/<sub>/s/` share links and `/gallery/` posts, and Bilibili `b23.tv` links.
+Links inside `<...>`, a code span or block, or a spoiler (`||...||`) are not
+previewed, and full-width punctuation directly after a link ends it.
 
 Facebook previews use a custom card with a Facebook header, a title linking to
 the source post, and available OpenGraph text and images. The body is capped at 350 Unicode

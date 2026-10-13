@@ -14,30 +14,26 @@
  * {@link resolveShareLink}). Hence the hop-scanning resolution instead of
  * `OgClient.resolveCanonical`.
  *
- * No single Threads proxy is good at every post type, so the three healthy
- * ones divide the work and the probe loop's ordering plus its quality tiers
- * pick the right one per post. `viewthreads.com` serves the real post title
- * and the real post image but never `og:video`, which makes it the best card
- * for an ordinary still-image post and only a static thumbnail for a video.
- * `fzthreads.com` and `fixthreads.seria.moe` serve a fetchable `og:video`,
- * and `fzthreads.com` also resolves login-restricted posts the other two
- * cannot. Their weakness is the mirror image: for a post with no media of
- * its own they answer with the author's profile avatar as `og:image`, which
- * the weak-image tier demotes below any proxy holding a real post asset
- * while still ranking it above a text-only embed (see
- * {@link LOW_VALUE_IMAGE_PATTERNS}). Listing the real-asset proxy ahead of
- * the video proxies therefore costs nothing — a video candidate
- * short-circuits the loop from any position — and wins the ordinary post a
- * card built from real post media.
+ * Threads proxies differ per post type, so the probe loop's quality tiers
+ * pick the right one per post rather than a fixed host. `fzthreads.com`
+ * serves a fetchable `og:video` and the real post image, and resolves
+ * login-restricted posts. For a post with no media of its own it answers
+ * with the author's profile avatar as `og:image`, which the weak-image tier
+ * demotes below any proxy holding a real post asset while still ranking it
+ * above a text-only embed (see {@link LOW_VALUE_IMAGE_PATTERNS}).
+ * `viewthreads.com` used to serve the real post image as well; it currently
+ * answers with only a generic `@user on Threads` title, which
+ * {@link isPlaceholder} rejects, so it stays listed only as a fallback that
+ * starts contributing again on its own if it recovers.
  *
- * `vxthreads.net` is unreachable, `fixthreads.net` and the `threadsez.*`
- * hosts no longer resolve, and a login wall carries a generic Instagram logo
- * as `og:image` and so is rejected by the shared junk-marker filter rather
- * than posted as a broken card. Per-host validation is what keeps all of
- * this honest as proxies come and go: each host is tried until one yields
- * media, a recovered proxy starts contributing again on its own, and while
- * every proxy is degraded Threads previews are skipped silently with no bare
- * link posted.
+ * `fixthreads.seria.moe` redirects every post back to threads.com,
+ * `vxthreads.net` times out, `fixthreads.net` and the `threadsez.*` hosts no
+ * longer resolve, and a login wall carries a generic Instagram logo as
+ * `og:image` and so is rejected by the shared junk-marker filter rather than
+ * posted as a broken card. Per-host validation is what keeps all of this
+ * honest as proxies come and go: each host is tried until one yields media,
+ * and while every proxy is degraded Threads previews are skipped silently
+ * with no bare link posted.
  */
 import { ok } from '../../../core/result';
 

@@ -2,7 +2,7 @@
  * Unit tests for the Bahamut OpenGraph provider. The {@link OgClient} is
  * faked so the provider's mapping + skip/error logic is exercised without
  * a network: image + title -> card, no image -> Ok(null), image but no
- * title -> INVALID_RESPONSE, fetch error -> propagated Err.
+ * title -> Ok(null), age gate -> Ok(null), fetch error -> propagated Err.
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -32,6 +32,10 @@ describe('bahamut provider canHandle', () => {
     expect(provider.canHandle(u('https://gamer.com/x'))).toBe(false);
     expect(provider.canHandle(u('https://notgamer.com.tw/x'))).toBe(false);
     expect(provider.canHandle(u('https://gamer.com.tw.attacker.com/x'))).toBe(false);
+  });
+
+  it('rejects the account host (login / profile pages)', () => {
+    expect(provider.canHandle(u('https://user.gamer.com.tw/login.php'))).toBe(false);
   });
 });
 
@@ -80,11 +84,24 @@ describe('bahamut provider build', () => {
     if (isOk(result)) expect(result.value).toBeNull();
   });
 
-  it('returns INVALID_RESPONSE when an image exists but the title is missing', async () => {
+  it('returns Ok(null) when an image exists but the title is missing', async () => {
     const provider = createBahamutProvider(makeOgClient({ images: ['https://cdn/og.jpg'] }));
     const result = await provider.build(url, { timeoutMs: 1000 });
-    expect(isErr(result)).toBe(true);
-    if (isErr(result)) expect(result.error.code).toBe('LINK_PREVIEW_INVALID_RESPONSE');
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBeNull();
+  });
+
+  it('returns Ok(null) for the age-gate interstitial, even when it carries a title', async () => {
+    const provider = createBahamutProvider(
+      makeOgClient({
+        title: 'Age check',
+        description: 'Verify your age to continue.',
+        images: ['https://i2.bahamut.com.tw/child-protection.png'],
+      }),
+    );
+    const result = await provider.build(url, { timeoutMs: 1000 });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBeNull();
   });
 
   it('propagates a fetch error from the OgClient', async () => {
