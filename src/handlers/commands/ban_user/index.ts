@@ -7,6 +7,7 @@ import { logError } from '@core/logger';
 import { replyForError } from '../../../infra/discord/reply-for-error';
 import { getOptionalNumber, getRequiredString } from '../../../infra/discord/options';
 import { startMessageDeletionFallback } from './delete-messages-fallback';
+import { buildVoteMessage } from './vote-message';
 export default class ban_user extends Command {
   constructor() {
     super();
@@ -40,11 +41,16 @@ export default class ban_user extends Command {
       const JUDGE_TIME = 1; // minutes to judge
       const user = getRequiredString(interaction, 'user');
       const member = interaction.guild?.members.cache.get(user);
-      const ban_user_role =
-        bot.getGuildInfo(interaction.guild?.id as string)?.roles?.ban_user?.id || 'role not set';
+      const voterRoleId = bot.getGuildInfo(interaction.guild?.id as string)?.roles?.ban_user?.id;
       if (!member) {
         await interaction.editReply({
           content: bot.translator?.t('errors:command.user_not_found') ?? '',
+        });
+        return;
+      }
+      if (member.user.bot) {
+        await interaction.editReply({
+          content: bot.translator?.t('replies:ban_user.cannot_ban_bot') ?? '',
         });
         return;
       }
@@ -54,21 +60,20 @@ export default class ban_user extends Command {
       if (duration > 5) duration = 5; // max 5 minutes
       if (duration < 1) duration = 1; // min 1 minute
 
-      // ban message
       const initiator = (interaction.member as GuildMember) || interaction.user;
-      const ban_msg =
-        bot.translator?.t('replies:ban_user.vote_call', {
+      await interaction.deleteReply();
+      const ch = interaction.channel;
+      if (!ch?.isSendable()) return;
+      const judge_msg = await ch.send(
+        buildVoteMessage(bot.translator, {
           initiator: initiator.displayName,
           target: member.displayName,
           duration,
           judgeTime: JUDGE_TIME,
           threshold: BAN_THRESHOLD,
-          role: ban_user_role,
-        }) ?? '';
-      await interaction.deleteReply();
-      const ch = interaction.channel;
-      if (!ch?.isSendable()) return;
-      const judge_msg = await ch.send({ content: ban_msg });
+          voterRoleId,
+        }),
+      );
       await msgReact(judge_msg, ['👍'], bot.logger, bot.clientId);
 
       // judgement time
@@ -82,11 +87,6 @@ export default class ban_user extends Command {
           await judge_msg.reply(bot.translator?.t('replies:ban_user.cannot_get_votes') ?? '');
           return;
         }
-        if (member.user.bot) {
-          await judge_msg.reply(bot.translator?.t('replies:ban_user.cannot_ban_bot') ?? '');
-          return;
-        }
-
         const judge_count = emoji.count - 1;
         if (judge_count >= BAN_THRESHOLD) {
           try {

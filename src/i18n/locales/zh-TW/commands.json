@@ -138,7 +138,7 @@
     }
   },
   "talk": {
-    "description": "讓機器人說話",
+    "description": "[管理員] 讓機器人說話(不署名)",
     "options": {
       "channel": {
         "description": "選擇頻道"
@@ -363,7 +363,7 @@
             }
           },
           "list": {
-            "description": "列出目前 AI 白名單的所有用戶"
+            "description": "[管理員] 列出目前 AI 白名單的所有用戶"
           }
         },
         "description": "管理 AI 白名單"

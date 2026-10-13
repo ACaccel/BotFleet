@@ -8,12 +8,13 @@
  * `toggle_role|<roleId>` is the contract the `toggle_role` button
  * handler parses, so a change on either side silently breaks the panel.
  */
-import type { ChatInputCommandInteraction } from 'discord.js';
+import { PermissionFlagsBits, type ChatInputCommandInteraction } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import RoleMessage from '../../../../src/handlers/commands/role_message';
 import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
 import { buildGuild, buildGuildRoles } from '../../../fixtures/discord/guild-builder';
+import { buildGuildMember } from '../../../fixtures/discord/member-builder';
 
 const ROLE_A = '111111111111111111';
 const ROLE_B = '222222222222222222';
@@ -22,9 +23,16 @@ interface BuildInput {
   /** Raw `roles` option text, as Discord delivers it. */
   readonly roles: string;
   readonly canManageRoles?: boolean;
-  /** Roles the guild actually resolves. */
-  readonly existingRoles?: readonly { readonly id: string; readonly name: string }[];
+  /** Roles the guild actually resolves; positions default to 1. */
+  readonly existingRoles?: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly position?: number;
+    readonly permissions?: readonly bigint[];
+  }[];
   readonly inGuild?: boolean;
+  /** Position of the caller's highest role. */
+  readonly callerPosition?: number;
 }
 
 const build = ({
@@ -35,8 +43,13 @@ const build = ({
     { id: ROLE_B, name: 'Beta' },
   ],
   inGuild = true,
+  callerPosition = 5,
 }: BuildInput) => {
-  const guild = buildGuild({ id: 'g1', roles: buildGuildRoles({ roles: existingRoles }) });
+  const guild = buildGuild({
+    id: 'g1',
+    roles: buildGuildRoles({ roles: existingRoles }),
+    me: buildGuildMember({ id: 'bot', highestRolePosition: 10 }),
+  });
   const editReply = vi.fn().mockResolvedValue(undefined);
   const interaction = {
     deferReply: vi.fn().mockResolvedValue(undefined),
@@ -44,7 +57,11 @@ const build = ({
     deferred: true,
     replied: false,
     guild: inGuild ? guild : null,
-    member: { permissions: { has: (flag: string) => canManageRoles && flag === 'ManageRoles' } },
+    member: {
+      id: 'caller',
+      roles: { highest: { position: callerPosition } },
+      permissions: { has: (flag: string) => canManageRoles && flag === 'ManageRoles' },
+    },
     options: { get: (name: string) => (name === 'roles' ? { value: roles } : undefined) },
   } as unknown as ChatInputCommandInteraction;
   return { interaction, editReply };
@@ -102,5 +119,42 @@ describe('role_message', () => {
     const editReply = await run({ roles: `<@&${ROLE_A}>`, inGuild: false });
 
     expect(editReply).toHaveBeenCalledWith({ content: 'errors:command.guild_not_found' });
+  });
+
+  it('refuses a role that grants a moderation permission', async () => {
+    const editReply = await run({
+      roles: `<@&${ROLE_A}>`,
+      existingRoles: [
+        { id: ROLE_A, name: 'Mods', permissions: [PermissionFlagsBits.ModerateMembers] },
+      ],
+    });
+
+    expect(editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'replies:role_message.role_not_assignable' }),
+    );
+  });
+
+  it("refuses a role at or above the caller's highest role", async () => {
+    const editReply = await run({
+      roles: `<@&${ROLE_A}>`,
+      existingRoles: [{ id: ROLE_A, name: 'Senior', position: 5 }],
+      callerPosition: 5,
+    });
+
+    expect(editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'replies:role_message.role_not_assignable' }),
+    );
+  });
+
+  it('refuses a role the bot cannot manage', async () => {
+    const editReply = await run({
+      roles: `<@&${ROLE_A}>`,
+      existingRoles: [{ id: ROLE_A, name: 'Above bot', position: 10 }],
+      callerPosition: 20,
+    });
+
+    expect(editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'replies:role_message.role_not_assignable' }),
+    );
   });
 });

@@ -45,7 +45,7 @@ export default class list_reply extends Command {
         replyList.map((e, i) => {
           content += `> ${i + 1}. ${e.reply}\n`;
         });
-        await interaction.editReply({ content });
+        await interaction.editReply({ content, allowedMentions: { parse: [] } });
       }
     } catch (error) {
       await replyForError(

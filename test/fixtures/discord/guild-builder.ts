@@ -8,13 +8,49 @@ import { vi, type Mock } from 'vitest';
 import type { Guild, GuildBasedChannel } from 'discord.js';
 
 /**
+ * A role spec. `position`, `permissions` and `managed` feed the
+ * hierarchy and dangerous-permission checks on self-service roles.
+ */
+interface RoleSpec {
+  readonly id: string;
+  readonly name: string;
+  readonly position?: number;
+  /** Permission flags the role grants; `has` answers from this list. */
+  readonly permissions?: readonly bigint[];
+  readonly managed?: boolean;
+}
+
+interface RoleFake {
+  readonly id: string;
+  readonly name: string;
+  readonly position: number;
+  readonly managed: boolean;
+  readonly permissions: { has: (flag: bigint) => boolean };
+  readonly comparePositionTo: (other: { readonly position: number }) => number;
+  /** Back-reference filled in by `buildGuild`, as discord.js exposes `role.guild`. */
+  guild?: Guild;
+}
+
+const buildRole = (spec: RoleSpec): RoleFake => {
+  const position = spec.position ?? 1;
+  return {
+    id: spec.id,
+    name: spec.name,
+    position,
+    managed: spec.managed ?? false,
+    permissions: { has: (flag) => (spec.permissions ?? []).includes(flag) },
+    comparePositionTo: (other) => position - other.position,
+  };
+};
+
+/**
  * Role manager stand-in. `create` / `delete` stay `vi.fn()` mocks
  * rather than call-recording arrays so a test can drive the failure
  * branches with `mockRejectedValue`.
  */
 interface GuildRolesFake {
   /** Backs both `roles.cache.size` (role-ceiling checks) and `.get(id)`. */
-  readonly cache: Map<string, { readonly id: string; readonly name: string }>;
+  readonly cache: Map<string, RoleFake>;
   readonly create: Mock;
   readonly delete: Mock;
   readonly everyone: { readonly id: string };
@@ -24,19 +60,20 @@ interface BuildGuildRolesInput {
   /** How many roles the guild already has; drives `roles.cache.size`. */
   readonly roleCount?: number;
   /** Roles resolvable by id through `roles.cache.get`. */
-  readonly roles?: readonly { readonly id: string; readonly name: string }[];
+  readonly roles?: readonly RoleSpec[];
   /** Id of the role `roles.create` resolves with. */
   readonly createdRoleId?: string;
   readonly everyoneRoleId?: string;
 }
 
 export const buildGuildRoles = (input: BuildGuildRolesInput = {}): GuildRolesFake => {
-  const cache = new Map<string, { id: string; name: string }>();
+  const cache = new Map<string, RoleFake>();
   for (let i = 0; i < (input.roleCount ?? 0); i += 1) {
-    cache.set(`filler-${String(i)}`, { id: `filler-${String(i)}`, name: `filler-${String(i)}` });
+    const id = `filler-${String(i)}`;
+    cache.set(id, buildRole({ id, name: id }));
   }
   for (const role of input.roles ?? []) {
-    cache.set(role.id, { id: role.id, name: role.name });
+    cache.set(role.id, buildRole(role));
   }
   return {
     cache,
@@ -65,6 +102,8 @@ interface BuildGuildInput {
    * handler must survive rather than assume away.
    */
   readonly me?: { readonly id: string } | null;
+  /** Guild owner id; `role` checks exempt the owner from hierarchy limits. */
+  readonly ownerId?: string;
   /** Role manager from {@link buildGuildRoles}; defaults to an empty one. */
   readonly roles?: GuildRolesFake;
   /** Id of the synthetic `@everyone` role. Ignored when `roles` is given. */
@@ -80,11 +119,15 @@ export const buildGuild = (input: BuildGuildInput = {}): Guild => {
   for (const m of input.members ?? []) {
     memberCache.set(m.id, m);
   }
-  return {
+  const roles = input.roles ?? buildGuildRoles({ everyoneRoleId: input.everyoneRoleId });
+  const guild = {
     id: input.id ?? 'g-1',
     name: input.name ?? 'TestGuild',
+    ownerId: input.ownerId ?? 'owner',
     channels: { cache: channelCache },
     members: { cache: memberCache, me: input.me ?? null },
-    roles: input.roles ?? buildGuildRoles({ everyoneRoleId: input.everyoneRoleId }),
+    roles,
   } as unknown as Guild;
+  for (const role of roles.cache.values()) role.guild = guild;
+  return guild;
 };

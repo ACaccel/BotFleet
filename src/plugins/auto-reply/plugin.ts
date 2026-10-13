@@ -134,9 +134,10 @@ export const createAutoReplyPlugin = (rawConfig?: unknown): Plugin => {
         // The remaining behaviours all skip bot authors so two bots
         // running this plugin do not feedback-loop each other.
         if (!message.author.bot) {
+          // Stored replies are member-authored, so they never ping anyone.
           const reply = await safeLookup(registry, guildId, message.content, logger, 'direct');
           if (reply !== null) {
-            await message.channel.send({ content: reply });
+            await message.channel.send({ content: reply, allowedMentions: { parse: [] } });
           }
 
           for (const lucky of config.luckyReplies) {
@@ -154,7 +155,7 @@ export const createAutoReplyPlugin = (rawConfig?: unknown): Plugin => {
           if (Math.random() < config.globalLuckyProbability) {
             const lucky = await safeLookup(registry, guildId, '[*]', logger, 'lucky');
             if (lucky !== null) {
-              await message.channel.send({ content: lucky });
+              await message.channel.send({ content: lucky, allowedMentions: { parse: [] } });
             }
           }
 

@@ -51,14 +51,14 @@ deletes regular files named `YYYY-MM-DD.log` (bot and guild logs) or
 
 The optional base fields are defined by [Config](../src/bot/index.ts).
 
-| Field                         | Purpose                                                                                                     |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `admin`                       | Bot-admin IDs for `/ai whitelist`, `/bug_report`, msg-archive's `/archive` and its notices; default `[]`    |
-| `language`                    | `zh-TW` (default) or `en`; also controls registered command text                                            |
-| `commands`                    | Commands to expose; [register again](contributing/local-setup.md#registering-slash-commands) after changing |
-| `guilds.<id>.channels`        | Symbolic channel names mapped to IDs                                                                        |
-| `guilds.<id>.roles`           | Symbolic role names mapped to IDs                                                                           |
-| `guilds.<id>.permission_rank` | Channel privacy and member clearance, below                                                                 |
+| Field                         | Purpose                                                                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `admin`                       | Bot-admin IDs for `/ai whitelist`, unsigned `/talk`, `/bug_report`, msg-archive's `/archive` and its notices; default `[]` |
+| `language`                    | `zh-TW` (default) or `en`; also controls registered command text                                                           |
+| `commands`                    | Commands to expose; [register again](contributing/local-setup.md#registering-slash-commands) after changing                |
+| `guilds.<id>.channels`        | Symbolic channel names mapped to IDs                                                                                       |
+| `guilds.<id>.roles`           | Symbolic role names mapped to IDs                                                                                          |
+| `guilds.<id>.permission_rank` | Channel privacy and member clearance, below                                                                                |
 
 Missing channel mappings skip channel-bound output. Message backups still run
 without a `debug` channel.

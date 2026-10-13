@@ -138,7 +138,7 @@
     }
   },
   "talk": {
-    "description": "Make the bot speak",
+    "description": "[Admin] Make the bot speak without a signature",
     "options": {
       "channel": {
         "description": "Choose a channel"
@@ -363,7 +363,7 @@
             }
           },
           "list": {
-            "description": "List all users currently on the AI whitelist"
+            "description": "[Admin] List all users currently on the AI whitelist"
           }
         },
         "description": "Manage AI allowlist"

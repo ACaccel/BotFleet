@@ -33,6 +33,14 @@ export default class talk extends Command {
     bot: BaseBot,
   ): Promise<void> {
     try {
+      // Unsigned speech is untraceable to members, so only bot admins may use it.
+      if (!bot.isAdmin(interaction.user.id)) {
+        await interaction.reply({
+          content: bot.translator?.t('errors:permission.admin_only_short') ?? '',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
       const ch = getRequiredString(interaction, 'channel');
       const content = getRequiredString(interaction, 'content');
       if (!ch || !content) {
@@ -60,9 +68,9 @@ export default class talk extends Command {
       if (content.includes('@everyone') || content.includes('@here')) {
         const tagMessage =
           bot.translator?.t('replies:talk.tag_warning', { user: interaction.user.username }) ?? '';
-        await channel.send(tagMessage);
+        await channel.send({ content: tagMessage, allowedMentions: { parse: [] } });
       } else {
-        await channel.send(content);
+        await channel.send({ content, allowedMentions: { parse: ['users', 'roles'] } });
       }
     } catch (error) {
       await replyForError(interaction, bot, error, 'replies:talk.failed', interaction.guild?.id);

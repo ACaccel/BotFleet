@@ -88,7 +88,8 @@
     "cannot_ban_bot": "還想ban機器人阿",
     "cannot_timeout": "雖然初華大人無法禁言他,但將予以無限刪除之審判,即刻裁決!",
     "failed": "無法禁言使用者 (錯誤代碼:{{traceId}})",
-    "vote_call": "**{{initiator}}** 發起了審判!\n是否禁言 **{{target}}** {{duration}} 分鐘?\n**{{judgeTime}}** 分鐘後累積 **{{threshold}}** 票則禁言,<@&{{role}}> 讓他看看豐川家的黑暗!",
+    "vote_call": "**{{initiator}}** 發起了審判!\n是否禁言 **{{target}}** {{duration}} 分鐘?\n**{{judgeTime}}** 分鐘後累積 **{{threshold}}** 票則禁言!",
+    "vote_ping": "<@&{{role}}> 讓他看看豐川家的黑暗!",
     "timed_out": "{{user}} 已被初華大人禁言 {{duration}} 分鐘",
     "vote_failed": "投票數 {{count}} 票,未達到禁言門檻 {{threshold}} 票",
     "timeout_reason": "初華大人的禁言裁決!"
@@ -175,7 +176,8 @@
     "no_valid_id": "請至少提供一個有效的身份組ID",
     "prompt": "請選擇你要領取的身份組:",
     "failed": "無法發送身份組領取訊息 (錯誤代碼:{{traceId}})",
-    "role_not_found": "找不到ID為 {{id}} 的身份組, 請確認ID是否正確"
+    "role_not_found": "找不到ID為 {{id}} 的身份組, 請確認ID是否正確",
+    "role_not_assignable": "身分組 <@&{{id}}> 無法放上面板：它必須低於你和機器人的最高身分組，且不能含管理類權限。"
   },
   "roll_call": {
     "missing_target": "請提供被點名者 (users) 或活動ID (activity_id)",
@@ -578,7 +580,8 @@
   "toggle_role": {
     "role_not_found": "找不到該身份組,可能已被刪除。",
     "added": "已為你加上身份組 {{role}}。",
-    "removed": "已為你移除身份組 {{role}}。"
+    "removed": "已為你移除身份組 {{role}}。",
+    "role_not_assignable": "這個身分組目前無法自行領取，請聯絡管理員。"
   },
   "archive": {
     "guild_only": "請在伺服器中使用此指令。",

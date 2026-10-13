@@ -21,6 +21,12 @@ export default class ai_whitelist_list extends Command {
     bot: BaseBot,
   ): Promise<void> {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!bot.isAdmin(interaction.user.id)) {
+      await interaction.editReply({
+        content: bot.translator?.t('errors:permission.admin_only_short') ?? '',
+      });
+      return;
+    }
     const repos = await requireGuildRepos(bot, interaction);
     if (repos === null) return;
 

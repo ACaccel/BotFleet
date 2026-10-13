@@ -90,6 +90,22 @@ configured debug channel after dispatch, including when dispatch throws.
 It applies the `channel_logging` permission-rank ceiling without suppressing the
 durable guild audit trail. See [command log presentation](configuration.md#common-bot-settings).
 
+### Mention and role safety
+
+Text that members author and the bot re-posts carries explicit `allowedMentions`:
+
+- Stored auto-replies (including `[*]`) and `/reply list` ping nobody.
+- `/talk` and `/talk_signed` may ping members and roles, never `@everyone`/`@here`;
+  unsigned `/talk` is limited to bot admins.
+- A `/ban_user` vote pings only the guild's `roles.ban_user`, and nobody when it is
+  unset; bots cannot be voted on.
+
+Self-service role buttons grant only roles that pass
+[`isSelfAssignableRole`](../src/infra/discord/self-assignable-role.ts): below the
+bot's highest role, not integration-managed, and without moderation or
+administrative permissions. A `/role_message` author may only offer roles below
+their own highest role, and the button rechecks the role on every click.
+
 ## Discord presentation colors
 
 [`presentation-colors.ts`](../src/infra/discord/presentation-colors.ts) owns the

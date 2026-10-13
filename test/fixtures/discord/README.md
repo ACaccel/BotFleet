@@ -6,10 +6,12 @@ minimum the SUT reads — no third-party mock libraries.
 
 ## Files
 
-- `guild-builder.ts` — `buildGuild({ id, name, channels, members, me, roles })`
+- `guild-builder.ts` — `buildGuild({ id, name, ownerId, channels, members, me, roles })`
   and `buildGuildRoles({ roleCount, roles, createdRoleId })`, whose
   `create` / `delete` mocks drive the role-creation failure branches.
-- `member-builder.ts` — `buildGuildMember({ id, displayName, roleIds, roles })`
+  A role spec may set `position`, `permissions` and `managed` for the
+  self-service role checks; `buildGuild` fills in each role's `guild`.
+- `member-builder.ts` — `buildGuildMember({ id, displayName, roleIds, roles, highestRolePosition })`
   and `buildMemberRoles()` for the `roles.add` / `roles.remove` spies.
 - `channel-builder.ts` — `buildTextChannel({ id, name, type, parent, viewableBy, permissionsBySubject })`
   for the `/traffic` visibility filter and for the `/feed_*` permission

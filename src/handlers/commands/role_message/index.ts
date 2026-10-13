@@ -4,6 +4,7 @@ import { Command } from '@cmd';
 import { requireCapture } from '../../../core/regex-capture';
 import { buildButtonRows } from '../discord-helpers';
 
+import { canOfferRole, isSelfAssignableRole } from '../../../infra/discord/self-assignable-role';
 import { replyForError } from '../../../infra/discord/reply-for-error';
 import { getRequiredString } from '../../../infra/discord/options';
 export default class role_message extends Command {
@@ -61,6 +62,14 @@ export default class role_message extends Command {
         if (!role) {
           await interaction.editReply({
             content: bot.translator?.t('replies:role_message.role_not_found', { id: roleId }) ?? '',
+          });
+          return;
+        }
+        if (!isSelfAssignableRole(role, guild.members.me) || !canOfferRole(role, member)) {
+          await interaction.editReply({
+            content:
+              bot.translator?.t('replies:role_message.role_not_assignable', { id: roleId }) ?? '',
+            allowedMentions: { parse: [] },
           });
           return;
         }

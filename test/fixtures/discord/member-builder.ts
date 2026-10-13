@@ -18,6 +18,8 @@ interface BuildGuildMemberInput {
   readonly roleIds?: readonly string[];
   /** Spies the built member's `roles.add` / `roles.remove` write into. */
   readonly roles?: MemberRolesFake;
+  /** Position of `roles.highest`, for role-hierarchy checks. */
+  readonly highestRolePosition?: number;
 }
 
 export const buildMemberRoles = (): MemberRolesFake => ({
@@ -41,6 +43,10 @@ export const buildGuildMember = (input: BuildGuildMemberInput = {}): GuildMember
       bot: false,
       displayAvatarURL: () => `https://cdn.example/${id}.png`,
     },
-    roles: { cache: roleCache, ...(input.roles ?? buildMemberRoles()) },
+    roles: {
+      cache: roleCache,
+      highest: { position: input.highestRolePosition ?? 0 },
+      ...(input.roles ?? buildMemberRoles()),
+    },
   } as unknown as GuildMember;
 };

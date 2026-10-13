@@ -31,6 +31,9 @@ interface Fixture {
   readonly votes: number;
   /** Whether `member.timeout` resolves. */
   readonly timeoutSucceeds: boolean;
+  readonly targetIsBot?: boolean;
+  /** The guild's configured voter role; `null` leaves it unset. */
+  readonly voterRoleId?: string | null;
 }
 
 const build = (fixture: Fixture) => {
@@ -45,18 +48,22 @@ const build = (fixture: Fixture) => {
   const member = {
     id: TARGET_ID,
     displayName: 'Target',
-    user: { bot: false, tag: 'target#1', displayName: 'Target' },
+    user: { bot: fixture.targetIsBot ?? false, tag: 'target#1', displayName: 'Target' },
     timeout: vi.fn(async () => {
       if (!fixture.timeoutSucceeds) throw new Error('Missing Permissions');
     }),
   };
   const clientListeners = new Map<string, unknown>();
+  const send = vi.fn(async (_options: unknown) => judgeMessage);
   const { bot, logger } = buildFakeBot({
     client: {
       prependListener: (event: string, fn: unknown) => clientListeners.set(event, fn),
       off: (event: string) => clientListeners.delete(event),
     },
-    getGuildInfo: () => ({ roles: { ban_user: { id: 'role-1' } } }),
+    getGuildInfo: () =>
+      fixture.voterRoleId === null
+        ? { roles: {} }
+        : { roles: { ban_user: { id: fixture.voterRoleId ?? 'role-1' } } },
   });
 
   const interaction = {
@@ -68,13 +75,13 @@ const build = (fixture: Fixture) => {
     guild: { id: GUILD_ID, members: { cache: new Map([[TARGET_ID, member]]) } },
     member: { displayName: 'Initiator' },
     user: { id: 'u-init', username: 'initiator' },
-    channel: { isSendable: () => true, send: vi.fn(async () => judgeMessage) },
+    channel: { isSendable: () => true, send },
     options: {
       get: (name: string) => (name === 'user' ? { value: TARGET_ID } : undefined),
     },
   } as unknown as ChatInputCommandInteraction;
 
-  return { bot, interaction, member, reply, error: logger.error, clientListeners };
+  return { bot, interaction, member, reply, send, error: logger.error, clientListeners };
 };
 
 afterEach(() => {
@@ -132,5 +139,49 @@ describe('ban_user judgement', () => {
     };
     expect(() => scheduledCallbacks[0]?.()).not.toThrow();
     await vi.waitFor(() => expect(error).toHaveBeenCalled());
+  });
+});
+
+describe('ban_user vote call', () => {
+  it('refuses a bot target before any vote is posted', async () => {
+    const { bot, interaction, send } = build({
+      votes: 5,
+      timeoutSucceeds: true,
+      targetIsBot: true,
+    });
+
+    await new BanUser().execute(interaction, bot);
+
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'replies:ban_user.cannot_ban_bot',
+    });
+    expect(send).not.toHaveBeenCalled();
+    expect(scheduledCallbacks).toHaveLength(0);
+  });
+
+  it('pings only the configured voter role', async () => {
+    const { bot, interaction, send } = build({ votes: 0, timeoutSucceeds: true });
+
+    await new BanUser().execute(interaction, bot);
+
+    expect(send).toHaveBeenCalledWith({
+      content: 'replies:ban_user.vote_call\nreplies:ban_user.vote_ping',
+      allowedMentions: { roles: ['role-1'] },
+    });
+  });
+
+  it('pings nobody when no voter role is configured', async () => {
+    const { bot, interaction, send } = build({
+      votes: 0,
+      timeoutSucceeds: true,
+      voterRoleId: null,
+    });
+
+    await new BanUser().execute(interaction, bot);
+
+    expect(send).toHaveBeenCalledWith({
+      content: 'replies:ban_user.vote_call',
+      allowedMentions: { parse: [] },
+    });
   });
 });

@@ -64,9 +64,12 @@ export default class talk_signed extends Command {
             displayName: guild_member.displayName,
             username: interaction.user.username,
           }) ?? '';
-        await channel.send(tagMessage);
+        await channel.send({ content: tagMessage, allowedMentions: { parse: [] } });
       } else {
-        await channel.send(`${guild_member.displayName}(${interaction.user.username}): ${content}`);
+        await channel.send({
+          content: `${guild_member.displayName}(${interaction.user.username}): ${content}`,
+          allowedMentions: { parse: ['users', 'roles'] },
+        });
       }
     } catch (error) {
       await replyForError(

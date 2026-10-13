@@ -88,7 +88,8 @@
     "cannot_ban_bot": "You want to ban a bot, huh?",
     "cannot_timeout": "Lady Sakiko cannot time them out, but they shall be sentenced to endless deletion, judged at once!",
     "failed": "Could not time out the user. (error code: {{traceId}})",
-    "vote_call": "**{{initiator}}** has called a trial!\nTime out **{{target}}** for {{duration}} minutes?\nIf **{{threshold}}** votes accumulate within **{{judgeTime}}** minutes they will be timed out. <@&{{role}}>, show them the darkness of the Toyokawa family!",
+    "vote_call": "**{{initiator}}** has called a trial!\nTime out **{{target}}** for {{duration}} minutes?\nIf **{{threshold}}** votes accumulate within **{{judgeTime}}** minutes they will be timed out.",
+    "vote_ping": "<@&{{role}}>, show them the darkness of the Toyokawa family!",
     "timed_out": "{{user}} has been timed out by Lady Sakiko for {{duration}} minutes.",
     "vote_failed": "{{count}} votes — the timeout threshold of {{threshold}} votes was not reached.",
     "timeout_reason": "Lady Sakiko's timeout verdict!"
@@ -175,7 +176,8 @@
     "no_valid_id": "Please provide at least one valid role ID.",
     "prompt": "Please choose the roles you want to claim:",
     "failed": "Could not send the role-claim message. (error code: {{traceId}})",
-    "role_not_found": "No role found with ID {{id}}. Please verify the ID is correct."
+    "role_not_found": "No role found with ID {{id}}. Please verify the ID is correct.",
+    "role_not_assignable": "Role <@&{{id}}> cannot be offered: it must sit below both your highest role and the bot's, and carry no moderation permission."
   },
   "roll_call": {
     "missing_target": "Please provide the users to call (users) or an activity ID (activity_id).",
@@ -578,7 +580,8 @@
   "toggle_role": {
     "role_not_found": "Role not found; it may have been deleted.",
     "added": "Added the role {{role}} to you.",
-    "removed": "Removed the role {{role}} from you."
+    "removed": "Removed the role {{role}} from you.",
+    "role_not_assignable": "This role cannot be self-assigned right now; please contact a moderator."
   },
   "archive": {
     "guild_only": "Use this command in a server.",

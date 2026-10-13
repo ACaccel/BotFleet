@@ -3,6 +3,8 @@ import { MessageFlags } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { ButtonHandler } from '@button';
 
+import { isSelfAssignableRole } from '../../../infra/discord/self-assignable-role';
+
 export default class toggle_role extends ButtonHandler {
   public override async execute(interaction: ButtonInteraction, bot: BaseBot): Promise<void> {
     const member = interaction.member as GuildMember;
@@ -12,6 +14,15 @@ export default class toggle_role extends ButtonHandler {
     if (!role) {
       await interaction.reply({
         content: bot.translator?.t('replies:toggle_role.role_not_found') ?? '',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    // Recheck on every click: the role's permissions or position may have
+    // changed since the panel was posted.
+    if (!isSelfAssignableRole(role, guild.members.me)) {
+      await interaction.reply({
+        content: bot.translator?.t('replies:toggle_role.role_not_assignable') ?? '',
         flags: MessageFlags.Ephemeral,
       });
       return;
