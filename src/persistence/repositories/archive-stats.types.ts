@@ -278,7 +278,7 @@ type KnownSections<S> = Record<Exclude<keyof S, keyof ActivitySections>, never> 
 interface ActivityQueryBase<S> {
   readonly window: StatsWindow;
   readonly scope: ArchiveStatsScope;
-  /** IANA zone for trend, heat map and active days (the bot host's zone). */
+  /** IANA zone for trend, heat map and active days (the bot's `config.timeZone`). */
   readonly timeZone: string;
   readonly sections: S & KnownSections<S>;
 }

@@ -26,10 +26,13 @@
  * ```
  */
 const noop = async (): Promise<void> => {};
+/** Every configured command name resolves, so `config.commands` passes validation. */
+class StubCommand {}
 
 export const barrelStubs = {
   cmd: {
     registerCommands: noop,
+    getSlashCommandClass: (): typeof StubCommand => StubCommand,
     getCommandJsonBody: (): unknown[] => [],
     executeCommand: noop,
     executeAutocomplete: noop,

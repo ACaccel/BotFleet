@@ -7,5 +7,5 @@
       "roles": {}
     }
   },
-  "commands": ["help", "COMMAND_NAME"]
+  "commands": ["help"]
 }

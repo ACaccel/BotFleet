@@ -32,7 +32,7 @@ import { trafficImageLoader, warnOnceWithoutEmojiFont } from './images';
 import { admitReport } from './inflight';
 import { answerPrivately } from './private-answer';
 import { readTrafficOptions, type TrafficOptionSpec } from './options';
-import { hostTimeZone, resolvePeriod, type Period } from './period';
+import { resolvePeriod, type Period } from './period';
 import type { TFn, TrafficOptions } from './types';
 
 export interface TrafficContext {
@@ -125,7 +125,7 @@ export const runTrafficAction = async (
       repos,
       t,
       options,
-      period: resolvePeriod(options.range, Date.now(), hostTimeZone()),
+      period: resolvePeriod(options.range, Date.now(), bot.timeZone),
       ...scoped,
       images: trafficImageLoader(bot.logger),
     });

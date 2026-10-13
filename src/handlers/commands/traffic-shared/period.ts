@@ -1,8 +1,8 @@
 /**
  * The time frame of a `/traffic` reply: the current window ending now, the
  * equal-length window before it, and the trend granularity. Windows are
- * half-open `[startMs, endMs)`; trend, heat map and day labels use the bot
- * host's time zone, like the statistics reader.
+ * half-open `[startMs, endMs)`; trend, heat map and day labels use the bot's
+ * `config.timeZone`, like the statistics reader.
  *
  * `24h` is a rolling window. Day ranges start at local midnight, so `7d` is the
  * last seven local days with today as the seventh (seven trend points, today
@@ -37,12 +37,9 @@ export interface Period {
   readonly granularity: StatsGranularity;
   /** Length of the window in days (1 for `24h`). */
   readonly days: number;
-  /** IANA zone of the bot host. */
+  /** IANA zone from the bot's `config.timeZone`. */
   readonly timeZone: string;
 }
-
-/** The bot host's IANA time zone, which trends and heat maps follow. */
-export const hostTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /** Milliseconds the zone is ahead of UTC at `atMs`. */
 const zoneOffsetMs = (timeZone: string, atMs: number): number => {

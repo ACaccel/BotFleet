@@ -24,7 +24,8 @@ import type { Job } from 'node-schedule';
 import type { ButtonHandler } from '@button';
 import { registerButtons } from '@button';
 import type { Command } from '@cmd';
-import { registerCommands } from '@cmd';
+import { getSlashCommandClass, registerCommands } from '@cmd';
+import { assertTimeZone } from '../core/archive/stats';
 import type { ModalHandler } from '@modal';
 import { registerModals } from '@modal';
 import type { ReactionHandler } from '@reaction';
@@ -114,6 +115,12 @@ export interface Config {
    * value is ignored with a warning and falls back to the default.
    */
   language?: string;
+  /**
+   * IANA time zone for calendar boundaries and local times in reports,
+   * such as `/traffic` day buckets and heat maps. Defaults to `UTC`;
+   * an unknown zone fails construction.
+   */
+  timeZone?: string;
 }
 
 export interface GuildInfo {
@@ -172,6 +179,8 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   /** Discord user ids granted bot-admin privileges; resolved from `config.admin`. */
   public adminIds: string[] = [];
   public readonly threadModerationEnabled: boolean;
+  /** Validated IANA zone from `config.timeZone`; `UTC` when unset. */
+  public readonly timeZone: string;
   public config: TConfig;
 
   /**
@@ -376,6 +385,20 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     this.clientId = clientId;
     this.config = config;
     this.adminIds = config.admin ?? [];
+    // A misspelled or retired command name would otherwise be skipped
+    // silently and surface only as "command not found" for members.
+    const unknownCommands = (config.commands ?? []).filter(
+      (name) => getSlashCommandClass(name) === undefined,
+    );
+    if (unknownCommands.length > 0) {
+      throw new Error(`Unknown command(s) in config.commands: ${unknownCommands.join(', ')}`);
+    }
+    this.timeZone = config.timeZone ?? 'UTC';
+    try {
+      assertTimeZone(this.timeZone);
+    } catch (err) {
+      throw new Error(`Unknown config.timeZone: ${this.timeZone}`, { cause: err });
+    }
     this.threadModerationEnabled = parseThreadModerationConfig(config.thread_moderation);
     if (this.threadModerationEnabled && !mongoURI) {
       throw new Error('thread_moderation.enabled requires MONGO_URI');

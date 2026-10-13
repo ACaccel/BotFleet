@@ -14,7 +14,7 @@
       }
     }
   },
-  "commands": ["help", "temp_role", "weather_forecast", "random_restaurant", "COMMAND_NAME"],
+  "commands": ["help", "temp_role", "weather_forecast", "random_restaurant"],
   "guild_events": {
     "attachment_cache": { "enabled": true, "ttlHours": 24, "minFreeDiskMb": 5120 }
   },

@@ -42,13 +42,11 @@
  * `buildRegisterTranslator`). Global registrations can take up to an hour
  * to propagate; use `--dev-guild` for instant iteration.
  */
-import type { ApplicationCommandDataResolvable } from 'discord.js';
 import { REST, Routes } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 
-import { buildCommandJsonBody, createCommand, localizeCommandConfig } from '@cmd';
 import { createBootstrapLogger, loadEnv, readNpmConfigFlags } from '@core/config';
 import { createDefaultTranslator, isLocale, type Locale, type Translator } from '@core/i18n';
 
@@ -67,6 +65,7 @@ import {
   scanBotDirectories,
   type BotDirectoryScan,
 } from './register-batch';
+import { buildCommandsFromConfig } from './register-commands';
 import { fetchAllUserGuilds } from './register-guilds';
 
 // Register runs before the IoC container is built, so the typed `Logger`
@@ -109,6 +108,7 @@ function loadBotConfig(botName: string): {
   clientId: string;
   commands: string[];
   language?: string;
+  config: BotConfig;
 } {
   const { configPath, envPath } = resolveBotPaths(botName);
 
@@ -131,7 +131,7 @@ function loadBotConfig(botName: string): {
     throw new Error(`No commands defined in ${configPath}`);
   }
 
-  return { token, clientId, commands: cfg.commands, language: cfg.language };
+  return { token, clientId, commands: cfg.commands, language: cfg.language, config: cfg };
 }
 
 /**
@@ -153,33 +153,11 @@ async function buildRegisterTranslator(language: string | undefined): Promise<Tr
   return createDefaultTranslator({ localesDir: resolveLocalesDir(), fallbackLocale });
 }
 
-function buildCommandsFromConfig(
-  commands: string[],
-  translator: Translator,
-): ApplicationCommandDataResolvable[] {
-  const out: ApplicationCommandDataResolvable[] = [];
-
-  for (const name of commands) {
-    const instance = createCommand(name);
-    if (!instance || !instance.config) {
-      logger.warn({ command: name }, 'Command could not be created or has no config.');
-      continue;
-    }
-
-    // Command / option descriptions are i18n keys resolved here
-    // against the `commands` catalog so the registered JSON keeps its
-    // localised text.
-    out.push(buildCommandJsonBody(localizeCommandConfig(instance.config, translator)));
-  }
-
-  return out;
-}
-
 async function registerGlobal(botName: string, keepGuildCommands: boolean): Promise<void> {
-  const { token, clientId, commands, language } = loadBotConfig(botName);
+  const { token, clientId, commands, language, config } = loadBotConfig(botName);
 
   const translator = await buildRegisterTranslator(language);
-  const body = buildCommandsFromConfig(commands, translator);
+  const body = buildCommandsFromConfig(commands, translator, config, logger);
   if (body.length === 0) {
     throw new Error(`No commands to register for ${botName} (after filtering).`);
   }
@@ -212,10 +190,10 @@ async function registerGlobal(botName: string, keepGuildCommands: boolean): Prom
 }
 
 async function registerDevGuild(botName: string, guildId: string): Promise<void> {
-  const { token, clientId, commands, language } = loadBotConfig(botName);
+  const { token, clientId, commands, language, config } = loadBotConfig(botName);
 
   const translator = await buildRegisterTranslator(language);
-  const body = buildCommandsFromConfig(commands, translator);
+  const body = buildCommandsFromConfig(commands, translator, config, logger);
   if (body.length === 0) {
     throw new Error(`No commands to register for ${botName} (after filtering).`);
   }
@@ -242,9 +220,9 @@ async function registerDevGuild(botName: string, guildId: string): Promise<void>
  * and stale guild-scoped registrations when debugging command text.
  */
 async function registerDryRun(botName: string): Promise<void> {
-  const { commands, language } = loadBotConfig(botName);
+  const { commands, language, config } = loadBotConfig(botName);
   const translator = await buildRegisterTranslator(language);
-  const body = buildCommandsFromConfig(commands, translator);
+  const body = buildCommandsFromConfig(commands, translator, config, logger);
 
   logger.info(
     { target: botName, count: body.length, language: language ?? '(default)' },

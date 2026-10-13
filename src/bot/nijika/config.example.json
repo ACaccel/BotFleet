@@ -1,6 +1,7 @@
 {
   "admin": ["YOUR_ADMIN_USER_ID"],
   "language": "zh-TW",
+  "timeZone": "Asia/Taipei",
   "thread_moderation": { "enabled": true },
   "guilds": {
     "YOUR_GUILD_ID": {
@@ -17,15 +18,7 @@
       }
     }
   },
-  "commands": [
-    "help",
-    "weather_forecast",
-    "random_restaurant",
-    "update_role",
-    "feed",
-    "thread",
-    "COMMAND_NAME"
-  ],
+  "commands": ["help", "weather_forecast", "random_restaurant", "update_role", "feed", "thread"],
   "level_roles": { "level_1": "YOUR_LEVEL_1_ROLE_NAME" },
   "guild_events": {
     "attachment_cache": { "enabled": true, "ttlHours": 24, "minFreeDiskMb": 5120 }

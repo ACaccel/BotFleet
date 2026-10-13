@@ -653,7 +653,7 @@ is a rolling window; the other ranges are whole local days ending today, so `7d`
 shows seven daily points with today last, compared with the same span one range
 earlier.
 Trends are hourly for `24h`, weekly for `365d` and daily otherwise; trends, heat
-maps and day labels use the bot host's time zone. `24h` omits the heat map from the
+maps and day labels use the bot's [`timeZone`](configuration.md#common-bot-settings), `UTC` by default. `24h` omits the heat map from the
 details image. A member
 runs one report at a time, and a server runs one `90d` or `365d` report at a time;
 a request beyond that gets a private "busy" reply.
