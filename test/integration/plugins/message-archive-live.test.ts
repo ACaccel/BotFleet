@@ -413,7 +413,9 @@ describe('msg-archive inbox loop', () => {
         await f.worker.initialize('1');
         await f.packet('MESSAGE_CREATE', f.message('102'));
         await vi.waitFor(async () => expect(await f.stored('102')).not.toBeNull());
-        expect(await connection.collection('archive_inbox').countDocuments()).toBe(0);
+        await vi.waitFor(async () =>
+          expect(await connection.collection('archive_inbox').countDocuments()).toBe(0),
+        );
       } finally {
         await f.worker.stop();
       }
