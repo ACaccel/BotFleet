@@ -83,12 +83,24 @@ async function mongo(config, request) {
   try {
     const filename = path.join(directory, 'request.json');
     await writeJson(filename, request);
+    // mongosh 2.x exits non-zero after a successful script when a fresh profile
+    // has telemetry on but no telemetry identity yet, which is every new host. A
+    // private profile with telemetry off avoids that and keeps mongosh state out
+    // of the operator's home.
+    const home = path.join(directory, 'home');
+    await fs.mkdir(path.join(home, '.mongodb/mongosh'), { recursive: true, mode: 0o700 });
+    await fs.writeFile(
+      path.join(home, '.mongodb/mongosh/config'),
+      JSON.stringify({ enableTelemetry: false }),
+      { mode: 0o600 },
+    );
     await run(
       await binary(config, 'mongosh'),
       ['--nodb', '--quiet', '--file', path.join(toolDir, 'mongo-run.cjs')],
       {
         env: {
           ...environment(config),
+          HOME: home,
           BOTFLEET_MIGRATION_REQUEST: filename,
           BOTFLEET_MIGRATION_HELPER: path.join(toolDir, 'mongo.cjs'),
         },

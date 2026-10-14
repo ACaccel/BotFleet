@@ -110,6 +110,17 @@ it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
     const databaseBinaries = join(databaseEnvironment, 'bin');
     const binaries = join(environment, 'bin');
     const backupDir = join(directory, 'backups');
+    // The CLI runs under an empty home, as on a fresh host, so a mongosh profile
+    // problem fails here instead of on the operator's target machine. The drill's
+    // own direct mongosh calls use a telemetry-off profile (see cli.mjs `mongo`).
+    const freshHome = join(directory, 'fresh-home');
+    const shellHome = join(directory, 'shell-home');
+    mkdirSync(freshHome, { mode: 0o700 });
+    mkdirSync(join(shellHome, '.mongodb/mongosh'), { recursive: true, mode: 0o700 });
+    writeFileSync(
+      join(shellHome, '.mongodb/mongosh/config'),
+      JSON.stringify({ enableTelemetry: false }),
+    );
     let sequence = 0;
     function privateFile(value: unknown, suffix = '.json'): string {
       const filename = join(directory, `${sequence++}${suffix}`);
@@ -138,6 +149,7 @@ it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
       const request = privateFile({ action, uri, databases, ...additional });
       return run('mongosh', ['--nodb', '--quiet', '--file', join(__dirname, 'mongo-run.cjs')], {
         ...testEnvironment,
+        HOME: shellHome,
         BOTFLEET_MIGRATION_REQUEST: request,
         BOTFLEET_MIGRATION_HELPER: helper,
       });
@@ -151,6 +163,7 @@ it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
       succeed(
         run('mongosh', ['--nodb', '--quiet', '--file', filename], {
           ...testEnvironment,
+          HOME: shellHome,
           BOTFLEET_MIGRATION_REQUEST: request,
         }),
       );
@@ -167,6 +180,7 @@ it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
         ],
         {
           ...testEnvironment,
+          HOME: freshHome,
           CONDA_PREFIX: environment,
           PATH: '/usr/bin:/bin',
         },

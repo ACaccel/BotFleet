@@ -18,6 +18,8 @@ Copy `config.example.json` to `config.json` beside this README:
 | `backupDir`           | Parent directory for automatically named backups, outside the repository. Defaults to`botfleet-backups` beside the checkout.                        |
 
 Paths are literal: use absolute paths for both environments and `backupDir`, not `~`.
+Each `mongosh` call runs under a temporary profile with telemetry off, so it neither
+reads nor writes the operator's `~/.mongodb`.
 The application environment may be `<checkout>/.conda`; the database environment
 must remain outside the checkout unless it is the same legacy combined environment.
 Binaries must exist in their configured prefix; no system/PATH fallback is used.
