@@ -38,12 +38,12 @@
   "bug_report": {
     "hub": { "guildId": "YOUR_HUB_GUILD_ID", "channelId": "YOUR_HUB_FORUM_CHANNEL_ID" },
     "tags": {
-      "bug": "問題",
-      "suggestion": "建議",
-      "other": "其他",
-      "open": "未處理",
-      "in_progress": "處理中",
-      "closed": "已結案"
+      "bug": "Bug",
+      "suggestion": "Suggestion",
+      "other": "Other",
+      "open": "Open",
+      "in_progress": "In progress",
+      "closed": "Closed"
     }
   },
   "commands": ["help", "random_restaurant", "role", "feed", "thread"],
