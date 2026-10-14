@@ -57,10 +57,17 @@ export interface ArchiveWorkerOptions {
   /** Interval between invalid-request checks (see `ARCHIVE_INVALID_REQUESTS`); tests shorten it. */
   invalidRequestCheckMs?: number;
   /**
+   * Monotonic clock in milliseconds that throttles a full backup's stop-request lookups
+   * (default `performance.now`); tests drive it instead of waiting out the throttle.
+   */
+  stopCheckClock?: () => number;
+  /**
    * Whether each guild reduces its inbox in a background loop (default). Tests that
    * drain explicitly turn it off.
    */
   inboxLoop?: boolean;
+  /** First wait after a failed inbox loop round (doubling); tests shorten it. */
+  inboxRetryBaseMs?: number;
 }
 
 /**

@@ -35,7 +35,7 @@ import {
 
 type HistoryResult = Awaited<ReturnType<typeof scanArchiveHistory>>;
 export type ScanPassContext = ArchiveWorkerContextFor<
-  'client' | 'config' | 'logger' | 'sourceRetryBaseMs'
+  'client' | 'config' | 'logger' | 'sourceRetryBaseMs' | 'stopCheckClock'
 >;
 
 /**
@@ -103,7 +103,11 @@ export class ScanPass {
         : new ArchiveJobCancellation(
             this.jobId,
             async (id) => (await state.repos.jobs.getJob(id))?.cancelRequested === true,
-            { signal: state.signal.signal, logger: ctx.options.logger },
+            {
+              signal: state.signal.signal,
+              logger: ctx.options.logger,
+              now: ctx.options.stopCheckClock,
+            },
           );
     this.progress =
       this.jobId === undefined

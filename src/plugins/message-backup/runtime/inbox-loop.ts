@@ -19,6 +19,8 @@ interface ArchiveInboxLoopOptions {
   readonly signal: AbortSignal;
   /** A failed round, with the number of consecutive failures. */
   readonly onFailure: (error: unknown, failures: number) => void;
+  /** First wait after a failed round (default one second); tests shorten it. */
+  readonly retryBaseMs?: number;
 }
 
 /**
@@ -63,7 +65,10 @@ export class ArchiveInboxLoop {
       await this.idle(
         failures === 0
           ? this.options.idleMs
-          : Math.min(ARCHIVE_INBOX_RETRY_MAX_MS, ARCHIVE_INBOX_RETRY_BASE_MS * 2 ** (failures - 1)),
+          : Math.min(
+              ARCHIVE_INBOX_RETRY_MAX_MS,
+              (this.options.retryBaseMs ?? ARCHIVE_INBOX_RETRY_BASE_MS) * 2 ** (failures - 1),
+            ),
         failures === 0,
       );
     }

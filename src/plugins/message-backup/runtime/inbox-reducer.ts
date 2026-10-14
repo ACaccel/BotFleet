@@ -59,7 +59,9 @@ export interface InboxReducerDependencies {
  */
 export class ArchiveInboxReducer {
   public constructor(
-    private readonly ctx: ArchiveWorkerContextFor<'client' | 'config' | 'inboxLoop' | 'logger'>,
+    private readonly ctx: ArchiveWorkerContextFor<
+      'client' | 'config' | 'inboxLoop' | 'inboxRetryBaseMs' | 'logger'
+    >,
     private readonly deps: InboxReducerDependencies,
   ) {}
 
@@ -245,6 +247,7 @@ export class ArchiveInboxReducer {
       roundSize: INBOX_ROUND,
       idleMs: this.ctx.options.config.job_poll_seconds * 1000,
       signal: state.signal.signal,
+      retryBaseMs: this.ctx.options.inboxRetryBaseMs,
       onFailure: (error, failures) => {
         this.ctx.options.logger[isProgrammerError(error) ? 'error' : 'warn'](
           { guildId, failures, err: error },
