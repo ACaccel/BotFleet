@@ -65,6 +65,9 @@
   "menu_get_avatar": {
     "name": "Get user avatar URL"
   },
+  "menu_author_avatar": {
+    "name": "Get author avatar URL"
+  },
   "menu_get_sticker": {
     "name": "Get emoji/sticker URL"
   },

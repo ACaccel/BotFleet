@@ -216,6 +216,7 @@
       "help": "Without options it shows the overview; with `command` it shows one command in full.",
       "level_detail": "Without options it shows the MEE6 leaderboard, ten members per page; only the member who ran it can turn the pages. `rank` opens the page holding that rank and marks it. `member` shows one member's card with level progress, average XP per message, an estimate of the messages to the next level and the gap to the rank above; it takes priority when `rank` is also given. The leaderboard must be public, covers the top 1,000 members and is cached for five minutes.",
       "menu_get_avatar": "Shows a member's avatar, preferring their server avatar.",
+      "menu_author_avatar": "Shows the message author's avatar, preferring their server avatar.",
       "menu_get_sticker": "Shows a message's stickers and custom emoji with links to the files.",
       "random_restaurant": "Suggests a random restaurant in Taipei and parts of New Taipei.",
       "reply": "After `add`, the bot answers any message **exactly** matching the keyword; the keyword `[*]` makes the bot interject at random. Replies never ping anyone. `delete` removes your own pairs; members who manage messages can remove any.",

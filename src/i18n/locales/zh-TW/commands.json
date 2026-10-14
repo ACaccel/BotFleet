@@ -65,6 +65,9 @@
   "menu_get_avatar": {
     "name": "取得用戶頭像連結"
   },
+  "menu_author_avatar": {
+    "name": "取得作者頭像連結"
+  },
   "menu_get_sticker": {
     "name": "取得表符/貼圖連結"
   },

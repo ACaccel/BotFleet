@@ -125,7 +125,7 @@ lists that command's paths and options. Admin-only paths are hidden from non-adm
 | Server and roles  | `/role`, `/level_detail`, `/roll_call`, `/ban_user`                                            |
 | Bot persona       | `/talk`, `/change_avatar`                                                                      |
 | Utilities and fun | `/help`, `/bug_report`, `/random_restaurant`, `/give_score`, `/gay`                            |
-| Context menus     | Get avatar, get sticker                                                                        |
+| Context menus     | Get avatar (from a member or a message author), get sticker                                    |
 
 Upgrading from standalone commands such as `/feed_subscribe`, or from the removed
 `/emoji_frequency`, `/sticker_frequency` and `/db_list_message`? See
