@@ -115,8 +115,8 @@ for test-guild registration and the opt-out flags. Registration is separate from
 
 A bot exposes only the command IDs listed in its `config.json` `commands`. Related
 actions are grouped under one root. `/help` shows a private root-command overview
-with a category selector; `/help command:<name>` lists that command's paths and
-options. Admin-only paths are hidden from non-admins.
+with a category selector, whose first entry returns to the overview; `/help command:<name>`
+lists that command's paths and options. Admin-only paths are hidden from non-admins.
 
 | Area              | Commands                                                                                       |
 | ----------------- | ---------------------------------------------------------------------------------------------- |

@@ -1,5 +1,10 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import type { EmbedBuilder, StringSelectMenuInteraction } from 'discord.js';
+import type {
+  ActionRowBuilder,
+  EmbedBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuInteraction,
+} from 'discord.js';
 
 import type { BaseBot } from '../../../../src/bot';
 import { createDefaultTranslator, type Translator } from '../../../../src/core/i18n';
@@ -18,15 +23,22 @@ beforeAll(async () => {
 
 const fixture = (values: string[] = ['community'], isAdmin = false) => {
   const admin = vi.fn(() => isAdmin);
-  const update = vi.fn(async (_payload: { embeds: EmbedBuilder[] }) => undefined);
+  const update = vi.fn(
+    async (_payload: {
+      embeds: EmbedBuilder[];
+      components?: ActionRowBuilder<StringSelectMenuBuilder>[];
+    }) => undefined,
+  );
   const interaction = {
     user: { id: 'member-1' },
+    client: { user: { username: 'Test Bot', displayAvatarURL: () => 'https://example.com/a.png' } },
     values,
     update,
   } as unknown as StringSelectMenuInteraction;
   const bot = {
     commandHandlers: new Map<string, Command>([['thread', new Thread()]]),
     translator,
+    helpMessage: 'Personality introduction',
     isAdmin: admin,
   } as unknown as BaseBot;
   return { handler: new HelpCategory(), bot, interaction, admin, update };
@@ -61,6 +73,22 @@ describe('/help category menu', () => {
     expect(update.mock.calls[1]?.[0].embeds[0]?.toJSON().description).not.toContain(
       '/thread manager',
     );
+  });
+
+  it('returns to the overview with its category menu', async () => {
+    const { handler, bot, interaction, admin, update } = fixture(['overview']);
+
+    await handler.execute(interaction, bot);
+
+    expect(admin).toHaveBeenCalledWith('member-1');
+    const payload = update.mock.calls[0]?.[0];
+    const embed = payload?.embeds[0]?.toJSON();
+    expect(embed?.author?.name).toBe('Test Bot · Command Help');
+    expect(embed?.description).toContain('Personality introduction');
+    const options = payload?.components?.[0]?.components[0]?.options.map(
+      (option) => option.data.value,
+    );
+    expect(options).toEqual(['overview', 'community']);
   });
 
   it('shows an empty-state message for a valid category with no loaded commands', async () => {

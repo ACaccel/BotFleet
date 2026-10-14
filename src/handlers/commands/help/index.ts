@@ -8,7 +8,8 @@ import { Command, type CommandSuggestions } from '../command';
 
 import { replyForError } from '../../../infra/discord/reply-for-error';
 import { getOptionalString } from '../../../infra/discord/options';
-import { buildCommandDetail, buildHelpOverview } from './build-help-embed';
+import { buildCommandDetail } from './build-help-embed';
+import { helpOverviewPayload } from './overview-payload';
 
 export default class help extends Command {
   constructor() {
@@ -56,14 +57,9 @@ export default class help extends Command {
         return;
       }
 
-      const botUser = interaction.client.user;
-      const { embed, menu } = buildHelpOverview(bot.commandHandlers, bot.translator, {
-        ...viewer,
-        botName: botUser?.username ?? '',
-        botAvatarUrl: botUser?.displayAvatarURL(),
-        intro: bot.helpMessage,
-      });
-      await interaction.editReply({ embeds: [embed], components: menu ? [menu] : [] });
+      await interaction.editReply(
+        helpOverviewPayload(bot, interaction.client.user, viewer.isAdmin),
+      );
     } catch (error) {
       await replyForError(interaction, bot, error, 'replies:help.failed', interaction.guildId);
     }

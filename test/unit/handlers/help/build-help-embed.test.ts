@@ -47,7 +47,8 @@ describe('/help overview', () => {
     expect(fields[0]?.value).toBe('`/give_score` commands:give_score.description');
     expect(fields[1]?.value).toContain('`commands:menu_get_avatar.name`');
     const options = menu?.components[0]?.options.map((option) => option.data.value);
-    expect(options).toEqual(['fun', 'utility', 'admin']);
+    // The overview entry leads, so a category page can always return to it.
+    expect(options).toEqual(['overview', 'fun', 'utility', 'admin']);
   });
 });
 

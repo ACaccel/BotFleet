@@ -7,15 +7,11 @@
  * Imports avoid the `@cmd` barrel, which registers `/help` itself.
  */
 import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
-import {
-  ActionRowBuilder,
-  EmbedBuilder,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder,
-} from 'discord.js';
+import { EmbedBuilder, type ActionRowBuilder, type StringSelectMenuBuilder } from 'discord.js';
 
 import type { Translator } from '../../../core/i18n';
 import type { Command, CommandCategory } from '../command';
+import { buildCategoryMenu } from './category-menu';
 import { commandsByCategory, helpPaths, type HelpPath } from './help-model';
 import {
   FIELD_MAX,
@@ -31,9 +27,6 @@ import {
 /** Discord's caps on embed descriptions and field count. */
 const DESCRIPTION_MAX = 4096;
 const MAX_FIELDS = 25;
-
-/** Custom ID of the overview's category menu, routed to `select-menus/help_category`. */
-const HELP_CATEGORY_MENU = 'help_category';
 
 interface HelpViewer {
   /** Bot admins also see admin-only paths. */
@@ -85,18 +78,7 @@ export const buildHelpOverview = (
   }
   embed.setFooter({ text: t('replies:help.footer', { count: commandCount }) });
 
-  if (categories.length === 0) return { embed, menu: null };
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(HELP_CATEGORY_MENU)
-    .setPlaceholder(t('replies:help.select_placeholder'))
-    .addOptions(
-      categories.map((category) =>
-        new StringSelectMenuOptionBuilder()
-          .setLabel(truncate(t(`replies:help.category.${category}`), 100))
-          .setValue(category),
-      ),
-    );
-  return { embed, menu: new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select) };
+  return { embed, menu: categories.length === 0 ? null : buildCategoryMenu(categories, t) };
 };
 
 /** Every executable path in one category, each with its own description. */

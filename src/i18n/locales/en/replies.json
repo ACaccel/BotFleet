@@ -194,6 +194,7 @@
     },
     "usage_hint": "Browse a category with the menu below, or use `/help command:<name>` for one command in full.",
     "select_placeholder": "Choose a category",
+    "overview_option": "📋 Overview",
     "context_menu": "Right-click a message or member and look under Apps",
     "category_empty": "No commands in this category are available to you.",
     "detail_hint": "Use /help command:<name> for options and notes",

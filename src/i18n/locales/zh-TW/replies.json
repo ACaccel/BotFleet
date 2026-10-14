@@ -194,6 +194,7 @@
     },
     "usage_hint": "用下方選單瀏覽分類,或輸入 `/help command:<指令>` 查看單一指令的完整用法。",
     "select_placeholder": "選擇分類",
+    "overview_option": "📋 總覽",
     "context_menu": "右鍵點擊訊息或成員,在「應用程式」中使用",
     "category_empty": "這個分類沒有你可以使用的指令",
     "detail_hint": "輸入 /help command:<指令> 查看參數與注意事項",
