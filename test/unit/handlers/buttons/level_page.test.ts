@@ -32,12 +32,6 @@ const press = async (customId: string, pressedBy = 'invoker') => {
   const sink = newInteractionSink();
   const { bot } = buildFakeBot({ translator: echoTranslatorWithParams() });
   const interaction = buildButtonInteraction({ customId, userId: pressedBy, sink });
-  // The shared builder records follow-ups in the sink but does not expose the method.
-  Object.assign(interaction, {
-    followUp: async (options: { content?: string; flags?: number }) => {
-      sink.followUps.push(options);
-    },
-  });
   await new LevelPage().execute(interaction, bot);
   return sink;
 };

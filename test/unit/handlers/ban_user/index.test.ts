@@ -51,12 +51,16 @@ const build = (fixture: Fixture) => {
     id: 'judge-1',
     guildId: GUILD_ID,
   };
-  const member = buildGuildMember({ id: TARGET_ID, displayName: 'Target' });
+  const member = buildGuildMember({
+    id: TARGET_ID,
+    displayName: 'Target',
+    bot: fixture.targetIsBot ?? false,
+  });
   const timeout = vi.fn(async () => {
     if (!fixture.timeoutSucceeds) throw new Error('Missing Permissions');
   });
   Object.assign(member, { timeout });
-  Object.assign(member.user, { bot: fixture.targetIsBot ?? false, tag: 'target#1' });
+  Object.assign(member.user, { tag: 'target#1' });
   const clientListeners = new Map<string, unknown>();
   const send = vi.fn(async (_options: unknown) => judgeMessage);
   const { bot, logger } = buildFakeBot({
@@ -74,20 +78,13 @@ const build = (fixture: Fixture) => {
   const sink = newInteractionSink();
   const interaction = buildChatInputInteraction({
     userId: 'u-init',
+    username: 'initiator',
+    member: buildGuildMember({ id: 'u-init', displayName: 'Initiator' }),
     guild: buildGuild({ id: GUILD_ID, members: [member] }),
     channel,
     options: { user: TARGET_ID },
     sink,
   });
-  // The builder has no `deleteReply`, guild member or username; removing
-  // the acknowledgement is only observable as the call.
-  const deleteReply = vi.fn(async () => undefined);
-  Object.assign(interaction, {
-    deleteReply,
-    member: buildGuildMember({ id: 'u-init', displayName: 'Initiator' }),
-  });
-  Object.assign(interaction.user, { username: 'initiator' });
-
   return {
     bot,
     interaction,
@@ -96,7 +93,6 @@ const build = (fixture: Fixture) => {
     timeout,
     reply,
     send,
-    deleteReply,
     error: logger.error,
     clientListeners,
   };
@@ -109,7 +105,7 @@ afterEach(() => {
 
 describe('ban_user judgement', () => {
   it('times the target out when the vote threshold is met', async () => {
-    const { bot, interaction, timeout, reply, sink, deleteReply } = build({
+    const { bot, interaction, timeout, reply, sink } = build({
       votes: 5,
       timeoutSucceeds: true,
     });
@@ -118,7 +114,7 @@ describe('ban_user judgement', () => {
     expect(scheduledCallbacks).toHaveLength(1);
     // The invoking acknowledgement is replaced by the public vote message.
     expect(sink.defers).toEqual([{}]);
-    expect(deleteReply).toHaveBeenCalledOnce();
+    expect(sink.deletes).toEqual(['@original']);
     scheduledCallbacks[0]?.();
     await vi.waitFor(() => expect(timeout).toHaveBeenCalledTimes(1));
 
@@ -171,7 +167,7 @@ describe('ban_user judgement', () => {
 
 describe('ban_user vote call', () => {
   it('refuses a bot target before any vote is posted', async () => {
-    const { bot, interaction, send, sink, deleteReply } = build({
+    const { bot, interaction, send, sink } = build({
       votes: 5,
       timeoutSucceeds: true,
       targetIsBot: true,
@@ -180,7 +176,7 @@ describe('ban_user vote call', () => {
     await new BanUser().execute(interaction, bot);
 
     expect(sink.editReplies).toEqual([{ content: 'replies:ban_user.cannot_ban_bot' }]);
-    expect(deleteReply).not.toHaveBeenCalled();
+    expect(sink.deletes).toEqual([]);
     expect(send).not.toHaveBeenCalled();
     expect(scheduledCallbacks).toHaveLength(0);
   });

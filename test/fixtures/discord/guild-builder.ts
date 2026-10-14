@@ -1,7 +1,8 @@
 /**
  * Minimal Guild builder for unit / integration tests. Returns the
  * structural subset that handler / plugin code touches — id, name,
- * `channels.cache`, `members.cache`, `roles`. Tests that need more can
+ * `channels.cache`, `members.cache`, `roles`, `emojis.cache`,
+ * `stickers.cache`. Tests that need more can
  * spread extra fields into the return.
  */
 import { vi, type Mock } from 'vitest';
@@ -96,6 +97,10 @@ interface BuildGuildInput {
   readonly channels?: readonly GuildBasedChannel[];
   /** Pre-populated member cache. Tests pass members built by `buildGuildMember`. */
   readonly members?: readonly { id: string; displayName?: string }[];
+  /** Pre-populated custom emoji cache, for handlers that count or list them. */
+  readonly emojis?: readonly { readonly id: string }[];
+  /** Pre-populated sticker cache, for handlers that count or list them. */
+  readonly stickers?: readonly { readonly id: string }[];
   /**
    * The bot's own member (`guild.members.me`), which permission checks
    * on a target channel resolve against. `null` by default, the state a
@@ -119,6 +124,8 @@ export const buildGuild = (input: BuildGuildInput = {}): Guild => {
   for (const m of input.members ?? []) {
     memberCache.set(m.id, m);
   }
+  const emojiCache = new Map((input.emojis ?? []).map((emoji) => [emoji.id, emoji]));
+  const stickerCache = new Map((input.stickers ?? []).map((sticker) => [sticker.id, sticker]));
   const roles = input.roles ?? buildGuildRoles({ everyoneRoleId: input.everyoneRoleId });
   const guild = {
     id: input.id ?? 'g-1',
@@ -127,6 +134,8 @@ export const buildGuild = (input: BuildGuildInput = {}): Guild => {
     channels: { cache: channelCache },
     members: { cache: memberCache, me: input.me ?? null },
     roles,
+    emojis: { cache: emojiCache },
+    stickers: { cache: stickerCache },
   } as unknown as Guild;
   for (const role of roles.cache.values()) role.guild = guild;
   return guild;

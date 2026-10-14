@@ -482,23 +482,35 @@ describe('thread_claim DM review', () => {
     );
   });
 
-  it.each(['owner', 'access', 'membership', 'private'])(
-    'rechecks applicant eligibility before approval: %s',
-    async (scenario) => {
-      const f = build();
-      if (scenario === 'owner') f.thread.ownerId = ADMIN;
-      if (scenario === 'access') f.has.mockReturnValue(false);
-      if (scenario === 'membership') f.fetchMember.mockRejectedValue(new Error('Left guild'));
-      if (scenario === 'private') {
-        f.thread.type = ChannelType.PrivateThread;
-        f.has.mockImplementation((permission) => permission === PermissionFlagsBits.ViewChannel);
-        f.membership.mockRejectedValue(new Error('Left private thread'));
-      }
-      await f.review();
-      expect(f.repo.decideClaim).not.toHaveBeenCalled();
-      expect(f.send).not.toHaveBeenCalled();
-    },
-  );
+  // A lookup that throws (the applicant left the guild or the private
+  // thread) is not a ThreadManagementError, so it surfaces as the generic
+  // failure reply rather than a specific key.
+  it.each([
+    ['owner', 'claim_owner_changed'],
+    ['access', 'claim_no_access'],
+    ['membership', 'claim_failed'],
+    ['private', 'claim_failed'],
+  ] as const)('rechecks applicant eligibility before approval: %s', async (scenario, key) => {
+    const f = build();
+    if (scenario === 'owner') f.thread.ownerId = ADMIN;
+    if (scenario === 'access') f.has.mockReturnValue(false);
+    if (scenario === 'membership') f.fetchMember.mockRejectedValue(new Error('Left guild'));
+    if (scenario === 'private') {
+      f.thread.type = ChannelType.PrivateThread;
+      f.has.mockImplementation((permission) => permission === PermissionFlagsBits.ViewChannel);
+      f.membership.mockRejectedValue(new Error('Left private thread'));
+    }
+    await f.review();
+    expect(f.repo.decideClaim).not.toHaveBeenCalled();
+    expect(f.send).not.toHaveBeenCalled();
+    if (key === 'claim_failed') {
+      expect(f.buttonSink.editReplies.at(-1)).toEqual({
+        content: 'replies:thread_moderation.claim_failed',
+      });
+    } else {
+      expectReply(f.buttonSink, key);
+    }
+  });
 
   it('allows rejection even when the applicant has left the server', async () => {
     const f = build();

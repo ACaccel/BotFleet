@@ -65,11 +65,7 @@ const makeInteraction = () => {
     options: { name: 'Notify', days: 7 },
     sink,
   });
-  // The builders record no `deleteReply`; the call itself is the only
-  // observable of removing the acknowledgement.
-  const deleteReply = vi.fn().mockResolvedValue(undefined);
-  Object.assign(interaction, { deleteReply });
-  return { interaction, sink, roles, deleteReply };
+  return { interaction, sink, roles };
 };
 
 afterEach(() => {
@@ -81,7 +77,7 @@ afterEach(() => {
 describe('temp_role command wrapper', () => {
   it('delegates to the plugin handler on the happy path', async () => {
     const repos = makeRepos(ok({ role_id: 'role-1' }));
-    const { interaction, sink, roles, deleteReply } = makeInteraction();
+    const { interaction, sink, roles } = makeInteraction();
 
     await new temp_role().execute(interaction, makeBot(repos));
 
@@ -89,7 +85,7 @@ describe('temp_role command wrapper', () => {
     expect(repos.tempRole.create).toHaveBeenCalledWith(
       expect.objectContaining({ role_id: 'role-1', creator_id: 'user-1' }),
     );
-    expect(deleteReply).toHaveBeenCalledTimes(1);
+    expect(sink.deletes).toEqual(['@original']);
     expect(sink.editReplies).toEqual([]);
   });
 

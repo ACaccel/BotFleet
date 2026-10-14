@@ -9,6 +9,7 @@ import {
   buildButtonInteraction,
   newInteractionSink,
 } from '../../../fixtures/discord/interaction-builder';
+import { buildMessage } from '../../../fixtures/discord/message-builder';
 import { ADMIN_ID, DEBUG_ID, archiveBot, archiveGuild } from '../archive/fixtures';
 
 // The control service reaches the handler through the injected factory.
@@ -54,17 +55,13 @@ const press = async (
     customId,
     userId,
     guild: archiveGuild(options.ownerId),
+    channel: { id: options.channelId ?? DEBUG_ID },
+    message: buildMessage({ id: '700' }),
     sink,
-  });
-  const followUp = vi.fn();
-  Object.assign(interaction, {
-    channelId: options.channelId ?? DEBUG_ID,
-    message: { id: '700' },
-    followUp,
   });
   const { bot, logger, createControl } = archiveBot({ control });
   await new ArchiveButton().execute(interaction, bot);
-  return { sink, followUp, logger, createControl };
+  return { sink, logger, createControl };
 };
 const titleOf = (sink: ReturnType<typeof newInteractionSink>) =>
   JSON.stringify((sink.editReplies.at(-1) as { embeds?: unknown } | undefined)?.embeds);
@@ -138,18 +135,18 @@ describe('archive panel buttons', () => {
     });
     expect(titleOf(sink)).toContain('replies:archive.confirm_restart_title');
     control.prepareRestart.mockResolvedValueOnce(rejected('ARCHIVE_JOB_NOT_RESUMABLE'));
-    const { followUp, sink: refused } = await press(`archive|restart|${JOB}`);
+    const { sink: refused } = await press(`archive|restart|${JOB}`);
     expect(refused.editReplies).toEqual([]);
     expect(control.requestConfirmation).toHaveBeenCalledOnce();
-    expect(followUp.mock.calls[0]?.[0]).toMatchObject({ flags: MessageFlags.Ephemeral });
-    expect(followUp.mock.calls[0]?.[0].content).toContain('replies:archive.backup_not_resumable');
+    expect(refused.followUps[0]).toMatchObject({ flags: MessageFlags.Ephemeral });
+    expect(refused.followUps[0]?.content).toContain('replies:archive.backup_not_resumable');
   });
 
   it('keeps the shared panel when an action fails', async () => {
     control.confirm.mockResolvedValue(rejected('ARCHIVE_CONFIRMATION_ACTOR'));
-    const { sink, followUp } = await press(`archive|start|${'T'.repeat(24)}`);
+    const { sink } = await press(`archive|start|${'T'.repeat(24)}`);
     expect(sink.editReplies).toEqual([]);
-    expect(followUp.mock.calls[0]?.[0].content).toContain('replies:archive.confirm_actor');
+    expect(sink.followUps[0]?.content).toContain('replies:archive.confirm_actor');
   });
 
   it.each([
@@ -198,7 +195,7 @@ describe('archive panel buttons', () => {
     control.archiveBytes.mockRejectedValue(new Error('collStats denied'));
     const status = await press('archive|status');
     expect(titleOf(status.sink)).toContain('replies:archive.status_title');
-    expect(status.followUp).not.toHaveBeenCalled();
+    expect(status.sink.followUps).toEqual([]);
     control.recentRecords.mockResolvedValue([job({ status: 'complete' })]);
     const records = await press('archive|records');
     expect(titleOf(records.sink)).toContain('replies:archive.records_title');

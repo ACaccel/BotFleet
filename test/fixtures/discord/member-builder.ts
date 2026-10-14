@@ -3,7 +3,7 @@
  * `interaction.member` and `guild.members.cache.get`.
  */
 import { vi, type Mock } from 'vitest';
-import type { GuildMember } from 'discord.js';
+import type { GuildMember, PermissionResolvable } from 'discord.js';
 
 /** Spies on the member's role grants, for handlers that toggle a role. */
 interface MemberRolesFake {
@@ -15,6 +15,10 @@ interface BuildGuildMemberInput {
   readonly id?: string;
   readonly displayName?: string;
   readonly username?: string;
+  /** Marks `user.bot`; a member is human by default. */
+  readonly bot?: boolean;
+  /** Permissions `permissions.has` answers from; a member holds none by default. */
+  readonly permissions?: readonly PermissionResolvable[];
   readonly roleIds?: readonly string[];
   /** Spies the built member's `roles.add` / `roles.remove` write into. */
   readonly roles?: MemberRolesFake;
@@ -29,6 +33,7 @@ export const buildMemberRoles = (): MemberRolesFake => ({
 
 export const buildGuildMember = (input: BuildGuildMemberInput = {}): GuildMember => {
   const id = input.id ?? 'u-1';
+  const permissions = input.permissions ?? [];
   const roleCache = new Map<string, unknown>();
   for (const rid of input.roleIds ?? []) {
     roleCache.set(rid, { id: rid });
@@ -40,9 +45,10 @@ export const buildGuildMember = (input: BuildGuildMemberInput = {}): GuildMember
       id,
       username: input.username ?? 'tester',
       displayName: input.displayName ?? input.username ?? 'tester',
-      bot: false,
+      bot: input.bot ?? false,
       displayAvatarURL: () => `https://cdn.example/${id}.png`,
     },
+    permissions: { has: (flag: PermissionResolvable) => permissions.includes(flag) },
     roles: {
       cache: roleCache,
       highest: { position: input.highestRolePosition ?? 0 },

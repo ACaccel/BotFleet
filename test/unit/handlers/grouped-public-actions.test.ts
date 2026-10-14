@@ -61,23 +61,9 @@ const families = [
 
 const { bot } = buildFakeBot();
 
-// The builders have no subcommand surface; routing reads only these two.
-const routeOf = (name: string) => ({
-  getSubcommand: () => name,
-  getSubcommandGroup: () => null,
-});
+const interactionFor = (name: string) => buildChatInputInteraction({ subcommand: name });
 
-const interactionFor = (name: string) => {
-  const interaction = buildChatInputInteraction();
-  Object.assign(interaction.options, routeOf(name));
-  return interaction;
-};
-
-const autocompleteFor = (name: string) => {
-  const interaction = buildAutocompleteInteraction();
-  Object.assign(interaction.options, routeOf(name));
-  return interaction;
-};
+const autocompleteFor = (name: string) => buildAutocompleteInteraction({ subcommand: name });
 
 afterEach(() => vi.restoreAllMocks());
 

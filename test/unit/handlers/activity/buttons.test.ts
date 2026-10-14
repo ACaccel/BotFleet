@@ -2,6 +2,7 @@
  * The activity post's buttons: join refusals name their reason, a role
  * limit is enforced, and only the organizer or a manager may close.
  */
+import { PermissionFlagsBits } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import ActivityButtons from '../../../../src/handlers/buttons/activity';
@@ -13,6 +14,7 @@ import {
   newInteractionSink,
 } from '../../../fixtures/discord/interaction-builder';
 import { buildGuildMember } from '../../../fixtures/discord/member-builder';
+import { buildMessage } from '../../../fixtures/discord/message-builder';
 
 const stored = (overrides: Record<string, unknown> = {}) => ({
   activity_id: 'a1',
@@ -43,18 +45,10 @@ const run = async (
     customId: `activity|${action}`,
     userId,
     guild: buildGuild({ id: 'g1' }),
-    sink,
-  });
-  // The button builder has no `deferReply`, message, member or channel.
-  Object.assign(interaction, {
-    message: { id: 'a1' },
-    channel: null,
+    message: buildMessage({ id: 'a1' }),
     member: buildGuildMember({ id: userId, roleIds: roles }),
-    memberPermissions: { has: () => manager },
-    deferReply: async (opts?: { flags?: number }) => {
-      sink.defers.push(opts ?? {});
-      sink.acknowledged.deferred = true;
-    },
+    memberPermissions: manager ? [PermissionFlagsBits.ManageEvents] : [],
+    sink,
   });
   const { bot } = buildFakeBot({
     getRepos: () => ({ activity }),

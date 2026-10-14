@@ -9,6 +9,7 @@ import {
   buildChatInputInteraction,
   newInteractionSink,
 } from '../../../fixtures/discord/interaction-builder';
+import { buildGuildMember } from '../../../fixtures/discord/member-builder';
 
 const NOW = Date.UTC(2026, 9, 14, 18);
 const INVOKER_ID = 'invoker-1';
@@ -35,13 +36,13 @@ const run = async ({
     commandName: 'give_score',
     userId: INVOKER_ID,
     options: subject === undefined ? {} : { subject },
+    users: user === undefined ? {} : { user },
+    member:
+      invokerMember === null ? null : buildGuildMember({ displayName: invokerMember.displayName }),
     sink,
   });
-  Object.assign(interaction.options, {
-    getUser: () => user ?? null,
-    getMember: () => member,
-  });
-  Object.assign(interaction, { member: invokerMember });
+  // The builder has no member resolver; the scored member is cached or not.
+  Object.assign(interaction.options, { getMember: () => member });
   const { bot } = buildFakeBot({
     timeZone,
     personaName: PERSONA,

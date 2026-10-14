@@ -16,10 +16,11 @@ import {
 
 const routedInteraction = (group: string | null, name: string) => {
   const sink = newInteractionSink();
-  const interaction = buildChatInputInteraction({ commandName: 'role', sink });
-  Object.assign(interaction.options, {
-    getSubcommandGroup: () => group,
-    getSubcommand: () => name,
+  const interaction = buildChatInputInteraction({
+    commandName: 'role',
+    subcommand: name,
+    subcommandGroup: group,
+    sink,
   });
   return { interaction, sink };
 };

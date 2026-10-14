@@ -6,32 +6,50 @@ minimum the SUT reads — no third-party mock libraries.
 
 ## Files
 
-- `guild-builder.ts` — `buildGuild({ id, name, ownerId, channels, members, me, roles })`
+- `guild-builder.ts` — `buildGuild({ id, name, ownerId, channels, members, emojis, stickers, me, roles })`
   and `buildGuildRoles({ roleCount, roles, createdRoleId })`, whose
   `create` / `delete` mocks drive the role-creation failure branches.
   A role spec may set `position`, `permissions` and `managed` for the
   self-service role checks; `buildGuild` fills in each role's `guild`.
-- `member-builder.ts` — `buildGuildMember({ id, displayName, roleIds, roles, highestRolePosition })`
+  `emojis` and `stickers` are `{ id }` lists backing `emojis.cache` and
+  `stickers.cache`; both are empty by default.
+- `member-builder.ts` — `buildGuildMember({ id, displayName, username, bot, permissions, roleIds, roles, highestRolePosition })`
   and `buildMemberRoles()` for the `roles.add` / `roles.remove` spies.
+  `bot` sets `user.bot` (human by default); `permissions` is the flag
+  list `permissions.has` answers from (none by default).
 - `channel-builder.ts` — `buildTextChannel({ id, name, type, parent, viewableBy, permissionsBySubject })`
   for the `/traffic` visibility filter and for the `/feed_*` permission
   checks (it answers `isTextBased()`, `isSendable()` and `isThread()`
   from `type`), and `buildSendableChannel({ sendable })` for any path
   that posts a message and later deletes it.
-- `interaction-builder.ts` — `buildChatInputInteraction({ commandName, userId, guildId, guild, options, channels, users, channel, memberPermissions, sink })`,
-  `buildButtonInteraction({ customId, userId, guildId, guild, sink })`,
-  `buildAutocompleteInteraction({ commandName, userId, guild, options, channel, focusedOption, focused, respondError, sink })`,
+- `interaction-builder.ts` — `buildChatInputInteraction({ commandName, userId, username, guildId, guild, member, options, channels, users, channel, memberPermissions, subcommand, subcommandGroup, sink })`,
+  `buildButtonInteraction({ customId, userId, guildId, guild, message, channel, member, memberPermissions, sink })`,
+  `buildAutocompleteInteraction({ commandName, userId, guild, options, channel, subcommand, subcommandGroup, focusedOption, focused, respondError, sink })`,
   `buildModalSubmitInteraction({ customId, userId, guildId, guild, channel, textInputs, selectValues, sink })`,
   `buildStringSelectInteraction({ customId, values, userId, guildId, guild, memberPermissions, channelMessages, sink })`
   and `buildUserContextMenuInteraction({ commandName, targetUser, targetMember, guildId, sink })`.
   The sink records `defers`, `replies`, `editReplies`, `updates`,
   `followUps` and `responses`, each with the `flags` it was sent with —
-  that is how a test asserts a reply stayed ephemeral — and `modals`,
-  the builders passed to `showModal`.
+  that is how a test asserts a reply stayed ephemeral — `modals`, the
+  builders passed to `showModal`, and `deletes`, the message each
+  `deleteReply` targeted (`@original` unless named). Every builder
+  except the autocomplete one shares one reply surface (`deferReply`,
+  `reply`, `editReply`, `followUp`, `deleteReply`), so none needs a
+  per-test patch for them.
   `memberPermissions` is a flag list `memberPermissions.has` answers
-  from; omitted, it is `null`, as outside a guild. `users` backs
-  `options.getUser`, which throws for a missing required option as
-  discord.js does; modal `fields` likewise throw for an absent field.
+  from; omitted, it is `null`, as outside a guild; the button builder
+  takes it too. `users` backs `options.getUser` (entries carry `id` plus
+  optional `displayName` / `username`), which throws for a missing
+  required option as discord.js does; modal `fields` likewise throw for
+  an absent field. `options` also backs `getBoolean`. `subcommand` and
+  `subcommandGroup` drive `options.getSubcommand` (required unless
+  called with `false`, so it throws when none is set) and
+  `getSubcommandGroup` on the chat-input and autocomplete builders.
+  `member` is the invoker's `GuildMember` (`null` by default); `username`
+  sets `user.username`. `channel` takes an id plus whichever of
+  `isSendable` / `send` / `isThread` / `fetch` the handler calls. On the
+  button builder, `message` is the message the button sits on and
+  `channel` also backs `channelId`.
   `channelMessages` gives a select interaction a channel whose
   `messages.fetch` rejects any other id. The user-menu builder's
   `targetMember` is what `guild.members.fetch` resolves (`null`

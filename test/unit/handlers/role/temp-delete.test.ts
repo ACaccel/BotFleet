@@ -17,7 +17,14 @@ const build = ({
   userId = 'other-member',
   admin = false,
   manageRoles = false,
-}: { userId?: string; admin?: boolean; manageRoles?: boolean } = {}) => {
+  permissionSnapshot = true,
+}: {
+  userId?: string;
+  admin?: boolean;
+  manageRoles?: boolean;
+  /** False models an interaction Discord sent without `memberPermissions`. */
+  permissionSnapshot?: boolean;
+} = {}) => {
   const doc = {
     role_id: ROLE_ID,
     creator_id: CREATOR_ID,
@@ -47,12 +54,10 @@ const build = ({
     userId,
     guildId: GUILD_ID,
     options: { role: ROLE_ID },
+    ...(permissionSnapshot
+      ? { memberPermissions: manageRoles ? [PermissionFlagsBits.ManageRoles] : [] }
+      : {}),
     sink,
-  });
-  Object.assign(interaction, {
-    memberPermissions: {
-      has: (permission: bigint) => manageRoles && permission === PermissionFlagsBits.ManageRoles,
-    },
   });
   return {
     bot,
@@ -97,15 +102,13 @@ describe('/role temp delete', () => {
   });
 
   it('still permits the creator when Discord supplies no permission snapshot', async () => {
-    const { bot, interaction, sink } = build({ userId: CREATOR_ID });
-    Object.assign(interaction, { memberPermissions: null });
+    const { bot, interaction, sink } = build({ userId: CREATOR_ID, permissionSnapshot: false });
     await new TempRoleDelete().execute(interaction, bot);
     expect(sink.editReplies).toEqual([{ content: 'replies:temp_role.cancelled' }]);
   });
 
   it('does not treat a missing permission snapshot as administrative authority', async () => {
-    const { bot, interaction, sink, deleteByRoleId } = build();
-    Object.assign(interaction, { memberPermissions: null });
+    const { bot, interaction, sink, deleteByRoleId } = build({ permissionSnapshot: false });
     await new TempRoleDelete().execute(interaction, bot);
     expect(sink.editReplies).toEqual([{ content: 'replies:temp_role.cancel_forbidden' }]);
     expect(deleteByRoleId).not.toHaveBeenCalled();

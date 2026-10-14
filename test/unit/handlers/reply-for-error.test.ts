@@ -49,18 +49,12 @@ const stubInteraction = (state: { deferred: boolean; replied: boolean }) => {
   sink.acknowledged.deferred = state.deferred;
   sink.acknowledged.replied = state.replied;
   const interaction = buildChatInputInteraction({ sink });
-  const deleted: string[] = [];
-  Object.assign(interaction, {
-    deleteReply: async () => {
-      deleted.push('@original');
-    },
-  });
   return {
     interaction,
     replies: sink.replies,
     editReplies: sink.editReplies,
     followUps: sink.followUps,
-    deleted,
+    deleted: sink.deletes,
   };
 };
 

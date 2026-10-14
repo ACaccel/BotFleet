@@ -48,9 +48,9 @@ const build = (opts: {
   const interaction = buildButtonInteraction({
     customId: `toggle_role|${ROLE_ID}`,
     guild,
+    member,
     sink,
   });
-  Object.assign(interaction, { member });
   return { interaction, memberRoles, sink };
 };
 

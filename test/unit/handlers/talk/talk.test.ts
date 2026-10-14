@@ -48,29 +48,28 @@ const build = (options: Options, { isAdmin = false, canPostElsewhere = true } = 
     get: (id: string) => (id === ELSEWHERE ? elsewhere : undefined),
   });
   const interaction = buildChatInputInteraction({
+    userId: member.id,
+    username: member.user.username,
+    member,
     guild,
     channel: here,
     channels: options.channel === undefined ? {} : { channel: { id: options.channel } },
-    options: { content: options.content },
+    options: {
+      content: options.content,
+      ...(options.anonymous === undefined ? {} : { anonymous: options.anonymous }),
+    },
     sink,
   });
-  // The builder answers neither boolean options nor a guild member.
-  Object.assign(interaction, { member, user: member.user });
-  Object.assign(interaction.options, { getBoolean: () => options.anonymous ?? null });
-  // No `deleteReply` in the sink; the call is the only observable of
-  // removing the acknowledgement.
-  const deleteReply = vi.fn(async () => undefined);
-  Object.assign(interaction, { deleteReply });
   const { bot, logger } = buildFakeBot({
     isAdmin: () => isAdmin,
     translator: echoTranslatorWithParams(),
   });
-  return { interaction, bot, logger, here, elsewhere, sink, deleteReply };
+  return { interaction, bot, logger, here, elsewhere, sink };
 };
 
 describe('/talk', () => {
   it('signs the message in the current channel and allows member and role pings', async () => {
-    const { interaction, bot, here, sink, deleteReply } = build({ content: '<@&2> hi' });
+    const { interaction, bot, here, sink } = build({ content: '<@&2> hi' });
 
     await new Talk().execute(interaction, bot);
 
@@ -80,12 +79,12 @@ describe('/talk', () => {
         allowedMentions: { parse: ['users', 'roles'] },
       },
     ]);
-    expect(deleteReply).toHaveBeenCalledTimes(1);
+    expect(sink.deletes).toEqual(['@original']);
     expect(sink.editReplies).toEqual([]);
   });
 
   it('refuses anonymous posting to a member who is not a bot admin', async () => {
-    const { interaction, bot, here, sink, deleteReply } = build({
+    const { interaction, bot, here, sink } = build({
       content: 'hi',
       anonymous: true,
     });
@@ -94,7 +93,7 @@ describe('/talk', () => {
 
     expect(here.sent).toEqual([]);
     expect(sink.editReplies).toEqual([{ content: 'errors:permission.admin_only_short' }]);
-    expect(deleteReply).not.toHaveBeenCalled();
+    expect(sink.deletes).toEqual([]);
   });
 
   it('lets an admin post anonymously and logs it', async () => {

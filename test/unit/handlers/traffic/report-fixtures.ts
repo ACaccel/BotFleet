@@ -392,11 +392,8 @@ const channel = (id: string, name: string, type: ChannelType, parentId: string |
   permissionsFor: () => ({ has: (flag: bigint) => flag === PermissionFlagsBits.ViewChannel }),
 });
 
-const member = (id: string, displayName: string, bot = false, roleIds: readonly string[] = []) => {
-  const built = buildGuildMember({ id, displayName, username: displayName, roleIds });
-  Object.assign(built.user, { bot });
-  return built;
-};
+const member = (id: string, displayName: string, bot = false, roleIds: readonly string[] = []) =>
+  buildGuildMember({ id, displayName, username: displayName, bot, roleIds });
 
 interface FakeGuildOptions {
   readonly emoji?: number;
@@ -434,43 +431,27 @@ export const fakeGuild = (options: FakeGuildOptions = {}): Guild => {
     'thonk',
     'stonks',
   ];
-  const emojis = new Map(
-    Array.from({ length: options.emoji ?? 24 }, (_, i) => {
-      const id = `e${i + 1}`;
-      return [
-        id,
-        {
-          id,
-          name: `${emojiNames[i % emojiNames.length]}${i >= 8 ? i : ''}`,
-          animated: i % 3 === 2,
-        },
-      ] as const;
-    }),
-  );
+  const emojis = Array.from({ length: options.emoji ?? 24 }, (_, i) => ({
+    id: `e${i + 1}`,
+    name: `${emojiNames[i % emojiNames.length]}${i >= 8 ? i : ''}`,
+    animated: i % 3 === 2,
+  }));
   const stickerNames = ['貓貓敬禮', '晚安啦', '笑到流淚', '加班中', '讚啦', '害羞', '衝啊', '震驚'];
-  const stickers = new Map(
-    Array.from({ length: options.stickers ?? 15 }, (_, i) => {
-      const id = `s${i + 1}`;
-      const format = i === 3 ? StickerFormatType.Lottie : StickerFormatType.PNG;
-      return [
-        id,
-        {
-          id,
-          name: `${stickerNames[i % stickerNames.length]}${i >= 8 ? i : ''}`,
-          format,
-          url: `https://media.discordapp.net/stickers/${id}.png`,
-        },
-      ] as const;
-    }),
-  );
-  // The live channel and member caches, emoji and stickers are richer than the
-  // builder's defaults, so they replace its empty ones.
-  return Object.assign(buildGuild({ id: GUILD_ID, name: '範例伺服器' }), {
+  const stickers = Array.from({ length: options.stickers ?? 15 }, (_, i) => {
+    const id = `s${i + 1}`;
+    return {
+      id,
+      name: `${stickerNames[i % stickerNames.length]}${i >= 8 ? i : ''}`,
+      format: i === 3 ? StickerFormatType.Lottie : StickerFormatType.PNG,
+      url: `https://media.discordapp.net/stickers/${id}.png`,
+    };
+  });
+  // The live channel and member caches are richer than the builder's
+  // defaults, so they replace its empty ones.
+  return Object.assign(buildGuild({ id: GUILD_ID, name: '範例伺服器', emojis, stickers }), {
     channels: { cache: channels },
     members: { cache: members, fetch: async (id: string) => members.get(id) },
     roles: { cache: new Map([['r1', { id: 'r1', name: '管理員' }]]) },
-    emojis: { cache: emojis },
-    stickers: { cache: stickers },
     client: {
       users: {
         // A bot the client has seen outside this guild's member cache.
@@ -518,20 +499,15 @@ export const fakeInteraction = (
     channel: { id: options.channelId ?? 'c1' },
     options: values,
     channels: { channel: { id: options.channel ?? 'c1' } },
+    users: {
+      user: options.user ?? { id: 'a2', username: 'momo' },
+      ...(options.app === undefined ? {} : { app: { id: options.app } }),
+    },
+    subcommand: options.subcommand,
     sink,
   });
-  Object.assign(interaction.options, {
-    getSubcommand: () => options.subcommand,
-    getSubcommandGroup: () => null,
-    getBoolean: (name: string) => (typeof values[name] === 'boolean' ? values[name] : null),
-    getUser: (name: string) =>
-      name === 'app'
-        ? options.app === undefined
-          ? null
-          : { id: options.app }
-        : (options.user ?? { id: 'a2', username: 'momo' }),
-    getMember: () => null,
-  });
+  // The builder has no member resolver; no option resolves to a cached member.
+  Object.assign(interaction.options, { getMember: () => null });
 
   // One ordered log across reply, edit, follow-up and delete: the sink keeps
   // them in separate lists, and a "replaced privately" outcome is their order.

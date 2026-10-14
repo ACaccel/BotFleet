@@ -24,7 +24,7 @@ import {
   buildChatInputInteraction,
   newInteractionSink,
 } from '../../../fixtures/discord/interaction-builder';
-import { buildGuildMember } from '../../../fixtures/discord/member-builder';
+import { buildGuildMember, buildMemberRoles } from '../../../fixtures/discord/member-builder';
 
 const roleManager = buildGuildRoles({
   roles: [
@@ -40,11 +40,12 @@ const ROOKIE = roleById('100000000000000001');
 const VETERAN = roleById('100000000000000002');
 
 const memberWith = (id: string, roleIds: string[]) => {
-  const member = buildGuildMember({ id, roleIds });
+  const { add, remove } = buildMemberRoles();
+  const member = buildGuildMember({ id, roleIds, roles: { add, remove } });
+  // Grants and removals write through to the cache the handler reads back.
   const cache = member.roles.cache;
-  const add = vi.fn(async (r: Role) => void cache.set(r.id, r));
-  const remove = vi.fn(async (ids: string[]) => ids.forEach((roleId) => cache.delete(roleId)));
-  Object.assign(member.roles, { add, remove });
+  add.mockImplementation(async (r: Role) => void cache.set(r.id, r));
+  remove.mockImplementation(async (ids: string[]) => ids.forEach((roleId) => cache.delete(roleId)));
   return { member, add, remove };
 };
 

@@ -83,13 +83,9 @@ const build = (action = 'add', opts: BuildOptions = {}) => {
     channels: { thread: { id: THREAD } },
     users: { user: { id: opts.target ?? TARGET, displayName: 'target' } },
     options: opts.page === undefined ? {} : { page: opts.page },
+    subcommand: action,
+    subcommandGroup: 'manager',
     sink,
-  });
-  // The builder has no subcommand surface; this command always runs
-  // as `/thread manager <action>`.
-  Object.assign(interaction.options, {
-    getSubcommandGroup: () => 'manager',
-    getSubcommand: () => action,
   });
   return {
     bot,

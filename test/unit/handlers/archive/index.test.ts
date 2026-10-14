@@ -48,12 +48,9 @@ const run = async (
     userId: options.userId ?? ADMIN_ID,
     guild: archiveGuild(),
     channel: { id: options.channelId ?? DEBUG_ID },
+    subcommand,
     sink,
     ...(options.minutes === undefined ? {} : { options: { minutes: options.minutes } }),
-  });
-  Object.assign(interaction.options, {
-    getSubcommand: () => subcommand,
-    getBoolean: () => null,
   });
   Object.assign(interaction, { fetchReply: vi.fn().mockResolvedValue({ id: '500' }) });
   if (options.editReply !== undefined) Object.assign(interaction, { editReply: options.editReply });

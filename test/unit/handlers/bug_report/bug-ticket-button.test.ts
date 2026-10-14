@@ -14,16 +14,8 @@ describe('ticket buttons', () => {
     const interaction = buildButtonInteraction({
       customId: 'bug_ticket|close',
       userId: 'member',
+      channel: { id: 'thread-7', isThread: () => true },
       sink,
-    });
-    // The button builder has no `deferReply` or channel; the handler
-    // acknowledges first and only then looks at the thread.
-    Object.assign(interaction, {
-      channel: { isThread: () => true, id: 'thread-7' },
-      deferReply: async (opts?: { flags?: number }) => {
-        sink.defers.push(opts ?? {});
-        sink.acknowledged.deferred = true;
-      },
     });
     const { bot } = buildFakeBot({ isAdmin: () => false });
 

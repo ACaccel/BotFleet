@@ -9,6 +9,7 @@ import {
   buildButtonInteraction,
   newInteractionSink,
 } from '../../fixtures/discord/interaction-builder';
+import { buildMessage } from '../../fixtures/discord/message-builder';
 
 const dbErr = (message: string) =>
   err(databaseErrorFrom(new Error(message), { operation: 'test' }));
@@ -51,18 +52,13 @@ const build = (opts: BuildOptions = {}) => {
     customId: opts.customId ?? `thread_list|${OWNER}|${THREAD}|2`,
     userId: opts.actor ?? OWNER,
     guild: buildGuild({ id: 'guild' }),
-    sink,
-  });
-  // The builder has no message or channel surface; the handler binds the
-  // control to both.
-  Object.assign(interaction, {
-    channelId: opts.channelId ?? THREAD,
-    channel: { isThread: () => true, fetch },
-    message: {
+    channel: { id: opts.channelId ?? THREAD, isThread: () => true, fetch },
+    message: buildMessage({
       author: { id: opts.messageAuthor ?? BOT },
       flags: { has: () => opts.ephemeral ?? true },
       interactionMetadata: { user: { id: opts.origin ?? OWNER } },
-    },
+    }),
+    sink,
   });
   return { bot, logger, interaction, sink, listBlocked, isManager, fetch };
 };

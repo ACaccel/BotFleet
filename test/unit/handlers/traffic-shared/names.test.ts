@@ -13,11 +13,8 @@ import {
 import { buildGuild } from '../../../fixtures/discord/guild-builder';
 import { buildGuildMember } from '../../../fixtures/discord/member-builder';
 
-const botMember = (id: string, displayName: string) => {
-  const member = buildGuildMember({ id, displayName });
-  Object.assign(member.user, { bot: true });
-  return member;
-};
+const botMember = (id: string, displayName: string) =>
+  buildGuildMember({ id, displayName, bot: true });
 
 const guildWith = (fetch: (id: string, options: unknown) => Promise<unknown>): Guild =>
   Object.assign(

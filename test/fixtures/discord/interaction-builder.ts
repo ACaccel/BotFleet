@@ -11,6 +11,7 @@ import type {
   Channel,
   ChatInputCommandInteraction,
   Guild,
+  GuildMember,
   Message,
   ModalSubmitInteraction,
   StringSelectMenuInteraction,
@@ -44,6 +45,12 @@ interface InteractionMockSink {
   /** Follow-ups in order — the overflow pages of a paginated reply. */
   readonly followUps: SentMessage[];
   /**
+   * `deleteReply` calls, each the message it targeted; `@original` when
+   * the handler named none. Removing the acknowledgement leaves no other
+   * trace, so the call itself is the observable.
+   */
+  readonly deletes: string[];
+  /**
    * `respond` calls — the only answer an autocomplete interaction has.
    * One entry per call, each the full choice list that was offered.
    */
@@ -67,10 +74,24 @@ interface ResolvedChannelOption {
   readonly id: string;
 }
 
+/**
+ * The invoking channel: an id, plus whichever channel methods the
+ * handler calls on it. Declared structurally rather than as `Channel`
+ * so a literal with `isThread: () => true` does not have to satisfy
+ * discord.js's type predicates.
+ */
+interface InvokingChannel extends ResolvedChannelOption {
+  readonly isSendable?: () => boolean;
+  readonly isThread?: () => boolean;
+  readonly send?: (...args: never[]) => unknown;
+  readonly fetch?: (...args: never[]) => unknown;
+}
+
 /** The structural minimum a resolved user option needs. */
 interface ResolvedUserOption {
   readonly id: string;
-  readonly displayName: string;
+  readonly displayName?: string;
+  readonly username?: string;
 }
 
 /**
@@ -82,9 +103,34 @@ const memberPermissionsFrom = (
 ): { has: (flag: bigint) => boolean } | null =>
   flags === undefined ? null : { has: (flag) => flags.includes(flag) };
 
+/**
+ * `options.getSubcommand` / `getSubcommandGroup` for a routed command.
+ * Like discord.js, the subcommand is required unless the caller passes
+ * `false` and the group is optional unless it passes `true`, so a
+ * handler routing on a missing name throws here as it would at runtime.
+ */
+const subcommandRoute = (name: string | null | undefined, group: string | null | undefined) => ({
+  getSubcommand: (required = true): string | null => {
+    if (name === undefined || name === null) {
+      if (required) throw new TypeError('No subcommand specified for interaction.');
+      return null;
+    }
+    return name;
+  },
+  getSubcommandGroup: (required = false): string | null => {
+    if (group === undefined || group === null) {
+      if (required) throw new TypeError('No subcommand group specified for interaction.');
+      return null;
+    }
+    return group;
+  },
+});
+
 interface BuildChatInputInteractionInput {
   readonly commandName?: string;
   readonly userId?: string;
+  /** The invoker's `user.username`, for handlers that sign output with it. */
+  readonly username?: string;
   readonly guildId?: string | null;
   readonly options?: Readonly<Record<string, string | number | boolean | null>>;
   /** Values `options.getChannel(name)` resolves, keyed by option name. */
@@ -92,11 +138,17 @@ interface BuildChatInputInteractionInput {
   /** Values `options.getUser(name)` resolves, keyed by option name. */
   readonly users?: Readonly<Record<string, ResolvedUserOption>>;
   /** The invoking channel; also backs `interaction.channelId`. */
-  readonly channel?: ResolvedChannelOption | null;
+  readonly channel?: InvokingChannel | null;
   /** Overrides the default `buildGuild({ id: guildId })`. */
   readonly guild?: Guild;
+  /** The invoker's guild profile; `null` outside a guild, as discord.js reports it. */
+  readonly member?: GuildMember | null;
   /** Flags the invoker holds in the channel; omitted means `memberPermissions` is `null`. */
   readonly memberPermissions?: readonly bigint[];
+  /** The routed subcommand `options.getSubcommand` reports; omitted means none. */
+  readonly subcommand?: string | null;
+  /** The routed subcommand group `options.getSubcommandGroup` reports; omitted means none. */
+  readonly subcommandGroup?: string | null;
   /** When the interaction was created; defaults to now. */
   readonly createdTimestamp?: number;
   readonly sink?: InteractionMockSink;
@@ -109,6 +161,7 @@ const newSink = (): InteractionMockSink => ({
   editReplies: [],
   updates: [],
   followUps: [],
+  deletes: [],
   responses: [],
   modals: [],
   acknowledged: { deferred: false, replied: false },
@@ -125,7 +178,7 @@ export const buildChatInputInteraction = (
   // `interaction.guild.id` and `interaction.guildId` cannot disagree.
   const guild =
     input.guild ?? (input.guildId === null ? null : buildGuild({ id: input.guildId ?? 'g-1' }));
-  return {
+  return withReplies(sink, {
     isChatInputCommand: () => true,
     isContextMenuCommand: () => false,
     isButton: () => false,
@@ -133,9 +186,14 @@ export const buildChatInputInteraction = (
     isStringSelectMenu: () => false,
     isAutocomplete: () => false,
     commandName: input.commandName ?? 'noop',
-    user: { id: input.userId ?? 'u-1', displayName: 'tester' },
+    user: {
+      id: input.userId ?? 'u-1',
+      displayName: 'tester',
+      username: input.username ?? 'tester',
+    },
     guild,
     guildId: guild?.id ?? null,
+    member: input.member ?? null,
     channel: input.channel ?? null,
     channelId: input.channel?.id ?? 'c-1',
     memberPermissions: memberPermissionsFrom(input.memberPermissions),
@@ -144,20 +202,12 @@ export const buildChatInputInteraction = (
     // batch budget from this, so a fixture without it would silently
     // disable the deadline instead of exercising it.
     createdTimestamp: input.createdTimestamp ?? Date.now(),
-    // Live acknowledgement state, so a handler's error boundary picks
-    // `editReply` over `reply` exactly as it would at runtime — and so
-    // a double-reply bug shows up here instead of only in production.
-    get deferred(): boolean {
-      return sink.acknowledged.deferred;
-    },
-    get replied(): boolean {
-      return sink.acknowledged.replied;
-    },
     options: {
       get: (name: string) =>
         Object.prototype.hasOwnProperty.call(options, name) ? { value: options[name] } : null,
       getString: (name: string) => (options[name] as string | undefined) ?? null,
       getInteger: (name: string) => (options[name] as number | undefined) ?? null,
+      getBoolean: (name: string) => (options[name] as boolean | undefined) ?? null,
       getChannel: (name: string) => channels[name] ?? null,
       // discord.js throws for a missing required option rather than
       // returning null, so a handler relying on `required` sees the same.
@@ -168,27 +218,14 @@ export const buildChatInputInteraction = (
         }
         return user ?? null;
       },
-    },
-    deferReply: async (opts?: { flags?: number }) => {
-      sink.defers.push(opts ?? {});
-      sink.acknowledged.deferred = true;
-    },
-    reply: async (opts: SentMessage) => {
-      sink.replies.push(opts);
-      sink.acknowledged.replied = true;
-    },
-    editReply: async (opts: SentMessage) => {
-      sink.editReplies.push(opts);
-    },
-    followUp: async (opts: SentMessage) => {
-      sink.followUps.push(opts);
+      ...subcommandRoute(input.subcommand, input.subcommandGroup),
     },
     // Showing a modal is the acknowledgement; a later reply would fail.
     showModal: async (modal: unknown) => {
       sink.modals.push(modal);
       sink.acknowledged.replied = true;
     },
-  } as unknown as ChatInputCommandInteraction;
+  }) as unknown as ChatInputCommandInteraction;
 };
 
 interface BuildButtonInteractionInput {
@@ -199,6 +236,14 @@ interface BuildButtonInteractionInput {
   readonly guildId?: string | null;
   /** Overrides the default `buildGuild({ id: guildId })`. */
   readonly guild?: Guild;
+  /** The message the button is attached to. */
+  readonly message?: Message;
+  /** The channel the button was pressed in; also backs `channelId`. */
+  readonly channel?: InvokingChannel | null;
+  /** The presser's guild profile; `null` outside a guild. */
+  readonly member?: GuildMember | null;
+  /** Flags the presser holds in the channel; omitted means `memberPermissions` is `null`. */
+  readonly memberPermissions?: readonly bigint[];
   readonly sink?: InteractionMockSink;
   /** When set, `update` rejects with it, so a handler's error path can be driven. */
   readonly updateError?: Error;
@@ -216,20 +261,19 @@ export const buildButtonInteraction = (input: BuildButtonInteractionInput): Butt
   const sink = input.sink ?? newSink();
   const guild =
     input.guild ?? (input.guildId === null ? null : buildGuild({ id: input.guildId ?? 'g-1' }));
-  return {
+  return withReplies(sink, {
     isButton: () => true,
     isChatInputCommand: () => false,
     customId: input.customId,
     user: { id: input.userId ?? 'u-1', displayName: 'tester' },
     guild,
     guildId: guild?.id ?? null,
+    member: input.member ?? null,
+    message: input.message,
+    channel: input.channel ?? null,
+    channelId: input.channel?.id ?? 'c-1',
+    memberPermissions: memberPermissionsFrom(input.memberPermissions),
     locale: 'zh-TW',
-    get deferred(): boolean {
-      return sink.acknowledged.deferred;
-    },
-    get replied(): boolean {
-      return sink.acknowledged.replied;
-    },
     deferUpdate: async () => {
       sink.deferUpdates.push({});
       sink.acknowledged.deferred = true;
@@ -239,14 +283,7 @@ export const buildButtonInteraction = (input: BuildButtonInteractionInput): Butt
       sink.updates.push(opts);
       sink.acknowledged.replied = true;
     },
-    reply: async (opts: SentMessage) => {
-      sink.replies.push(opts);
-      sink.acknowledged.replied = true;
-    },
-    editReply: async (opts: SentMessage) => {
-      sink.editReplies.push(opts);
-    },
-  } as unknown as ButtonInteraction;
+  }) as unknown as ButtonInteraction;
 };
 
 interface BuildAutocompleteInteractionInput {
@@ -263,6 +300,10 @@ interface BuildAutocompleteInteractionInput {
   readonly options?: Readonly<Record<string, string | number | boolean | null>>;
   /** The invoking channel; also backs `interaction.channelId`. */
   readonly channel?: ResolvedChannelOption | null;
+  /** The routed subcommand `options.getSubcommand` reports; omitted means none. */
+  readonly subcommand?: string | null;
+  /** The routed subcommand group `options.getSubcommandGroup` reports; omitted means none. */
+  readonly subcommandGroup?: string | null;
   /** The name of the option being typed into; `getFocused(true)` reports it. */
   readonly focusedOption?: string;
   /** What has been typed into that option so far. */
@@ -309,6 +350,7 @@ export const buildAutocompleteInteraction = (
         full === true
           ? { name: input.focusedOption ?? '', value: input.focused ?? '', focused: true }
           : (input.focused ?? ''),
+      ...subcommandRoute(input.subcommand, input.subcommandGroup),
     },
     respond: async (choices: readonly ApplicationCommandOptionChoiceData[]) => {
       if (input.respondError !== undefined) throw input.respondError;
@@ -339,12 +381,15 @@ const replySurface = (sink: InteractionMockSink) => ({
   followUp: async (opts: SentMessage) => {
     sink.followUps.push(opts);
   },
+  deleteReply: async (message?: string) => {
+    sink.deletes.push(message ?? '@original');
+  },
 });
 
 /**
- * Add the reply surface shared by the component and modal builders to
- * `fields`: the same sink-recording `deferReply` / `reply` /
- * `editReply` / `followUp` the chat-input builder exposes. Copied by
+ * Add the sink-recording reply surface — `deferReply` / `reply` /
+ * `editReply` / `followUp` / `deleteReply` — to `fields`, so every
+ * builder answers the reply methods the same way. Copied by
  * descriptor, because spreading would freeze the acknowledgement
  * getters at their build-time values.
  */

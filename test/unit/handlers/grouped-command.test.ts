@@ -22,23 +22,23 @@ class Action extends Command {
   }
 }
 
-// The builders have no subcommand surface; routing reads only these two.
-const routeOf = (name: string | null, group: string | null) => ({
-  getSubcommand: () => name,
-  getSubcommandGroup: () => group,
-});
-
 const chatRequest = (name: string | null, group: string | null = null) => {
   const sink = newInteractionSink();
-  const interaction = buildChatInputInteraction({ sink });
-  Object.assign(interaction.options, routeOf(name, group));
+  const interaction = buildChatInputInteraction({
+    subcommand: name,
+    subcommandGroup: group,
+    sink,
+  });
   return { interaction, sink };
 };
 
 const autocompleteRequest = (name: string | null, group: string | null = null) => {
   const sink = newInteractionSink();
-  const interaction = buildAutocompleteInteraction({ sink });
-  Object.assign(interaction.options, routeOf(name, group));
+  const interaction = buildAutocompleteInteraction({
+    subcommand: name,
+    subcommandGroup: group,
+    sink,
+  });
   return { interaction, sink };
 };
 

@@ -101,11 +101,7 @@ const makeInteraction = (
     textInputs: fields,
     sink,
   });
-  // The builders record no `deleteReply`; the call itself is the only
-  // observable of removing the acknowledgement.
-  const deleteReply = vi.fn().mockResolvedValue(undefined);
-  Object.assign(interaction, { deleteReply });
-  return { interaction, sink, deleteReply };
+  return { interaction, sink };
 };
 
 // node-schedule jobs created on the happy path are cancelled so no
@@ -122,7 +118,7 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     const repos = makeRepos();
     const channel = makeChannel(true);
     const { bot } = makeBot(repos, scheduledJobs);
-    const { interaction, sink, deleteReply } = makeInteraction(channel.channel);
+    const { interaction, sink } = makeInteraction(channel.channel);
 
     await handleGiveawayCreate(interaction, bot);
 
@@ -151,7 +147,7 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     // The draw is scheduled under the announcement's key.
     expect(scheduledJobs.size).toBe(1);
     // The interaction's own reply is removed; no success message remains.
-    expect(deleteReply).toHaveBeenCalledTimes(1);
+    expect(sink.deletes).toEqual(['@original']);
     expect(sink.editReplies).toEqual([]);
   });
 
@@ -162,7 +158,7 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     const { bot, getChannel } = makeBot(repos, scheduledJobs, {
       configuredChannel: configured.channel,
     });
-    const { interaction, sink, deleteReply } = makeInteraction(
+    const { interaction, sink } = makeInteraction(
       current.channel,
       DEFAULT_FIELDS,
       'giveaway_create|configured',
@@ -176,7 +172,7 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     expect(repos.giveaway.create).toHaveBeenCalledWith(
       expect.objectContaining({ channel_id: 'configured-channel' }),
     );
-    expect(deleteReply).toHaveBeenCalledTimes(1);
+    expect(sink.deletes).toEqual(['@original']);
     expect(sink.editReplies).toEqual([]);
   });
 
@@ -206,7 +202,7 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     const repos = makeRepos();
     const channel = makeChannel(true);
     const { bot } = makeBot(repos, scheduledJobs);
-    const { interaction, sink, deleteReply } = makeInteraction(channel.channel, {
+    const { interaction, sink } = makeInteraction(channel.channel, {
       ...DEFAULT_FIELDS,
       winner_num: 'abc',
     });
@@ -216,7 +212,7 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     expect(sink.defers).toEqual([{ flags: MessageFlags.Ephemeral }]);
     expect(sink.editReplies).toEqual([{ content: 'replies:giveaway.invalid_winner_num' }]);
     expect(repos.giveaway.create).not.toHaveBeenCalled();
-    expect(deleteReply).not.toHaveBeenCalled();
+    expect(sink.deletes).toEqual([]);
   });
 
   it.each(['30s', '31d'])('rejects a %s duration outside 1 minute to 30 days', async (duration) => {
@@ -268,13 +264,13 @@ describe('handleGiveawayCreate (modal redesign)', () => {
     const repos = makeRepos();
     const channel = makeChannel(false);
     const { bot } = makeBot(repos, scheduledJobs);
-    const { interaction, sink, deleteReply } = makeInteraction(channel.channel);
+    const { interaction, sink } = makeInteraction(channel.channel);
 
     await handleGiveawayCreate(interaction, bot);
 
     expect(sink.editReplies).toEqual([{ content: 'errors:command.channel_not_found' }]);
     expect(repos.giveaway.create).not.toHaveBeenCalled();
-    expect(deleteReply).not.toHaveBeenCalled();
+    expect(sink.deletes).toEqual([]);
   });
 });
 

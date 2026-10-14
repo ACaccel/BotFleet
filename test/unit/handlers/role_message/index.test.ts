@@ -55,18 +55,18 @@ const build = ({
     me: buildGuildMember({ id: 'bot', highestRolePosition: 10 }),
   });
   const sink = newInteractionSink();
+  // The handler checks ManageRoles and the role hierarchy against the caller's.
+  const caller = buildGuildMember({
+    id: 'caller',
+    highestRolePosition: callerPosition,
+    permissions: canManageRoles ? ['ManageRoles'] : [],
+  });
   const interaction = buildChatInputInteraction({
     ...(inGuild ? { guild } : { guildId: null }),
     options: { roles },
+    member: caller,
     sink,
   });
-  // The builder has no guild member; the handler checks ManageRoles and
-  // the role hierarchy against the caller's.
-  const caller = buildGuildMember({ id: 'caller', highestRolePosition: callerPosition });
-  Object.assign(caller, {
-    permissions: { has: (flag: string) => canManageRoles && flag === 'ManageRoles' },
-  });
-  Object.assign(interaction, { member: caller });
   return { interaction, sink };
 };
 

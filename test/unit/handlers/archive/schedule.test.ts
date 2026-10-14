@@ -33,12 +33,13 @@ const access = (
   };
 };
 const command = (options: { enabled?: boolean; minutes?: number }): ChatInputCommandInteraction => {
-  const interaction = buildChatInputInteraction({ commandName: 'archive' });
-  Object.assign(interaction.options, {
-    getBoolean: () => options.enabled ?? null,
-    getInteger: () => options.minutes ?? null,
+  return buildChatInputInteraction({
+    commandName: 'archive',
+    options: {
+      ...(options.enabled === undefined ? {} : { enabled: options.enabled }),
+      ...(options.minutes === undefined ? {} : { minutes: options.minutes }),
+    },
   });
-  return interaction;
 };
 const describeOf = (panel: Awaited<ReturnType<typeof executeArchiveSchedule>>) =>
   panel.embeds[0]?.description ?? '';

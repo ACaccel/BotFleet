@@ -79,11 +79,7 @@ const makeInteraction = (
     options,
     sink,
   });
-  // The builders record no `deleteReply`; the call itself is the only
-  // observable of removing the acknowledgement.
-  const deleteReply = vi.fn().mockResolvedValue(undefined);
-  Object.assign(interaction, { deleteReply });
-  return { interaction, sink, deleteReply };
+  return { interaction, sink };
 };
 
 afterEach(() => {
@@ -97,7 +93,7 @@ describe('handleTempRoleCreate', () => {
     const repos = makeRepos();
     const { guild, roles } = makeGuild(10);
     const { channel, send } = makeChannel(true);
-    const { interaction, sink, deleteReply } = makeInteraction(guild, channel, {
+    const { interaction, sink } = makeInteraction(guild, channel, {
       name: 'Notify',
       days: 7,
     });
@@ -137,7 +133,7 @@ describe('handleTempRoleCreate', () => {
     expect(stored.expires_at).toBeLessThanOrEqual(Date.now() + 7 * MS_PER_DAY);
     expect(scheduledJobs.has('temp-role:role-1')).toBe(true);
     // The public claim message is the only visible output.
-    expect(deleteReply).toHaveBeenCalledTimes(1);
+    expect(sink.deletes).toEqual(['@original']);
     expect(sink.editReplies).toEqual([]);
   });
 
@@ -145,7 +141,7 @@ describe('handleTempRoleCreate', () => {
     const repos = makeRepos();
     const { guild } = makeGuild(10);
     const { channel } = makeChannel(true);
-    const { interaction, deleteReply } = makeInteraction(guild, channel, { name: 'Notify' });
+    const { interaction, sink } = makeInteraction(guild, channel, { name: 'Notify' });
     const before = Date.now();
 
     await handleTempRoleCreate(interaction, makeBot(repos));
@@ -153,7 +149,7 @@ describe('handleTempRoleCreate', () => {
     const stored = repos.tempRole.create.mock.calls[0]?.[0] as { expires_at: number };
     expect(stored.expires_at).toBeGreaterThanOrEqual(before + 30 * MS_PER_DAY);
     expect(stored.expires_at).toBeLessThanOrEqual(Date.now() + 30 * MS_PER_DAY);
-    expect(deleteReply).toHaveBeenCalledTimes(1);
+    expect(sink.deletes).toEqual(['@original']);
   });
 
   it('rejects a blank name without creating a role', async () => {
@@ -188,7 +184,7 @@ describe('handleTempRoleCreate', () => {
     const repos = makeRepos();
     const { guild, roles } = makeGuild(250);
     const { channel } = makeChannel(true);
-    const { interaction, sink, deleteReply } = makeInteraction(guild, channel, {
+    const { interaction, sink } = makeInteraction(guild, channel, {
       name: 'Notify',
       days: 7,
     });
@@ -197,7 +193,7 @@ describe('handleTempRoleCreate', () => {
 
     expect(sink.editReplies).toEqual([{ content: 'replies:temp_role.at_role_limit:{"max":250}' }]);
     expect(roles.create).not.toHaveBeenCalled();
-    expect(deleteReply).not.toHaveBeenCalled();
+    expect(sink.deletes).toEqual([]);
   });
 
   it('reports guild_not_found when invoked outside a guild', async () => {

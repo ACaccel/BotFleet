@@ -27,11 +27,11 @@ import {
 
 const interactionFor = (name: string, group: string | null = null) => {
   const sink = newInteractionSink();
-  const interaction = buildChatInputInteraction({ userId: 'member', sink });
-  // The builder has no subcommand surface; routing reads only these two.
-  Object.assign(interaction.options, {
-    getSubcommand: () => name,
-    getSubcommandGroup: () => group,
+  const interaction = buildChatInputInteraction({
+    userId: 'member',
+    subcommand: name,
+    subcommandGroup: group,
+    sink,
   });
   return { interaction, sink };
 };
