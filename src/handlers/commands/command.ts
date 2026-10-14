@@ -40,9 +40,10 @@ import type { Translator } from '../../core/i18n';
  * that omits `category` falls into `'other'`.
  */
 export type CommandCategory =
-  | 'auto_reply'
   | 'fun'
-  | 'server_activity'
+  | 'events'
+  | 'stats'
+  | 'community'
   | 'utility'
   | 'admin'
   | 'ai'

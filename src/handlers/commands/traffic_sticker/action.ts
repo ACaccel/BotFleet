@@ -28,7 +28,7 @@ export default class traffic_sticker extends Command {
     super();
     this.setConfig({
       name: 'traffic_sticker',
-      category: 'server_activity',
+      category: 'stats',
       options: trafficCommandOptions(OPTIONS, {
         string: [
           { name: 'order', required: false, choices: USAGE_ORDERS.map((value) => ({ value })) },

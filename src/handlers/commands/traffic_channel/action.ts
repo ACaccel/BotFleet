@@ -33,7 +33,7 @@ export default class traffic_channel extends Command {
     super();
     this.setConfig({
       name: 'traffic_channel',
-      category: 'server_activity',
+      category: 'stats',
       options: trafficCommandOptions(OPTIONS, {
         channel: [{ name: 'channel', required: true, channelTypes: CHANNEL_TYPES }],
         boolean: [{ name: 'include_threads', required: false }],

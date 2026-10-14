@@ -25,7 +25,7 @@ export default class list_reply extends Command {
     super();
     this.setConfig({
       name: 'list_reply',
-      category: 'auto_reply',
+      category: 'community',
       options: { string: [{ name: 'keyword', required: false, maxLength: 100 }] },
     });
   }

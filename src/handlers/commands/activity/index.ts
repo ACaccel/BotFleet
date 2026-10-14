@@ -7,7 +7,7 @@ export default class activity extends GroupedCommand {
   constructor() {
     super({
       name: 'activity',
-      category: 'server_activity',
+      category: 'events',
       guildOnly: true,
       routes: [
         { name: 'create', command: new ActivityCreate() },

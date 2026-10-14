@@ -16,7 +16,7 @@ const lastRunByGuild = new Map<string, number>();
 export default class update_role extends Command {
   constructor() {
     super();
-    this.setConfig({ name: 'update_role', category: 'utility', guildOnly: true });
+    this.setConfig({ name: 'update_role', category: 'community', guildOnly: true });
   }
 
   public override async execute(

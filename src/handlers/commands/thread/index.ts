@@ -10,7 +10,7 @@ export default class Thread extends GroupedCommand {
     const manager = new ThreadManagerAction();
     super({
       name: 'thread',
-      category: 'admin',
+      category: 'community',
       guildOnly: true,
       routes: [
         { name: 'ban', command: new ThreadBanAction() },

@@ -21,7 +21,7 @@ export default class traffic extends Command {
     super();
     this.setConfig({
       name: 'traffic',
-      category: 'server_activity',
+      category: 'stats',
       options: trafficCommandOptions(OPTIONS),
     });
   }

@@ -41,7 +41,7 @@ export default class feed_unsubscribe extends Command {
     super();
     this.setConfig({
       name: 'feed_unsubscribe',
-      category: 'utility',
+      category: 'community',
       // Declaration order is registration order, so the narrowing
       // options come first and `channel` last, matching how
       // `/feed_subscribe` reads.

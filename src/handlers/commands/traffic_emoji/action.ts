@@ -30,7 +30,7 @@ export default class traffic_emoji extends Command {
     super();
     this.setConfig({
       name: 'traffic_emoji',
-      category: 'server_activity',
+      category: 'stats',
       options: trafficCommandOptions(OPTIONS, {
         string: [
           { name: 'order', required: false, choices: choices(USAGE_ORDERS) },

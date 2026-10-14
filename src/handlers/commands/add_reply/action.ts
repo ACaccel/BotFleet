@@ -11,7 +11,7 @@ export default class add_reply extends Command {
     super();
     this.setConfig({
       name: 'add_reply',
-      category: 'auto_reply',
+      category: 'community',
       options: {
         string: [
           { name: 'keyword', required: true, maxLength: 100 },

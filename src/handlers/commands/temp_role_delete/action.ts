@@ -13,7 +13,7 @@ export default class temp_role_delete extends Command {
     super();
     this.setConfig({
       name: 'temp_role_delete',
-      category: 'utility',
+      category: 'community',
       guildOnly: true,
       options: { role: [{ name: 'role', required: true }] },
     });

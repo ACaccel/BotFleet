@@ -16,7 +16,7 @@ beforeAll(async () => {
   });
 });
 
-const fixture = (values: string[] = ['admin'], isAdmin = false) => {
+const fixture = (values: string[] = ['community'], isAdmin = false) => {
   const admin = vi.fn(() => isAdmin);
   const update = vi.fn(async (_payload: { embeds: EmbedBuilder[] }) => undefined);
   const interaction = {
@@ -41,13 +41,13 @@ describe('/help category menu', () => {
     expect(update).toHaveBeenCalledTimes(1);
     expect(admin).toHaveBeenCalledWith('member-1');
     const embed = update.mock.calls[0]?.[0].embeds[0]?.toJSON();
-    expect(embed?.title).toContain('Server Admin');
+    expect(embed?.title).toContain('Community');
     expect(embed?.description).toContain('**`/thread ban`**');
     expect(embed?.description).not.toContain('/thread manager');
   });
 
   it('rechecks admin status on each selection after permissions change', async () => {
-    const { handler, bot, interaction, admin, update } = fixture(['admin'], true);
+    const { handler, bot, interaction, admin, update } = fixture(['community'], true);
 
     await handler.execute(interaction, bot);
     admin.mockReturnValue(false);

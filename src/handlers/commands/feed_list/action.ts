@@ -26,7 +26,7 @@ export default class feed_list extends Command {
     super();
     this.setConfig({
       name: 'feed_list',
-      category: 'utility',
+      category: 'community',
     });
   }
 

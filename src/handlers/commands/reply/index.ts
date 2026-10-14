@@ -7,7 +7,7 @@ export default class reply extends GroupedCommand {
   constructor() {
     super({
       name: 'reply',
-      category: 'auto_reply',
+      category: 'community',
       guildOnly: true,
       routes: [
         { name: 'add', command: new AddReply() },

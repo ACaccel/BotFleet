@@ -11,7 +11,7 @@ export default class activity_create extends Command {
     super();
     this.setConfig({
       name: 'activity_create',
-      category: 'server_activity',
+      category: 'events',
       guildOnly: true,
       options: { role: [{ name: 'role', required: false }] },
     });

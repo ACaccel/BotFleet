@@ -11,7 +11,7 @@ import { sendPagedEphemeralReply } from '../../../infra/discord/send-paged-reply
 export default class temp_role_list extends Command {
   constructor() {
     super();
-    this.setConfig({ name: 'temp_role_list', category: 'utility', guildOnly: true });
+    this.setConfig({ name: 'temp_role_list', category: 'community', guildOnly: true });
   }
 
   public override async execute(

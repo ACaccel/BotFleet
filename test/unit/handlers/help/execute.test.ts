@@ -83,7 +83,7 @@ describe('/help execute', () => {
     expect(embed?.fields?.map((field) => field.value).join('\n')).toContain('`/thread`');
     const menu = reply?.components?.[0]?.toJSON().components[0];
     expect(menu).toMatchObject({ custom_id: 'help_category' });
-    expect(menu?.options.map((option) => option.value)).toEqual(['utility', 'admin']);
+    expect(menu?.options.map((option) => option.value)).toEqual(['community', 'utility']);
   });
 
   it.each([false, true])(

@@ -8,7 +8,7 @@ export default class thread_list extends Command {
     super();
     this.setConfig({
       name: 'thread_list',
-      category: 'admin',
+      category: 'community',
       guildOnly: true,
     });
   }

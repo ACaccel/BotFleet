@@ -20,7 +20,7 @@ export default class traffic_apps extends Command {
     super();
     this.setConfig({
       name: 'traffic_apps',
-      category: 'server_activity',
+      category: 'stats',
       options: trafficCommandOptions(OPTIONS, { user: [{ name: 'app', required: false }] }),
     });
   }

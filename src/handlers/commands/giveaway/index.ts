@@ -6,7 +6,7 @@ export default class giveaway extends GroupedCommand {
   constructor() {
     super({
       name: 'giveaway',
-      category: 'server_activity',
+      category: 'events',
       guildOnly: true,
       routes: [
         { name: 'create', command: new GiveawayCreate() },

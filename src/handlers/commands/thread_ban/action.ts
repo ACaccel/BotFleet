@@ -8,7 +8,7 @@ export default class thread_ban extends Command {
     super();
     this.setConfig({
       name: 'thread_ban',
-      category: 'admin',
+      category: 'community',
       guildOnly: true,
       options: { string: [{ name: 'users', required: true }] },
     });

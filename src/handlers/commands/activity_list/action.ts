@@ -12,7 +12,7 @@ import { visibleActivities } from '../activity-shared/visible';
 export default class activity_list extends Command {
   constructor() {
     super();
-    this.setConfig({ name: 'activity_list', category: 'server_activity', guildOnly: true });
+    this.setConfig({ name: 'activity_list', category: 'events', guildOnly: true });
   }
 
   public override async execute(

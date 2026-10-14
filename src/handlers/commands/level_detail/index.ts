@@ -13,7 +13,7 @@ export default class level_detail extends Command {
     super();
     this.setConfig({
       name: 'level_detail',
-      category: 'utility',
+      category: 'stats',
       guildOnly: true,
       options: {
         integer: [

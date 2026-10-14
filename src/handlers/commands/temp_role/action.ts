@@ -11,7 +11,7 @@ export default class temp_role extends Command {
     super();
     this.setConfig({
       name: 'temp_role',
-      category: 'utility',
+      category: 'community',
       guildOnly: true,
       options: {
         // Leaves room for the prefix within Discord's 100-character role names.

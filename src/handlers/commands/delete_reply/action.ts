@@ -23,7 +23,7 @@ export default class delete_reply extends Command {
     super();
     this.setConfig({
       name: 'delete_reply',
-      category: 'auto_reply',
+      category: 'community',
       options: { string: [{ name: 'keyword', required: true, maxLength: 100 }] },
     });
   }

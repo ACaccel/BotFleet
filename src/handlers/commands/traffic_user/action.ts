@@ -25,7 +25,7 @@ export default class traffic_user extends Command {
     super();
     this.setConfig({
       name: 'traffic_user',
-      category: 'server_activity',
+      category: 'stats',
       options: trafficCommandOptions(OPTIONS, { user: [{ name: 'user', required: true }] }),
     });
   }

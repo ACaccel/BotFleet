@@ -19,7 +19,7 @@ export default class thread_manager extends Command {
     const user = [{ name: 'user', required: true }];
     this.setConfig({
       name: 'thread_manager',
-      category: 'admin',
+      category: 'community',
       guildOnly: true,
       subcommands: [
         { name: 'add', options: { channel: thread, user } },

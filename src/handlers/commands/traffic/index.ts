@@ -11,7 +11,7 @@ export default class Traffic extends GroupedCommand {
   constructor() {
     super({
       name: 'traffic',
-      category: 'server_activity',
+      category: 'stats',
       guildOnly: true,
       routes: [
         { name: 'overview', command: new TrafficAction() },

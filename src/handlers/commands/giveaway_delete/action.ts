@@ -8,7 +8,7 @@ export default class giveaway_delete extends Command {
     super();
     this.setConfig({
       name: 'giveaway_delete',
-      category: 'server_activity',
+      category: 'events',
     });
   }
 

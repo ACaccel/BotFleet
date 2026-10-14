@@ -11,11 +11,12 @@ import type { Command, CommandCategory, CommandConfig } from '../command';
 /** Render order for category sections; `'other'` collects the rest. */
 export const CATEGORY_ORDER: readonly CommandCategory[] = [
   'fun',
-  'auto_reply',
-  'server_activity',
+  'events',
+  'stats',
+  'community',
   'utility',
-  'admin',
   'ai',
+  'admin',
   'other',
 ];
 

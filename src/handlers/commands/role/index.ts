@@ -10,7 +10,7 @@ export default class Role extends GroupedCommand {
   constructor() {
     super({
       name: 'role',
-      category: 'utility',
+      category: 'community',
       guildOnly: true,
       routes: [
         { name: 'panel', command: new RolePanelAction() },

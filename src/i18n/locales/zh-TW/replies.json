@@ -183,12 +183,13 @@
     "intro_fallback": "以下是目前可用的指令:",
     "footer": "共 {{count}} 個指令",
     "category": {
-      "auto_reply": "💬 自動回覆",
       "fun": "🎮 娛樂互動",
-      "server_activity": "🎉 伺服器活動",
-      "utility": "🔧 工具與查詢",
-      "admin": "🛡️ 伺服器管理",
+      "events": "🎉 活動",
+      "stats": "📊 統計與排行",
+      "community": "👥 社群管理",
+      "utility": "🔧 工具",
       "ai": "🤖 AI 對話",
+      "admin": "🛡️ Bot 管理",
       "other": "📦 其他"
     },
     "usage_hint": "用下方選單瀏覽分類,或輸入 `/help command:<指令>` 查看單一指令的完整用法。",

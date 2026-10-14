@@ -20,7 +20,7 @@ export default class activity_cancel extends Command {
     super();
     this.setConfig({
       name: 'activity_cancel',
-      category: 'server_activity',
+      category: 'events',
       guildOnly: true,
       options: { string: [{ name: 'activity', required: true, autocomplete: true }] },
     });

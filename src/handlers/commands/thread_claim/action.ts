@@ -22,7 +22,7 @@ export default class thread_claim extends Command {
     super();
     this.setConfig({
       name: 'thread_claim',
-      category: 'admin',
+      category: 'community',
       guildOnly: true,
       options: {
         channel: [{ name: 'thread', required: false }],

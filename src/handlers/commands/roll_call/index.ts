@@ -22,7 +22,7 @@ export default class roll_call extends Command {
     super();
     this.setConfig({
       name: 'roll_call',
-      category: 'server_activity',
+      category: 'events',
       guildOnly: true,
       options: {
         role: [{ name: 'role', required: false }],

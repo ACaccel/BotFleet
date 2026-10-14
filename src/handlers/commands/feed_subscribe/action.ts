@@ -44,7 +44,7 @@ export default class feed_subscribe extends Command {
     super();
     this.setConfig({
       name: 'feed_subscribe',
-      category: 'utility',
+      category: 'community',
       // Choice lists derive from the shipped constants; widening
       // either never edits this handler.
       options: {

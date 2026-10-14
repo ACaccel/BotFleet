@@ -8,7 +8,7 @@ export default class thread_allow extends Command {
     super();
     this.setConfig({
       name: 'thread_allow',
-      category: 'admin',
+      category: 'community',
       guildOnly: true,
       options: { string: [{ name: 'users', required: true }] },
     });
