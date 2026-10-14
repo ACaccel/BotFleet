@@ -321,7 +321,8 @@ export const verifyHub = async (deps: BugReportDeps): Promise<void> => {
   if (forum === null) {
     throw new Error(`bug_report hub ${deps.config.hub.channelId} is not a reachable forum channel`);
   }
-  const me = deps.client.user;
+  // Fetch the bot's own member: a cache miss would read as no permissions at all.
+  const me = await forum.guild.members.fetchMe().catch(() => null);
   const granted = me === null ? null : forum.permissionsFor(me);
   const missing = Object.entries(REQUIRED_HUB_PERMISSIONS)
     .filter(([, flag]) => granted?.has(flag) !== true)

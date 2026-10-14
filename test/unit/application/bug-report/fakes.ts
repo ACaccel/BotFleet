@@ -52,6 +52,7 @@ export const buildDeps = (
     ],
     threads: { create: vi.fn(async (_options: unknown) => thread) },
     permissionsFor: () => ({ has: () => permissions }),
+    guild: { members: { fetchMe: vi.fn(async () => ({ id: 'bot' })) } },
   };
   const send = vi.fn(async (_options: unknown) => {
     if (dmFails) throw new Error('Cannot send messages to this user');

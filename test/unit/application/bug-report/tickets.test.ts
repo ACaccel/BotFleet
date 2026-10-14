@@ -107,6 +107,11 @@ describe('hub checks', () => {
     expect(ticketNumberIn(undefined)).toBeUndefined();
   });
 
+  it('passes a hub where the bot has every permission', async () => {
+    const { deps } = buildDeps(buildRepo());
+    await expect(verifyHub(deps)).resolves.toBeUndefined();
+  });
+
   it('refuses a hub where the bot lacks permissions', async () => {
     const { deps } = buildDeps(buildRepo(), { permissions: false });
     await expect(verifyHub(deps)).rejects.toThrow(/missing permissions: ViewChannel/);
