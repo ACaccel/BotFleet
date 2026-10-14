@@ -13,3 +13,14 @@ export const SOCIAL_COLORS = {
   facebook: 0x1877f2,
   x: 0x1d9bf0,
 } as const;
+
+/**
+ * CWA earthquake report severity, mirroring the agency's own report
+ * colours so a reader who knows the CWA scale recognises the level.
+ */
+export const EARTHQUAKE_REPORT_COLORS = {
+  green: 0x2ecc71,
+  yellow: 0xf1c40f,
+  orange: 0xe67e22,
+  red: 0xe74c3c,
+} as const;

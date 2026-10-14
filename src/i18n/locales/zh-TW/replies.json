@@ -548,7 +548,18 @@
     "summary": "等級身分組同步完成:{{granted}} 人獲得新身分組、移除 {{removed}} 個舊身分組、{{failed}} 人失敗。"
   },
   "earthquake": {
-    "alert": "# <@&{{role}}> 台北強震警報!!! (4級以上)\n> 為什麼要地震!?"
+    "alert": "# <@&{{role}}> 台北強震警報!!! (4級以上)\n> 為什麼要地震!?",
+    "report": {
+      "title": "地震報告 第 {{number}} 號",
+      "origin_time": "發震時間",
+      "magnitude": "芮氏規模",
+      "depth": "深度",
+      "depth_value": "{{depth}} 公里",
+      "epicenter": "震央位置",
+      "intensity": "各縣市最大震度",
+      "intensity_more": "...另有 {{count}} 個縣市",
+      "footer": "資料來源:中央氣象署"
+    }
   },
   "social_link_preview": {
     "engagement_likes": "👍 {{count}}",

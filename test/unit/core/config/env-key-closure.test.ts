@@ -33,6 +33,7 @@ const FULL_SOURCE: NodeJS.ProcessEnv = {
   ANTHROPIC_API_KEY: 'sk-anthropic',
   GEMINI_API_KEY: 'sk-gemini',
   XAI_API_KEY: 'sk-xai',
+  CWA_API_KEY: 'cwa-key',
   GOPHER_SETTINGS_API_KEY: 'gopher-bearer',
 };
 

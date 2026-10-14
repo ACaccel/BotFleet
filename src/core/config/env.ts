@@ -63,10 +63,11 @@ const mongoUriSchema = z
     }
   }, 'MONGO_URI must include a non-empty host');
 
-// Optional LLM-provider API keys. These live in the typed Env so the
-// `infra/llm` providers resolve them through DI rather than reading
-// `process.env` directly. A bot that does not use a given provider
-// simply omits the key — the registry's missing-key gate at
+// Optional third-party API keys (the LLM providers and the CWA open-data
+// API). These live in the typed Env so their consumers receive them
+// through the composition root rather than reading `process.env`
+// directly. A bot that does not use a given service simply omits the
+// key — for the LLM providers the registry's missing-key gate at
 // `resolve(name)` time emits a `MissingApiKeyError` which surfaces
 // only when something actually asks for that provider.
 //
@@ -76,7 +77,7 @@ const mongoUriSchema = z
 // OPENAI_API_KEY=, ANTHROPIC_API_KEY=, GEMINI_API_KEY= blank). Without
 // this preprocess the empty string survives into `.min(1)` and
 // `loadEnv` rejects an otherwise-valid deployment.
-const llmKeySchema = z.preprocess(
+const optionalApiKeySchema = z.preprocess(
   (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
   z.string().min(1).optional(),
 );
@@ -124,10 +125,16 @@ const envShape = {
       return days;
     }),
   /** Optional per-provider LLM API keys. Absent when the deployment does not use that provider. */
-  OPENAI_API_KEY: llmKeySchema,
-  ANTHROPIC_API_KEY: llmKeySchema,
-  GEMINI_API_KEY: llmKeySchema,
-  XAI_API_KEY: llmKeySchema,
+  OPENAI_API_KEY: optionalApiKeySchema,
+  ANTHROPIC_API_KEY: optionalApiKeySchema,
+  GEMINI_API_KEY: optionalApiKeySchema,
+  XAI_API_KEY: optionalApiKeySchema,
+  /**
+   * Central Weather Administration open-data key for nijika's earthquake
+   * reports. Optional: without it the report poller stays off and only
+   * the webhook alert runs.
+   */
+  CWA_API_KEY: optionalApiKeySchema,
   /**
    * Bearer key for gopher's settings REST API. Optional — only gopher
    * sets it; the settings-api plugin refuses to start (when enabled)

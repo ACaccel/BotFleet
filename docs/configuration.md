@@ -18,19 +18,20 @@ See [local setup](contributing/local-setup.md) and
 [env.ts](../src/core/config/env.ts) defines validation. Invalid values and token
 placeholders fail startup; there is no root `.env.example`.
 
-| Key                                                                    | Requirement / default                                           |
-| ---------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `TOKEN`, `CLIENT_ID`                                                   | Required Discord token and application ID                       |
-| `MONGO_URI`                                                            | Required for database-backed bots; optional for gopher          |
-| `PORT`                                                                 | Required by nijika's webhook and gopher's settings API          |
-| `MONGO_RECOVERY_INTERVAL_MS`                                           | Recovery polling, default `60000`                               |
-| `NODE_ENV`                                                             | `development` (default), `test`, or `production`                |
-| `LOG_LEVEL`                                                            | `trace`, `debug`, `info` (default), `warn`, `error`, or `fatal` |
-| `LOG_DIR`                                                              | File log root, default `logs`; empty disables file logs         |
-| `LOG_RETENTION_DAYS`                                                   | Days of file logs to keep, default `60`; `0` keeps all          |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                  |
-| `GOPHER_SETTINGS_API_KEY`                                              | Required when gopher's settings API is enabled                  |
-| `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup      |
+| Key                                                                    | Requirement / default                                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `TOKEN`, `CLIENT_ID`                                                   | Required Discord token and application ID                                                        |
+| `MONGO_URI`                                                            | Required for database-backed bots; optional for gopher                                           |
+| `PORT`                                                                 | Required by nijika's webhook and gopher's settings API                                           |
+| `MONGO_RECOVERY_INTERVAL_MS`                                           | Recovery polling, default `60000`                                                                |
+| `NODE_ENV`                                                             | `development` (default), `test`, or `production`                                                 |
+| `LOG_LEVEL`                                                            | `trace`, `debug`, `info` (default), `warn`, `error`, or `fatal`                                  |
+| `LOG_DIR`                                                              | File log root, default `logs`; empty disables file logs                                          |
+| `LOG_RETENTION_DAYS`                                                   | Days of file logs to keep, default `60`; `0` keeps all                                           |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                                                   |
+| `GOPHER_SETTINGS_API_KEY`                                              | Required when gopher's settings API is enabled                                                   |
+| `CWA_API_KEY`                                                          | Optional nijika key for [earthquake reports](#earthquake-alerts-and-reports); blank means absent |
+| `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup                                       |
 
 ### Log retention
 
@@ -67,9 +68,9 @@ Features look up these symbolic names:
 | `debug`      | channel | Command logs, archive panels and operator notices            |
 | `event`      | channel | Guild-event mirror (message edits, deletions, member events) |
 | `giveaway`   | channel | `/giveaway create destination:configured`                    |
-| `earthquake` | channel | Earthquake alert broadcast (with the role below)             |
+| `earthquake` | channel | Earthquake alerts (with the role below) and CWA reports      |
 | `ban_user`   | role    | Pinged by `/ban_user` vote calls; none when unset            |
-| `earthquake` | role    | Pinged by earthquake alerts                                  |
+| `earthquake` | role    | Pinged by earthquake alerts; reports ping nobody             |
 
 Missing channel mappings skip channel-bound output. Message backups still run
 without a `debug` channel.
@@ -265,6 +266,29 @@ Discord accepts the complete message; send failures retry on the next pass.
 
 `/giveaway create` defaults to `destination: current`. `configured` uses
 `guilds.<id>.channels.giveaway` and fails if that destination is unavailable.
+
+### Earthquake alerts and reports
+
+Nijika posts two kinds of earthquake message to each guild's `earthquake` channel:
+
+| Message     | Trigger                                                                                             | Guilds                        | Mentions              |
+| ----------- | --------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------- |
+| Early alert | `POST /discord/earthquake` on `PORT` (warning app webhook)                                          | `earthquake` channel and role | The `earthquake` role |
+| CWA report  | New Central Weather Administration significant earthquake report (`E-A0015-001`), polled every 60 s | `earthquake` channel          | None                  |
+
+- Reports need `CWA_API_KEY`. Without it nijika logs one startup line and runs the
+  webhook alone. Get a free key by registering at
+  [opendata.cwa.gov.tw](https://opendata.cwa.gov.tw) and copying the member
+  page's API authorization code (API授權碼).
+- The first successful poll after startup only records the newest report, so a
+  restart never reposts old reports; later polls post each newer report once,
+  oldest first.
+- A failed poll (network, rejected key, malformed response) is logged when it
+  starts and when it clears, then retried on the next poll. A malformed report is
+  skipped and logged.
+- The embed shows the report text, origin time, magnitude, depth, epicenter and
+  each county's maximum intensity, links the CWA report page, shows the report
+  image and credits the CWA. Its color follows the CWA report color.
 
 ### Settings API transport
 

@@ -6,6 +6,10 @@
  * one of the registered plugins — is caught by spying on
  * `BaseBot.prototype.use`.
  *
+ * It pins the earthquake plugin's wiring: the webhook port and the
+ * optional CWA key reach the factory, and the plugin is registered
+ * whether or not a key is set.
+ *
  * It also pins the one service nijika's constructor binds itself: the
  * feed platform registry, which the `/feed_*` commands resolve through
  * `BaseBot.feedPlatformRegistry` and which must therefore exist before
@@ -15,19 +19,27 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { buildInertClient } from '../../fixtures/discord/client-builder';
+import type * as EarthquakePluginModule from '../../../src/plugins/earthquake/plugin';
 import { barrelStubs } from '../../fixtures/handler-barrel-stubs';
 
 vi.mock('@cmd', () => barrelStubs.cmd);
 vi.mock('@button', () => barrelStubs.button);
 vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
+// Wrap the real factory so the test can read the configuration nijika
+// hands it without changing what gets registered.
+vi.mock('../../../src/plugins/earthquake/plugin', async (importOriginal) => {
+  const actual = await importOriginal<typeof EarthquakePluginModule>();
+  return { createEarthquakePlugin: vi.fn(actual.createEarthquakePlugin) };
+});
 
 import { BaseBot } from '../../../src/bot/index';
 import { Nijika } from '../../../src/bot/nijika/nijika';
 import type { Plugin } from '../../../src/core/plugin';
+import { createEarthquakePlugin } from '../../../src/plugins/earthquake/plugin';
 
 /** Build nijika with the minimum config its constructor requires. */
-const buildNijika = (config: Record<string, unknown> = {}): Nijika =>
+const buildNijika = (config: Record<string, unknown> = {}, cwaApiKey?: string): Nijika =>
   new Nijika(
     buildInertClient(),
     'token',
@@ -35,6 +47,7 @@ const buildNijika = (config: Record<string, unknown> = {}): Nijika =>
     'bot-client',
     { commands: [], level_roles: {}, ...config },
     3000,
+    cwaApiKey,
   );
 
 const collectRegisteredPluginIds = (): string[] => {
@@ -91,6 +104,19 @@ describe('Nijika composition', () => {
     const registry = buildNijika({ social_feed: { platforms: { x: {} } } }).feedPlatformRegistry;
 
     expect(registry?.get('x')?.id).toBe('x');
+  });
+
+  it('hands the earthquake plugin its webhook port and the CWA key', () => {
+    vi.mocked(createEarthquakePlugin).mockClear();
+    buildNijika({}, 'cwa-test-key');
+    expect(createEarthquakePlugin).toHaveBeenCalledWith({ port: 3000, cwaApiKey: 'cwa-test-key' });
+  });
+
+  it('still registers the earthquake webhook without a CWA key', () => {
+    vi.mocked(createEarthquakePlugin).mockClear();
+    buildNijika();
+    expect(createEarthquakePlugin).toHaveBeenCalledWith({ port: 3000, cwaApiKey: undefined });
+    expect(collectRegisteredPluginIds()).toContain('earthquake');
   });
 
   it('rejects a malformed platform block at composition time', () => {

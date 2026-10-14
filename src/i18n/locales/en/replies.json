@@ -548,7 +548,18 @@
     "summary": "Level roles synced: {{granted}} members gained a role, {{removed}} old roles removed, {{failed}} members failed."
   },
   "earthquake": {
-    "alert": "# <@&{{role}}> Taipei strong earthquake alert!!! (intensity 4 or above)\n> Why must there be an earthquake!?"
+    "alert": "# <@&{{role}}> Taipei strong earthquake alert!!! (intensity 4 or above)\n> Why must there be an earthquake!?",
+    "report": {
+      "title": "Earthquake report No. {{number}}",
+      "origin_time": "Origin time",
+      "magnitude": "Magnitude (ML)",
+      "depth": "Depth",
+      "depth_value": "{{depth}} km",
+      "epicenter": "Epicenter",
+      "intensity": "Maximum intensity by county",
+      "intensity_more": "...and {{count}} more",
+      "footer": "Source: Central Weather Administration (CWA)"
+    }
   },
   "social_link_preview": {
     "engagement_likes": "👍 {{count}}",

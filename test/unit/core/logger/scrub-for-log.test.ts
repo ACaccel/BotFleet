@@ -106,6 +106,14 @@ describe('scrubForLog URL credentials', () => {
     expect(out).toContain('language=zh-tw');
   });
 
+  it('redacts the CWA key carried as an Authorization query parameter', () => {
+    const out = scrubForLog(
+      'https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization=SUPERSECRET&limit=5',
+    ) as string;
+    expect(out).not.toContain('SUPERSECRET');
+    expect(out).toContain('limit=5');
+  });
+
   it('redacts a credential inside an Error message and stack', () => {
     const err = new Error('Request failed: https://api.example/v1/models?key=SUPERSECRET');
     const out = scrubForLog(err) as { message: string; stack?: string };

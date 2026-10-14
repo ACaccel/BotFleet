@@ -121,6 +121,21 @@ describe('loadEnv', () => {
       expect(env.XAI_API_KEY).toBe('real-xai-key');
     });
 
+    it('carries CWA_API_KEY through and treats a blank one as absent', () => {
+      // nijika's .env may keep the line blank to leave report polling off.
+      const withKey = loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, CWA_API_KEY: 'CWA-0000-test' },
+      });
+      expect(withKey.CWA_API_KEY).toBe('CWA-0000-test');
+      for (const blank of ['', '   ']) {
+        const env = loadEnv({ exitOnFailure: false, source: { ...validBase, CWA_API_KEY: blank } });
+        expect(env.CWA_API_KEY).toBeUndefined();
+        expect('CWA_API_KEY' in env).toBe(false);
+      }
+      expect(loadEnv({ exitOnFailure: false, source: validBase }).CWA_API_KEY).toBeUndefined();
+    });
+
     it('passes GOPHER_SETTINGS_API_KEY through to the returned object', () => {
       // Regression guard: a key present in the schema + type but omitted
       // from the destructure/freeze block would be silently stripped.

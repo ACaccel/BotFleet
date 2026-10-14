@@ -57,6 +57,9 @@ export class Nijika extends BaseBot<NijikaConfig> {
    *   passed through the constructor (rather than read from
    *   `process.env` here) so the composition root stays the single
    *   place that touches the environment.
+   * @param cwaApiKey - Central Weather Administration open-data key
+   *   (`Env.CWA_API_KEY`), threaded the same way. When absent the
+   *   earthquake plugin skips report polling and keeps only the webhook.
    */
   public constructor(
     client: Client,
@@ -65,6 +68,7 @@ export class Nijika extends BaseBot<NijikaConfig> {
     clientId: string,
     config: NijikaConfig,
     webhookPort: number,
+    cwaApiKey: string | undefined,
   ) {
     super(client, token, mongoURI, clientId, config);
     // `helpMessage` is resolved from this key inside BaseBot.run()
@@ -106,8 +110,8 @@ export class Nijika extends BaseBot<NijikaConfig> {
     // Polls each guild's stored feed subscriptions and forwards the new
     // posts that match every subscription's own filter.
     this.use(createSocialFeedPlugin(this.config.social_feed, { platforms: feedPlatforms }));
-    // The earthquake webhook server + per-guild broadcast is a
-    // bot-scoped plugin; its `start` hook owns the Express route.
-    this.use(createEarthquakePlugin({ port: webhookPort }));
+    // Earthquake early-warning webhook (its `start` hook owns the Express
+    // route) plus the CWA report poller, which runs only with a key.
+    this.use(createEarthquakePlugin({ port: webhookPort, cwaApiKey }));
   }
 }

@@ -1,14 +1,22 @@
 /**
- * EarthquakePlugin — owns the `/discord/earthquake` HTTP webhook and
- * the per-guild earthquake-alert broadcast.
+ * EarthquakePlugin — owns the two earthquake feeds for a guild's
+ * `earthquake` channel:
+ *   - the early warning: a `/discord/earthquake` HTTP webhook that the
+ *     owner's warning app calls, which pings the guild's earthquake role;
+ *   - the CWA significant earthquake report, polled from the open-data
+ *     API once a minute and posted as an embed that pings nobody.
  *
- * Assembled only by `nijika`. Its `start` hook stands up the Express
- * server; `onShutdown` closes it so
- * a fast restart does not leak the listening socket. The broadcast
- * logic lives in `internal/` so this file is lifecycle wiring only.
+ * Assembled only by `nijika`. `start` stands up the Express server;
+ * `onReady` starts the report poller (guild channels resolve only once
+ * the client is ready); `onShutdown` stops the poller and closes the
+ * server so a fast restart leaks neither a timer nor the listening
+ * socket. Fetching, parsing, rendering and fan-out live in `internal/`,
+ * so this file is lifecycle wiring only.
  *
- * Why a factory: the listen `port` is per-bot configuration captured
- * into the closure, mirroring the `createMessageBackupPlugin` pattern.
+ * Why a factory: the listen `port` and the CWA key are per-bot
+ * configuration captured into the closure, mirroring the
+ * `createMessageBackupPlugin` pattern. Without a key the poller stays
+ * off and the webhook works alone.
  */
 import express, { type Express } from 'express';
 import type { Server } from 'node:http';
@@ -17,24 +25,48 @@ import { TOKENS } from '../../bot/tokens';
 import { closeServerBounded } from '../../core/http';
 import { logError, logSystem } from '../../core/logger';
 import type { Plugin } from '../../core/plugin';
-import { broadcastEarthquakeAlert } from './internal';
+import {
+  broadcastEarthquakeAlert,
+  broadcastEarthquakeReport,
+  createReportPoller,
+  fetchSignificantReports,
+  startReportPolling,
+  type ParsedReports,
+} from './internal';
 
 const PLUGIN_ID = 'earthquake';
-const PLUGIN_VERSION = '1.0.0';
+const PLUGIN_VERSION = '1.1.0';
+
+/** Delay between report polls; CWA reports appear minutes after a quake. */
+const REPORT_POLL_INTERVAL_MS = 60_000;
 
 /** Configuration for {@link createEarthquakePlugin}. */
 interface EarthquakePluginConfig {
   /** TCP port the earthquake webhook server listens on. */
   readonly port: number;
+  /** CWA open-data API key; the report poller is disabled without it. */
+  readonly cwaApiKey?: string | undefined;
+}
+
+/** Optional collaborators for tests. */
+interface EarthquakePluginDeps {
+  /** Replaces the CWA HTTP fetch; receives the configured key. */
+  readonly fetchReports?: (apiKey: string) => Promise<ParsedReports>;
 }
 
 /**
  * Build the earthquake plugin. The returned object is pure data; all
- * mutable state (the HTTP server handle) is captured in the closure.
+ * mutable state (the HTTP server and poll-loop handles) is captured in
+ * the closure.
  */
-export const createEarthquakePlugin = (rawConfig: EarthquakePluginConfig): Plugin => {
-  const config: EarthquakePluginConfig = { port: rawConfig.port };
+export const createEarthquakePlugin = (
+  rawConfig: EarthquakePluginConfig,
+  deps: EarthquakePluginDeps = {},
+): Plugin => {
+  const config: EarthquakePluginConfig = { port: rawConfig.port, cwaApiKey: rawConfig.cwaApiKey };
+  const fetchReports = deps.fetchReports ?? fetchSignificantReports;
   let server: Server | undefined;
+  let reportPolling: { stop(): void } | undefined;
 
   return {
     id: PLUGIN_ID,
@@ -84,7 +116,27 @@ export const createEarthquakePlugin = (rawConfig: EarthquakePluginConfig): Plugi
       });
     },
 
+    async onReady(ctx): Promise<void> {
+      const apiKey = config.cwaApiKey;
+      if (apiKey === undefined) {
+        logSystem(ctx.logger, 'CWA_API_KEY is not set; earthquake report polling is disabled');
+        return;
+      }
+      const client = ctx.resolve(TOKENS.DiscordClient);
+      const registry = ctx.resolve(TOKENS.GuildRegistry);
+      const poller = createReportPoller({
+        fetchReports: () => fetchReports(apiKey),
+        publish: (report) =>
+          broadcastEarthquakeReport(client, registry, report, ctx.translator, ctx.logger),
+        logger: ctx.logger,
+      });
+      reportPolling = startReportPolling(poller, REPORT_POLL_INTERVAL_MS, ctx.logger);
+      logSystem(ctx.logger, 'earthquake report polling started');
+    },
+
     async onShutdown(ctx): Promise<void> {
+      reportPolling?.stop();
+      reportPolling = undefined;
       if (server === undefined) return;
       const listening = server;
       server = undefined;

@@ -156,7 +156,10 @@ existing state rules through `ARCHIVE_COLORS`; a full backup's `partial` result 
 an error, while a periodic pass's `partial` result is a warning.
 Social cards retain source identity through `SOCIAL_COLORS` (X `#1D9BF0`, Facebook
 `#1877F2`), including Components V2 accents; generic previews use `info` and
-auxiliary gallery embeds omit color. Shared `replyForError` replies remain localized
+auxiliary gallery embeds omit color.
+CWA earthquake report embeds use `EARTHQUAKE_REPORT_COLORS` to mirror the agency's
+own report color (green, yellow, orange, red) as a severity cue; an unknown color
+falls back to `info`. Shared `replyForError` replies remain localized
 plain text.
 
 ## Temporary moderation and automatic replies
