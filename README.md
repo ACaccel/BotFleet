@@ -51,8 +51,9 @@ Every bot shares the framework capabilities:
   delegated management approved by DM and deletion of attributable bot replies.
 - **Community tools.** Giveaways, activities, temporary notification roles,
   role-claim messages, level roles and restaurant picks. `/give_score` (also a
-  message menu) and `/gay` give stable daily readings in the bot's configured time zone, with member and
-  pair options and mention-safe replies.
+  message menu) and `/gay` give daily readings in the bot's configured time zone, with member and
+  pair options and mention-safe replies. [`/gay`](docs/fun-readings.md) optionally uses archived
+  activity and mutual interactions, with bounded queries and stored daily results.
 - **Social media.** Rich previews for shared links and per-channel subscriptions to
   social feeds. X links and subscriptions use custom cards for text and photos,
   proxies for playable videos, and bounded video uploads as a fallback.

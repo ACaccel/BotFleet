@@ -95,6 +95,11 @@ SDK adapters they draw on, such as fonts, colour emoji and the bounded CDN
 
 ## Privacy-aware data commands
 
+Optional archive inputs must retain the basic response when data or bounded reads
+are unavailable. See [`/gay` daily readings](../fun-readings.md) for an example
+with permission-scoped, atomic snapshots; a stored result cannot bypass current
+visibility checks.
+
 Activity, ranking, and message-count commands must follow the
 [privacy rules](../architecture.md#privacy-aware-data-commands): filter queries
 and results by channel visibility and respect the reply audience.

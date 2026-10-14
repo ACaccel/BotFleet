@@ -250,7 +250,8 @@ infra for CJK literals; the guild-event mirror is an English operator audit surf
 [PermissionRankPolicy](../src/core/plugin/permission-rank-policy.ts) supplements
 Discord permissions with static channel ranks and member clearance. Channel rank
 includes ancestry; invalid configuration fails startup and unknown ancestry must
-not widen access. Aggregate commands such as the `/traffic` subcommands must:
+not widen access. Aggregate commands such as the `/traffic` subcommands and
+archive-aware `/gay` readings must:
 
 1. Include only channels passing the invoker's Discord `ViewChannel` check and rank
    ceiling, resolving the invoker's roles and permissions.
@@ -273,6 +274,13 @@ not widen access. Aggregate commands such as the `/traffic` subcommands must:
 
 The filter is [`resolveVisibleChannelIds`](../src/handlers/commands/traffic-shared/visibility-filter.ts),
 a pure function over injected cache and record lookups.
+
+`/gay` uses a dedicated read-only `GayStatsRepo` with a 500 ms summary budget,
+filtering the current public scope before querying or reusing a result. Its
+`GayReadingRepo` atomically stores scores in `gay_readings`, outside the archive;
+snapshot identities include the permitted channels and expire through a TTL
+index. Missing archive data or failed reads keep the basic daily calculation.
+See [daily fun readings](fun-readings.md) for the calculation and fallback contract.
 
 Feed commands use Discord visibility without rank gating and fail closed when
 visibility cannot be resolved. Threads use parent checks; removal rechecks access
@@ -322,7 +330,8 @@ msg-archive ownership, and the plugin injects the factory into the worker.
 `buildArchiveRepos` builds one each for control (confirmations, jobs and status
 reads), the periodic run, the schedule, Gateway continuity and storage usage, for
 both the control factory and the worker. The per-bot `buildRepos` holds no archive
-writer: its only archive member is the read-only `ArchiveStatsRepo`.
+writer: archive access is limited to the read-only `ArchiveStatsRepo` and
+`GayStatsRepo`; daily fun scores use the separate `GayReadingRepo`.
 
 The [worker](../src/plugins/message-backup/runtime/worker.ts) is a facade that keeps
 each guild's state and lifecycle and delegates to one collaborator per

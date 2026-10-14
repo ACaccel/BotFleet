@@ -5,6 +5,10 @@ messages; their existing attachment caches and deleted-file archives continue
 independently. Administrators manage the full backup and periodic schedule through
 `/archive` in Discord; msg-archive remains the only archive writer.
 
+`/gay` optionally reads bounded, permission-filtered activity summaries. Its
+daily score snapshots are separate from the archive; see
+[daily fun readings](fun-readings.md) for inputs, limits and fallback behavior.
+
 ## Scope and retention
 
 `backup_server` selects guilds. Discovery covers text/announcement channels,

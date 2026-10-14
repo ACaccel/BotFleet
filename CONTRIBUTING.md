@@ -3,6 +3,9 @@
 Start with [local setup](docs/contributing/local-setup.md) and the
 [architecture overview](docs/architecture.md).
 
+Changes to `/gay` must preserve the [daily fun reading contract](docs/fun-readings.md),
+including optional archive inputs, permission-scoped snapshots and query budgets.
+
 | Task               | Guide                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------- |
 | Add a command      | [Handlers, autocomplete, and shared utilities](docs/contributing/adding-a-command.md) |

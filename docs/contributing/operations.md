@@ -2,6 +2,10 @@
 
 For service commands and rollback, see [deployment](deployment.md).
 
+For `/gay` archive inputs, daily score persistence and fallback behavior, see
+[daily fun readings](../fun-readings.md). No archive setup is required to use its
+basic reading; score snapshots expire automatically.
+
 ## Command logs
 
 For debug-channel embed contents, language, permissions and suppression behavior,

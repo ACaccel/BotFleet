@@ -20,6 +20,7 @@ import { bugTicketSchema, type BugTicketDoc } from './bug-ticket.schema';
 import { feedSubscriptionSchema, type FeedSubscriptionDoc } from './feed-subscription.schema';
 import { fetchSchema, type FetchDoc } from './fetch.schema';
 import { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
+import { gayReadingSchema, type GayReadingDoc } from './gay-reading.schema';
 import { messageSchema, type MessageDoc } from './message.schema';
 import { replySchema, type ReplyDoc } from './reply.schema';
 import { rollCallSchema, type RollCallDoc } from './roll-call.schema';
@@ -46,6 +47,7 @@ export {
 } from './feed-subscription.schema';
 export { fetchSchema, type FetchDoc } from './fetch.schema';
 export { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
+export { gayReadingSchema, type GayReadingDoc } from './gay-reading.schema';
 export { messageSchema, type MessageDoc } from './message.schema';
 export { replySchema, type ReplyDoc } from './reply.schema';
 export { rollCallSchema, type RollCallDoc } from './roll-call.schema';
@@ -67,6 +69,7 @@ export const SCHEMAS = {
   Message: messageSchema,
   Reply: replySchema,
   Giveaway: giveawaySchema,
+  GayReading: gayReadingSchema,
   Activity: activitySchema,
   TempRole: tempRoleSchema,
   ThreadModeration: threadModerationSchema,
@@ -94,6 +97,7 @@ export interface DocByName {
   Message: MessageDoc;
   Reply: ReplyDoc;
   Giveaway: GiveawayDoc;
+  GayReading: GayReadingDoc;
   Activity: ActivityDoc;
   TempRole: TempRoleDoc;
   ThreadModeration: ThreadModerationDoc;

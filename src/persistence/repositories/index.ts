@@ -16,6 +16,9 @@ import { MongoArchiveStatsRepo } from './archive-stats.repo';
 import type { ArchiveStatsRepo } from './archive-stats.types';
 import { MongoFeedSubscriptionRepo, type FeedSubscriptionRepo } from './feed-subscription.repo';
 import { MongoGiveawayRepo, type GiveawayRepo } from './giveaway.repo';
+import { MongoGayReadingRepo, type GayReadingRepo } from './gay-reading.repo';
+import { MongoGayStatsRepo } from './gay-stats.repo';
+import type { GayStatsRepo } from './gay-stats.types';
 import { MongoReplyRepo, type ReplyRepo } from './reply.repo';
 import { MongoRollCallRepo, type RollCallRepo } from './roll-call.repo';
 import { MongoTempRoleRepo, type TempRoleRepo } from './temp-role.repo';
@@ -59,6 +62,7 @@ export {
   type FeedSubscriptionDeleteWhere,
 } from './feed-subscription.repo';
 export { MongoGiveawayRepo, type GiveawayRepo, type GiveawayInput } from './giveaway.repo';
+export { MongoGayReadingRepo, type GayReadingRepo } from './gay-reading.repo';
 export { MongoReplyRepo, type ReplyRepo } from './reply.repo';
 export { MongoRollCallRepo, type RollCallRepo, type RollCallInput } from './roll-call.repo';
 export { MongoTempRoleRepo, type TempRoleRepo, type TempRoleInput } from './temp-role.repo';
@@ -81,6 +85,8 @@ export interface Repos {
   /** Read-only archive statistics; every bot may read through its reader connection. */
   readonly archiveStats: ArchiveStatsRepo;
   readonly giveaway: GiveawayRepo;
+  readonly gayReading: GayReadingRepo;
+  readonly gayStats: GayStatsRepo;
   readonly reply: ReplyRepo;
   readonly rollCall: RollCallRepo;
   readonly tempRole: TempRoleRepo;
@@ -100,6 +106,8 @@ export const buildRepos = (conn: GuildConnection): Repos => ({
   aiUsage: new MongoAiUsageRepo(conn),
   archiveStats: new MongoArchiveStatsRepo(conn),
   giveaway: new MongoGiveawayRepo(conn),
+  gayReading: new MongoGayReadingRepo(conn),
+  gayStats: new MongoGayStatsRepo(conn),
   reply: new MongoReplyRepo(conn),
   rollCall: new MongoRollCallRepo(conn),
   tempRole: new MongoTempRoleRepo(conn),
