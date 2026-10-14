@@ -58,7 +58,6 @@ export {
   type FeedSubscriptionUpsertResult,
   type FeedSubscriptionDeleteWhere,
 } from './feed-subscription.repo';
-export { MongoFetchRepo } from './fetch.repo';
 export { MongoGiveawayRepo, type GiveawayRepo, type GiveawayInput } from './giveaway.repo';
 export { MongoReplyRepo, type ReplyRepo } from './reply.repo';
 export { MongoRollCallRepo, type RollCallRepo, type RollCallInput } from './roll-call.repo';

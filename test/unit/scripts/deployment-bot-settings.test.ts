@@ -3,28 +3,21 @@ import { validateBotSettings } from '../../../scripts/deployment/bot-settings';
 import { parseArchiveSettings } from '../../../src/plugins/message-backup/config';
 
 describe('deployment bot configuration preflight', () => {
-  it('uses startup bounds for archive concurrency and notification intervals', () => {
+  it('uses startup bounds for archive concurrency and rejects removed keys', () => {
     for (const concurrency of [1, 2, 8, 32]) {
-      for (const interval of [10]) {
-        const runtime = { concurrency, progress_interval_seconds: interval };
-        expect(() =>
-          validateBotSettings(
-            'msg-archive',
-            JSON.stringify({ backup_server: ['1'], archive_runtime: runtime }),
-          ),
-        ).not.toThrow();
-        expect(parseArchiveSettings({ backupServers: ['1'], runtime }).config).toMatchObject(
-          runtime,
-        );
-      }
+      const runtime = { concurrency };
+      expect(() =>
+        validateBotSettings(
+          'msg-archive',
+          JSON.stringify({ backup_server: ['1'], archive_runtime: runtime }),
+        ),
+      ).not.toThrow();
+      expect(parseArchiveSettings({ backupServers: ['1'], runtime }).config).toMatchObject(runtime);
     }
     for (const runtime of [
       { concurrency: 33 },
       { concurrency: 0 },
-      { progress_interval_seconds: 4 },
-      { progress_interval_seconds: 5 },
-      { progress_interval_seconds: 30 },
-      { progress_interval_seconds: 31 },
+      { progress_interval_seconds: 10 },
     ]) {
       expect(() =>
         validateBotSettings(

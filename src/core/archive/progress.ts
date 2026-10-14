@@ -106,10 +106,8 @@ export interface ArchiveProgressSnapshot {
   recentThroughput?: { messages: number; windowMs: number; observedAt: number };
 }
 
-/** The snapshot version written now; version 1 and unversioned snapshots are upgraded on read. */
+/** The only snapshot version written and read; any other stored snapshot reads as no progress. */
 const ARCHIVE_PROGRESS_VERSION = 2 as const;
-/** Stored versions this release reads; unversioned snapshots predate version 1. */
-const SUPPORTED_PROGRESS_VERSIONS = [1, ARCHIVE_PROGRESS_VERSION] as const;
 const units = ['messages', 'documents', 'operations', 'channels', 'checks'] as const;
 const qualities = ['exact', 'discovered', 'estimated', 'unknown'] as const;
 const states = [
@@ -242,15 +240,11 @@ const estimateSchema = lenientObject({
   .catch(undefined);
 
 /**
- * Stored progress, every version: a snapshot without a known phase or state is
- * rejected, and every other field falls back on its own.
+ * Stored progress: a snapshot of another version or without a known phase or state
+ * is rejected, and every other field falls back on its own.
  */
 const storedProgressSchema = lenientObject({
-  version: z
-    .custom<
-      (typeof SUPPORTED_PROGRESS_VERSIONS)[number]
-    >((value) => (SUPPORTED_PROGRESS_VERSIONS as readonly unknown[]).includes(value))
-    .optional(),
+  version: z.literal(ARCHIVE_PROGRESS_VERSION),
   work: z.enum(['full-backup', 'periodic']).catch('periodic'),
   jobId: reference,
   runId: reference,
@@ -327,25 +321,6 @@ const storedProgressSchema = lenientObject({
   }).optional(),
 });
 
-/**
- * Upgrades fields older snapshots stored differently: the retired repair workflow's
- * `repair` phase, timings derived from `elapsedMs` and `estimatedAt`, and version 1's
- * run estimate kept in `phaseEstimate`.
- */
-const upgradeStoredProgress = (value: unknown): Record<string, unknown> => {
-  const data = toRecord(value);
-  return {
-    ...data,
-    phase: data['phase'] === 'repair' ? 'history' : data['phase'],
-    activeMs: data['activeMs'] ?? data['elapsedMs'],
-    updatedAt: data['updatedAt'] ?? data['estimatedAt'],
-    lastProgressAt: data['lastProgressAt'] ?? data['estimatedAt'],
-    estimate:
-      data['estimate'] ??
-      (data['version'] === ARCHIVE_PROGRESS_VERSION ? undefined : data['phaseEstimate']),
-  };
-};
-
 const positiveRate = z.number().finite().positive();
 
 /** Only explicit display metadata crosses the private status and notification boundary. */
@@ -353,7 +328,7 @@ export function sanitizeArchiveProgress(
   value: unknown,
   options: { includeRates?: boolean } = {},
 ): ArchiveProgressSnapshot | undefined {
-  const parsed = storedProgressSchema.safeParse(upgradeStoredProgress(value));
+  const parsed = storedProgressSchema.safeParse(value);
   if (!parsed.success) return undefined;
   const data = parsed.data;
   const phases = Object.fromEntries(

@@ -20,7 +20,7 @@ both in [`archive-repos.ts`](../../src/persistence/repositories/archive-repos.ts
 [layers and boundaries](../architecture.md#layers-and-boundaries).
 
 Removing a model leaves its data intact. Collection cleanup is an operator action:
-provide a dry-run-first [database tool](../../tools/db/README.md), never a startup migration.
+ship a dry-run-first one-off script under `tools/`, never a startup migration.
 
 `Reply` records who added each auto-reply in `created_by`, which `/reply delete`
 checks; pairs stored before the field existed have none and need a member with

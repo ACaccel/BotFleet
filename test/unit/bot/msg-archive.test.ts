@@ -49,7 +49,7 @@ describe('MsgArchive command wiring', () => {
     );
     expect(bot.config.commands).toEqual(['archive']);
     expect(config.commands).toEqual(['talk']);
-    expect(bot.suppression()).toEqual({ reaction: true, guildCreate: true });
+    expect(bot.suppression()).toEqual({ guildCreate: true });
     expect(wiring.use).toHaveBeenCalledOnce();
     expect(wiring.createPlugin).toHaveBeenCalledWith({
       backupServers: ['guild'],

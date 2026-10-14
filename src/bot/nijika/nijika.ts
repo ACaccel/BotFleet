@@ -19,18 +19,6 @@ import {
 } from '../../infra/social-feed';
 import { TOKENS } from '../tokens';
 
-/**
- * Config key retired by the social-feed rename.
- *
- * Subscriptions moved out of config and into each guild's database, so
- * a config still carrying this block describes a feed that no longer
- * exists. Nothing validates the top level of a bot's `config.json`, so
- * the plugin's own `.strict()` schema never sees the stale key and the
- * feed would simply go dark; rejecting it here is what makes the
- * migration loud instead of silent.
- */
-const RETIRED_FEED_CONFIG_KEY = 'x_media_feed';
-
 interface NijikaConfig extends Config {
   level_roles: Record<string, string>;
   /**
@@ -108,12 +96,6 @@ export class Nijika extends BaseBot<NijikaConfig> {
         label: () => this.personaName || (this.client.user?.username ?? this.clientId),
       }),
     );
-    if (RETIRED_FEED_CONFIG_KEY in config) {
-      throw new Error(
-        `nijika config.json still declares "${RETIRED_FEED_CONFIG_KEY}"; it is now "social_feed", ` +
-          'and the accounts it listed must be re-added per channel with /feed subscribe',
-      );
-    }
     // Feed platforms are built once from config and shared: the poller
     // reads timelines through the registry and the `/feed` commands
     // validate an account against the same instances.

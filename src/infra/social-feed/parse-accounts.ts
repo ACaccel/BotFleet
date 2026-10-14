@@ -2,8 +2,8 @@
  * Parses the `account` option of the `/feed_*` commands, which accepts
  * several handles in one invocation.
  *
- * Shared rather than duplicated: `/feed_subscribe` and
- * `/feed_unsubscribe` are sibling handler directories that may not
+ * Shared rather than duplicated: `/feed subscribe` and
+ * `/feed unsubscribe` are sibling handler directories that may not
  * import each other, and both have to read the option the same way — a
  * list that parsed differently between subscribing and unsubscribing
  * would leave entries no command could remove. It lives beside
@@ -25,7 +25,7 @@
  * with backoff, so its worst case is roughly 28 seconds at the shipped
  * 8-second platform timeout and roughly 95 at the configurable
  * 30-second ceiling — twenty of the latter would overrun the window, so
- * the cap alone is not the guarantee. `/feed_subscribe` stops the batch
+ * the cap alone is not the guarantee. `/feed subscribe` stops the batch
  * at its own deadline; what this cap does is bound the common case and
  * the reply, which lists one line per account.
  */

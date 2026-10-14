@@ -106,7 +106,7 @@ export const buildChatInputInteraction = (
     channel: input.channel ?? null,
     channelId: input.channel?.id ?? 'c-1',
     locale: 'zh-TW',
-    // Discord stamps every interaction; `/feed_subscribe` measures its
+    // Discord stamps every interaction; `/feed subscribe` measures its
     // batch budget from this, so a fixture without it would silently
     // disable the deadline instead of exercising it.
     createdTimestamp: input.createdTimestamp ?? Date.now(),

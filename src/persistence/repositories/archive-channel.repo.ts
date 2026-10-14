@@ -23,7 +23,7 @@ export interface ArchiveChannelUpdate {
   readonly initialAccess?: ArchiveChannel['access'];
   readonly everyoneCanView?: boolean;
 }
-/** `archive_channels` records and the legacy `fetches` cursors of each channel. */
+/** `archive_channels` records and the `fetches` newest-message cursor of each channel. */
 export interface ArchiveChannelRepo {
   upsertChannel(channel: ArchiveChannel, context?: ArchiveMutationContext): Promise<void>;
   recordChannel(update: ArchiveChannelUpdate, context?: ArchiveMutationContext): Promise<void>;
@@ -33,11 +33,11 @@ export interface ArchiveChannelRepo {
   channelParent(channelId: string): Promise<Pick<ArchiveChannel, 'parentId'> | null>;
   /** Channel IDs `archive_channels` holds. */
   listChannelIds(): Promise<string[]>;
-  /** Channel IDs with a legacy `fetches` cursor. */
+  /** Channel IDs with a `fetches` cursor. */
   fetchChannelIds(): Promise<string[]>;
-  /** The legacy newest-message cursor of a channel. */
+  /** The newest-message cursor of a channel. */
   fetchCursor(channelId: string): Promise<string | undefined>;
-  /** Moves the channel's legacy cursor forward to `latest`; never backward. */
+  /** Moves the channel's cursor forward to `latest`; never backward. */
   advanceFetchCursor(channelId: string, name: string, latest: string): Promise<void>;
 }
 export class MongoArchiveChannelRepo implements ArchiveChannelRepo {

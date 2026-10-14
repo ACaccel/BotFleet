@@ -4,7 +4,7 @@
  * The thread case is the one that matters: `SendMessages` on a parent
  * does not let a bot post inside a thread, so a gate that checked only
  * that bit would admit exactly the silently-broken subscription
- * `/feed_subscribe` exists to refuse.
+ * `/feed subscribe` exists to refuse.
  */
 import { describe, expect, it } from 'vitest';
 import { PermissionFlagsBits } from 'discord.js';

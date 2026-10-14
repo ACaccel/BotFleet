@@ -1,8 +1,8 @@
 /**
  * The words every `/feed_*` surface uses for a subscription's filter.
  *
- * `/feed_list` describes the filter a subscription already has, and
- * `/feed_subscribe` echoes back the filter it has just written; a member
+ * `/feed list` describes the filter a subscription already has, and
+ * `/feed subscribe` echoes back the filter it has just written; a member
  * comparing the two is comparing the same subscription, so the two
  * surfaces must not spell it differently. Keeping the labels — and the
  * separator between them — in one module is what makes that structural
@@ -15,8 +15,8 @@ import type { BoundTranslate } from '../core/i18n';
 import type { FeedSubscriptionFilter } from '../persistence/schemas/feed-subscription.schema';
 
 /**
- * A filter as either caller holds it: `/feed_list` reads one off a
- * stored document and `/feed_subscribe` has just built one for the
+ * A filter as either caller holds it: `/feed list` reads one off a
+ * stored document and `/feed subscribe` has just built one for the
  * repository. Both shapes satisfy this one, and labelling only reads —
  * hence `Readonly`. Exported so a module rendering a filter names the
  * contract it is describing rather than the repository's write input.

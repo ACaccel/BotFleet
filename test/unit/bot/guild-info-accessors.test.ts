@@ -20,7 +20,6 @@ vi.mock('@cmd', () => barrelStubs.cmd);
 vi.mock('@button', () => barrelStubs.button);
 vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
-vi.mock('@reaction', () => barrelStubs.reaction);
 
 import { BaseBot, type Config, type GuildInfo } from '../../../src/bot/index';
 import type { Repos } from '../../../src/persistence/repositories';

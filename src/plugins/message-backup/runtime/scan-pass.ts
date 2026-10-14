@@ -6,6 +6,7 @@ import type {
   PeriodicHistory,
 } from '../../../core/archive/types';
 import { continuityFullChannelIds } from '../../../core/archive/continuity';
+import { ARCHIVE_PROGRESS_INTERVAL_MS } from '../../../core/archive/limits';
 import type { DiscoveryGap, DiscoveryLocation } from '../flow/discovery';
 import { archivePerformanceLog } from '../flow/performance-log';
 import { estimatePeriodicWork, updatePeriodicHistory } from '../flow/periodic-estimate';
@@ -569,7 +570,7 @@ export class ScanPass {
       live: {
         pending: liveBacklog,
         oldestAgeMs: oldestLiveAt === undefined ? 0 : Math.max(0, Date.now() - oldestLiveAt),
-        windowMs: ctx.options.config.progress_interval_seconds * 1000,
+        windowMs: ARCHIVE_PROGRESS_INTERVAL_MS,
       },
     });
     // Dead letters traced to this run: their sources are rescanned fully, but the

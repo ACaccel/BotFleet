@@ -1,6 +1,6 @@
 /**
  * Confirms clearing every feed subscription in one channel — the
- * destructive half of the prompt `/feed_unsubscribe` shows when a
+ * destructive half of the prompt `/feed unsubscribe` shows when a
  * member names neither a platform nor an account.
  *
  * The button is where the deletion actually happens, so it re-derives

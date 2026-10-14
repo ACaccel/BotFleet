@@ -653,8 +653,8 @@ remain bounded numeric diagnostics without message bodies or signed URLs.
 
 New journal version 2 preserves before/after image semantics while allowing
 sequence reservations. Legacy runs retain their original handler; older runtimes
-reject new runs through the schema identity. See [upgrade contracts](../upgrading.md#archive-batching-and-progress-contracts)
-and [operational recovery](../message-archive.md#capacity-and-recovery).
+reject new runs through the schema identity. See
+[operational recovery](../message-archive.md#capacity-and-recovery).
 
 ## Integrated validation
 

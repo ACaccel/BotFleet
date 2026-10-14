@@ -32,8 +32,6 @@
     "handlers:gen": "node scripts/runtime.mjs exec ts-node scripts/gen-registry.ts",
     "handlers:gen:check": "node scripts/runtime.mjs exec ts-node scripts/gen-registry.ts --check",
     "security": "node scripts/runtime.mjs exec audit-ci --config audit-ci.jsonc",
-    "db": "node scripts/runtime.mjs exec ts-node tools/db/db.ts",
-    "db:test": "node scripts/runtime.mjs exec vitest run --project tools tools/db",
     "register": "node scripts/runtime.mjs exec ts-node src/register.ts",
     "setup": "node scripts/runtime.mjs setup",
     "deploy": "node scripts/runtime.mjs exec ts-node scripts/deploy.ts deploy",

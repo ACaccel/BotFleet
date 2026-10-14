@@ -44,7 +44,7 @@ export default class feed_unsubscribe extends Command {
       category: 'community',
       // Declaration order is registration order, so the narrowing
       // options come first and `channel` last, matching how
-      // `/feed_subscribe` reads.
+      // `/feed subscribe` reads.
       options: {
         string: [
           { name: 'platform', required: false, choices: platformChoices },

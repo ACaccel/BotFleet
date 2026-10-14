@@ -99,11 +99,9 @@ describe('scrubForLog', () => {
 
 describe('scrubForLog URL credentials', () => {
   it('redacts a credential carried in a query string', () => {
-    // AccuWeather accepts the key only as a query parameter, so
+    // Some upstreams accept the key only as a query parameter, so
     // field-name redaction alone cannot reach it.
-    const out = scrubForLog(
-      'https://dataservice.accuweather.com/forecasts/v1/hourly/1hour/315078?apikey=SUPERSECRET&language=zh-tw',
-    );
+    const out = scrubForLog('https://api.example/v1/forecast?apikey=SUPERSECRET&language=zh-tw');
     expect(out).not.toContain('SUPERSECRET');
     expect(out).toContain('language=zh-tw');
   });

@@ -46,7 +46,6 @@ function fixture(
   manager: StaticConnectionManager,
   debug = false,
   translator?: Translator,
-  progressSeconds = 10,
   discoveryPasses = true,
 ) {
   const channel = { id: '10', name: 'room', type: ChannelType.GuildText, parentId: null };
@@ -129,7 +128,7 @@ function fixture(
       getRole: () => undefined,
       listGuildIds: () => ['1'],
     },
-    config: archiveRuntimeSchema.parse({ progress_interval_seconds: progressSeconds }),
+    config: archiveRuntimeSchema.parse({}),
     policy: ArchivePolicySchema.parse({ guildIds: ['1'] }),
     guildIds: ['1'],
     logger: createLogger({ level: 'silent', pretty: false }),

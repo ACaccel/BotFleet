@@ -17,7 +17,7 @@ source privacy](docs/message-archive.md), including the separation between
 [periodic scheduling](docs/message-archive.md#periodic-schedule), live capture and the
 [full backup](docs/message-archive.md#full-backup).
 Archive operator workflows belong to the [Discord control plane](docs/message-archive.md#discord-controls);
-keep host migration, rebuild tools and unrelated collection cleanup in their existing tools.
+keep host migration and unrelated collection cleanup in their existing tools.
 Every `/archive` command and button must recheck the `admin` list, `backup_server`, the
 debug channel and msg-archive ownership, and reject privately without changing the
 shared panel. Custom-ID prefixes of retired panels stay registered only to reply

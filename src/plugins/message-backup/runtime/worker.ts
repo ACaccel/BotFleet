@@ -215,7 +215,7 @@ export class ArchiveWorker {
     // Collection creation/index maintenance is explicit and occurs only after
     // ownership. Existing messages without the schema 3 indexes are an archive
     // that was not isolated before the upgrade; the guild stays in capture-only
-    // mode until the rebuild replaces it (`docs/upgrading.md`).
+    // mode (`docs/upgrading.md#message-schema-3`).
     await storage.withReservation(1_048_576, false, async () => {
       await repos.owner.ensureArchiveCollections();
       try {

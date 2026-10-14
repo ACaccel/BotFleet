@@ -23,7 +23,7 @@
  * Field-name redaction cannot reach a credential carried *inside* a
  * string — a URL such as `https://api.example/x?apikey=SECRET` is one
  * opaque value to both pino and the name-based walk. Some upstreams
- * (AccuWeather) accept the key only as a query parameter, so
+ * accept the key only as a query parameter, so
  * {@link scrubUrlCredentials} strips those values from every string the
  * scrubber sees, including an `Error`'s message and stack.
  */

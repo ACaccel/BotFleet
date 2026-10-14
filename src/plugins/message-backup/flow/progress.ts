@@ -9,7 +9,7 @@ import type {
   ArchiveScopeGap,
 } from '../../../core/archive/progress';
 import { safeArchiveName, sanitizeArchiveProgress } from '../../../core/archive/progress';
-import { archiveNotificationSecondsSchema } from '../../../core/archive/limits';
+import { ARCHIVE_PROGRESS_INTERVAL_MS } from '../../../core/archive/limits';
 import type { ArchivePhase } from '../../../core/archive/progress';
 import type { Logger } from '../../../core/logger';
 export type { ArchivePhase } from '../../../core/archive/progress';
@@ -573,12 +573,9 @@ export class ProgressNotifier<T> {
   private stopped = false;
   constructor(
     private readonly send: (value: T) => Promise<void>,
-    private readonly intervalMs = 10000,
+    private readonly intervalMs = ARCHIVE_PROGRESS_INTERVAL_MS,
     private readonly clock: () => number = Date.now,
-  ) {
-    if (!archiveNotificationSecondsSchema.safeParse(intervalMs / 1000).success)
-      throw new Error('invalid-progress-notification-cadence');
-  }
+  ) {}
   async update(value: T, urgent = false): Promise<void> {
     if (this.stopped) return;
     this.pending = value;

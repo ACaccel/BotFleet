@@ -1,5 +1,5 @@
 /**
- * How `/feed_unsubscribe` reports what it deleted.
+ * How `/feed unsubscribe` reports what it deleted.
  *
  * The bound exists because `deleteMany` has already committed by the
  * time the confirmation is built: a reply over Discord's 2000-character

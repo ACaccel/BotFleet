@@ -1,5 +1,5 @@
 /**
- * `/feed_unsubscribe` — the deletion scope it builds, who may build it,
+ * `/feed unsubscribe` — the deletion scope it builds, who may build it,
  * and what it reports back.
  *
  * The scope is the whole risk: too wide and a member clears
@@ -141,8 +141,8 @@ const buttonsOf = (sink: ReturnType<typeof newInteractionSink>): RenderedButton[
   });
 };
 
-describe('/feed_unsubscribe', () => {
-  it('offers the narrowing options before the channel, as /feed_subscribe does', () => {
+describe('/feed unsubscribe', () => {
+  it('offers the narrowing options before the channel, as /feed subscribe does', () => {
     // Asserted on the payload Discord is actually sent, not on the
     // config literal: the ordering rests on `Object.entries` insertion
     // order and a stable required-first sort, neither of which the

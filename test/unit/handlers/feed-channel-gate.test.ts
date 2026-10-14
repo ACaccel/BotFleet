@@ -1,5 +1,5 @@
 /**
- * The visibility gate `/feed_unsubscribe` shares with its confirmation
+ * The visibility gate `/feed unsubscribe` shares with its confirmation
  * button.
  *
  * This helper is the only thing standing between ungated authority and

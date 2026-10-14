@@ -65,12 +65,6 @@ const TARGETS: readonly RegistryTarget[] = [
     typeName: 'SSMHandler',
     exportName: 'SSM_REGISTRY',
   },
-  {
-    dir: 'src/handlers/reactions',
-    typeImportPath: '.',
-    typeName: 'ReactionHandler',
-    exportName: 'REACTION_REGISTRY',
-  },
 ];
 
 interface HandlerEntry {

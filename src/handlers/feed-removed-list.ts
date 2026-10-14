@@ -1,5 +1,5 @@
 /**
- * Renders what `/feed_unsubscribe` deleted, bounded so the confirmation
+ * Renders what `/feed unsubscribe` deleted, bounded so the confirmation
  * always fits in one Discord message. Shared with the button that
  * confirms clearing a whole channel, which reports the same list.
  *

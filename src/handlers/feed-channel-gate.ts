@@ -1,5 +1,5 @@
 /**
- * The visibility gate `/feed_unsubscribe` and its confirmation button
+ * The visibility gate `/feed unsubscribe` and its confirmation button
  * share.
  *
  * Authority over a feed subscription is ungated — any member may
@@ -9,7 +9,7 @@
  * that confirms clearing a whole channel), and a gate that drifted
  * between them would be a hole rather than a cosmetic inconsistency.
  * Hence one helper, returning the refusal copy with it so both surfaces
- * also say the same thing. `/feed_subscribe` and `/feed_list` still
+ * also say the same thing. `/feed subscribe` and `/feed list` still
  * carry their own copies of the check.
  *
  * Nothing here touches the database or the platform registry: the gate

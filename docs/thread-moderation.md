@@ -29,7 +29,7 @@ page, while revoked authority removes the controls.
 
 A ban combines three restrictions: delete subsequent messages, reject commands
 and components, and suppress bot triggers such as automatic replies and link
-previews. Autocomplete returns no suggestions and reaction handlers do not run.
+previews. Autocomplete returns no suggestions.
 The restriction list belongs to this bot and this thread. They persist across
 restarts until explicitly allowed. Existing messages are not purged; allowing a
 user does not restore deleted messages. Edits from blocked users do not trigger
@@ -153,8 +153,8 @@ unrelated users' responses.
 
 ## Implementation contract
 
-`ClientEventBridge` awaits `ThreadModeration` before message event fan-out,
-interaction routing and reaction handling. A moderation plugin in the parallel
+`ClientEventBridge` awaits `ThreadModeration` before message event fan-out and
+interaction routing. A moderation plugin in the parallel
 event dispatcher would race with replies and is insufficient. Rejected messages
 also skip this bot's guild-event attachment cache and update mirrors. Other bot
 processes keep their own event handling and restrictions.

@@ -171,7 +171,7 @@ describe('catalog runtime behaviour', () => {
     // Passing a param proves nothing on its own: dropping `{{filter}}`
     // from both locales leaves every assertion above green, and the
     // handler suites run an echo translator that cannot see the copy.
-    // `/feed_subscribe` replaces a stored filter wholesale, so these two
+    // `/feed subscribe` replaces a stored filter wholesale, so these two
     // lines have to state the one now in force.
     const successKeys = [
       'replies:feed.account_subscribed',
@@ -224,7 +224,7 @@ describe('catalog runtime behaviour', () => {
   });
 
   it('has a label for every value the feed constants can produce', async () => {
-    // The command choices and the `/feed_list` filter label are built by
+    // The command choices and the `/feed list` filter label are built by
     // mapping over `SUPPORTED_FEED_PLATFORMS` and `FEED_MEDIA_FILTERS`,
     // so widening either constant without touching the catalog would
     // ship the raw key to a user as a Discord choice label. Deriving the
@@ -285,7 +285,7 @@ describe('catalog runtime behaviour', () => {
     // A platform now gets named from two places: the `platform` option's
     // choice label, which is per-locale catalog copy, and
     // `FEED_PLATFORM_DISPLAY_NAMES`, a code constant that labels
-    // `/feed_unsubscribe`'s account suggestions and the
+    // `/feed unsubscribe`'s account suggestions and the
     // unconfigured-platform refusal. A member reading the choice list
     // and the suggestion dropdown side by side sees both, so the two
     // must agree — and nothing else would notice if a translator

@@ -361,7 +361,7 @@ export interface ArchiveHistoryCheckpoint {
 interface ArchiveFullBackupOptions {
   cutoff: number;
 }
-/** A finished full backup; the rebuild tools read `cutoff` (`tools/db` archive-legacy). */
+/** A finished full backup. */
 export interface ArchiveFullBackupResult {
   cutoff: number;
   status: ArchiveTerminalStatus;

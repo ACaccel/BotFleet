@@ -103,8 +103,8 @@ See [configuration](configuration.md#message-archive).
 
 ## Discord controls
 
-Register `/archive` on msg-archive after adding `archive` to its local `commands`:
-`npm run register -t msg-archive`. Deployment and command registration remain
+Register `/archive` on msg-archive with `npm run register -t msg-archive`; msg-archive
+always registers exactly `/archive`, whatever its `commands` list says. Deployment and command registration remain
 host operations.
 
 | Command                                                        | Purpose                                                     |
@@ -225,7 +225,7 @@ alone; **Back** shows the current progress.
 **Recent records** lists the retained full-backup and periodic-pass records with
 type, result, start time and duration. The worker keeps the ten newest finished
 records and prunes older ones when a backup or pass ends. It never prunes a queued
-or running backup, the newest complete full backup (the rebuild tools read its
+or running backup, the newest complete full backup (periodic runs read its
 cutoff) or the newest full backup while it can still resume.
 
 ## Periodic schedule
@@ -578,8 +578,8 @@ and reserve capacity for live work.
 
 Progress uses a shared versioned model, saved with the full-backup job
 (`result.progress`) or the periodic run (`archive_periodic_runs`). A stored snapshot
-is read through its versioned schema: older versions are upgraded, and one of an
-unknown version or without a known phase and state is ignored. Activity lines show
+is read through its versioned schema; one of another version or without a known
+phase and state is ignored and the panel shows no progress for it. Activity lines show
 real fetches, message batches, reaction pages and checkpoints; there is no simulated
 movement, so a slow request can keep the same activity until it returns. Only the
 scan's own sources report activity; reaction refreshes of live events and the inbox
@@ -596,8 +596,8 @@ totals stay unknown. Raw errors, message bodies, membership lists and temporary
 attachment URLs are not panel data; a failed backup shows a reason category and the
 worker log holds the error.
 
-`progress_interval_seconds` is fixed at `10`. Full-backup and periodic-pass panels
-refresh on that heartbeat even when no counter changes; state changes and final
+Full-backup and periodic-pass panels refresh on a fixed ten-second heartbeat even
+when no counter changes; state changes and final
 results publish at once. Full-backup panel edits are serialized between the worker
 and button handlers and coalesced; a failed edit is retried without posting
 duplicates, and a failed final result is retried on later polls, backing off from

@@ -1,8 +1,8 @@
 /**
  * Temporary notification-role service.
  *
- * Shared by the temp-role plugin (expiry reboot) and the `/temp_role`
- * handler, which may not import each other. Mirrors the giveaway
+ * Shared by the temp-role plugin (expiry reboot) and the `/role temp`
+ * handlers, which may not import each other. Mirrors the giveaway
  * service's shape: the surface takes a typed {@link TempRoleDeps} bundle
  * rather than the whole `BaseBot`, so the plugin can resolve its
  * dependencies through the IoC container (`ctx.resolve(...)`). The
@@ -55,7 +55,7 @@ const DISCORD_MAX_ROLES_ERROR = 30005;
 
 // Audit-log reasons recorded against the Discord role lifecycle. Not
 // user-facing bot copy, so they stay as plain English constants.
-const AUDIT_REASON_CREATE = 'Temporary notification role created via /temp_role';
+const AUDIT_REASON_CREATE = 'Temporary notification role created via /role temp create';
 const AUDIT_REASON_EXPIRE = 'Temporary notification role expired';
 
 export const tempRoleJobKey = (roleId: string): string => `temp-role:${roleId}`;

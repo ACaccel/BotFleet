@@ -2,7 +2,7 @@
  * Configuration schema and defaults for the social-feed plugin.
  *
  * Only operating parameters live here. *What* is followed is stored in
- * each guild's database and edited with the `/feed_*` commands, so this
+ * each guild's database and edited with the `/feed` subcommands, so this
  * block never names an account or a channel: the poll cadence, the
  * per-pass cap, and the platform construction options are the whole of
  * it.
@@ -10,9 +10,8 @@
  * Defaults live in code (zod `.default()`), so a bot may declare an
  * empty or partial `social_feed` block and still boot with a
  * fully-formed, safe (disabled) configuration. `.strict()` surfaces a
- * mistyped key at startup rather than silently ignoring it — which is
- * also what makes the rename from the former `x_media_feed` block a
- * hard failure at boot rather than a feature that quietly stops.
+ * mistyped key inside the block at startup rather than silently
+ * ignoring it.
  */
 import { z } from 'zod';
 

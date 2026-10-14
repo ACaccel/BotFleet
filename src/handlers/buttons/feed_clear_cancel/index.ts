@@ -1,5 +1,5 @@
 /**
- * Abandons the whole-channel clear `/feed_unsubscribe` proposed.
+ * Abandons the whole-channel clear `/feed unsubscribe` proposed.
  *
  * The safe half of the prompt: it touches no repository, so there is
  * nothing to gate beyond replacing the prompt with a plain statement

@@ -298,15 +298,7 @@ describe('message archive lifecycle', () => {
 });
 
 describe('archive progress notification interval', () => {
-  it.each([10])('accepts %s seconds', (seconds) => {
-    expect(
-      archiveRuntimeSchema.parse({ progress_interval_seconds: seconds }).progress_interval_seconds,
-    ).toBe(seconds);
-  });
-  it.each([4, 5, 15, 30, 31, 10.5, NaN, Infinity])('rejects invalid interval %s', (seconds) => {
-    expect(() => archiveRuntimeSchema.parse({ progress_interval_seconds: seconds })).toThrow();
-  });
-  it('defaults to a ten-second public heartbeat', () => {
-    expect(archiveRuntimeSchema.parse({}).progress_interval_seconds).toBe(10);
+  it('rejects the removed progress_interval_seconds key', () => {
+    expect(() => archiveRuntimeSchema.parse({ progress_interval_seconds: 10 })).toThrow();
   });
 });

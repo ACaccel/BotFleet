@@ -1,5 +1,5 @@
 /**
- * The customId contract between `/feed_unsubscribe`'s confirmation
+ * The customId contract between `/feed unsubscribe`'s confirmation
  * prompt and the two buttons that answer it.
  *
  * The dispatcher selects a handler by the customId's leading segment
@@ -24,7 +24,7 @@ export const FEED_CLEAR_CANCEL_ID = 'feed_clear_cancel';
 /** What the confirmation prompt is about, as carried by the customId. */
 export interface FeedClearScope {
   readonly channelId: string;
-  /** The member who ran `/feed_unsubscribe`; the only one who may answer. */
+  /** The member who ran `/feed unsubscribe`; the only one who may answer. */
   readonly invokerId: string;
 }
 

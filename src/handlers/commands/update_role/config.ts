@@ -1,20 +1,17 @@
 /**
  * Operator configuration for `/role sync`.
  *
- * `level_roles` maps a `level_<n>` threshold key to the role granted at
- * that level, by ID; a role name still resolves but should be migrated. The handler previously narrowed it with
- * `'level_roles' in bot.config`, which proves only that a property
- * exists — a `level_roles: 42` typo passed the check and then failed
- * deep inside the role loop with an unrelated error.
+ * `level_roles` maps a `level_<n>` threshold key to the ID of the role
+ * granted at that level.
  */
 import { z } from 'zod';
 
 const ConfigSchema = z
   .object({
-    /** `level_<n>` -> role ID (or legacy role name); any key order. */
+    /** `level_<n>` -> role ID; any key order. */
     level_roles: z.record(
       z.string().regex(/^level_\d+$/, 'level_roles keys must look like "level_<n>"'),
-      z.string().min(1, 'level_roles values must be a role ID'),
+      z.string().regex(/^\d{17,20}$/, 'level_roles values must be a role ID'),
     ),
   })
   .passthrough();

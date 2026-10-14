@@ -1,5 +1,5 @@
 /**
- * Behaviour coverage for `/role_message`, the admin command that posts
+ * Behaviour coverage for `/role panel`, the admin command that posts
  * the self-service role-claim panel.
  *
  * Two invariants carry real consequences and are pinned here: the

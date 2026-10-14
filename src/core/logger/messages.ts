@@ -72,7 +72,7 @@ export const ops = {
     missingBotPermissions: (channelId: string, permissions: string): string =>
       `ops:feed.missing_bot_permissions | cannot deliver to channel ${channelId}; missing ${permissions}.`,
     /**
-     * Subscriptions removed by `/feed_unsubscribe`, written before the
+     * Subscriptions removed by `/feed unsubscribe`, written before the
      * confirmation is sent. The reply is bounded and can be lost to a
      * delivery failure; this line is the durable record of what a
      * member actually deleted.
@@ -88,7 +88,7 @@ export const ops = {
     clearDenied: (channelId: string, reason: string): string =>
       `ops:feed.clear_denied | refused to clear channel ${channelId}: ${reason}`,
     /**
-     * The result of one `/feed_subscribe` invocation, which may name
+     * The result of one `/feed subscribe` invocation, which may name
      * several accounts. Per-account failures are isolated so the batch
      * can finish, which means they never reach the handler's error
      * boundary — this line is where an operator sees them.
@@ -96,7 +96,7 @@ export const ops = {
     subscriptionsProcessed: (channelId: string, count: number, outcomes: string): string =>
       `ops:feed.subscriptions_processed | processed ${count} account(s) for channel ${channelId}: ${outcomes}`,
     /**
-     * The subscription read behind `/feed_unsubscribe`'s account
+     * The subscription read behind `/feed unsubscribe`'s account
      * suggestions failed. Info rather than error because it fires once
      * per keystroke, but it must fire: the member just sees an empty
      * list, so without this line a degraded database is invisible on

@@ -1,5 +1,5 @@
 /**
- * `/feed_unsubscribe`'s autocomplete hook: which of the channel's
+ * `/feed unsubscribe`'s autocomplete hook: which of the channel's
  * subscribed accounts to offer for the `account` option.
  *
  * A database read and nothing else. The upstream platform is never

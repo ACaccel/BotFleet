@@ -3,8 +3,8 @@
  *
  * The companion of {@link sendPagedEphemeralReply}: that helper decides
  * how pages are delivered, this one decides where they end. Shared
- * because two commands now build a listing this way (`/feed_list` and
- * `/feed_subscribe`'s per-account report) and a page that overflows the
+ * because two commands now build a listing this way (`/feed list` and
+ * `/feed subscribe`'s per-account report) and a page that overflows the
  * message limit is rejected outright — losing the whole page, not its
  * tail — so the rule is worth stating once.
  *

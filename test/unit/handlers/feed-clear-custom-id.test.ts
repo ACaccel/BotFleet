@@ -1,5 +1,5 @@
 /**
- * The customId contract between `/feed_unsubscribe`'s prompt and the
+ * The customId contract between `/feed unsubscribe`'s prompt and the
  * buttons that answer it.
  *
  * Encoding and decoding are joined only by a string format, and a

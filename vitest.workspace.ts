@@ -40,7 +40,6 @@ const aliases = {
   '@button': path.resolve(__dirname, 'src/handlers/buttons/index'),
   '@select-menu': path.resolve(__dirname, 'src/handlers/select-menus/index'),
   '@modal': path.resolve(__dirname, 'src/handlers/modals/index'),
-  '@reaction': path.resolve(__dirname, 'src/handlers/reactions/index'),
   '@plugins': path.resolve(__dirname, 'src/plugins/index'),
   handlers: path.resolve(__dirname, 'src/handlers/index'),
 };
@@ -131,10 +130,7 @@ export default defineWorkspace([
   },
   // `tools` project covers the unit tests that live next to the ops
   // scripts under `tools/<name>/*.test.ts`. Aliases are mirrored so
-  // the helpers can import `@core/*` for shared error types. Suites that
-  // need MongoDB (`tools/db/commands/archive-legacy/`) start their own
-  // in-memory server per file, since the `integration` globalSetup is
-  // not shared with this project.
+  // the helpers can import `@core/*` for shared error types.
   {
     test: {
       name: 'tools',

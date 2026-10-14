@@ -1,5 +1,5 @@
 /**
- * `/feed_unsubscribe`'s autocomplete hook — which channel it reads and
+ * `/feed unsubscribe`'s autocomplete hook — which channel it reads and
  * when it declines to answer.
  *
  * Two things carry risk here. The scope must track the `channel` option

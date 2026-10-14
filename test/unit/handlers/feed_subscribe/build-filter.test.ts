@@ -1,5 +1,5 @@
 /**
- * `/feed_subscribe`'s filter assembly.
+ * `/feed subscribe`'s filter assembly.
  *
  * The two options are the only user input stored verbatim, so this pins
  * the three decisions the handler cannot re-litigate later: what "not

@@ -111,7 +111,7 @@ describe('release preparation', () => {
       'src/bot/msg-archive/config.json',
       JSON.stringify({
         backup_server: ['1'],
-        archive_runtime: { progress_interval_seconds: 4 },
+        archive_runtime: { concurrency: 0 },
       }),
     );
     expect(() => makeRelease(root, config, false)).toThrow('Invalid config.json for msg-archive');

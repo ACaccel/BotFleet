@@ -494,17 +494,6 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('skips channels in the blocked list', async () => {
-    const { channel, fetch } = makeChannel(burst());
-    const plugin = createLlmAutoReplyPlugin(
-      { enabled: true },
-      { clientId: BOT_ID, random: () => 0, blockedChannels: ['c-blocked'] },
-    );
-    await dispatch(plugin, makeTriggerMessage(channel, { channelId: 'c-blocked' }), makeLogger());
-
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
   it('bypasses the probability gate for an @-mention but still honours the count gate', async () => {
     // random() = 0.9 would normally block (>= 0.05); the @-mention forces it.
     // fetch returns < N, so the count gate still bails before the client —
@@ -542,13 +531,11 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
   it.each([
     ['disabled', { enabled: false }, {}],
     ['bot author', { enabled: true }, { authorBot: true }],
-    ['blocked channel', { enabled: true }, { channelId: 'c-blocked' }],
   ])('does not let an @-mention override the %s guard', async (_label, rawConfig, overrides) => {
     const { channel, fetch } = makeChannel(burst());
     const plugin = createLlmAutoReplyPlugin(rawConfig, {
       clientId: BOT_ID,
       random: () => 0.9,
-      blockedChannels: ['c-blocked'],
     });
     await dispatch(
       plugin,

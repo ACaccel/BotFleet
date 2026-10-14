@@ -32,7 +32,7 @@ const MINUTE_MS = 60 * 1000;
  * collection, resumable pagination, live capture and full-backup jobs) lives in {@link createMessageBackupPlugin}. This class
  * registers that plugin, binds the archive control factory and accepts the
  * archive administration command.
- * Reactions and guildCreate onboarding remain suppressed through the
+ * GuildCreate onboarding remains suppressed through the
  * `eventBridgeSuppression` hook.
  */
 export class MsgArchive extends BaseBot<MsgArchiveConfig> {
@@ -69,6 +69,6 @@ export class MsgArchive extends BaseBot<MsgArchiveConfig> {
   }
 
   protected override eventBridgeSuppression(): ClientEventBridgeSuppression {
-    return { reaction: true, guildCreate: true };
+    return { guildCreate: true };
   }
 }

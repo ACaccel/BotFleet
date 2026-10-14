@@ -156,13 +156,4 @@ export class ThreadModeration {
     if (!channel) throw new Error('Thread moderation channel is unavailable');
     return this.blocked(interaction.guildId, channel, interaction.user.id);
   }
-
-  public async allowReaction(message: Message | PartialMessage, userId: string): Promise<boolean> {
-    try {
-      return !(await this.blocked(message.guildId, message.channel, userId));
-    } catch (err) {
-      this.deps.logger.error({ err, guildId: message.guildId }, 'thread moderation lookup failed');
-      return false;
-    }
-  }
 }

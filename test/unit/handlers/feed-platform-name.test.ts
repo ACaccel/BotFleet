@@ -3,7 +3,7 @@
  *
  * It is what stops a platform from being named by its raw registry id
  * in the one message the registry cannot answer for — the refusal for
- * an unconfigured platform, and the labels on `/feed_unsubscribe`'s
+ * an unconfigured platform, and the labels on `/feed unsubscribe`'s
  * account suggestions.
  */
 import { describe, expect, it } from 'vitest';

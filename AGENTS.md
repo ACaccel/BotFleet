@@ -60,7 +60,6 @@ Runtime and deployment operations: [`docs/contributing/deployment.md`](docs/cont
 | `@button`      | `src/handlers/buttons/index`      |
 | `@modal`       | `src/handlers/modals/index`       |
 | `@select-menu` | `src/handlers/select-menus/index` |
-| `@reaction`    | `src/handlers/reactions/index`    |
 | `@core/*`      | `src/core/*`                      |
 | `@plugins`     | `src/plugins/index`               |
 

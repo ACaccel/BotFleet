@@ -1,5 +1,5 @@
 /**
- * The two rules that end a `/feed_subscribe` batch early.
+ * The two rules that end a `/feed subscribe` batch early.
  *
  * `isSystemicFailure` decides whether the remaining accounts are worth
  * attempting, so getting it wrong is expensive in one direction and

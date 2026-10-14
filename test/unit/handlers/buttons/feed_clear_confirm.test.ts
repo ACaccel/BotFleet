@@ -1,7 +1,7 @@
 /**
  * The button that actually clears a channel's feed subscriptions.
  *
- * This is where `/feed_unsubscribe`'s widest scope commits, so the
+ * This is where `/feed unsubscribe`'s widest scope commits, so the
  * suite asserts on what reaches the repository, not only on the reply:
  * every refusal branch must leave `deleteWhere` untouched. The customId
  * is a public value and the gap between prompt and click is long enough

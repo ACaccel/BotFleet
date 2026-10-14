@@ -1,5 +1,5 @@
 /**
- * The suggestions `/feed_unsubscribe` offers for its `account` option.
+ * The suggestions `/feed unsubscribe` offers for its `account` option.
  *
  * The option takes a list, and Discord replaces the whole option value
  * with the chosen suggestion — so the risky part is not which accounts

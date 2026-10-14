@@ -2,7 +2,7 @@
  * `prepareFeedSubscription` — the validate-then-maybe-seed sequence.
  *
  * The load-bearing property is the *absence* of an upstream read on the
- * update path: re-running `/feed_subscribe` is how a filter is changed,
+ * update path: re-running `/feed subscribe` is how a filter is changed,
  * so an X outage must not stand between a member and turning a keyword
  * off. A mock counter on the fake platform is the only way to see that.
  */

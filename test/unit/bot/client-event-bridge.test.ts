@@ -4,29 +4,18 @@
  *   1. attach wires InteractionCreate; firing routes through router
  *   2. double attach throws (contract violation — TypeError)
  *   3. detach removes every installed listener
- *   4. partial reaction is fetched + delegated to ReactionHandlerPort;
- *      bot reactions are dropped before any port dispatch
- *   5. GuildCreate skipped when a plugin already subscribes;
+ *   4. GuildCreate skipped when a plugin already subscribes;
  *      otherwise routed through GuildOnboardingPort
- *   6. EventDispatcher-subscribed events are forwarded onto client.on
+ *   5. EventDispatcher-subscribed events are forwarded onto client.on
  *      (the dispatcher's per-subscription isolation is its own concern)
- *   7. router throw → fallback reply with traceId
- *   8. sendRebootMessages is best-effort over guildInfo
+ *   6. router throw → fallback reply with traceId
+ *   7. sendRebootMessages is best-effort over guildInfo
  */
 import { Events } from 'discord.js';
-import type {
-  Channel,
-  Client,
-  ClientEvents,
-  Guild,
-  MessageReaction,
-  PartialMessageReaction,
-  PartialUser,
-  User,
-} from 'discord.js';
+import type { Channel, Client, ClientEvents, Guild } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ClientEventBridge, type ReactionHandlerPort } from '../../../src/bot/client-event-bridge';
+import { ClientEventBridge } from '../../../src/bot/client-event-bridge';
 import { ThreadModeration } from '../../../src/bot/thread-moderation';
 import type { GuildInfo } from '../../../src/bot/index';
 import { createContainer } from '../../../src/core/ioc';
@@ -94,11 +83,6 @@ const fakeHost = (subscribed: readonly (keyof ClientEvents)[] = []): PluginHost 
 const fakeRouter = (dispatch = vi.fn(async () => {})): InteractionRouter =>
   ({ dispatch }) as unknown as InteractionRouter;
 
-const noopReactionPort: ReactionHandlerPort = {
-  handleAdded: vi.fn(async () => {}),
-  handleRemoved: vi.fn(async () => {}),
-};
-
 const identityTranslator = {
   t: (key: string, params?: Record<string, string>) =>
     params !== undefined ? `${key}|${JSON.stringify(params)}` : key,
@@ -107,9 +91,8 @@ const identityTranslator = {
 const baseConfig = (overrides: {
   host?: PluginHost;
   router?: InteractionRouter | undefined;
-  reactionPort?: ReactionHandlerPort;
   guildInfo?: ReadonlyMap<string, GuildInfo>;
-  suppression?: { interaction?: boolean; reaction?: boolean; guildCreate?: boolean };
+  suppression?: { interaction?: boolean; guildCreate?: boolean };
   onboardingPort?: GuildOnboardingPort;
   skipTranslator?: boolean;
 }) => {
@@ -129,7 +112,6 @@ const baseConfig = (overrides: {
     container,
     host: overrides.host ?? fakeHost(),
     router: overrides.router,
-    reactionPort: overrides.reactionPort ?? noopReactionPort,
     guildInfo: () => overrides.guildInfo ?? new Map<string, GuildInfo>(),
     suppression: overrides.suppression,
   };
@@ -143,6 +125,8 @@ describe('ClientEventBridge.attach', () => {
     bridge.attach(baseConfig({ router: fakeRouter(dispatch) }));
 
     expect(fake.listeners.get(Events.InteractionCreate)?.length).toBe(1);
+    expect(fake.listeners.has(Events.MessageReactionAdd)).toBe(false);
+    expect(fake.listeners.has(Events.MessageReactionRemove)).toBe(false);
     const fakeInteraction = {
       isAutocomplete: () => false,
       isRepliable: () => true,
@@ -170,11 +154,10 @@ describe('ClientEventBridge.attach', () => {
     const bridge = new ClientEventBridge(fake.client, silent);
     bridge.attach(
       baseConfig({
-        suppression: { interaction: true, reaction: true, guildCreate: true },
+        suppression: { interaction: true, guildCreate: true },
       }),
     );
     expect(fake.listeners.get(Events.InteractionCreate)?.length ?? 0).toBe(0);
-    expect(fake.listeners.get(Events.MessageReactionAdd)?.length ?? 0).toBe(0);
     expect(fake.listeners.get(Events.GuildCreate)?.length ?? 0).toBe(0);
   });
 });
@@ -195,50 +178,6 @@ describe('ClientEventBridge.detach', () => {
     const fake = buildFakeClient();
     const bridge = new ClientEventBridge(fake.client, silent);
     expect(() => bridge.detach()).not.toThrow();
-  });
-});
-
-describe('ClientEventBridge reaction routing', () => {
-  it('hydrates partial reactions and delegates to the port', async () => {
-    const fake = buildFakeClient();
-    const reactionPort: ReactionHandlerPort = {
-      handleAdded: vi.fn(async () => {}),
-      handleRemoved: vi.fn(async () => {}),
-    };
-    const bridge = new ClientEventBridge(fake.client, silent);
-    bridge.attach(baseConfig({ reactionPort }));
-
-    const fullReaction = { partial: false, message: { guildId: 'g-1' } };
-    const partialReactionFetched = { ...fullReaction };
-    const partialReaction = {
-      partial: true,
-      message: { guildId: 'g-1' },
-      fetch: vi.fn(async () => partialReactionFetched),
-    } as unknown as PartialMessageReaction;
-    const user = { partial: false, bot: false } as unknown as User;
-
-    await fake.fire(Events.MessageReactionAdd, partialReaction, user);
-    expect(partialReaction.fetch).toHaveBeenCalledTimes(1);
-    expect(reactionPort.handleAdded).toHaveBeenCalledTimes(1);
-
-    await fake.fire(Events.MessageReactionAdd, fullReaction as unknown as MessageReaction, user);
-    expect(reactionPort.handleAdded).toHaveBeenCalledTimes(2);
-  });
-
-  it('drops bot-authored reactions before any port dispatch', async () => {
-    const fake = buildFakeClient();
-    const reactionPort: ReactionHandlerPort = {
-      handleAdded: vi.fn(async () => {}),
-      handleRemoved: vi.fn(async () => {}),
-    };
-    const bridge = new ClientEventBridge(fake.client, silent);
-    bridge.attach(baseConfig({ reactionPort }));
-
-    const reaction = { partial: false, message: { guildId: 'g-1' } };
-    const botUser = { partial: false, bot: true } as unknown as User | PartialUser;
-
-    await fake.fire(Events.MessageReactionAdd, reaction, botUser);
-    expect(reactionPort.handleAdded).not.toHaveBeenCalled();
   });
 });
 
@@ -519,33 +458,4 @@ describe('ClientEventBridge thread moderation', () => {
     expect(target.reply).toHaveBeenCalledOnce();
     expect(dispatch).not.toHaveBeenCalled();
   });
-
-  it.each([Events.MessageReactionAdd, Events.MessageReactionRemove] as const)(
-    'hydrates partial %s and users before preventing reaction handler dispatch',
-    async (event) => {
-      const fake = buildFakeClient();
-      const reactionPort = {
-        handleAdded: vi.fn(async () => {}),
-        handleRemoved: vi.fn(async () => {}),
-      };
-      const bridge = new ClientEventBridge(fake.client, silent);
-      bridge.attach({ ...baseConfig({ reactionPort }), moderation: moderation() });
-      const reaction = { partial: false, message: moderatedMessage() };
-      const partial = {
-        partial: true,
-        message: reaction.message,
-        fetch: vi.fn(async () => reaction),
-      };
-      const user = {
-        partial: true,
-        bot: false,
-        fetch: vi.fn(async () => ({ partial: false, bot: false, id: 'blocked-user' })),
-      };
-      await fake.fire(event, partial, user);
-      expect(partial.fetch).toHaveBeenCalledOnce();
-      expect(user.fetch).toHaveBeenCalledOnce();
-      expect(reactionPort.handleAdded).not.toHaveBeenCalled();
-      expect(reactionPort.handleRemoved).not.toHaveBeenCalled();
-    },
-  );
 });

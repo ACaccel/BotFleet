@@ -111,7 +111,7 @@ describe('localizeCommandConfig', () => {
 
   it('resolves a choice label by stable value when the choice carries no name', () => {
     const config: CommandConfig = {
-      name: 'emoji_frequency',
+      name: 'sample_command',
       options: {
         string: [{ name: 'frequency', required: false, choices: [{ value: 'asc' }] }],
       },
@@ -119,7 +119,7 @@ describe('localizeCommandConfig', () => {
     const localized = localizeCommandConfig(config, echoTranslator());
     expect(localized.options?.string?.[0]?.choices?.[0]).toEqual({
       value: 'asc',
-      name: '[commands:emoji_frequency.options.frequency.choices.asc]',
+      name: '[commands:sample_command.options.frequency.choices.asc]',
     });
   });
 

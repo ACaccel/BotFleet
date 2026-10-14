@@ -119,7 +119,7 @@ Follow the [archive upgrade notes](../upgrading.md#message-archive-worker-and-to
 and [ownership/recovery procedure](../message-archive.md#capacity-and-recovery).
 Code deployment does not authorize starting a production full backup.
 
-Configure the guild debug channel and register `/archive` after adding `archive` to msg-archive's local
-`commands` list: `npm run register -t msg-archive`. See
+Configure the guild debug channel and register `/archive` with
+`npm run register -t msg-archive`; msg-archive always registers exactly `/archive`. See
 [archive control setup](../message-archive.md#discord-controls); existing installations
 without saved schedule settings start with periodic scans disabled.

@@ -22,7 +22,6 @@ const REGISTRY_FILES = [
   'src/handlers/buttons/registry.generated.ts',
   'src/handlers/modals/registry.generated.ts',
   'src/handlers/select-menus/registry.generated.ts',
-  'src/handlers/reactions/registry.generated.ts',
 ] as const;
 
 describe('handlers codegen', () => {

@@ -1,5 +1,5 @@
 /**
- * Turns `/feed_subscribe`'s two filter option values into the shape the
+ * Turns `/feed subscribe`'s two filter option values into the shape the
  * repository stores.
  *
  * Takes the values, not the interaction: reading options is the

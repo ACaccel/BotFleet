@@ -1,5 +1,5 @@
 /**
- * `/feed_subscribe`'s per-account loop.
+ * `/feed subscribe`'s per-account loop.
  *
  * The property under test is isolation: one bad account in a batch must
  * cost that account and nothing else. Every failure mode a single

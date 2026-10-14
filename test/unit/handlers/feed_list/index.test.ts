@@ -1,5 +1,5 @@
 /**
- * `/feed_list`'s Discord side: who sees which rows, the paging hand-off
+ * `/feed list`'s Discord side: who sees which rows, the paging hand-off
  * from `editReply` to `followUp`, and the failure boundary.
  *
  * Rendering itself is covered by `format-subscriptions.test.ts`. What
@@ -89,7 +89,7 @@ const sentPages = (sink: ReturnType<typeof newInteractionSink>): string[] => [
   ...sink.followUps.map((f) => f.content ?? ''),
 ];
 
-describe('/feed_list', () => {
+describe('/feed list', () => {
   it('answers ephemerally', async () => {
     const { bot, interaction, sink } = build();
 

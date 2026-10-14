@@ -17,7 +17,7 @@ shared `BaseBot` and registers its own plugins and services.
 | ------------- | --------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `nijika`      | `npm run nijika`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`, `PORT` | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles, plus social-feed polling with its platform registry and an earthquake webhook |
 | `tomori`      | `npm run tomori`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles                                                                                |
-| `konata`      | `npm run konata`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | LLM chat for whitelisted users (a mention starts a session, a reply continues it) and an online presence; reaction and guild-join listeners are off                                |
+| `konata`      | `npm run konata`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | LLM chat for whitelisted users (a mention starts a session, a reply continues it) and an online presence; the guild-join listener is off                                           |
 | `gopher`      | `npm run gopher`      | `TOKEN`, `CLIENT_ID`, `PORT`              | Self-hosted LLM auto-replies, a settings REST API that swaps the LLM endpoint at runtime, and daily avatar/nickname sync; no database                                              |
 | `msg-archive` | `npm run msg-archive` | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | The only [message archive](docs/message-archive.md) writer: live capture, periodic and full backups, and archive control; it exposes exactly `/archive`                            |
 
@@ -76,9 +76,8 @@ Every bot shares the framework capabilities:
 ## Requirements
 
 - Conda or Miniforge. [`scripts/setup-env.sh`](scripts/setup-env.sh) installs
-  into the project's `.conda` the pinned Node.js 22.13 runtime, the CJK and colour
-  emoji fonts used by dashboard images, and the `zip`/`unzip` tools used by
-  [`tools/db`](tools/db/README.md); it then installs the locked npm dependencies
+  into the project's `.conda` the pinned Node.js 22.13 runtime and the CJK and colour
+  emoji fonts used by dashboard images; it then installs the locked npm dependencies
   and verifies Canvas (see [local setup](docs/contributing/local-setup.md#prerequisites)).
 - MongoDB for every bot except gopher. Integration tests use an in-memory server.
 - A Discord application per bot, plus provider API keys for the features you enable.
@@ -141,7 +140,7 @@ src/
   persistence/  repository contracts and Mongoose storage
   infra/        Discord, MongoDB, HTTP and provider adapters
   application/  feature services shared by handlers and plugins
-  handlers/     commands, buttons, modals, select menus, reactions
+  handlers/     commands, buttons, modals, select menus
   plugins/      features, event subscriptions and scheduled jobs
   bot/          composition roots (one directory per bot) and lifecycle
   i18n/         en and zh-TW translation catalogs
@@ -159,21 +158,20 @@ dependency injection, the request flow and message archive ownership.
 
 The [documentation index](docs/README.md) lists the guides under `docs/`.
 
-| Task                                               | Guide                                                   |
-| -------------------------------------------------- | ------------------------------------------------------- |
-| Install and run locally                            | [Local setup](docs/contributing/local-setup.md)         |
-| Configure a bot                                    | [Configuration](docs/configuration.md)                  |
-| Understand the system                              | [Architecture](docs/architecture.md)                    |
-| Operate the message archive and `/traffic`         | [Message archive](docs/message-archive.md)              |
-| Moderate threads                                   | [Thread moderation](docs/thread-moderation.md)          |
-| Deploy or update systemd services                  | [Deployment](docs/contributing/deployment.md)           |
-| Diagnose database or connectivity problems         | [Operations](docs/contributing/operations.md)           |
-| Upgrade an existing installation                   | [Upgrade notes](docs/upgrading.md)                      |
-| Move to another host                               | [Migration runbook](tools/migration/README.md)          |
-| Clean up retired collections or the legacy archive | [Database tools](tools/db/README.md)                    |
-| Measure archive performance                        | [Archive benchmarks](tools/archive-benchmark/README.md) |
-| Add a command, plugin or persisted model           | [Contributing](CONTRIBUTING.md)                         |
-| Review releases                                    | [Changelog](CHANGELOG.md)                               |
+| Task                                       | Guide                                                   |
+| ------------------------------------------ | ------------------------------------------------------- |
+| Install and run locally                    | [Local setup](docs/contributing/local-setup.md)         |
+| Configure a bot                            | [Configuration](docs/configuration.md)                  |
+| Understand the system                      | [Architecture](docs/architecture.md)                    |
+| Operate the message archive and `/traffic` | [Message archive](docs/message-archive.md)              |
+| Moderate threads                           | [Thread moderation](docs/thread-moderation.md)          |
+| Deploy or update systemd services          | [Deployment](docs/contributing/deployment.md)           |
+| Diagnose database or connectivity problems | [Operations](docs/contributing/operations.md)           |
+| Upgrade an existing installation           | [Upgrade notes](docs/upgrading.md)                      |
+| Move to another host                       | [Migration runbook](tools/migration/README.md)          |
+| Measure archive performance                | [Archive benchmarks](tools/archive-benchmark/README.md) |
+| Add a command, plugin or persisted model   | [Contributing](CONTRIBUTING.md)                         |
+| Review releases                            | [Changelog](CHANGELOG.md)                               |
 
 ## Contributing
 

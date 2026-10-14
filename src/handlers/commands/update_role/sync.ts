@@ -19,12 +19,10 @@ export interface SyncSummary {
 const CONCURRENCY = 4;
 /** Discord resolves at most 100 members per fetch. */
 const MEMBER_BATCH = 100;
-const SNOWFLAKE = /^\d{17,20}$/;
 
 /**
- * Resolve `level_<n>` entries to roles the bot can manage, lowest level
- * first. Values are role IDs; a role name still resolves so existing
- * configurations keep working until they are migrated.
+ * Resolve `level_<n>` role IDs to roles the bot can manage, lowest level
+ * first.
  */
 export const resolveLevelRoles = (
   guild: Guild,
@@ -34,9 +32,7 @@ export const resolveLevelRoles = (
   const highest = guild.members.me?.roles.highest;
   const resolved: LevelRole[] = [];
   for (const [key, value] of Object.entries(levelRoles)) {
-    const role = SNOWFLAKE.test(value)
-      ? guild.roles.cache.get(value)
-      : [...guild.roles.cache.values()].find((candidate) => candidate.name === value);
+    const role = guild.roles.cache.get(value);
     if (role === undefined || highest === undefined || role.comparePositionTo(highest) >= 0) {
       logger?.warn({ guildId: guild.id, key, value }, 'level role missing or above the bot');
       continue;

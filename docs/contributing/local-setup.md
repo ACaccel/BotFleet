@@ -14,9 +14,8 @@ CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-env.sh
 export PATH="$PWD/.conda/bin:$PATH"
 ```
 
-Setup installs the pinned runtime, fonts and the `zip`/`unzip` tools used by the
-`tools/db` legacy archive export from [`environment.yml`](../../environment.yml),
-locked dependencies, and verifies Canvas. Commands use `.conda`; activation is optional.
+Setup installs the pinned runtime and fonts from
+[`environment.yml`](../../environment.yml), locked dependencies, and verifies Canvas. Commands use `.conda`; activation is optional.
 Vitest 3 uses the scoped Tinypool 2.1.2 override in `package.json` to include its
 prototype-pollution fixes. Tinypool 2 requires Node 20 or later; the project uses
 Node 22. Keep the override until the selected Vitest release depends on a patched

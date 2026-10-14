@@ -214,7 +214,7 @@ export const createLlmChatPlugin = (config: LlmChatPluginConfig): Plugin => {
       ctx.registerInstance(TOKENS.DefaultModelResolver, defaultModelResolver);
       // Pre-warm each provider's live model catalog at boot. The call
       // returns a fallback sync while kicking off the SDK fetch, so by
-      // the time `/ai_settings` is invoked the cache is usually warm.
+      // the time `/ai settings` is invoked the cache is usually warm.
       for (const provider of PREWARM_PROVIDERS) {
         modelCatalog.list(provider);
       }

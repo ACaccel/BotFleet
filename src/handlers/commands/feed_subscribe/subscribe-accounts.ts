@@ -1,5 +1,5 @@
 /**
- * Runs `/feed_subscribe`'s per-account work for a whole invocation and
+ * Runs `/feed subscribe`'s per-account work for a whole invocation and
  * reports what happened to each one.
  *
  * Failure isolation is the reason this exists as its own loop. A handle

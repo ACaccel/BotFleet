@@ -22,4 +22,16 @@ describe('personality gateway intents', () => {
       ).toBe(true);
     },
   );
+
+  it('message bots do not subscribe to reaction events', () => {
+    expect(
+      new IntentsBitField([...MESSAGE_BOT_INTENTS]).has(GatewayIntentBits.GuildMessageReactions),
+    ).toBe(false);
+  });
+
+  it('guild observers keep reaction events for the message archive', () => {
+    expect(
+      new IntentsBitField([...GUILD_OBSERVER_INTENTS]).has(GatewayIntentBits.GuildMessageReactions),
+    ).toBe(true);
+  });
 });

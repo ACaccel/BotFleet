@@ -45,14 +45,13 @@ export const GUILD_OBSERVER_INTENTS: readonly GatewayIntentBits[] = [
 
 /**
  * Intents for a personality that only reads and answers messages. The
- * minimum for slash commands, message content, and reactions — a bot
+ * minimum for slash commands and message content — a bot
  * that mirrors nothing has no reason to receive the rest.
  */
 export const MESSAGE_BOT_INTENTS: readonly GatewayIntentBits[] = [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.GuildMembers,
   GatewayIntentBits.GuildMessages,
-  GatewayIntentBits.GuildMessageReactions,
   GatewayIntentBits.MessageContent,
 ];
 

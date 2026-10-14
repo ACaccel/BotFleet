@@ -1,6 +1,6 @@
 /**
  * Turns a channel's stored subscriptions into the suggestions
- * `/feed_unsubscribe` offers for its `account` option.
+ * `/feed unsubscribe` offers for its `account` option.
  *
  * The option takes a list, so completion works on the **last** segment
  * only and each suggestion's value repeats the segments already typed.

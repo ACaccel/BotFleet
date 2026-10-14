@@ -1,5 +1,5 @@
 /**
- * `/feed_list`'s rendering rules.
+ * `/feed list`'s rendering rules.
  *
  * Three things are easy to get wrong once and never notice: a
  * subscription filed under the wrong channel heading, a subscription

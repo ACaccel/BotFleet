@@ -1,6 +1,6 @@
 /**
- * The `account` option parser shared by `/feed_subscribe` and
- * `/feed_unsubscribe`.
+ * The `account` option parser shared by `/feed subscribe` and
+ * `/feed unsubscribe`.
  *
  * It is the only thing standing between a free-text Discord option and
  * a list of subscription keys, so every separator a member might type,

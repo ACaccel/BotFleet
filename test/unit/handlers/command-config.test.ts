@@ -7,7 +7,7 @@
  * so `validateBotConfig` fails the command's registration instead of
  * letting it answer with confidently wrong data.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { parseRandomRestaurantConfig } from '../../../src/handlers/commands/random_restaurant/config';
 import { parseUpdateRoleConfig } from '../../../src/handlers/commands/update_role/config';
@@ -33,10 +33,8 @@ describe('parseRandomRestaurantConfig', () => {
 
 describe('parseUpdateRoleConfig', () => {
   it('accepts a well-formed level_roles map', () => {
-    const parsed = parseUpdateRoleConfig({
-      level_roles: { level_1: 'Rookie', level_10: 'Veteran' },
-    });
-    expect(parsed?.level_roles).toEqual({ level_1: 'Rookie', level_10: 'Veteran' });
+    const levelRoles = { level_1: '100000000000000001', level_10: '100000000000000002' };
+    expect(parseUpdateRoleConfig({ level_roles: levelRoles })?.level_roles).toEqual(levelRoles);
   });
 
   it('returns undefined when the block is absent', () => {
@@ -49,5 +47,13 @@ describe('parseUpdateRoleConfig', () => {
     expect(parseUpdateRoleConfig({ level_roles: 42 })).toBeUndefined();
     expect(parseUpdateRoleConfig({ level_roles: { not_a_level: 'Role' } })).toBeUndefined();
     expect(parseUpdateRoleConfig({ level_roles: { level_1: '' } })).toBeUndefined();
+  });
+
+  it('rejects a role name in place of a role ID and reports it', () => {
+    const onInvalid = vi.fn();
+    expect(
+      parseUpdateRoleConfig({ level_roles: { level_1: 'Rookie' } }, onInvalid),
+    ).toBeUndefined();
+    expect(onInvalid).toHaveBeenCalledOnce();
   });
 });

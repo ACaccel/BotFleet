@@ -21,7 +21,6 @@ vi.mock('@cmd', () => barrelStubs.cmd);
 vi.mock('@button', () => barrelStubs.button);
 vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
-vi.mock('@reaction', () => barrelStubs.reaction);
 
 import { BaseBot } from '../../../src/bot/index';
 import { Nijika } from '../../../src/bot/nijika/nijika';
@@ -92,13 +91,6 @@ describe('Nijika composition', () => {
     const registry = buildNijika({ social_feed: { platforms: { x: {} } } }).feedPlatformRegistry;
 
     expect(registry?.get('x')?.id).toBe('x');
-  });
-
-  it('refuses to boot on a config that still declares the retired x_media_feed block', () => {
-    // Nothing validates the top level of a bot config, so a stale block
-    // would otherwise be read by nobody and the feed would go silently
-    // dark instead of failing the migration loudly.
-    expect(() => buildNijika({ x_media_feed: { enabled: true } })).toThrow(/social_feed/);
   });
 
   it('rejects a malformed platform block at composition time', () => {

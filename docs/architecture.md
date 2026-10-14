@@ -80,8 +80,7 @@ Discord event -> ClientEventBridge -> InteractionRouter + middleware
               -> generated registry -> handler -> service / repository / adapter
 ```
 
-Components route by the leading custom-ID segment; reaction handlers inspect
-reactions themselves. `npm run handlers:gen` maintains registries, checked by CI.
+Components route by the leading custom-ID segment. `npm run handlers:gen` maintains registries, checked by CI.
 The router translates domain failures into ephemeral replies; failed autocomplete
 returns no suggestions. Shared Discord utilities live in `infra/discord`.
 
@@ -158,8 +157,8 @@ plain text.
 ## Temporary moderation and automatic replies
 
 Persistent [thread moderation](thread-moderation.md#implementation-contract) runs
-in `ClientEventBridge` before concurrent plugin dispatch, interaction routing and
-reaction handlers. It is opt-in per bot and enabled in Nijika's configuration.
+in `ClientEventBridge` before concurrent plugin dispatch and interaction routing.
+It is opt-in per bot and enabled in Nijika's configuration.
 Its repository isolates restrictions by guild, bot and thread.
 Delegated authority and recipient-bound DM review decisions share the thread
 document for atomic approval. Source-ID records with a seven-day TTL support

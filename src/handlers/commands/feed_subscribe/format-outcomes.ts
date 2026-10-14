@@ -1,5 +1,5 @@
 /**
- * Renders what `/feed_subscribe` did with each account it was given.
+ * Renders what `/feed subscribe` did with each account it was given.
  *
  * One invocation can name up to `MAX_FEED_ACCOUNTS` accounts and a
  * failure line carries a whole sentence, so the report can outgrow a
@@ -109,7 +109,7 @@ const formatOutcome = (outcome: FeedSubscribeOutcome, label: string, t: BoundTra
 
 /**
  * Plain, untranslated rendering of the whole batch for the operator
- * log, the counterpart of `/feed_unsubscribe`'s removal line.
+ * log, the counterpart of `/feed unsubscribe`'s removal line.
  *
  * A failed account contributes its `DomainError` code rather than the
  * member-facing sentence: the log is read in one language, and the code

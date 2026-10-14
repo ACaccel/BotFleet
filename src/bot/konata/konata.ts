@@ -14,8 +14,8 @@ import { parseAiPolicy } from '../../application/ai/policy';
  * Discord presence.
  *
  * Listener policy: Konata is a pure LLM-chat bot. It opts out of the
- * reaction and guildCreate raw listeners through the
- * `eventBridgeSuppression` hook so the bridge does not install them.
+ * guildCreate raw listener through the `eventBridgeSuppression` hook so
+ * the bridge does not install it.
  */
 export class Konata extends BaseBot<Config> {
   public constructor(
@@ -38,7 +38,7 @@ export class Konata extends BaseBot<Config> {
   }
 
   protected override eventBridgeSuppression(): ClientEventBridgeSuppression {
-    return { reaction: true, guildCreate: true };
+    return { guildCreate: true };
   }
 
   /**

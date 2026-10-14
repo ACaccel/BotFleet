@@ -1,8 +1,8 @@
 /**
- * `/feed_unsubscribe`'s account resolution.
+ * `/feed unsubscribe`'s account resolution.
  *
  * The deletion scope has to spell every account exactly the way
- * `/feed_subscribe` stored it, and the command's `platform` option is
+ * `/feed subscribe` stored it, and the command's `platform` option is
  * optional — so this covers both the platform-informed path and the
  * best-effort fallback that stands in for it, over a list rather than a
  * single handle.

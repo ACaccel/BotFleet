@@ -106,7 +106,7 @@ interface Tokens {
   /**
    * LLM model catalog, published by LlmChatPlugin's `init` hook via
    * {@link PluginInitContext.registerInstance}. Provides the live model
-   * list used by `/ai_settings`. Unbound for bots that do not register
+   * list used by `/ai settings`. Unbound for bots that do not register
    * LlmChatPlugin.
    */
   readonly ModelCatalog: ServiceToken<ModelCatalog>;

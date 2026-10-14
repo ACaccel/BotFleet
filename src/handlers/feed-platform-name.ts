@@ -4,8 +4,8 @@
  *
  * `FeedPlatform.displayName` is only reachable through the registry,
  * which holds the platforms an operator actually configured. Both
- * `/feed_subscribe` (refusing an unconfigured platform) and
- * `/feed_unsubscribe` (labelling the accounts it suggests) have to name
+ * `/feed subscribe` (refusing an unconfigured platform) and
+ * `/feed unsubscribe` (labelling the accounts it suggests) have to name
  * a platform the registry may not hold, and two handler directories may
  * not import each other — so the fallback lives here, one level up,
  * rather than being written twice.

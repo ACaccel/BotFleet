@@ -1,7 +1,7 @@
 /**
- * Turns `/feed_unsubscribe`'s optional `account` list into the values
+ * Turns `/feed unsubscribe`'s optional `account` list into the values
  * stored on subscriptions, so the deletion scope matches what was
- * written by `/feed_subscribe`.
+ * written by `/feed subscribe`.
  *
  * Pure by construction — it takes the platform adapter rather than the
  * registry or the interaction — which is what lets the fallback branch

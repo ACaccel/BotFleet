@@ -3,7 +3,7 @@
  * feature.
  *
  * Documents are keyed by the Discord `role_id`. The scheduler reads
- * pending temp roles on boot (`listAll`), the `/temp_role` command
+ * pending temp roles on boot (`listAll`), `/role temp create`
  * creates one, and the expiry job (or a reboot sweep that finds an
  * already-expired row) deletes it.
  *

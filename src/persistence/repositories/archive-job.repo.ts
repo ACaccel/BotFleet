@@ -128,7 +128,7 @@ export class MongoArchiveJobRepo implements ArchiveJobRepo {
   }
   /**
    * Keeps the newest `keep` finished records. Queued and running jobs are never
-   * removed, nor the newest complete full backup (the rebuild tools read its cutoff)
+   * removed, nor the newest complete full backup (periodic runs read its cutoff)
    * or the newest full backup while it is unfinished (it can still be resumed).
    */
   public async pruneJobRecords(keep: number): Promise<number> {

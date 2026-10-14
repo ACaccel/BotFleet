@@ -33,15 +33,7 @@ const LAYER_IMPORTS = {
   persistence: ['**/persistence', '**/persistence/**'],
   application: ['**/application', '**/application/**'],
   infra: ['**/infra', '**/infra/**'],
-  handlers: [
-    '**/handlers',
-    '**/handlers/**',
-    '@cmd',
-    '@button',
-    '@modal',
-    '@select-menu',
-    '@reaction',
-  ],
+  handlers: ['**/handlers', '**/handlers/**', '@cmd', '@button', '@modal', '@select-menu'],
   plugins: ['**/plugins', '**/plugins/**', '@plugins'],
   bot: ['**/bot', '**/bot/**', '@bot'],
 };
@@ -86,7 +78,6 @@ export default tseslint.config(
       '**/*.generated.ts',
       'src/bot/**/config.json',
       // Private operational backups may contain retired source files.
-      'tools/db/backups/**',
     ],
   },
   js.configs.recommended,
@@ -359,7 +350,6 @@ export default tseslint.config(
                 '@button',
                 '@modal',
                 '@select-menu',
-                '@reaction',
               ],
               message:
                 'Plugins must not import from the handler layer; move shared code to src/application/ or src/infra/.',

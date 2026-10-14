@@ -167,7 +167,7 @@ describe('ThreadModeration messages', () => {
   });
 });
 
-describe('ThreadModeration interactions and reactions', () => {
+describe('ThreadModeration interactions', () => {
   it.each(['command', 'button', 'modal', 'select menu'])(
     'rejects blocked %s interactions with an ephemeral reply',
     async (kind) => {
@@ -280,21 +280,6 @@ describe('ThreadModeration interactions and reactions', () => {
     const target = interaction({ isRepliable: () => false });
     expect(await gate.allowInteraction(target.value)).toBe(false);
     expect(target.data.reply).not.toHaveBeenCalled();
-  });
-
-  it('gates reactions by the reacting member rather than message author', async () => {
-    const { gate, isBlocked } = setup();
-    const target = message({ author: { id: 'owner', bot: false } });
-    expect(await gate.allowReaction(target.value, 'member')).toBe(false);
-    expect(isBlocked).toHaveBeenCalledWith('bot', 'thread', 'member');
-    expect(await gate.allowReaction(target.value, 'owner')).toBe(true);
-    expect(await gate.allowReaction(target.value, 'admin')).toBe(true);
-    expect(target.data.delete).not.toHaveBeenCalled();
-  });
-
-  it('fails closed for reactions when storage is unavailable', async () => {
-    const { gate } = setup(true);
-    expect(await gate.allowReaction(message().value, 'member')).toBe(false);
   });
 });
 

@@ -3,7 +3,6 @@ import {
   ARCHIVE_DEFAULT_INTERVAL_MS,
   ARCHIVE_LIMITS,
   archiveConcurrencySchema,
-  archiveNotificationSecondsSchema,
 } from '../../core/archive/limits';
 import { ArchivePolicySchema } from '../../core/archive/policy';
 
@@ -11,9 +10,6 @@ import { ArchivePolicySchema } from '../../core/archive/policy';
 export const archiveRuntimeSchema = z
   .object({
     concurrency: archiveConcurrencySchema.default(ARCHIVE_LIMITS.concurrency.default),
-    progress_interval_seconds: archiveNotificationSecondsSchema.default(
-      ARCHIVE_LIMITS.notificationSeconds.default,
-    ),
     overlap_minutes: z.number().int().min(1).max(1440).default(60),
     job_poll_seconds: z.number().int().min(1).max(300).default(5),
     max_pending_events: z.number().int().min(1).max(10000).default(1000),

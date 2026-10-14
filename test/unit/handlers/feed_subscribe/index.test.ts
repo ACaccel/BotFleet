@@ -1,5 +1,5 @@
 /**
- * `/feed_subscribe` end to end, driven entirely through a fake platform.
+ * `/feed subscribe` end to end, driven entirely through a fake platform.
  *
  * One invocation may name several accounts, so the suite covers both
  * halves of that: the channel is gated once for the whole call, and
@@ -165,7 +165,7 @@ const build = (fixture: Fixture = {}) => {
 const reply = (sink: ReturnType<typeof newInteractionSink>): string =>
   [...sink.editReplies, ...sink.followUps].map((message) => message.content ?? '').join('\n');
 
-describe('/feed_subscribe', () => {
+describe('/feed subscribe', () => {
   it('requires media in the command payload sent to Discord', () => {
     const body = buildCommandJsonBody(
       localizeCommandConfig(new FeedSubscribe().config, echoTranslatorWithParams()),
@@ -253,7 +253,7 @@ describe('/feed_subscribe', () => {
     // command is the documented way to change one. Asserted so the
     // reset stays a decision rather than becoming an accident — and so
     // the member is told which filter they are left with rather than
-    // discovering the loss through `/feed_list`.
+    // discovering the loss through `/feed list`.
     const { bot, interaction, sink, upsert } = build({
       existing: subscription({ filter: { media: 'video_only', keyword: 'live' } }),
     });

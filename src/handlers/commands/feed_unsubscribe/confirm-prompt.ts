@@ -1,5 +1,5 @@
 /**
- * The prompt `/feed_unsubscribe` shows before clearing a whole channel.
+ * The prompt `/feed unsubscribe` shows before clearing a whole channel.
  *
  * Split out of the command because it is the one reply that is not an
  * answer but a question: it has to name the channel and the exact

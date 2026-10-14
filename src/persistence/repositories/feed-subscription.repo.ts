@@ -69,7 +69,7 @@ export interface FeedSubscriptionDeleteWhere {
   readonly platform?: string;
   /**
    * Accounts to remove, as a set: one invocation of
-   * `/feed_unsubscribe` may name several. Omit it to cover every
+   * `/feed unsubscribe` may name several. Omit it to cover every
    * account in the channel.
    *
    * An **empty array** is not the same as omitting it — it names no

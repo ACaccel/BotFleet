@@ -59,11 +59,3 @@ describe.each(examples)('%s config.example.json — social_feed block', (_name, 
     expect(example['commands']).toEqual(expect.arrayContaining(FEED_COMMANDS));
   });
 });
-
-describe('nijika config.example.json — retired block', () => {
-  it('no longer names the retired x_media_feed block', () => {
-    // Nijika is the only personality that ever shipped the retired key,
-    // so this is the one example whose migration can regress.
-    expect((nijikaExample as Record<string, unknown>)['x_media_feed']).toBeUndefined();
-  });
-});

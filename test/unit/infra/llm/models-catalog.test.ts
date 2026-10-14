@@ -88,7 +88,7 @@ describe('ModelCatalog DI wiring', () => {
     const catalog = container.resolve(TOKENS.ModelCatalog);
     expect(catalog).toBeInstanceOf(ModelCatalog);
     // Cache miss returns an empty array (the synchronous contract the
-    // `/ai_settings` modal builder depends on); we only check the
+    // `/ai settings` modal builder depends on); we only check the
     // shape, not the contents.
     expect(Array.isArray(catalog.list('openai'))).toBe(true);
   });

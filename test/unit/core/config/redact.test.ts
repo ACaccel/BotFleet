@@ -4,10 +4,9 @@
  * Every secret-shaped key of `Env` must have a lower-cased entry in
  * `REDACT_FIELD_NAMES`, otherwise a structured log that happens to
  * carry that field — a config dump, an error context, an axios request
- * config — prints the credential in clear text. Three keys
- * (`XAI_API_KEY`, `ACCUWEATHER_KEY`, `GOPHER_SETTINGS_API_KEY`) were
- * missing; deriving the expectation from `ENV_KEYS` means a future key
- * cannot be added without either covering it or failing here.
+ * config — prints the credential in clear text. Deriving the expectation
+ * from `ENV_KEYS` means a new key cannot be added without either covering
+ * it or failing here.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -44,7 +43,7 @@ describe('REDACT_FIELD_NAMES', () => {
 
   it('derives nested pino redact paths for every field', () => {
     const paths = buildPinoRedactPaths();
-    for (const field of ['xai_api_key', 'accuweather_key', 'gopher_settings_api_key']) {
+    for (const field of ['xai_api_key', 'gopher_settings_api_key']) {
       expect(paths).toContain(field);
       expect(paths).toContain(`*.${field}`);
     }

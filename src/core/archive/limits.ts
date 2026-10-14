@@ -18,7 +18,6 @@ export const ARCHIVE_LIMITS = {
   /** Waiting reads and byte reservations allowed per configured reader, never below the floor. */
   queuedPerReader: 16,
   queuedFloor: 128,
-  notificationSeconds: { minimum: 10, maximum: 10, default: 10 },
   batchDocuments: 500,
   batchBytes: 4 * 1024 * 1024,
   /**
@@ -67,9 +66,8 @@ export const archiveConcurrencySchema = z
 export const archiveQueueLimit = (concurrency: number): number =>
   Math.max(ARCHIVE_LIMITS.queuedFloor, concurrency * ARCHIVE_LIMITS.queuedPerReader);
 
-export const archiveNotificationSecondsSchema = z.literal(
-  ARCHIVE_LIMITS.notificationSeconds.default,
-);
+/** Cadence of public progress edits and the live-backlog window they report. */
+export const ARCHIVE_PROGRESS_INTERVAL_MS = 10_000;
 
 /** Job IDs are `<guildId>:<uuid>`; panel buttons embed them, so the bound keeps custom IDs short. */
 export const ARCHIVE_JOB_ID_PATTERN = /^[A-Za-z0-9:_-]{1,80}$/;

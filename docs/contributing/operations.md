@@ -77,8 +77,7 @@ other persistent failures, then restart the bot.
 Use [archive operations](../message-archive.md) for health, capacity, owner recovery,
 the full backup and the periodic schedule through `/archive` in the configured guild
 debug channel; only users in msg-archive's `admin` list can use it. Local tests do
-not authorize a production backup. Unrelated collection cleanup and the legacy
-archive rebuild remain in the [database CLI](../../tools/db/README.md); whole-database
+not authorize a production backup. Whole-database
 transfer remains in the [migration runbook](../../tools/migration/README.md).
 
 Start a [full backup](../message-archive.md#full-backup) with `/archive backup` and

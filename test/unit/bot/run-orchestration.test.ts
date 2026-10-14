@@ -34,7 +34,6 @@ vi.mock('@cmd', () => barrelStubs.cmd);
 vi.mock('@button', () => barrelStubs.button);
 vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
-vi.mock('@reaction', () => barrelStubs.reaction);
 
 import { GuildDbConnector } from '../../../src/bot/guild-db-connector';
 import { BaseBot, type Config } from '../../../src/bot/index';
@@ -137,17 +136,15 @@ describe('BaseBot.run() — contract baseline', () => {
     await bot.run();
 
     // ClientEventBridge installs raw listeners only for the
-    // events BaseBot actually owns (interaction / reaction / guildCreate
-    // fallback). Pure-plugin events (messageCreate / messageUpdate /
-    // messageDelete / guildMemberUpdate) attach only when a plugin
+    // events BaseBot actually owns (interaction / guildCreate fallback).
+    // Pure-plugin events (messageCreate / messageUpdate / messageDelete /
+    // guildMemberUpdate / reactions) attach only when a plugin
     // subscribes; the MinimalBot here registers no plugin.
-    for (const event of [
-      Events.InteractionCreate,
-      Events.MessageReactionAdd,
-      Events.MessageReactionRemove,
-      Events.GuildCreate,
-    ]) {
+    for (const event of [Events.InteractionCreate, Events.GuildCreate]) {
       expect(fake.listeners.get(event)?.length ?? 0).toBeGreaterThanOrEqual(1);
+    }
+    for (const event of [Events.MessageReactionAdd, Events.MessageReactionRemove]) {
+      expect(fake.listeners.get(event)?.length ?? 0).toBe(0);
     }
     await bot.shutdown();
   });

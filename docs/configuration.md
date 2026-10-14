@@ -100,7 +100,7 @@ Plugin settings are validated at startup; strict schemas reject unknown keys.
 | `social_link_preview`           | nijika, tomori | Disabled; provider/proxy lists and request limits                                          |
 | `social_feed`                   | nijika         | Disabled; enabled feeds require a nonempty `platforms` map (`x` supported)                 |
 | `guild_events.attachment_cache` | nijika, tomori | Enabled; see attachment storage below                                                      |
-| `level_roles`                   | nijika         | `level_<n>` to role-ID map for `/role sync`; legacy role names remain supported            |
+| `level_roles`                   | nijika         | `level_<n>` to role-ID map for `/role sync`; a non-ID value disables the command           |
 | `temp_role.maxActivePerMember`  | nijika, tomori | Active temporary roles per creator in a guild; default `3`, integer `1`–`50`               |
 | `bug_report.hub`                | nijika, tomori | Required for `/bug_report`: `guildId` and forum `channelId` receiving every ticket         |
 | `bug_report.tags`               | nijika, tomori | Optional forum tag names for `bug`, `suggestion`, `other`, `open`, `in_progress`, `closed` |
@@ -131,8 +131,8 @@ with `🔔 `; creation refuses an existing role name and enforces
 privately. A role's creator, a configured bot admin or a member with Manage Roles
 may end it early; failed Discord deletion preserves its expiry tracking.
 
-`level_roles` maps `level_<n>` thresholds to role IDs in any order. Legacy role
-names still resolve with a warning. `/role sync` reads all MEE6 leaderboard pages,
+`level_roles` maps `level_<n>` thresholds to role IDs in any order; a role name
+or other non-ID value makes the block invalid. `/role sync` reads all MEE6 leaderboard pages,
 assigns each member's highest qualifying role and removes other configured level
 roles; unmanageable roles are skipped. It reports granted, removed and failed
 changes, with a ten-minute cooldown per guild; an unavailable leaderboard resets
@@ -245,7 +245,6 @@ it replaces the filter, and omitting a keyword clears the old value. New
 subscriptions forward original posts from creation time, without backfill.
 `maxPostsPerPoll` defaults to `5` per subscription (maximum `20`); polling defaults
 to `300000` ms with a full sweep every `12` polls.
-See [feed migration](upgrading.md#migrating-from-x_media_feed-to-social_feed).
 
 X subscriptions use the same hybrid provider and card renderer as shared-link
 previews: text and photo posts become custom cards, playable videos use a proxy,
@@ -371,7 +370,6 @@ for accepted structures and limits.
 | Field                            | Default         | Purpose                                                         |
 | -------------------------------- | --------------- | --------------------------------------------------------------- |
 | `concurrency`                    | `2`             | Background readers, range 1–32                                  |
-| `progress_interval_seconds`      | `10`            | Fixed ten-second full-backup panel cadence; only `10` accepted  |
 | `overlap_minutes`                | `60`            | Incremental overlap before watermarks and Gateway downtime      |
 | `job_poll_seconds`               | `5`             | Full-backup job polling and the idle inbox loop's recheck       |
 | `max_pending_events`             | `1000`          | In-process admission limit; ×10 sizes the changed-message table |

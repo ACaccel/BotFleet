@@ -4,7 +4,6 @@
     "scripts/*.ts",
     "src/register.ts",
     "src/bot/*/index.ts",
-    "tools/db/db.ts",
     "tools/archive-benchmark/cpu.ts",
     "tools/archive-benchmark/cpu-persistence.ts",
     "tools/archive-benchmark/rest.ts",
@@ -26,7 +25,6 @@
     "@button": ["src/handlers/buttons/index.ts"],
     "@select-menu": ["src/handlers/select-menus/index.ts"],
     "@modal": ["src/handlers/modals/index.ts"],
-    "@reaction": ["src/handlers/reactions/index.ts"],
     "@core/*": ["src/core/*"],
     "@plugins": ["src/plugins/index.ts"]
   },

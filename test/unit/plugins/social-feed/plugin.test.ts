@@ -43,15 +43,6 @@ describe('createSocialFeedPlugin — shape and config', () => {
     expect(() => createSocialFeedPlugin(enabledConfig({ pollIntervalMS: 60_000 }))).toThrow();
   });
 
-  it('rejects the superseded x_media_feed keys, forcing the migration', () => {
-    // `.strict()` is the migration mechanism: an operator who renamed
-    // only the block would otherwise boot a feed that follows nobody.
-    expect(() =>
-      createSocialFeedPlugin(enabledConfig({ accounts: [{ handle: 'someaccount' }] })),
-    ).toThrow();
-    expect(() => createSocialFeedPlugin(enabledConfig({ defaultChannel: 'x_feed' }))).toThrow();
-  });
-
   it('rejects an enabled feed with no platform configured', () => {
     expect(() => createSocialFeedPlugin({ enabled: true, platforms: {} })).toThrow();
   });

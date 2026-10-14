@@ -74,14 +74,16 @@ describe('level role sync', () => {
     expect(targetRoleFor(25, levels)).toBe(VETERAN);
   });
 
-  it('resolves role IDs and legacy names, skipping missing roles', () => {
+  it('resolves role IDs lowest level first, skipping missing roles', () => {
     const guild = guildWith([]);
+    const warn = vi.fn();
     const resolved = resolveLevelRoles(
       guild,
-      { level_20: VETERAN.id, level_5: 'Rookie', level_9: 'Gone' },
-      { warn: vi.fn() },
+      { level_20: VETERAN.id, level_5: ROOKIE.id, level_9: '100000000000000009' },
+      { warn },
     );
     expect(resolved.map((entry) => entry.role)).toEqual([ROOKIE, VETERAN]);
+    expect(warn).toHaveBeenCalledOnce();
   });
 
   it('swaps a promoted member to their new role and counts the changes', async () => {

@@ -2,7 +2,7 @@
  * Regression test for `scheduleGiveaway` channel resolution.
  *
  * After the giveaway redesign the announcement is published in the
- * channel `/giveaway_create` was invoked from, so the persisted
+ * channel `/giveaway create` was invoked from, so the persisted
  * `channel_id` may be a thread or a channel that is not in
  * `guild.channels.cache` after a restart. The reboot/end path must
  * fall back to an API fetch so the winner draw is not stranded; if even

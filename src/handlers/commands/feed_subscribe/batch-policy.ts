@@ -1,5 +1,5 @@
 /**
- * When `/feed_subscribe` stops working through its account list.
+ * When `/feed subscribe` stops working through its account list.
  *
  * Both rules exist because per-account failure isolation, left
  * unbounded, turns one member's typo-ridden command into twenty

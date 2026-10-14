@@ -1,5 +1,5 @@
 /**
- * `/feed_subscribe`'s per-account report, and the operator line beside
+ * `/feed subscribe`'s per-account report, and the operator line beside
  * it.
  *
  * Four things are easy to get wrong and hard to notice: an account
@@ -106,7 +106,7 @@ describe('formatOutcomePages', () => {
     expect(lines[1]).toContain('replies:feed.account_subscribed');
     expect(lines[2]).toContain('replies:feed.account_updated');
     for (const line of [lines[1] ?? '', lines[2] ?? '']) {
-      // Both labels, adjacent and in the order `/feed_list` prints them.
+      // Both labels, adjacent and in the order `/feed list` prints them.
       // The `:{}` is this suite's echo translator, not the copy.
       expect(line).toContain(
         `replies:feed.filter_media.video_only:{}${FEED_FILTER_SEPARATOR}replies:feed.filter_keyword`,

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ARCHIVE_PROGRESS_INTERVAL_MS } from '../../../core/archive/limits';
 import { ARCHIVE_PROCESS_ID } from '../../../infra/archive/owner';
 import { ProgressNotifier } from '../flow/progress';
 import type { ArchiveGuildState, ArchiveWorkerContextFor } from './worker-context';
@@ -79,7 +80,7 @@ export class ProgressPublisher {
         );
         throw error;
       }
-    }, this.ctx.options.config.progress_interval_seconds * 1000);
+    });
     state.publication.heartbeat = setInterval(() => {
       if (state.publication.scope?.generation !== generation || this.ctx.stopped) return;
       void this.notify(guildId, state, jobId);
@@ -94,7 +95,7 @@ export class ProgressPublisher {
         .finally(() => {
           state.publication.heartbeatWork = undefined;
         });
-    }, this.ctx.options.config.progress_interval_seconds * 1000);
+    }, ARCHIVE_PROGRESS_INTERVAL_MS);
     state.publication.heartbeat.unref();
   }
 
@@ -111,7 +112,7 @@ export class ProgressPublisher {
         pending,
         oldestAgeMs:
           oldestObservedAt === undefined ? 0 : Math.max(0, Date.now() - oldestObservedAt),
-        windowMs: this.ctx.options.config.progress_interval_seconds * 1000,
+        windowMs: ARCHIVE_PROGRESS_INTERVAL_MS,
       },
     });
     if (

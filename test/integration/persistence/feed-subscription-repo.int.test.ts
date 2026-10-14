@@ -418,7 +418,7 @@ describe('MongoFeedSubscriptionRepo — deleteWhere (integration)', () => {
   });
 
   it('removes every named account in one call, across platforms', async () => {
-    // The `$in` scope one `/feed_unsubscribe` invocation now builds.
+    // The `$in` scope one `/feed unsubscribe` invocation now builds.
     await withFreshConnection(async (connection) => {
       const repo = await buildRepo(new StaticConnectionManager(connection));
       await seedChannel(repo);

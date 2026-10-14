@@ -1,5 +1,5 @@
 /**
- * The filter vocabulary `/feed_list` and `/feed_subscribe` share.
+ * The filter vocabulary `/feed list` and `/feed subscribe` share.
  *
  * Two rules carry the whole point of the module and are easy to lose:
  * the media filter is labelled even when it is the default — an
@@ -38,7 +38,7 @@ describe('describeFeedFilter', () => {
   });
 
   it('defuses a backtick in the keyword, which is whatever a member typed', () => {
-    // The translator interpolates without escaping and `/feed_list`
+    // The translator interpolates without escaping and `/feed list`
     // draws a code span on the same line, so an unescaped backtick would
     // rewrite the rest of the page.
     expect(describeFeedFilter({ media: 'any', keyword: '`live`' }, t)).toEqual([
@@ -59,8 +59,8 @@ describe('describeFeedFilter', () => {
 describe('formatFeedFilter', () => {
   it('joins the labels with the separator both feed surfaces use', () => {
     // The separator is spelled out rather than read from the module, so
-    // changing it has to be a deliberate edit to the copy both `/feed_list`
-    // and `/feed_subscribe` show.
+    // changing it has to be a deliberate edit to the copy both `/feed list`
+    // and `/feed subscribe` show.
     expect(formatFeedFilter({ media: 'video_only', keyword: 'live' }, t)).toBe(
       'replies:feed.filter_media.video_only · replies:feed.filter_keyword:{"keyword":"live"}',
     );

@@ -287,12 +287,6 @@ describe('acknowledged ETA and cutoff', () => {
     expect(send).toHaveBeenCalledTimes(2);
     expect(send).toHaveBeenLastCalledWith('latest');
   });
-  it.each([4999, 5000, 9999, 10001, 30000, NaN, Infinity])(
-    'rejects invalid notification cadence %s',
-    (interval) => {
-      expect(() => new ProgressNotifier(async () => undefined, interval)).toThrow();
-    },
-  );
   it('coalesces notifications and isolates errors', async () => {
     let now = 0;
     const send = vi.fn(async () => {

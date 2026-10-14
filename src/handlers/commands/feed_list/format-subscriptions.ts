@@ -4,7 +4,7 @@
  * Pure: it takes the documents and a translate function, so every
  * grouping and pagination rule is testable without an interaction, a
  * database, or a live catalog. The filter labels come from the module
- * `/feed_subscribe` also reports through.
+ * `/feed subscribe` also reports through.
  */
 import type { BoundTranslate } from '../../../core/i18n';
 import { paginateLines } from '../../../infra/discord/paginate';

@@ -56,6 +56,7 @@ describe('truthful bounded archive progress', () => {
   });
   it('keeps only known message counters and rejects invalid recent speed evidence', () => {
     const saved = sanitizeArchiveProgress({
+      version: 2,
       phase: 'history',
       state: 'running',
       messages: { updated: 10, upgraded: 3 },
@@ -65,6 +66,7 @@ describe('truthful bounded archive progress', () => {
     for (const windowMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY])
       expect(
         sanitizeArchiveProgress({
+          version: 2,
           phase: 'history',
           state: 'running',
           recentThroughput: { messages: 10, windowMs, observedAt: 1000 },
@@ -288,27 +290,24 @@ describe('decoupled progress publication', () => {
     }
   });
 
-  it('reads every stored snapshot version and rejects unknown ones', () => {
+  it('reads only the current snapshot version and treats anything else as no progress', () => {
     const estimate = { lowerMs: 10, upperMs: 20, scope: 'run', reason: 'observed-throughput' };
-    const base = { phase: 'history', state: 'running', elapsedMs: 50, estimatedAt: 7 };
-    expect(sanitizeArchiveProgress({ ...base, version: 3 })).toBeUndefined();
-    const legacy = sanitizeArchiveProgress({ ...base, version: 1, phaseEstimate: estimate });
-    expect(legacy).toMatchObject({
+    const base = { phase: 'history', state: 'running', activeMs: 50, updatedAt: 7 };
+    expect(sanitizeArchiveProgress({ ...base, version: 2, estimate })).toMatchObject({
       version: 2,
       activeMs: 50,
       updatedAt: 7,
-      lastProgressAt: 7,
       estimate: { lowerMs: 10, upperMs: 20, scope: 'run', confidence: 'low' },
     });
-    expect(
-      sanitizeArchiveProgress({ ...base, version: 2, phaseEstimate: estimate })?.estimate,
-    ).toBeUndefined();
-    expect(sanitizeArchiveProgress({ ...base, phase: 'repair' })?.phase).toBe('history');
-    expect(sanitizeArchiveProgress({ ...base, state: 'unknown' })).toBeUndefined();
+    expect(sanitizeArchiveProgress({ ...base, version: 1 })).toBeUndefined();
+    expect(sanitizeArchiveProgress({ ...base, version: 3 })).toBeUndefined();
+    expect(sanitizeArchiveProgress(base)).toBeUndefined();
+    expect(sanitizeArchiveProgress({ ...base, version: 2, phase: 'repair' })).toBeUndefined();
+    expect(sanitizeArchiveProgress({ ...base, version: 2, state: 'unknown' })).toBeUndefined();
   });
 
   describe('stored snapshot fallbacks', () => {
-    const base = { phase: 'history', state: 'running' };
+    const base = { version: 2, phase: 'history', state: 'running' };
     const read = (fields: Record<string, unknown>, includeRates = false) =>
       sanitizeArchiveProgress({ ...base, ...fields }, { includeRates })!;
     const activity = (fields: Record<string, unknown>) => ({

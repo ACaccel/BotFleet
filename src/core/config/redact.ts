@@ -12,8 +12,7 @@
  *   - LLM providers in dependency graph (@anthropic-ai/sdk, openai, @google/generative-ai,
  *     xAI via the OpenAI-compatible client): anthropic*, openai*, google*, gemini*, xai*
  *   - Data store: mongoURI
- *   - Other third-party keys carried in the typed Env: accuweather*,
- *     gopher_settings_api_key
+ *   - Other keys carried in the typed Env: gopher_settings_api_key
  *
  * Every secret-shaped key of `Env` must appear here in lower case; the
  * `redact` unit suite asserts that closure.
@@ -59,9 +58,7 @@ export const REDACT_FIELD_NAMES = Object.freeze([
   'xai_api_key',
   'xaiApiKey',
 
-  // Other third-party keys carried in the typed Env
-  'accuweather_key',
-  'accuweatherKey',
+  // Other keys carried in the typed Env
   'gopher_settings_api_key',
   'gopherSettingsApiKey',
 ] as const);

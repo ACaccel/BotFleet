@@ -294,7 +294,12 @@ describe('createTempRole', () => {
     const expectedExpiry = BASE_NOW + 7 * MS_PER_DAY;
     expect(outcome).toEqual({ status: 'created', roleId: 'role-1', expiresAt: expectedExpiry });
     expect(roles.create).toHaveBeenCalledWith(
-      expect.objectContaining({ name: '🔔 Notify', mentionable: true, permissions: [] }),
+      expect.objectContaining({
+        name: '🔔 Notify',
+        mentionable: true,
+        permissions: [],
+        reason: 'Temporary notification role created via /role temp create by u1',
+      }),
     );
     expect(send).toHaveBeenCalledTimes(1);
     expect(repos.tempRole.create).toHaveBeenCalledWith(

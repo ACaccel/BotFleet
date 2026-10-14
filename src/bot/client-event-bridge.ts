@@ -1,7 +1,7 @@
 /**
  * Adapter between Discord's raw `client.on(...)` event stream and the
- * bot's internal dispatch surfaces (the InteractionRouter, the plugin
- * EventDispatcher, the reaction port).
+ * bot's internal dispatch surfaces (the InteractionRouter and the plugin
+ * EventDispatcher).
  *
  * Pattern: Adapter — the bridge owns one direction only (Discord →
  * domain). Every per-event branch is a thin translation that hands off
@@ -14,16 +14,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { MessageFlags } from 'discord.js';
-import type {
-  Client,
-  ClientEvents,
-  Guild,
-  Interaction,
-  MessageReaction,
-  PartialMessageReaction,
-  PartialUser,
-  User,
-} from 'discord.js';
+import type { Client, ClientEvents, Guild, Interaction } from 'discord.js';
 import { Events } from 'discord.js';
 
 import type { Translator } from '../core/i18n';
@@ -36,12 +27,6 @@ import { logError, logGuildEvent, logSystem, ops, type Logger } from '../core/lo
 //     emits a `message_delete` line tagged `source: 'bulk'` for each
 //     message whose cached attachments were rescued — Discord sends no
 //     per-message delete for those, so it is the only record of them.
-//   - `MESSAGE_REACTION_ADD` / `MESSAGE_REACTION_REMOVE` are
-//     intentionally NOT audit-logged here. Reaction throughput on busy
-//     guilds dwarfs every other event; an audit line per reaction would
-//     drown the file sink and the dev console without operator value.
-//     The reaction port still dispatches to handlers; we simply omit the
-//     bridge-level audit record.
 import type {
   GuildOnboardingPort,
   InteractionContext,
@@ -55,16 +40,6 @@ import { TOKENS } from './tokens';
 import type { ThreadModeration } from './thread-moderation';
 
 /**
- * Port the bridge delegates reaction processing to. Lives on the bridge
- * (not on BaseBot) so the reaction codegen path needs no BaseBot
- * reference.
- */
-export interface ReactionHandlerPort {
-  handleAdded(reaction: MessageReaction, user: User): Promise<void>;
-  handleRemoved(reaction: MessageReaction, user: User): Promise<void>;
-}
-
-/**
  * Per-bot suppression flags. A subclass that does not want one of the
  * bridge's raw listeners installed flips the corresponding bit (for
  * example: `msg-archive` opts out of every interactive event).
@@ -72,8 +47,6 @@ export interface ReactionHandlerPort {
 export interface ClientEventBridgeSuppression {
   /** When true the InteractionCreate listener is not installed. */
   readonly interaction?: boolean;
-  /** When true the MessageReaction{Add,Remove} listeners are not installed. */
-  readonly reaction?: boolean;
   /** When true the fallback GuildCreate listener is not installed. */
   readonly guildCreate?: boolean;
 }
@@ -87,7 +60,6 @@ interface ClientEventBridgeConfig {
   readonly container: ServiceContainer;
   readonly host: PluginHost;
   readonly router: InteractionRouter | undefined;
-  readonly reactionPort: ReactionHandlerPort;
   /** Live view over the bot's `guildInfo` — read only. */
   readonly guildInfo: () => ReadonlyMap<string, GuildInfo>;
   readonly suppression?: ClientEventBridgeSuppression;
@@ -179,7 +151,7 @@ export class ClientEventBridge {
   // Internal helpers
   // ------------------------------------------------------------------
 
-  /** Install the eight raw `client.on(...)` branches the bridge owns. */
+  /** Install the raw `client.on(...)` branches the bridge owns. */
   private installRawListeners(config: ClientEventBridgeConfig): void {
     const suppress = config.suppression ?? {};
 
@@ -196,25 +168,6 @@ export class ClientEventBridge {
     // gone — plugins subscribe through the EventDispatcher when
     // they care. Skipping the no-ops here keeps client.on listener
     // counts at their minimum.
-
-    if (suppress.reaction !== true) {
-      this.on(
-        Events.MessageReactionAdd,
-        async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser) => {
-          await this.onReactionAdd(reaction, user).catch((err) => {
-            logError(this.logger, reaction.message.guildId ?? null, err);
-          });
-        },
-      );
-      this.on(
-        Events.MessageReactionRemove,
-        async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser) => {
-          await this.onReactionRemove(reaction, user).catch((err) => {
-            logError(this.logger, reaction.message.guildId ?? null, err);
-          });
-        },
-      );
-    }
 
     // GuildMemberUpdate has no BaseBot-owned behaviour; plugins
     // subscribe through the dispatcher. The dispatcher forwarder
@@ -354,42 +307,6 @@ export class ClientEventBridge {
         }
       }
     }
-  }
-
-  private async onReactionAdd(
-    reaction: MessageReaction | PartialMessageReaction,
-    user: User | PartialUser,
-  ): Promise<void> {
-    if (user.bot) return;
-    const fetchedReaction = reaction.partial ? await reaction.fetch() : reaction;
-    const fetchedUser = user.partial ? await user.fetch() : user;
-    if (
-      this.config?.moderation &&
-      !(await this.config.moderation.allowReaction(fetchedReaction.message, fetchedUser.id))
-    )
-      return;
-    const port = this.config?.reactionPort;
-    if (port === undefined) return;
-    // Intentionally no audit log — see header comment.
-    await port.handleAdded(fetchedReaction, fetchedUser);
-  }
-
-  private async onReactionRemove(
-    reaction: MessageReaction | PartialMessageReaction,
-    user: User | PartialUser,
-  ): Promise<void> {
-    if (user.bot) return;
-    const fetchedReaction = reaction.partial ? await reaction.fetch() : reaction;
-    const fetchedUser = user.partial ? await user.fetch() : user;
-    if (
-      this.config?.moderation &&
-      !(await this.config.moderation.allowReaction(fetchedReaction.message, fetchedUser.id))
-    )
-      return;
-    const port = this.config?.reactionPort;
-    if (port === undefined) return;
-    // Intentionally no audit log — see header comment.
-    await port.handleRemoved(fetchedReaction, fetchedUser);
   }
 
   private async onGuildCreate(guild: Guild): Promise<void> {

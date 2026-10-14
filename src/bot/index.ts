@@ -7,8 +7,8 @@
  *   - {@link GuildRegistrar} — assembles `GuildInfo` from the Discord
  *     cache + bot config (`registerAll`).
  *   - {@link ClientEventBridge} — Adapter from `client.on(...)` raw
- *     events to router dispatch, plugin EventDispatcher, reaction
- *     port, and the GuildCreate fallback.
+ *     events to router dispatch, plugin EventDispatcher, and the
+ *     GuildCreate fallback.
  *   - {@link GuildDbConnector} — owns per-guild Mongo connection
  *     fan-out and failure normalisation.
  *
@@ -28,8 +28,6 @@ import { getSlashCommandClass, registerCommands } from '@cmd';
 import { assertTimeZone } from '../core/archive/stats';
 import type { ModalHandler } from '@modal';
 import { registerModals } from '@modal';
-import type { ReactionHandler } from '@reaction';
-import { executeReactionAdded, executeReactionRemoved, registerReactions } from '@reaction';
 import type { SSMHandler } from '@select-menu';
 import { registerSSMs } from '@select-menu';
 
@@ -58,11 +56,7 @@ import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { FeedPlatformRegistry } from '../infra/social-feed';
 import type { ArchiveControlFactory } from '../application/archive/control';
 
-import {
-  ClientEventBridge,
-  type ClientEventBridgeSuppression,
-  type ReactionHandlerPort,
-} from './client-event-bridge';
+import { ClientEventBridge, type ClientEventBridgeSuppression } from './client-event-bridge';
 import { installClientSafetyListeners } from './client-safety-listeners';
 import { GuildDbConnector } from './guild-db-connector';
 import { BaseBotGuildOnboardingPort } from './guild-onboarding';
@@ -256,7 +250,6 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   public buttonHandlers: Map<string, ButtonHandler> = new Map();
   public modalHandlers: Map<string, ModalHandler> = new Map();
   public ssmHandlers: Map<string, SSMHandler> = new Map();
-  public reactionHandlers: Map<string, ReactionHandler> = new Map();
   public helpMessage: string = '';
 
   /**
@@ -272,7 +265,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    * container on every access: `LlmChatPlugin.init` publishes
    * it under `TOKENS.ModelCatalog` through `ctx.registerInstance`,
    * and bots that do not register the plugin see `undefined`. The
-   * `/ai_settings` handler reaches the live model list through this
+   * `/ai settings` handler reaches the live model list through this
    * getter so the prior `listProviderModels` module-global is no
    * longer needed.
    */
@@ -594,7 +587,6 @@ export abstract class BaseBot<TConfig extends Config = Config> {
         container: this.container,
         host,
         router: this.interactionRouter,
-        reactionPort: this.buildReactionPort(),
         guildInfo: () => this.#guildInfo,
         suppression: this.eventBridgeSuppression(),
         ...(this.threadModerationEnabled && this.translator
@@ -856,7 +848,6 @@ export abstract class BaseBot<TConfig extends Config = Config> {
       await registerButtons(this);
       await registerSSMs(this);
       await registerModals(this);
-      await registerReactions(this);
       await this.clientEventBridge.sendRebootMessages(this.translator);
       if (callback !== undefined) {
         await callback();
@@ -956,18 +947,5 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   /** True when `userId` is one of this bot's configured admins. */
   public isAdmin(userId: string): boolean {
     return this.adminIds.includes(userId);
-  }
-
-  /**
-   * Build the `ReactionHandlerPort` the bridge consumes. The reaction
-   * codegen entry points (`executeReactionAdded` / `executeReactionRemoved`)
-   * accept a `BaseBot` reference; the port adapts them so the bridge
-   * itself stays decoupled from the bot.
-   */
-  private buildReactionPort(): ReactionHandlerPort {
-    return {
-      handleAdded: (reaction, user) => executeReactionAdded(reaction, user, this),
-      handleRemoved: (reaction, user) => executeReactionRemoved(reaction, user, this),
-    };
   }
 }
