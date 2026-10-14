@@ -43,6 +43,9 @@ export const plainValue: ValueFormat = (value, field, names) => {
     if (time !== undefined) return new Date(time).toISOString().slice(0, 16).replace('T', ' ');
   }
   if (Array.isArray(value)) return `[${value.length}]`;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? 'Invalid Date' : value.toISOString();
+  }
   if (typeof value === 'string') {
     const name = names.get(value);
     const text = name === undefined ? value : `${name} (${value})`;

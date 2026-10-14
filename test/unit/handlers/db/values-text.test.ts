@@ -157,7 +157,9 @@ describe('plainValue', () => {
   it('stringifies numbers, booleans and dates on untyped fields', () => {
     expect(plainValue(42, undefined, NO_NAMES)).toBe('42');
     expect(plainValue(false, undefined, NO_NAMES)).toBe('false');
-    expect(plainValue(new Date(0), undefined, NO_NAMES)).toBe(String(new Date(0)));
+    // ISO, so the text does not depend on the host time zone.
+    expect(plainValue(new Date(0), undefined, NO_NAMES)).toBe('1970-01-01T00:00:00.000Z');
+    expect(plainValue(new Date(Number.NaN), undefined, NO_NAMES)).toBe('Invalid Date');
   });
 });
 
