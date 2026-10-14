@@ -121,7 +121,6 @@
     "timeout_reason": "{{persona}}'s timeout verdict!"
   },
   "bug_report": {
-    "dm_footer": "Ticket #{{number}} · reply to this DM to add details",
     "field_type": "Type",
     "type_bug": "Bug",
     "type_suggestion": "Suggestion",
@@ -136,7 +135,7 @@
     "thread_dm_failed": "⚠️ The reporter cannot be DMed (their DMs may be closed), so replies will not reach them.",
     "dm_closed": "Report #{{number}} \"{{title}}\" is closed. Thanks for reporting!",
     "dm_reopened": "Report #{{number}} \"{{title}}\" was reopened.",
-    "from_admin": "Admin {{name}}",
+    "from_admin": "#{{number}} Admin {{name}}",
     "from_reporter": "Reporter {{name}}",
     "dm_unknown_ticket": "That report was not found; it may not be yours or may have been deleted.",
     "dm_ticket_closed": "That report is closed; use /bug_report for a new one.",

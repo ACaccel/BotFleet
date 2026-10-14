@@ -15,7 +15,6 @@ import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
 import { bindTranslator, type BoundTranslate } from '../../core/i18n';
 import type { BugTicketDoc } from '../../persistence/schemas/bug-ticket.schema';
 import {
-  dmFooter,
   dmReporter,
   markInProgress,
   ticketNumberIn,
@@ -31,11 +30,8 @@ const DESCRIPTION_MAX = 4096;
 const TICKET_PICK_MENU = 'bug_ticket_pick';
 
 /** An embed carrying a relayed message, its attachments as links. */
-const relayEmbed = (message: Message, author: string, footer: string, color: number) => {
-  const embed = new EmbedBuilder()
-    .setColor(color)
-    .setAuthor({ name: author })
-    .setFooter({ text: footer });
+const relayEmbed = (message: Message, author: string, color: number) => {
+  const embed = new EmbedBuilder().setColor(color).setAuthor({ name: author });
   if (message.content.length > 0) embed.setDescription(message.content.slice(0, DESCRIPTION_MAX));
   const attachments = [...message.attachments.values()].map((file) => file.url);
   if (attachments.length > 0)
@@ -63,13 +59,13 @@ export const relayAdminMessage = async (deps: BugReportDeps, message: Message): 
     ticket.reporter_id,
     relayEmbed(
       message,
-      t('replies:bug_report.from_admin', { name }),
-      dmFooter(t, ticket.number),
+      t('replies:bug_report.from_admin', { name, number: ticket.number }),
       EMBED_COLORS.info,
     ),
   );
-  await message.react(delivered ? '✅' : '⚠️').catch(() => undefined);
-  if (delivered) await markInProgress(deps, thread, ticket);
+  // Only a failure is marked; an unmarked reply reached the reporter.
+  if (!delivered) await message.react('⚠️').catch(() => undefined);
+  else await markInProgress(deps, thread, ticket);
 };
 
 /** Forward a reporter's DM into `ticket`'s post. */
@@ -87,13 +83,11 @@ export const relayDmToTicket = async (
       relayEmbed(
         dm,
         t('replies:bug_report.from_reporter', { name: dm.author.displayName }),
-        `#${String(ticket.number)}`,
         EMBED_COLORS.warning,
       ),
     ],
     allowedMentions: { parse: [] },
   });
-  await dm.react('✅').catch(() => undefined);
   return 'relayed';
 };
 
@@ -106,7 +100,8 @@ const quotedTicketNumber = async (
   if (quotedId === undefined) return undefined;
   const quoted = await dm.channel.messages.fetch(quotedId).catch(() => null);
   if (quoted?.author.id !== deps.client.user?.id) return undefined;
-  return ticketNumberIn(quoted?.embeds[0]?.footer?.text);
+  const embed = quoted?.embeds[0];
+  return ticketNumberIn(embed?.title ?? embed?.author?.name);
 };
 
 /**

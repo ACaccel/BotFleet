@@ -43,6 +43,8 @@ describe('createTicket', () => {
     });
     expect(repo.setThread).toHaveBeenCalledWith('bot', 7, 'thread-7');
     expect(send).toHaveBeenCalledOnce();
+    const dm = send.mock.calls[0]?.[0] as { embeds: { data: { footer?: unknown } }[] };
+    expect(dm.embeds[0]?.data.footer).toBeUndefined();
   });
 
   it('notes a reporter who cannot be DMed', async () => {
@@ -102,8 +104,8 @@ describe('setTicketClosed', () => {
 });
 
 describe('hub checks', () => {
-  it('reads ticket numbers back from DM footers', () => {
-    expect(ticketNumberIn('replies:bug_report.dm_footer #12')).toBe(12);
+  it('reads ticket numbers back from DM headings', () => {
+    expect(ticketNumberIn('#12 Admin Someone')).toBe(12);
     expect(ticketNumberIn(undefined)).toBeUndefined();
   });
 

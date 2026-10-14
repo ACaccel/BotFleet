@@ -121,7 +121,6 @@
     "timeout_reason": "{{persona}}的禁言裁決!"
   },
   "bug_report": {
-    "dm_footer": "Ticket #{{number}}・直接回覆這則私訊即可補充",
     "field_type": "類型",
     "type_bug": "問題",
     "type_suggestion": "建議",
@@ -136,7 +135,7 @@
     "thread_dm_failed": "⚠️ 無法私訊回報者,對方可能關閉了私訊,回覆將無法送達。",
     "dm_closed": "回報 #{{number}}「{{title}}」已結案,感謝你的回報!",
     "dm_reopened": "回報 #{{number}}「{{title}}」已重新開啟。",
-    "from_admin": "管理員 {{name}}",
+    "from_admin": "#{{number}} 管理員 {{name}}",
     "from_reporter": "回報者 {{name}}",
     "dm_unknown_ticket": "找不到這則回報,可能不是你的回報或已被刪除。",
     "dm_ticket_closed": "這則回報已結案;有新問題請再用 /bug_report 回報。",

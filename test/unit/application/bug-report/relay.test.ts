@@ -35,8 +35,22 @@ describe('admin replies', () => {
     await relayAdminMessage(deps, message as never);
 
     expect(send).toHaveBeenCalledOnce();
-    expect(message.react).toHaveBeenCalledWith('✅');
+    const embed = (send.mock.calls[0]?.[0] as { embeds: { data: Record<string, unknown> }[] })
+      .embeds[0]?.data;
+    expect(embed).toMatchObject({ author: { name: 'replies:bug_report.from_admin' } });
+    expect(embed?.footer).toBeUndefined();
+    // Delivery is the normal case; only a failure is marked.
+    expect(message.react).not.toHaveBeenCalled();
     expect(repo.setStatus).toHaveBeenCalledWith('bot', 7, 'in_progress');
+  });
+
+  it('marks a reply that could not reach the reporter', async () => {
+    const { deps } = buildDeps(buildRepo(), { dmFails: true });
+    const message = adminMessage('Can you send logs?');
+
+    await relayAdminMessage(deps, message as never);
+
+    expect(message.react).toHaveBeenCalledWith('⚠️');
   });
 
   it('keeps // notes in the post', async () => {
@@ -76,7 +90,7 @@ describe('reporter DMs', () => {
     const message = dm({ reference: { messageId: 'bot-dm' } });
     message.channel.messages.fetch.mockResolvedValueOnce({
       author: { id: 'bot' },
-      embeds: [{ footer: { text: 'Ticket #7' } }],
+      embeds: [{ author: { name: '#7 Admin Someone' } }],
     });
 
     await relayReporterDm(buildDeps(repo).deps, message as never);

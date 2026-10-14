@@ -85,13 +85,13 @@ const tagIds = (forum: ForumChannel, deps: BugReportDeps, keys: readonly BugTagK
     return tag === undefined ? [] : [tag.id];
   });
 
-/** Footer every ticket DM carries; the ticket number is read back from it. */
-export const dmFooter = (t: BoundTranslate, number: number): string =>
-  t('replies:bug_report.dm_footer', { number });
-
-/** The ticket number in a DM footer written by {@link dmFooter}. */
-export const ticketNumberIn = (footer: string | undefined): number | undefined => {
-  const match = footer === undefined ? null : /#(\d+)/.exec(footer);
+/**
+ * The ticket number of a bot DM, read from the `#<number>` its embed's
+ * title or author line starts with. Every ticket DM names its ticket
+ * there, so a reporter's reply can be routed without extra text.
+ */
+export const ticketNumberIn = (heading: string | undefined): number | undefined => {
+  const match = heading === undefined ? null : /#(\d+)/.exec(heading);
   return match?.[1] === undefined ? undefined : Number(match[1]);
 };
 
@@ -220,8 +220,7 @@ export const createTicket = async (
     new EmbedBuilder()
       .setColor(EMBED_COLORS.info)
       .setTitle(t('replies:bug_report.dm_created_title', { number, title: args.title }))
-      .setDescription(t('replies:bug_report.dm_created_body'))
-      .setFooter({ text: dmFooter(t, number) }),
+      .setDescription(t('replies:bug_report.dm_created_body')),
   );
   if (!dmDelivered) {
     await repo.markDmFailed(deps.botId, number);
@@ -285,15 +284,12 @@ export const setTicketClosed = async (
   await dmReporter(
     deps,
     ticket.reporter_id,
-    new EmbedBuilder()
-      .setColor(close ? EMBED_COLORS.neutral : EMBED_COLORS.info)
-      .setTitle(
-        t(close ? 'replies:bug_report.dm_closed' : 'replies:bug_report.dm_reopened', {
-          number: ticket.number,
-          title: ticket.title,
-        }),
-      )
-      .setFooter({ text: dmFooter(t, ticket.number) }),
+    new EmbedBuilder().setColor(close ? EMBED_COLORS.neutral : EMBED_COLORS.info).setTitle(
+      t(close ? 'replies:bug_report.dm_closed' : 'replies:bug_report.dm_reopened', {
+        number: ticket.number,
+        title: ticket.title,
+      }),
+    ),
   );
   if (close) {
     await thread.setLocked(true).catch(() => undefined);
