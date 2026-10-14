@@ -42,13 +42,6 @@ interface CreateLlmAutoReplyDeps {
   readonly random?: () => number;
   /** Reply client; injectable so tests can assert the send path without a real HTTP call. */
   readonly client?: Pick<SelfHostedLlmClient, 'reply'>;
-  /**
-   * Live endpoint source, read on every reply. When supplied it overrides
-   * `config.endpoint` so a composition root (e.g. gopher's settings API)
-   * can swap the self-hosted endpoint at runtime without rebuilding the
-   * plugin. Ignored when `client` is injected.
-   */
-  readonly endpointProvider?: () => string;
 }
 
 export const createLlmAutoReplyPlugin = (
@@ -60,9 +53,7 @@ export const createLlmAutoReplyPlugin = (
   const client =
     deps.client ??
     new SelfHostedLlmClient({
-      // A live provider takes precedence so the endpoint can change at
-      // runtime; otherwise the parsed config's static endpoint is used.
-      endpoint: deps.endpointProvider ?? config.endpoint,
+      endpoint: config.endpoint,
       timeoutMs: config.timeoutMs,
     });
   const random = deps.random ?? Math.random;

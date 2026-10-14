@@ -43,7 +43,7 @@ describe('REDACT_FIELD_NAMES', () => {
 
   it('derives nested pino redact paths for every field', () => {
     const paths = buildPinoRedactPaths();
-    for (const field of ['xai_api_key', 'gopher_settings_api_key', 'cwa_api_key']) {
+    for (const field of ['xai_api_key', 'cwa_api_key']) {
       expect(paths).toContain(field);
       expect(paths).toContain(`*.${field}`);
     }

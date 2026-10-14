@@ -55,6 +55,11 @@ journalctl -u botfleet@nijika.service -f
 
 The database unit is `mongodb-botfleet.service`.
 
+For gopher endpoint changes, follow
+[manual configuration and restart](../configuration.md#gopher-llm-endpoint).
+Deploy code changes with `npm run deploy` first; restarting alone keeps the
+existing release's code.
+
 ## Prepared releases and readiness
 
 Preparation validates configuration/runtime, types, Canvas and units, then snapshots

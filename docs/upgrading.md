@@ -1,5 +1,14 @@
 # Upgrade notes
 
+## Gopher settings API removal
+
+Gopher no longer exposes the settings HTTP API. Remove `settings_api` from its
+`config.json` and `GOPHER_SETTINGS_API_KEY` and `PORT` from its `.env`; these fields
+are no longer needed by gopher. Nijika still requires `PORT` for its earthquake
+webhook. Deploy the updated code, then follow
+[manual configuration and restart](configuration.md#gopher-llm-endpoint)
+for subsequent endpoint changes.
+
 ## Command review
 
 Unknown IDs in a bot's `commands` now stop startup and `npm run register`, so remove

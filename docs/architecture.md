@@ -45,6 +45,10 @@ Bootstrap validates configuration; [BaseBot](../src/bot/index.ts) builds service
 and initializes plugins before login. Listeners attach before guild registration,
 repository connection and ready hooks. Guild database failures are isolated and can recover.
 
+Gopher has no database or inbound HTTP server. Its self-hosted LLM endpoint is
+fixed at startup; operators apply changes through
+[manual configuration and restart](configuration.md#gopher-llm-endpoint).
+
 Startup rejection exits with failure. Shutdown cleans up resources within a deadline;
 a second signal exits immediately. Discord handles reconnection. Uncaught exceptions
 use a narrow transient-network whitelist, separate from ordinary retry policy.

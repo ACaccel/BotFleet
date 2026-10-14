@@ -26,7 +26,6 @@
     "endpoint": "https://YOUR_LLM_HOST/chat",
     "timeoutMs": 10000
   },
-  "settings_api": { "enabled": false, "host": "127.0.0.1", "basePath": "/settings" },
   "identity_sync": {
     "enabled": false,
     "syncWithSource": false,

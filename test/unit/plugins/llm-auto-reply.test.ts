@@ -10,6 +10,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Message } from 'discord.js';
+import axios from 'axios';
 
 import { createLlmAutoReplyPlugin } from '../../../src/plugins/llm-auto-reply/plugin';
 import {
@@ -438,6 +439,43 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     // the structural fake is widened through `never` for the call site only.
     await plugin.events?.messageCreate?.(buildPluginContext({ logger }), message as never);
   };
+
+  it('keeps the configured endpoint until the plugin is rebuilt after a settings change', async () => {
+    const post = vi
+      .spyOn(axios, 'post')
+      .mockResolvedValue({ data: { status: 'success', response: 'reply' } });
+    try {
+      const config = { enabled: true, endpoint: 'https://first.invalid/chat', timeoutMs: 4321 };
+      const plugin = createLlmAutoReplyPlugin(config, { clientId: BOT_ID });
+      const { channel, send } = makeChannel(burst());
+
+      await dispatch(plugin, makeTriggerMessage(channel, { mention: true }));
+      config.endpoint = 'https://second.invalid/chat';
+      await dispatch(plugin, makeTriggerMessage(channel, { mention: true }));
+
+      const restarted = createLlmAutoReplyPlugin(config, { clientId: BOT_ID });
+      await dispatch(restarted, makeTriggerMessage(channel, { mention: true }));
+
+      expect(post).toHaveBeenCalledTimes(3);
+      for (const call of [1, 2]) {
+        expect(post).toHaveBeenNthCalledWith(
+          call,
+          'https://first.invalid/chat',
+          expect.objectContaining({ messages: [expect.objectContaining({ role: 'user' })] }),
+          expect.objectContaining({ timeout: 4321 }),
+        );
+      }
+      expect(post).toHaveBeenNthCalledWith(
+        3,
+        'https://second.invalid/chat',
+        expect.anything(),
+        expect.objectContaining({ timeout: 4321 }),
+      );
+      expect(send).toHaveBeenCalledTimes(3);
+    } finally {
+      post.mockRestore();
+    }
+  });
 
   it('rolls the probability gate before any fetch (gate fail -> no fetch)', async () => {
     const { channel, fetch } = makeChannel(burst());

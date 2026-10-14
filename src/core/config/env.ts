@@ -102,7 +102,7 @@ const envShape = {
   MONGO_URI: mongoUriSchema.optional(),
   /** Cooldown and polling interval for transient per-guild connection failures. */
   MONGO_RECOVERY_INTERVAL_MS: z.coerce.number().int().positive().max(2_147_483_647).default(60_000),
-  /** HTTP port for the earthquake webhook (nijika) / settings API (gopher). */
+  /** HTTP port for nijika's earthquake webhook. */
   PORT: z.coerce.number().int().positive().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
@@ -135,12 +135,6 @@ const envShape = {
    * the webhook alert runs.
    */
   CWA_API_KEY: optionalApiKeySchema,
-  /**
-   * Bearer key for gopher's settings REST API. Optional — only gopher
-   * sets it; the settings-api plugin refuses to start (when enabled)
-   * without it, so a secret never lives in config.json.
-   */
-  GOPHER_SETTINGS_API_KEY: z.string().min(1).optional(),
 } as const;
 
 const envSchema = z

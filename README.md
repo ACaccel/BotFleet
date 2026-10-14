@@ -18,12 +18,12 @@ shared `BaseBot` and registers its own plugins and services.
 | `nijika`      | `npm run nijika`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`, `PORT` | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles, plus social-feed polling with its platform registry, an earthquake webhook and CWA earthquake reports (optional `CWA_API_KEY`) |
 | `tomori`      | `npm run tomori`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles                                                                                                                                 |
 | `konata`      | `npm run konata`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | LLM chat for whitelisted users (a mention starts a session, a reply continues it) and an online presence; the guild-join listener is off                                                                                            |
-| `gopher`      | `npm run gopher`      | `TOKEN`, `CLIENT_ID`, `PORT`              | Self-hosted LLM auto-replies, a settings REST API that swaps the LLM endpoint at runtime, and daily avatar/nickname sync; no database                                                                                               |
+| `gopher`      | `npm run gopher`      | `TOKEN`, `CLIENT_ID`                      | Self-hosted LLM auto-replies and daily avatar/nickname sync; no database. [Endpoint changes](docs/configuration.md#gopher-llm-endpoint) take effect after a restart                                                                 |
 | `msg-archive` | `npm run msg-archive` | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | The only [message archive](docs/message-archive.md) writer: live capture, periodic and full backups, and archive control; it exposes exactly `/archive`                                                                             |
 
 Event mirroring posts message edits, deletions and role changes to a guild's event
-channel and keeps deleted attachments through an attachment cache. LLM providers,
-the settings API and nijika's [earthquake reports](docs/configuration.md#earthquake-alerts-and-reports)
+channel and keeps deleted attachments through an attachment cache. LLM providers
+and nijika's [earthquake reports](docs/configuration.md#earthquake-alerts-and-reports)
 need their own keys; see
 [environment variables](docs/configuration.md#environment-variables).
 

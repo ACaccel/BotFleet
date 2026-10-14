@@ -16,7 +16,6 @@ export { createLlmChatPlugin } from './llm-chat';
 export { createEarthquakePlugin } from './earthquake';
 export { createLlmAutoReplyPlugin } from './llm-auto-reply';
 export { createSocialLinkPreviewPlugin } from './social-link-preview';
-export { createSettingsApiPlugin } from './settings-api';
 export { createIdentitySyncPlugin } from './identity-sync';
 export { createSocialFeedPlugin } from './social-feed';
 export { createBugReportPlugin } from './bug-report';

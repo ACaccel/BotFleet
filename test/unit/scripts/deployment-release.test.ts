@@ -63,6 +63,30 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 describe('release preparation', () => {
+  it('prepares gopher with only Discord credentials and no database or HTTP port', () => {
+    config.bots = ['gopher'];
+    file('src/bot/gopher/index.ts', 'export {};');
+    file('src/bot/gopher/.env', 'TOKEN=valid-token\nCLIENT_ID=123456\n');
+    file('src/bot/gopher/config.json', '{}');
+
+    const release = makeRelease(root, config, false);
+
+    expect(release.units['botfleet@gopher.service']).toContain('src/bot/gopher/index.ts');
+    expect(release.units['botfleet@gopher.service']).not.toContain('mongo-ready');
+  });
+
+  it('still rejects nijika without its webhook port', () => {
+    config.bots = ['nijika'];
+    file(
+      'src/bot/nijika/.env',
+      'TOKEN=valid-token\nCLIENT_ID=123456\nMONGO_URI=mongodb://localhost/test\n',
+    );
+    file('src/bot/nijika/config.json', '{}');
+
+    expect(() => makeRelease(root, config, false)).toThrow('PORT');
+    expect(readdirSync(join(root, '.deploy/releases'))).toEqual([]);
+  });
+
   it('freezes application code and dependencies while retaining shared local settings', () => {
     const release = makeRelease(root, config, false);
     file('src/bot/tomori/index.ts', 'export const revision = 2;');

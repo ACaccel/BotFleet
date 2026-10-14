@@ -22,14 +22,13 @@ placeholders fail startup; there is no root `.env.example`.
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `TOKEN`, `CLIENT_ID`                                                   | Required Discord token and application ID                                                        |
 | `MONGO_URI`                                                            | Required for database-backed bots; optional for gopher                                           |
-| `PORT`                                                                 | Required by nijika's webhook and gopher's settings API                                           |
+| `PORT`                                                                 | Required by nijika's earthquake webhook                                                          |
 | `MONGO_RECOVERY_INTERVAL_MS`                                           | Recovery polling, default `60000`                                                                |
 | `NODE_ENV`                                                             | `development` (default), `test`, or `production`                                                 |
 | `LOG_LEVEL`                                                            | `trace`, `debug`, `info` (default), `warn`, `error`, or `fatal`                                  |
 | `LOG_DIR`                                                              | File log root, default `logs`; empty disables file logs                                          |
 | `LOG_RETENTION_DAYS`                                                   | Days of file logs to keep, default `60`; `0` keeps all                                           |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                                                   |
-| `GOPHER_SETTINGS_API_KEY`                                              | Required when gopher's settings API is enabled                                                   |
 | `CWA_API_KEY`                                                          | Optional nijika key for [earthquake reports](#earthquake-alerts-and-reports); blank means absent |
 | `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup                                       |
 
@@ -96,7 +95,6 @@ Plugin settings are validated at startup; strict schemas reject unknown keys.
 | Setting                         | Bot            | Purpose / default                                                                          |
 | ------------------------------- | -------------- | ------------------------------------------------------------------------------------------ |
 | `llm_auto_reply`                | gopher         | Self-hosted endpoint, reply probability, context, cooldown and timeout                     |
-| `settings_api`                  | gopher         | Disabled; binds `127.0.0.1` at `/settings`, using `PORT` and bearer authentication         |
 | `identity_sync`                 | gopher         | Avatar/nickname sync; requires `sourceUserId` when sync is enabled                         |
 | `social_link_preview`           | nijika, tomori | Disabled; provider/proxy lists and request limits                                          |
 | `social_feed`                   | nijika         | Disabled; enabled feeds require a nonempty `platforms` map (`x` supported)                 |
@@ -290,10 +288,16 @@ Nijika posts two kinds of earthquake message to each guild's `earthquake` channe
   each county's maximum intensity, links the CWA report page, shows the report
   image and credits the CWA. Its color follows the CWA report color.
 
-### Settings API transport
+### Gopher LLM endpoint
 
-Keep the settings API on loopback or use HTTPS/an encrypted tunnel. Bearer
-authentication does not encrypt traffic; rotate keys exposed over plain HTTP.
+To change the self-hosted LLM URL, edit `llm_auto_reply.endpoint` in
+`src/bot/gopher/config.json`, then restart gopher. The URL must be valid;
+configuration is validated and read once at startup. Gopher does not expose a
+settings HTTP API or rewrite its configuration.
+
+For a local process, stop it and run `npm run gopher` again. For a managed
+deployment, restart `botfleet@gopher.service`; its release links to the same
+local configuration. See [deployment](contributing/deployment.md).
 
 ## Channel privacy
 

@@ -34,7 +34,6 @@ const FULL_SOURCE: NodeJS.ProcessEnv = {
   GEMINI_API_KEY: 'sk-gemini',
   XAI_API_KEY: 'sk-xai',
   CWA_API_KEY: 'cwa-key',
-  GOPHER_SETTINGS_API_KEY: 'gopher-bearer',
 };
 
 describe('Env key closure', () => {
@@ -51,7 +50,7 @@ describe('Env key closure', () => {
 
   it('carries an optional API key through to the result', () => {
     const env = loadEnv({ exitOnFailure: false, source: { ...FULL_SOURCE } });
-    expect(env.GOPHER_SETTINGS_API_KEY).toBe('gopher-bearer');
+    expect(env.CWA_API_KEY).toBe('cwa-key');
   });
 
   it('drops keys the schema does not declare', () => {

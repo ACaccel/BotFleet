@@ -65,7 +65,6 @@ const TEST_TIMEOUT_MS = 20000;
 const NO_DB_INTEGRATION = [
   'test/integration/core/http/**/*.test.ts',
   'test/integration/plugins/earthquake-route.int.test.ts',
-  'test/integration/plugins/settings-api-route.int.test.ts',
 ];
 
 export const projects: TestProjectConfiguration[] = [
