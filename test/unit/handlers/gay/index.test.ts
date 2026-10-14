@@ -1,38 +1,43 @@
 /** `/gay` always answers, never pings, and reads pairs when given a second member. */
-import { describe, expect, it, vi } from 'vitest';
-import type { ChatInputCommandInteraction } from 'discord.js';
+import { describe, expect, it } from 'vitest';
 
 import Gay from '../../../../src/handlers/commands/gay';
 import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../../fixtures/discord/interaction-builder';
 
 const user = (id: string) => ({ id, displayName: `name-${id}` });
 
 const run = async (second?: string) => {
-  const reply = vi.fn(async (_options: unknown) => undefined);
-  const interaction = {
-    reply,
-    options: {
-      getUser: (name: string) => (name === 'user' ? user('u1') : second ? user(second) : null),
-      // Neither member is cached: the reply must still go out.
-      getMember: () => null,
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({
+    users: {
+      user: user('u1'),
+      ...(second === undefined ? {} : { user2: user(second) }),
     },
-  } as unknown as ChatInputCommandInteraction;
+    sink,
+  });
+  // Neither member is cached: the reply must still go out. The builder
+  // has no member resolver.
+  Object.assign(interaction.options, { getMember: () => null });
   const { bot } = buildFakeBot({ timeZone: 'UTC' });
   await new Gay().execute(interaction, bot);
-  return reply.mock.calls[0]?.[0] as { content: string; allowedMentions: unknown };
+  return sink.replies[0];
 };
 
 describe('/gay', () => {
   it('answers a single reading for an uncached member without pinging', async () => {
     const sent = await run();
 
-    expect(sent.content).toMatch(/^replies:gay\.single\n> replies:gay\.single_/);
-    expect(sent.allowedMentions).toEqual({ parse: [] });
+    expect(sent?.content).toMatch(/^replies:gay\.single\n> replies:gay\.single_/);
+    expect(sent?.allowedMentions).toEqual({ parse: [] });
   });
 
   it('reads the pair when a second member is given', async () => {
     const sent = await run('u2');
 
-    expect(sent.content).toMatch(/^replies:gay\.pair\n> replies:gay\.pair_/);
+    expect(sent?.content).toMatch(/^replies:gay\.pair\n> replies:gay\.pair_/);
   });
 });

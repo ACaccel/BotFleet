@@ -226,7 +226,9 @@ describe('runBounded', () => {
     const worker = async (): Promise<void> => {
       active += 1;
       peak = Math.max(peak, active);
-      await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      // One event-loop turn lets every worker the limiter admits start
+      // before this one finishes, without depending on a timer.
+      await new Promise<void>((resolve) => setImmediate(resolve));
       active -= 1;
     };
 

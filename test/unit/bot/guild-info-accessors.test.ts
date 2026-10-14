@@ -10,10 +10,12 @@
  */
 /* eslint-disable import/first */
 import { describe, expect, it, vi } from 'vitest';
-import type { Channel, Guild } from 'discord.js';
+import type { Guild } from 'discord.js';
 import type { Job } from 'node-schedule';
 
+import { buildTextChannel } from '../../fixtures/discord/channel-builder';
 import { buildInertClient } from '../../fixtures/discord/client-builder';
+import { buildGuild } from '../../fixtures/discord/guild-builder';
 import { barrelStubs } from '../../fixtures/handler-barrel-stubs';
 
 vi.mock('@cmd', () => barrelStubs.cmd);
@@ -27,7 +29,7 @@ import { TOKENS } from '../../../src/bot/tokens';
 import { archiveControlFactory } from '../../../src/application/archive/control';
 import { buildArchiveRepos } from '../../../src/persistence/repositories/archive-repos';
 
-const fakeGuild = (id: string): Guild => ({ id, name: `Guild ${id}` }) as unknown as Guild;
+const fakeGuild = (id: string): Guild => buildGuild({ id, name: `Guild ${id}` });
 
 const fakeRepos = (): Repos => ({}) as unknown as Repos;
 
@@ -132,7 +134,7 @@ describe('BaseBot container-backed accessors', () => {
 
   it('guildRegistry reads through to the live guild slots', () => {
     const bot = buildBot();
-    const channel = { id: 'c-1' } as unknown as Channel;
+    const channel = buildTextChannel({ id: 'c-1' });
     bot.registerGuildSlotInternal('g-1', {
       bot_name: 'A',
       guild: fakeGuild('g-1'),

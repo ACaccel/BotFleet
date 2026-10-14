@@ -1,17 +1,11 @@
-import {
-  MessageReferenceType,
-  MessageType,
-  MessageFlags,
-  type Interaction,
-  type Message,
-} from 'discord.js';
+import { MessageReferenceType, MessageType, MessageFlags, type Interaction } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import { ThreadModeration, parseThreadModerationConfig } from '../../../src/bot/thread-moderation';
-import type { Translator } from '../../../src/core/i18n';
-import { createLogger } from '../../../src/core/logger';
 import { err, ok } from '../../../src/core/result';
 import { databaseErrorFrom } from '../../../src/persistence/error-translator';
 import type { ThreadModerationRepo } from '../../../src/persistence/repositories/thread-moderation.repo';
+import { buildMessage } from '../../fixtures/discord/message-builder';
+import { echoTranslator, silentLogger } from '../../fixtures/runtime';
 
 const thread = { id: 'thread', ownerId: 'owner', isThread: () => true };
 const message = (overrides: Record<string, unknown> = {}) => {
@@ -20,11 +14,10 @@ const message = (overrides: Record<string, unknown> = {}) => {
     guildId: 'guild',
     channel: thread,
     author: { id: 'member', bot: false },
-    partial: false,
     delete: vi.fn(async () => {}),
     ...overrides,
   };
-  return { data, value: data as unknown as Message };
+  return { data, value: buildMessage(data) };
 };
 const interaction = (overrides: Record<string, unknown> = {}) => {
   const data = {
@@ -55,12 +48,12 @@ const setup = (missingRepo = false) => {
     setBlocked: vi.fn(async () => ok(undefined)),
     listBlocked: vi.fn(async () => ok([])),
   };
-  const logger = createLogger({ level: 'silent', pretty: false });
+  const logger = silentLogger();
   const error = vi.spyOn(logger, 'error');
   const gate = new ThreadModeration({
     botId: 'bot',
     logger,
-    translator: { t: (key: string) => key } as unknown as Translator,
+    translator: echoTranslator(),
     isAdmin: (id) => id === 'admin',
     getRepo: () => (missingRepo ? undefined : repo),
   });

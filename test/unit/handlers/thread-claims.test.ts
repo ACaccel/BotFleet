@@ -1,15 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-  ChannelType,
-  PermissionFlagsBits,
-  type ButtonInteraction,
-  type ChatInputCommandInteraction,
-} from 'discord.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import ClaimCommand from '../../../src/handlers/commands/thread_claim/action';
 import ClaimButton from '../../../src/handlers/buttons/thread_claim';
 import { buildThreadClaimCard } from '../../../src/handlers/thread-claim-view';
 import type { ThreadClaim } from '../../../src/persistence/repositories/thread-moderation.repo';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import { buildGuild } from '../../fixtures/discord/guild-builder';
+import {
+  buildButtonInteraction,
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
 
 const BOT = '100000000000000001';
 const GUILD = '100000000000000002';
@@ -19,6 +20,17 @@ const APPLICANT = '100000000000000005';
 const ADMIN = '100000000000000006';
 const OTHER_ADMIN = '100000000000000007';
 const CLAIM = '0123456789abcdef01234567';
+const NOW = Date.UTC(2026, 0, 15, 12);
+
+// Only Date is faked: expiry checks and recorded timestamps read one
+// fixed instant, while discord.js fakes keep their real timers.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'], now: NOW });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const build = () => {
   const claim: { -readonly [Key in keyof ThreadClaim]: ThreadClaim[Key] } = {
@@ -26,10 +38,10 @@ const build = () => {
     applicant_id: APPLICANT,
     owner_id: OWNER,
     reason: 'Lost access to my original account',
-    requested_at: Date.now(),
-    expires_at: Date.now() + 86400_000,
+    requested_at: NOW,
+    expires_at: NOW + 86400_000,
     status: 'pending',
-    delivery_completed_at: Date.now(),
+    delivery_completed_at: NOW,
     notices: [{ admin_id: ADMIN, channel_id: 'dm', message_id: 'message' }],
   };
   const repo = {
@@ -47,7 +59,10 @@ const build = () => {
   const fetchMember = vi.fn().mockResolvedValue({ user: { id: APPLICANT, bot: false } });
   const has = vi.fn().mockReturnValue(true);
   const membership = vi.fn().mockResolvedValue({ id: APPLICANT });
-  const guild = { id: GUILD, members: { fetch: fetchMember }, channels: { fetch: vi.fn() } };
+  const fetchChannel = vi.fn();
+  const guild = buildGuild({ id: GUILD });
+  Object.assign(guild.members, { fetch: fetchMember });
+  Object.assign(guild.channels, { fetch: fetchChannel });
   const thread = {
     id: THREAD,
     guildId: GUILD,
@@ -58,7 +73,7 @@ const build = () => {
     permissionsFor: () => ({ has }),
     members: { fetch: membership },
   };
-  guild.channels.fetch.mockResolvedValue(thread);
+  fetchChannel.mockResolvedValue(thread);
   const message = { id: 'message', channelId: 'dm', edit: vi.fn().mockResolvedValue(undefined) };
   const send = vi.fn().mockResolvedValue(message);
   const createDM = vi
@@ -77,39 +92,42 @@ const build = () => {
     getRepos,
     client: { users: { fetch: fetchUser }, guilds: { fetch: fetchGuild } },
   });
-  const command = {
-    user: { id: APPLICANT },
-    guildId: GUILD,
-    guild: guild as typeof guild | null,
-    options: {
-      getChannel: vi.fn().mockReturnValue({ id: THREAD }),
-      getString: vi.fn().mockReturnValue(claim.reason),
-    },
-    deferred: true,
-    replied: false,
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-  };
-  const button = {
-    user: { id: ADMIN },
-    guildId: null as string | null,
-    channelId: 'dm',
+  const commandSink = newInteractionSink();
+  const command = buildChatInputInteraction({
+    userId: APPLICANT,
+    guild,
+    channels: { thread: { id: THREAD } },
+    options: { reason: claim.reason },
+    sink: commandSink,
+  });
+  const buttonSink = newInteractionSink();
+  const button = buildButtonInteraction({
     customId: `thread_claim|approve|${GUILD}|${THREAD}|${CLAIM}`,
+    userId: ADMIN,
+    guildId: null,
+    sink: buttonSink,
+  });
+  // The button builder has no `deferReply`, channel or message surface;
+  // the handler binds the review to the DM message it was sent on.
+  Object.assign(button, {
+    channelId: 'dm',
     message: { id: 'message', author: { id: BOT } },
-    deferred: true,
-    replied: false,
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-  };
+    deferReply: async (opts?: { flags?: number }) => {
+      buttonSink.defers.push(opts ?? {});
+      buttonSink.acknowledged.deferred = true;
+    },
+  });
   return {
     bot,
     logger,
     repo,
     claim,
     command,
+    commandSink,
     button,
+    buttonSink,
     thread,
-    guild,
+    fetchChannel,
     has,
     fetchMember,
     membership,
@@ -119,17 +137,13 @@ const build = () => {
     message,
     createDM,
     getRepos,
-    execute: () =>
-      new ClaimCommand().execute(command as unknown as ChatInputCommandInteraction, bot),
-    review: () => new ClaimButton().execute(button as unknown as ButtonInteraction, bot),
+    execute: () => new ClaimCommand().execute(command, bot),
+    review: () => new ClaimButton().execute(button, bot),
   };
 };
 
-const expectReply = (
-  interaction: ReturnType<typeof build>['command'] | ReturnType<typeof build>['button'],
-  key: string,
-) => {
-  expect(interaction.editReply).toHaveBeenLastCalledWith({
+const expectReply = (sink: ReturnType<typeof newInteractionSink>, key: string) => {
+  expect(sink.editReplies.at(-1)).toEqual({
     content: `replies:thread_moderation.${key}`,
     allowedMentions: { parse: [] },
   });
@@ -152,7 +166,7 @@ describe('thread claim card status', () => {
         f.bot,
         GUILD,
         THREAD,
-        { ...f.claim, status, expires_at: Date.now() + expiryOffset },
+        { ...f.claim, status, expires_at: NOW + expiryOffset },
         enabled,
       );
       const embed = card.embeds[0]!.toJSON();
@@ -173,14 +187,14 @@ describe('thread_claim submission', () => {
   it('renders a maximum-length Markdown reason without exceeding embed limits', async () => {
     const f = build();
     const reason = '*'.repeat(1000);
-    f.command.options.getString.mockReturnValue(reason);
+    Object.assign(f.command.options, { getString: () => reason });
     const card = buildThreadClaimCard(f.bot, GUILD, THREAD, { ...f.claim, reason }, false);
     expect(() => card.embeds[0]!.toJSON()).not.toThrow();
     expect(card.embeds[0]!.toJSON().description!.replaceAll('\\', '')).toContain(reason);
     expect(card.embeds[0]!.toJSON().description!.length).toBeGreaterThan(1024);
     expect(card.embeds[0]!.toJSON().description!.length).toBeLessThanOrEqual(4096);
     await f.execute();
-    expectReply(f.command, 'claim_submitted');
+    expectReply(f.commandSink, 'claim_submitted');
   });
 
   it('sends disabled cards to every distinct admin, persists bindings, then enables them', async () => {
@@ -206,34 +220,35 @@ describe('thread_claim submission', () => {
     });
     f.repo.completeClaimDelivery.mockImplementation(async () => {
       expect(f.message.edit).toHaveBeenCalledTimes(2);
-      expect(f.command.editReply).not.toHaveBeenCalled();
+      expect(f.commandSink.editReplies).toEqual([]);
       return { ok: true, value: true };
     });
     await f.execute();
-    expect(f.repo.completeClaimDelivery).toHaveBeenCalledWith(
-      BOT,
-      THREAD,
-      expect.any(String),
-      expect.any(Number),
-    );
+    expect(f.repo.completeClaimDelivery).toHaveBeenCalledWith(BOT, THREAD, expect.any(String), NOW);
     expect(f.fetchUser.mock.calls.map(([id]) => id)).toEqual([ADMIN, OTHER_ADMIN]);
     expect(f.repo.createClaim).toHaveBeenCalledWith(
       BOT,
       THREAD,
-      expect.objectContaining({ applicant_id: APPLICANT, owner_id: OWNER, status: 'pending' }),
+      expect.objectContaining({
+        applicant_id: APPLICANT,
+        owner_id: OWNER,
+        status: 'pending',
+        requested_at: NOW,
+        expires_at: NOW + 7 * 86400_000,
+      }),
     );
     expect(f.repo.bindClaimNotices).toHaveBeenCalledWith(BOT, THREAD, expect.any(String), [
       expect.objectContaining({ admin_id: ADMIN }),
       expect.objectContaining({ admin_id: OTHER_ADMIN }),
     ]);
-    expectReply(f.command, 'claim_submitted');
+    expectReply(f.commandSink, 'claim_submitted');
   });
 
   it('succeeds if at least one admin can receive and enable a card', async () => {
     const f = build();
     f.fetchUser.mockRejectedValueOnce(new Error('DM closed'));
     await f.execute();
-    expectReply(f.command, 'claim_submitted');
+    expectReply(f.commandSink, 'claim_submitted');
     expect(f.repo.failClaimDelivery).not.toHaveBeenCalled();
   });
 
@@ -245,7 +260,7 @@ describe('thread_claim submission', () => {
       if (stage === 'bind') f.repo.bindClaimNotices.mockResolvedValue({ ok: true, value: false });
       if (stage === 'enable') f.message.edit.mockRejectedValue(new Error('Cannot edit'));
       await f.execute();
-      expectReply(f.command, 'claim_delivery_failed');
+      expectReply(f.commandSink, 'claim_delivery_failed');
       expect(f.repo.failClaimDelivery).toHaveBeenCalledWith(BOT, THREAD, expect.any(String));
       if (stage !== 'closed') expect(f.message.edit).toHaveBeenLastCalledWith({ components: [] });
     },
@@ -255,7 +270,7 @@ describe('thread_claim submission', () => {
     const f = build();
     f.repo.createClaim.mockResolvedValue({ ok: true, value: status });
     await f.execute();
-    expectReply(f.command, `claim_${status}`);
+    expectReply(f.commandSink, `claim_${status}`);
     expect(f.send).not.toHaveBeenCalled();
   });
 
@@ -274,7 +289,7 @@ describe('thread_claim submission', () => {
       expect(f.repo.completeClaimDelivery).toHaveBeenCalledOnce();
       expect(f.repo.failClaimDelivery).toHaveBeenCalledWith(BOT, THREAD, expect.any(String));
       expect(f.message.edit).toHaveBeenLastCalledWith({ components: [] });
-      expect(f.command.editReply).toHaveBeenLastCalledWith(
+      expect(f.commandSink.editReplies.at(-1)).toEqual(
         expect.objectContaining({
           content: `replies:thread_moderation.${scenario === 'expired' ? 'claim_delivery_failed' : 'claim_failed'}`,
         }),
@@ -309,10 +324,10 @@ describe('thread_claim submission', () => {
       'missing-owner': 'claim_owner_missing',
       'no-admins': 'claim_no_admins',
     };
-    if (scenario === 'dm') f.command.guild = null;
+    if (scenario === 'dm') Object.assign(f.command, { guild: null });
     if (scenario === 'foreign') f.thread.guildId = 'foreign';
     if (scenario === 'nonthread') f.thread.isThread = () => false;
-    if (scenario === 'owner') f.command.user.id = OWNER;
+    if (scenario === 'owner') Object.assign(f.command.user, { id: OWNER });
     if (scenario === 'manager') f.repo.isManager.mockResolvedValue({ ok: true, value: true });
     if (scenario === 'no-access') f.has.mockReturnValue(false);
     if (scenario === 'private') {
@@ -321,11 +336,11 @@ describe('thread_claim submission', () => {
       f.membership.mockResolvedValue({ id: 'another-member' });
     }
     if (scenario === 'bot') f.fetchMember.mockResolvedValue({ user: { bot: true } });
-    if (scenario === 'reason') f.command.options.getString.mockReturnValue(' ');
+    if (scenario === 'reason') Object.assign(f.command.options, { getString: () => ' ' });
     if (scenario === 'missing-owner') f.thread.ownerId = null;
     if (scenario === 'no-admins') Object.defineProperty(f.bot, 'adminIds', { value: [] });
     await f.execute();
-    expectReply(f.command, keys[scenario]!);
+    expectReply(f.commandSink, keys[scenario]!);
     expect(f.repo.createClaim).not.toHaveBeenCalled();
   });
 
@@ -335,7 +350,7 @@ describe('thread_claim submission', () => {
     await f.execute();
     expect(f.fetchMember).toHaveBeenCalledWith({ user: APPLICANT, force: true });
     expect(f.repo.createClaim).not.toHaveBeenCalled();
-    expect(f.command.editReply).toHaveBeenLastCalledWith({
+    expect(f.commandSink.editReplies.at(-1)).toEqual({
       content: 'replies:thread_moderation.claim_failed',
     });
   });
@@ -346,7 +361,7 @@ describe('thread_claim DM review', () => {
     const f = build();
     delete f.claim.delivery_completed_at;
     await f.review();
-    expectReply(f.button, 'claim_delivering');
+    expectReply(f.buttonSink, 'claim_delivering');
     expect(f.repo.decideClaim).not.toHaveBeenCalled();
     expect(f.fetchGuild).not.toHaveBeenCalled();
     expect(f.send).not.toHaveBeenCalled();
@@ -361,7 +376,7 @@ describe('thread_claim DM review', () => {
     await f.review();
     expect(f.repo.findClaim).toHaveBeenCalledOnce();
     expect(f.repo.decideClaim).toHaveBeenCalledOnce();
-    expectReply(f.button, 'claim_approved');
+    expectReply(f.buttonSink, 'claim_approved');
     const card = f.message.edit.mock.calls[0]![0];
     expect(card.embeds[0].toJSON().fields).toEqual(
       expect.arrayContaining([
@@ -387,7 +402,7 @@ describe('thread_claim DM review', () => {
     await f.review();
     expect(f.repo.findClaim).toHaveBeenCalledWith(BOT, THREAD, CLAIM);
     expect(f.fetchGuild).toHaveBeenCalledWith(GUILD);
-    expect(f.guild.channels.fetch).toHaveBeenCalledWith(THREAD, { force: true });
+    expect(f.fetchChannel).toHaveBeenCalledWith(THREAD, { force: true });
     expect(f.fetchMember).toHaveBeenCalledWith({ user: APPLICANT, force: true });
     expect(f.repo.decideClaim).toHaveBeenCalledWith(
       BOT,
@@ -397,9 +412,9 @@ describe('thread_claim DM review', () => {
       'dm',
       'message',
       true,
-      expect.any(Number),
+      NOW,
     );
-    expectReply(f.button, 'claim_approved');
+    expectReply(f.buttonSink, 'claim_approved');
     expect(f.send).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining(`https://discord.com/channels/${GUILD}/${THREAD}`),
@@ -407,7 +422,7 @@ describe('thread_claim DM review', () => {
     );
     await f.review();
     expect(f.repo.decideClaim).toHaveBeenCalledOnce();
-    expectReply(f.button, 'claim_already_reviewed');
+    expectReply(f.buttonSink, 'claim_already_reviewed');
   });
 
   it.each([
@@ -425,31 +440,36 @@ describe('thread_claim DM review', () => {
     'decided',
   ])('rejects unauthorized or stale review: %s', async (scenario) => {
     const f = build();
-    if (scenario === 'nonadmin') f.button.user.id = APPLICANT;
-    if (scenario === 'guild') f.button.guildId = GUILD;
-    if (scenario === 'bot') f.button.message.author.id = 'foreign-bot';
-    if (scenario === 'message') f.button.message.id = 'copied-message';
-    if (scenario === 'channel') f.button.channelId = 'foreign-dm';
-    if (scenario === 'recipient') f.button.user.id = OTHER_ADMIN;
-    if (scenario === 'malformed') f.button.customId += '|extra';
-    if (scenario === 'foreign-guild') f.button.customId = f.button.customId.replace(GUILD, OWNER);
+    const customId = f.button.customId;
+    if (scenario === 'nonadmin') Object.assign(f.button.user, { id: APPLICANT });
+    if (scenario === 'guild') Object.assign(f.button, { guildId: GUILD });
+    if (scenario === 'bot') Object.assign(f.button.message.author, { id: 'foreign-bot' });
+    if (scenario === 'message') Object.assign(f.button.message, { id: 'copied-message' });
+    if (scenario === 'channel') Object.assign(f.button, { channelId: 'foreign-dm' });
+    if (scenario === 'recipient') Object.assign(f.button.user, { id: OTHER_ADMIN });
+    if (scenario === 'malformed') Object.assign(f.button, { customId: `${customId}|extra` });
+    if (scenario === 'foreign-guild') {
+      Object.assign(f.button, { customId: customId.replace(GUILD, OWNER) });
+    }
     if (scenario === 'foreign-thread' || scenario === 'foreign-claim') {
       f.repo.findClaim.mockImplementation(async (_bot, thread, claim) => ({
         ok: true,
         value: thread === THREAD && claim === CLAIM ? f.claim : undefined,
       }));
-      f.button.customId =
-        scenario === 'foreign-thread'
-          ? f.button.customId.replace(THREAD, OWNER)
-          : f.button.customId.replace(CLAIM, 'abcdefabcdefabcdefabcdef');
+      Object.assign(f.button, {
+        customId:
+          scenario === 'foreign-thread'
+            ? customId.replace(THREAD, OWNER)
+            : customId.replace(CLAIM, 'abcdefabcdefabcdefabcdef'),
+      });
     }
-    if (scenario === 'expired') f.claim.expires_at = Date.now() - 1;
+    if (scenario === 'expired') f.claim.expires_at = NOW - 1;
     if (scenario === 'decided') f.claim.status = 'rejected';
     await f.review();
     expect(f.repo.decideClaim).not.toHaveBeenCalled();
     expect(f.send).not.toHaveBeenCalled();
     expectReply(
-      f.button,
+      f.buttonSink,
       scenario === 'nonadmin'
         ? 'manager_admin_only'
         : scenario === 'expired'
@@ -482,7 +502,7 @@ describe('thread_claim DM review', () => {
 
   it('allows rejection even when the applicant has left the server', async () => {
     const f = build();
-    f.button.customId = f.button.customId.replace('approve', 'reject');
+    Object.assign(f.button, { customId: f.button.customId.replace('approve', 'reject') });
     f.fetchMember.mockRejectedValue(new Error('Left guild'));
     await f.review();
     expect(f.fetchGuild).not.toHaveBeenCalled();
@@ -494,16 +514,16 @@ describe('thread_claim DM review', () => {
       'dm',
       'message',
       false,
-      expect.any(Number),
+      NOW,
     );
-    expectReply(f.button, 'claim_rejected');
+    expectReply(f.buttonSink, 'claim_rejected');
   });
 
   it('does not announce approval when another reviewer wins the storage race', async () => {
     const f = build();
     f.repo.decideClaim.mockResolvedValue({ ok: true, value: false });
     await f.review();
-    expectReply(f.button, 'claim_already_reviewed');
+    expectReply(f.buttonSink, 'claim_already_reviewed');
     expect(f.send).not.toHaveBeenCalled();
     expect(f.message.edit).not.toHaveBeenCalled();
   });
@@ -516,7 +536,7 @@ describe('thread_claim DM review', () => {
     expect(f.claim.status).toBe('approved');
     expect(f.repo.decideClaim).toHaveBeenCalledOnce();
     expect(f.repo.failClaimDelivery).not.toHaveBeenCalled();
-    expectReply(f.button, 'claim_approved');
+    expectReply(f.buttonSink, 'claim_approved');
     expect(f.logger.error).toHaveBeenCalledTimes(2);
   });
 });

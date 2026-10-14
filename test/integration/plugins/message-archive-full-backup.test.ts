@@ -1,9 +1,3 @@
-import {
-  buildArchiveRepos,
-  buildArchiveWriterRepos,
-} from '../../../src/persistence/repositories/archive-repos';
-import { archiveBackupNotifiers } from '../../../src/plugins/message-backup/runtime/backup-notifier';
-import { ChannelType, type Client, type Guild } from 'discord.js';
 import type { Connection } from 'mongoose';
 import { describe, expect, it, vi } from 'vitest';
 import type {
@@ -12,22 +6,21 @@ import type {
   ArchiveJob,
   ArchivePeriodicRecord,
 } from '../../../src/core/archive/types';
-import { ArchivePolicySchema } from '../../../src/core/archive/policy';
 import { ArchiveCapacityError } from '../../../src/core/archive/errors';
-import { createLogger } from '../../../src/core/logger';
-import type { Translator } from '../../../src/core/i18n';
 import { unwrap } from '../../../src/core/result';
 import { archiveControlFor } from '../../helpers/archive-control';
 import { MongoArchiveScheduleRepo } from '../../../src/persistence/repositories/archive-schedule.repo';
 import type * as StorageModule from '../../../src/infra/archive/storage-usage';
 import { StaticConnectionManager } from '../../../src/infra/mongo/connection-manager';
 import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
-import { collectChannels } from '../../../src/plugins/message-backup/internal/collect-channels';
-import { ArchiveWorker } from '../../../src/plugins/message-backup/runtime/worker';
+import type { ArchiveWorker } from '../../../src/plugins/message-backup/runtime/worker';
 import { withFreshConnection } from '../helpers/mongo';
-
-/** A raw `messages` document, keyed by the Discord message ID. */
-type StoredMessage = { _id: string } & Record<string, any>;
+import {
+  buildArchiveWorker,
+  keyWithParamsTranslator,
+  stubArchiveInventory,
+  type StoredMessage,
+} from '../../helpers/archive-worker-fixture';
 
 vi.mock('../../../src/plugins/message-backup/internal/collect-channels', () => ({
   collectChannels: vi.fn(),
@@ -64,69 +57,44 @@ const message = (id: string, reactions: unknown[] = []) => ({
 /** One full page of 100 messages: ids 1100 down to 1001. */
 const fullPage = () => Array.from({ length: 100 }, (_, index) => message(String(1100 - index)));
 
-const inventory = (hidden = false) => {
-  const channel = { id: '10', name: 'room', type: ChannelType.GuildText, parentId: null };
-  vi.mocked(collectChannels).mockResolvedValue({
-    channels: [channel],
-    liveChannelIds: new Set(hidden ? ['10', '20'] : ['10']),
-    gaps: hidden ? [{ pass: 'history', channelId: '20', reason: 'missing-view-channel' }] : [],
-    complete: true,
-    locations: [
-      { id: '10', name: 'room', type: ChannelType.GuildText, passes: ['channels'] },
-      ...(hidden
-        ? [{ id: '20', name: 'hidden', type: ChannelType.GuildText, passes: ['channels'] }]
-        : []),
-    ],
-  } as unknown as Awaited<ReturnType<typeof collectChannels>>);
-};
+/** The room, and with `hidden` a second channel the bot cannot read. */
+const inventory = (hidden = false) =>
+  stubArchiveInventory(
+    hidden
+      ? {
+          hidden: [{ id: '20', name: 'hidden' }],
+          gaps: [{ pass: 'history', channelId: '20', reason: 'missing-view-channel' }],
+          complete: true,
+        }
+      : {},
+  );
 
 const fixture = (
   manager: StaticConnectionManager,
   extra: Partial<ConstructorParameters<typeof ArchiveWorker>[0]> = {},
 ) => {
-  const get = vi.fn(
-    async (route: string): Promise<unknown> =>
-      route.endsWith('/messages') ? [message('101')] : message('101'),
-  );
   const patch = vi.fn(async () => ({}));
   const send = vi.fn(async () => ({ id: '90' }));
-  const client = {
-    channels: { cache: new Map() },
-    guilds: {
-      fetch: async () => ({ id: '1', channels: { cache: new Map() } }) as unknown as Guild,
-    },
-    rest: { get, patch },
-  } as unknown as Client;
-  const logger = createLogger({ level: 'silent', pretty: false });
-  // Nested parameters show which keys a panel rendered.
-  const translator = {
-    t: (key: string, params?: Record<string, unknown>) =>
-      params === undefined ? key : `${key}${JSON.stringify(params)}`,
-  } as Translator;
-  const worker = new ArchiveWorker({
-    client,
-    // Tests drain the inbox explicitly; the loop has its own tests.
-    inboxLoop: false,
+  // Stop requests are looked up at most every 250 ms by this clock; tests move it.
+  let stopCheckNow = 0;
+  const { worker, rest, logger, client } = buildArchiveWorker({
     connections: manager,
-    registry: {
-      getRepos: () => undefined,
-      getChannel: () => ({ id: '22', isSendable: () => true, send }) as never,
-      getRole: () => undefined,
-      listGuildIds: () => ['1'],
+    get: async (route) => (route.endsWith('/messages') ? [message('101')] : message('101')),
+    patch,
+    channel: { id: '22', isSendable: () => true, send },
+    // Nested parameters show which keys a panel rendered.
+    translator: keyWithParamsTranslator(),
+    worker: {
+      // Sources failing transiently retry in the same sweep; keep the waits short.
+      sourceRetryBaseMs: 1,
+      stopCheckClock: () => stopCheckNow,
+      ...extra,
     },
-    config: archiveRuntimeSchema.parse({}),
-    policy: ArchivePolicySchema.parse({ guildIds: ['1'] }),
-    guildIds: ['1'],
-    logger,
-    translator,
-    backupNotifiers: archiveBackupNotifiers(client, translator),
-    archiveRepos: buildArchiveRepos,
-    writerRepos: buildArchiveWriterRepos,
-    // Sources failing transiently retry in the same sweep; keep the waits short.
-    sourceRetryBaseMs: 1,
-    ...extra,
   });
-  return { worker, get, patch, send, logger, client };
+  const passStopCheckThrottle = () => {
+    stopCheckNow += 250;
+  };
+  return { worker, get: rest.get, patch, send, logger, client, passStopCheckThrottle };
 };
 
 /** Confirms a full backup the way the `/archive backup` panel does. */
@@ -143,7 +111,6 @@ const fullCheckpoint = async (connection: Connection) =>
       'checkpoints'
     ] as Record<string, Record<string, unknown>> | undefined
   )?.['full-backup'];
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('msg-archive full backup', () => {
   it('runs a confirmed backup to completion as its own full run and shows the result', async () =>
@@ -240,19 +207,8 @@ describe('msg-archive full backup', () => {
 
   it('scans the source with the most stored work first', async () =>
     withFreshConnection(async (connection) => {
-      const rooms = ['10', '20', '30'].map((id) => ({
-        id,
-        name: `room-${id}`,
-        type: ChannelType.GuildText,
-        parentId: null,
-      }));
-      vi.mocked(collectChannels).mockResolvedValue({
-        channels: rooms,
-        liveChannelIds: new Set(rooms.map(({ id }) => id)),
-        gaps: [],
-        complete: true,
-        locations: rooms.map(({ id, name }) => ({ id, name, type: ChannelType.GuildText })),
-      } as unknown as Awaited<ReturnType<typeof collectChannels>>);
+      const rooms = ['10', '20', '30'].map((id) => ({ id, name: `room-${id}` }));
+      stubArchiveInventory({ readable: rooms });
       // Discovery order is 10, 20, 30; the archive holds most for 30, then 20.
       const stored = (id: number, channelId: string, reactions = 0) => ({
         _id: String(id),
@@ -296,7 +252,9 @@ describe('msg-archive full backup', () => {
   it('stops cooperatively and resumes with the same cutoff and checkpoints', async () =>
     withFreshConnection(async (connection) => {
       inventory();
-      const { worker, get } = fixture(new StaticConnectionManager(connection));
+      const { worker, get, passStopCheckThrottle } = fixture(
+        new StaticConnectionManager(connection),
+      );
       const control = await archiveControlFor(connection);
       const befores: string[] = [];
       get.mockImplementation(async (route: string, options?: { query?: URLSearchParams }) => {
@@ -315,8 +273,8 @@ describe('msg-archive full backup', () => {
             const saved = channel.checkpoints?.['full-backup'] as { pageSequence?: number };
             if (saved?.pageSequence === 1) {
               unwrap(await control.stop(job.jobId));
-              // Past the stop-check cache, so the next boundary observes the request.
-              await sleep(300);
+              // Past the stop-check throttle, so the next boundary observes the request.
+              passStopCheckThrottle();
             }
           },
         );
@@ -498,7 +456,9 @@ describe('msg-archive full backup', () => {
   it('retries a failed final write before releasing the backup', async () =>
     withFreshConnection(async (connection) => {
       inventory();
-      const { worker } = fixture(new StaticConnectionManager(connection));
+      const { worker } = fixture(new StaticConnectionManager(connection), {
+        terminalRetryBaseMs: 1,
+      });
       try {
         const state = await worker.initialize('1');
         const update = state.repos.jobs.updateJob.bind(state.repos.jobs);

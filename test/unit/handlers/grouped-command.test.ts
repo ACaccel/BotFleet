@@ -1,14 +1,15 @@
-import {
-  MessageFlags,
-  type AutocompleteInteraction,
-  type ChatInputCommandInteraction,
-} from 'discord.js';
+import { MessageFlags } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import { Command, type CommandConfig } from '../../../src/handlers/commands/command';
 import { GroupedCommand } from '../../../src/handlers/commands/grouped-command';
 import '../../../src/handlers/commands';
 import { COMMAND_REGISTRY } from '../../../src/handlers/commands/registry.generated';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import {
+  buildAutocompleteInteraction,
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
 
 class Action extends Command {
   public override execute = vi.fn(async () => undefined);
@@ -21,13 +22,25 @@ class Action extends Command {
   }
 }
 
-const request = (name: string | null, group: string | null = null) => ({
-  options: {
-    getSubcommand: () => name,
-    getSubcommandGroup: () => group,
-  },
-  reply: vi.fn(async () => undefined),
+// The builders have no subcommand surface; routing reads only these two.
+const routeOf = (name: string | null, group: string | null) => ({
+  getSubcommand: () => name,
+  getSubcommandGroup: () => group,
 });
+
+const chatRequest = (name: string | null, group: string | null = null) => {
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({ sink });
+  Object.assign(interaction.options, routeOf(name, group));
+  return { interaction, sink };
+};
+
+const autocompleteRequest = (name: string | null, group: string | null = null) => {
+  const sink = newInteractionSink();
+  const interaction = buildAutocompleteInteraction({ sink });
+  Object.assign(interaction.options, routeOf(name, group));
+  return { interaction, sink };
+};
 
 const build = () => {
   const rootAction = new Action();
@@ -51,13 +64,12 @@ describe('GroupedCommand routing boundaries', () => {
     ['unknown group', 'add', 'obsolete'],
     ['wrong group for root action', 'list', 'manager'],
   ] as const)('rejects %s without executing an action', async (_label, name, group) => {
-    const { command, rootAction, groupedAction, bot } = build();
-    const interaction = request(name, group);
-    await command.execute(interaction as unknown as ChatInputCommandInteraction, bot);
-    expect(interaction.reply).toHaveBeenCalledExactlyOnceWith({
-      content: 'errors:command.not_found',
-      flags: MessageFlags.Ephemeral,
-    });
+    const { command: grouped, rootAction, groupedAction, bot } = build();
+    const { interaction, sink } = chatRequest(name, group);
+    await grouped.execute(interaction, bot);
+    expect(sink.replies).toEqual([
+      { content: 'errors:command.not_found', flags: MessageFlags.Ephemeral },
+    ]);
     expect(rootAction.execute).not.toHaveBeenCalled();
     expect(groupedAction.execute).not.toHaveBeenCalled();
   });
@@ -69,17 +81,14 @@ describe('GroupedCommand routing boundaries', () => {
     ['add', 'obsolete'],
     ['list', 'manager'],
   ] as const)('returns no suggestions for invalid route %s/%s', async (name, group) => {
-    const { command, rootAction, groupedAction, bot } = build();
-    const interaction = request(name, group);
-    expect(command.autocomplete).toBeTypeOf('function');
-    const suggestions = await command.autocomplete!(
-      interaction as unknown as AutocompleteInteraction,
-      bot,
-    );
+    const { command: grouped, rootAction, groupedAction, bot } = build();
+    const { interaction, sink } = autocompleteRequest(name, group);
+    expect(grouped.autocomplete).toBeTypeOf('function');
+    const suggestions = await grouped.autocomplete!(interaction, bot);
     expect(suggestions).toEqual([]);
     expect(rootAction.autocomplete).not.toHaveBeenCalled();
     expect(groupedAction.autocomplete).not.toHaveBeenCalled();
-    expect(interaction.reply).not.toHaveBeenCalled();
+    expect(sink.replies).toEqual([]);
   });
 });
 

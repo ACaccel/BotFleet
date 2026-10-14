@@ -11,6 +11,7 @@ import {
   startRollCall,
   type RollCallDeps,
 } from '../../../src/application/roll-call/roll-call';
+import { echoTranslator } from '../../fixtures/runtime';
 
 const GUILD = 'g1';
 
@@ -43,7 +44,7 @@ const build = (stored: Record<string, unknown>) => {
     },
     jobMap: new Map(),
     logger: { error: vi.fn(), warn: vi.fn() },
-    translator: { t: (key: string) => key },
+    translator: echoTranslator(),
   } as unknown as RollCallDeps;
   return { deps, rollCall, activity, send, guild, channel };
 };

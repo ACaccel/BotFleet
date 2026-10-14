@@ -5,141 +5,164 @@
  * an ephemeral confirmation.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MessageFlags, type StringSelectMenuInteraction } from 'discord.js';
+import { MessageFlags, PermissionFlagsBits } from 'discord.js';
 
+import { giveawayJobKey } from '../../../src/application/giveaway/giveaway';
 import { ok } from '../../../src/core/result';
 import { handleGiveawayDeleteSelection } from '../../../src/handlers/commands/giveaway-shared/delete';
-import type { BaseBot } from '../../../src/bot';
+import { buildFakeBot, echoTranslatorWithParams } from '../../fixtures/discord/bot-fake';
+import { buildGuild } from '../../fixtures/discord/guild-builder';
+import {
+  buildStringSelectInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
 
 const GUILD_ID = 'guild-1';
 const MESSAGE_ID = 'm1';
 
-const translator = { t: (key: string) => key } as unknown as BaseBot['translator'];
-
-const makeRepos = (ownerId = 'owner-1') => ({
-  giveaway: {
-    findByMessageId: vi
-      .fn()
-      .mockResolvedValue(
-        ok({ message_id: MESSAGE_ID, prize_owner_id: ownerId, channel_id: 'chan-1' }),
-      ),
-    deleteByMessageId: vi.fn().mockResolvedValue(ok(true)),
-  },
-});
-
-const makeBot = (repos: ReturnType<typeof makeRepos>) =>
-  ({
-    client: {
-      guilds: { cache: new Map([[GUILD_ID, { id: GUILD_ID, channels: { cache: new Map() } }]]) },
-      channels: { fetch: vi.fn().mockResolvedValue(null) },
+/** In-memory giveaway repo so a test can read back what was deleted. */
+const makeRepos = (ownerId = 'owner-1') => {
+  const stored = new Map([
+    [MESSAGE_ID, { message_id: MESSAGE_ID, prize_owner_id: ownerId, channel_id: 'chan-1' }],
+  ]);
+  return {
+    stored,
+    giveaway: {
+      findByMessageId: async (id: string) => ok(stored.get(id) ?? null),
+      deleteByMessageId: async (id: string) => ok(stored.delete(id)),
     },
+  };
+};
+
+interface BotOptions {
+  readonly knownGuild?: boolean;
+  readonly jobMap?: Map<string, { cancel: () => void }>;
+  readonly extra?: Readonly<Record<string, unknown>>;
+}
+
+const makeBot = (repos: ReturnType<typeof makeRepos>, options: BotOptions = {}) => {
+  const bag = { giveaway: repos.giveaway };
+  const getRepos = (guildId: string) => (guildId === GUILD_ID ? bag : undefined);
+  const guilds =
+    options.knownGuild === false
+      ? new Map()
+      : new Map([[GUILD_ID, { id: GUILD_ID, channels: { cache: new Map() } }]]);
+  return buildFakeBot({
+    client: { guilds: { cache: guilds }, channels: { fetch: async () => null } },
     isAdmin: () => false,
-    getRepos: (guildId: string) => (guildId === GUILD_ID ? repos : undefined),
+    getRepos,
     guildRegistry: {
-      getRepos: (guildId: string) => (guildId === GUILD_ID ? repos : undefined),
+      getRepos,
       getChannel: () => undefined,
       getRole: () => undefined,
       listGuildIds: () => [],
     },
-    jobMap: new Map(),
-    requireLogger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
-    translator,
-  }) as unknown as BaseBot;
+    jobMap: options.jobMap ?? new Map(),
+    ...options.extra,
+  }).bot;
+};
 
-const makeInteraction = (values: string[], manager = false) =>
-  ({
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-    guild: { id: GUILD_ID },
-    user: { id: 'owner-1' },
-    memberPermissions: { has: () => manager },
+const makeInteraction = (values: string[], manager = false) => {
+  const sink = newInteractionSink();
+  const interaction = buildStringSelectInteraction({
+    customId: 'giveaway_delete|0',
     values,
-  }) as unknown as StringSelectMenuInteraction;
+    userId: 'owner-1',
+    guild: buildGuild({ id: GUILD_ID }),
+    memberPermissions: manager ? [PermissionFlagsBits.ManageMessages] : [],
+    sink,
+  });
+  return { interaction, sink };
+};
 
 afterEach(() => vi.clearAllMocks());
 
 describe('handleGiveawayDeleteSelection', () => {
-  it('deletes the selected giveaway and confirms', async () => {
+  it('deletes the selected giveaway, cancels its draw job and confirms', async () => {
     const repos = makeRepos();
-    const bot = makeBot(repos);
-    const interaction = makeInteraction([MESSAGE_ID]);
+    const cancel = vi.fn();
+    const jobMap = new Map([[giveawayJobKey(MESSAGE_ID), { cancel }]]);
+    const { interaction, sink } = makeInteraction([MESSAGE_ID]);
 
-    await handleGiveawayDeleteSelection(interaction, bot);
+    await handleGiveawayDeleteSelection(interaction, makeBot(repos, { jobMap }));
 
-    expect(interaction.deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
-    expect(repos.giveaway.deleteByMessageId).toHaveBeenCalledWith(MESSAGE_ID);
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'replies:giveaway.delete_success',
-    });
+    expect(sink.defers).toEqual([{ flags: MessageFlags.Ephemeral }]);
+    expect(repos.stored.has(MESSAGE_ID)).toBe(false);
+    // The scheduled draw would otherwise fire for a deleted giveaway.
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(jobMap.has(giveawayJobKey(MESSAGE_ID))).toBe(false);
+    expect(sink.editReplies).toEqual([{ content: 'replies:giveaway.delete_success' }]);
   });
 
   it("refuses someone else's giveaway without moderation rights", async () => {
     const repos = makeRepos('someone-else');
-    const interaction = makeInteraction([MESSAGE_ID]);
+    const { interaction, sink } = makeInteraction([MESSAGE_ID]);
 
     await handleGiveawayDeleteSelection(interaction, makeBot(repos));
 
-    expect(repos.giveaway.deleteByMessageId).not.toHaveBeenCalled();
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'replies:giveaway.delete_forbidden',
-    });
+    expect(repos.stored.has(MESSAGE_ID)).toBe(true);
+    expect(sink.editReplies).toEqual([{ content: 'replies:giveaway.delete_forbidden' }]);
+  });
+
+  it("lets a moderator delete someone else's giveaway", async () => {
+    const repos = makeRepos('someone-else');
+    const { interaction, sink } = makeInteraction([MESSAGE_ID], true);
+
+    await handleGiveawayDeleteSelection(interaction, makeBot(repos));
+
+    expect(repos.stored.has(MESSAGE_ID)).toBe(false);
+    expect(sink.editReplies).toEqual([{ content: 'replies:giveaway.delete_success' }]);
   });
 
   it('rejects when no giveaway was selected', async () => {
     const repos = makeRepos();
-    const bot = makeBot(repos);
-    const interaction = makeInteraction([]);
+    const { interaction, sink } = makeInteraction([]);
 
-    await handleGiveawayDeleteSelection(interaction, bot);
+    await handleGiveawayDeleteSelection(interaction, makeBot(repos));
 
-    expect(repos.giveaway.deleteByMessageId).not.toHaveBeenCalled();
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'replies:giveaway.missing_message_id',
-    });
+    expect(repos.stored.has(MESSAGE_ID)).toBe(true);
+    expect(sink.editReplies).toEqual([{ content: 'replies:giveaway.missing_message_id' }]);
   });
 
   it('answers a missing per-guild database with a catalog key, not a raw English reason', async () => {
     const repos = makeRepos();
     const bot = makeBot(repos);
     // Registered guild, no repos bag: the `no_db` outcome.
-    (bot as unknown as { guildRegistry: { getRepos: () => undefined } }).guildRegistry.getRepos =
-      () => undefined;
-    const interaction = makeInteraction([MESSAGE_ID]);
+    bot.guildRegistry.getRepos = () => undefined;
+    const { interaction, sink } = makeInteraction([MESSAGE_ID]);
 
     await handleGiveawayDeleteSelection(interaction, bot);
 
     // Previously the reply interpolated the literal 'Database not found'
     // into the localised template, so a zh-TW user saw English.
-    expect(interaction.editReply).toHaveBeenCalledWith({ content: 'errors:db.not_found' });
+    expect(sink.editReplies).toEqual([{ content: 'errors:db.not_found' }]);
+    expect(repos.stored.has(MESSAGE_ID)).toBe(true);
   });
 
   it('answers an unknown guild with the shared guild-not-found key', async () => {
     const repos = makeRepos();
-    const bot = makeBot(repos);
-    (bot as unknown as { client: { guilds: { cache: Map<string, unknown> } } }).client = {
-      guilds: { cache: new Map() },
-    };
-    const interaction = makeInteraction([MESSAGE_ID]);
+    const { interaction, sink } = makeInteraction([MESSAGE_ID]);
 
-    await handleGiveawayDeleteSelection(interaction, bot);
+    await handleGiveawayDeleteSelection(interaction, makeBot(repos, { knownGuild: false }));
 
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'errors:command.guild_not_found',
-    });
+    expect(sink.editReplies).toEqual([{ content: 'errors:command.guild_not_found' }]);
+    expect(repos.stored.has(MESSAGE_ID)).toBe(true);
   });
 });
 
 it('reports disabled database state with its trace ID', async () => {
-  const repos = makeRepos();
-  const bot = makeBot(repos);
-  const interaction = makeInteraction([MESSAGE_ID]);
-  const translate = vi.fn((key: string) => key);
-  Object.defineProperty(bot, 'translator', { value: { t: translate } });
-  Object.defineProperty(bot, 'connectionManager', {
-    value: { isDisabled: () => ({ traceId: 'trace-db' }) },
+  const bot = makeBot(makeRepos(), {
+    extra: {
+      translator: echoTranslatorWithParams(),
+      connectionManager: { isDisabled: () => ({ traceId: 'trace-db' }) },
+    },
   });
   bot.guildRegistry.getRepos = () => undefined;
+  const { interaction, sink } = makeInteraction([MESSAGE_ID]);
+
   await handleGiveawayDeleteSelection(interaction, bot);
-  expect(translate).toHaveBeenCalledWith('errors:db.guild_disabled', { traceId: 'trace-db' });
-  expect(interaction.editReply).toHaveBeenCalledWith({ content: 'errors:db.guild_disabled' });
+
+  expect(sink.editReplies).toEqual([
+    { content: 'errors:db.guild_disabled:{"traceId":"trace-db"}' },
+  ]);
 });

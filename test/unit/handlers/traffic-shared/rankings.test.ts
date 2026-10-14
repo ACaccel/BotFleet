@@ -2,16 +2,16 @@
  * Channel ranking rows: a forum post carries its forum as a tag, unless the
  * caller drops it (the person dashboard's half-width channel list).
  */
-import type { Guild } from 'discord.js';
 import { describe, expect, it } from 'vitest';
 
 import { channelRow } from '../../../../src/handlers/commands/traffic-shared/rankings';
 import type { TrafficContext } from '../../../../src/handlers/commands/traffic-shared/run';
+import { buildGuild } from '../../../fixtures/discord/guild-builder';
 
 const context = {
   t: (key: string, params?: Record<string, unknown>) =>
     params?.name === undefined ? key : `#${String(params.name)}`,
-  guild: { channels: { cache: new Map() } } as unknown as Guild,
+  guild: buildGuild(),
 } as unknown as TrafficContext;
 const post = {
   channelId: 'post-1',

@@ -2,23 +2,20 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   MessageFlags,
   type ActionRowBuilder,
-  type AutocompleteInteraction,
-  type ChatInputCommandInteraction,
   type EmbedBuilder,
   type StringSelectMenuBuilder,
 } from 'discord.js';
 
-import type { BaseBot } from '../../../../src/bot';
 import { createDefaultTranslator, type Translator } from '../../../../src/core/i18n';
 import type { Command } from '../../../../src/handlers/commands/command';
 import Help from '../../../../src/handlers/commands/help';
 import Thread from '../../../../src/handlers/commands/thread';
-
-interface ReplyPayload {
-  content?: string;
-  embeds?: EmbedBuilder[];
-  components?: ActionRowBuilder<StringSelectMenuBuilder>[];
-}
+import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
+import {
+  buildAutocompleteInteraction,
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../../fixtures/discord/interaction-builder';
 
 let translator: Translator;
 
@@ -29,59 +26,79 @@ beforeAll(async () => {
   });
 });
 
-const fixture = (requested?: string, isAdmin = false) => {
+interface Fixture {
+  readonly requested?: string;
+  readonly isAdmin?: boolean;
+  /** Rejects the first `editReply`, as a Discord outage on the response would. */
+  readonly failFirstEdit?: boolean;
+}
+
+const fixture = ({ requested, isAdmin = false, failFirstEdit = false }: Fixture = {}) => {
   const handler = new Help();
   const commandHandlers = new Map<string, Command>([
     ['help', handler],
     ['thread', new Thread()],
   ]);
   const admin = vi.fn(() => isAdmin);
-  const deferReply = vi.fn(async () => undefined);
-  const editReply = vi.fn(async (_payload: ReplyPayload) => undefined);
-  const get = vi.fn(() => (requested === undefined ? null : { value: requested }));
-  const interaction = {
-    user: { id: 'member-1' },
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({
+    userId: 'member-1',
     guildId: null,
-    deferred: true,
-    replied: false,
+    options: requested === undefined ? {} : { command: requested },
+    sink,
+  });
+  Object.assign(interaction, {
     client: {
       user: {
         username: 'Test Bot',
         displayAvatarURL: () => 'https://example.com/avatar.png',
       },
     },
-    options: { get },
-    deferReply,
-    editReply,
-  } as unknown as ChatInputCommandInteraction;
-  const bot = {
+  });
+  // Every attempt is kept, including the one the "outage" swallows.
+  const attempted: unknown[] = [];
+  const deliver = interaction.editReply.bind(interaction);
+  Object.assign(interaction, {
+    editReply: async (payload: unknown) => {
+      attempted.push(payload);
+      if (failFirstEdit && attempted.length === 1) throw new Error('Discord request failed');
+      return deliver(payload as Parameters<typeof deliver>[0]);
+    },
+  });
+  const { bot } = buildFakeBot({
     commandHandlers,
     translator,
     helpMessage: 'Personality introduction',
     isAdmin: admin,
-    logger: undefined,
-  } as unknown as BaseBot;
-  return { handler, bot, interaction, commandHandlers, admin, deferReply, editReply, get };
+  });
+  return { handler, bot, interaction, commandHandlers, admin, sink, attempted };
 };
+
+const embedOf = (reply: { embeds?: readonly unknown[] } | undefined) =>
+  (reply?.embeds?.[0] as EmbedBuilder | undefined)?.toJSON();
+
+const menuOf = (reply: { components?: readonly unknown[] } | undefined) =>
+  (reply?.components?.[0] as ActionRowBuilder<StringSelectMenuBuilder> | undefined)?.toJSON()
+    .components[0];
 
 describe('/help execute', () => {
   it('privately sends the overview and category menu in a DM', async () => {
-    const { handler, bot, interaction, admin, deferReply, editReply } = fixture();
+    const { handler, bot, interaction, admin, sink } = fixture();
 
     await handler.execute(interaction, bot);
 
-    expect(deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
+    expect(sink.defers).toEqual([{ flags: MessageFlags.Ephemeral }]);
     expect(admin).toHaveBeenCalledWith('member-1');
-    expect(editReply).toHaveBeenCalledTimes(1);
-    const reply = editReply.mock.calls[0]?.[0];
-    const embed = reply?.embeds?.[0]?.toJSON();
+    expect(sink.editReplies).toHaveLength(1);
+    const reply = sink.editReplies[0];
+    const embed = embedOf(reply);
     expect(embed?.author).toMatchObject({
       name: 'Test Bot · Command Help',
       icon_url: 'https://example.com/avatar.png',
     });
     expect(embed?.description).toContain('Personality introduction');
     expect(embed?.fields?.map((field) => field.value).join('\n')).toContain('`/thread`');
-    const menu = reply?.components?.[0]?.toJSON().components[0];
+    const menu = menuOf(reply);
     expect(menu).toMatchObject({ custom_id: 'help_category' });
     expect(menu?.options.map((option) => option.value)).toEqual([
       'overview',
@@ -93,13 +110,13 @@ describe('/help execute', () => {
   it.each([false, true])(
     'filters privileged detail paths with admin status %s',
     async (isAdmin) => {
-      const { handler, bot, interaction, deferReply, editReply } = fixture('/thread', isAdmin);
+      const { handler, bot, interaction, sink } = fixture({ requested: '/thread', isAdmin });
 
       await handler.execute(interaction, bot);
 
-      expect(deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
-      const reply = editReply.mock.calls[0]?.[0];
-      const embed = reply?.embeds?.[0]?.toJSON();
+      expect(sink.defers).toEqual([{ flags: MessageFlags.Ephemeral }]);
+      const reply = sink.editReplies[0];
+      const embed = embedOf(reply);
       expect(embed?.title).toBe('/thread');
       expect(embed?.fields?.find((field) => field.name === '/thread ban')?.value).toContain(
         '`users` (required)',
@@ -113,33 +130,33 @@ describe('/help execute', () => {
   );
 
   it('explains an unknown command without rendering another command', async () => {
-    const { handler, bot, interaction, editReply } = fixture('missing');
+    const { handler, bot, interaction, sink } = fixture({ requested: 'missing' });
 
     await handler.execute(interaction, bot);
 
-    expect(editReply).toHaveBeenCalledExactlyOnceWith({ content: 'No command named "missing".' });
+    expect(sink.editReplies).toEqual([{ content: 'No command named "missing".' }]);
   });
 
   it('omits the menu when no commands are loaded', async () => {
-    const { handler, bot, interaction, commandHandlers, editReply } = fixture();
+    const { handler, bot, interaction, commandHandlers, sink } = fixture();
     commandHandlers.clear();
 
     await handler.execute(interaction, bot);
 
-    const reply = editReply.mock.calls[0]?.[0];
+    const reply = sink.editReplies[0];
     expect(reply?.components).toEqual([]);
-    expect(reply?.embeds?.[0]?.toJSON().footer?.text).toBe('0 commands');
+    expect(embedOf(reply)?.footer?.text).toBe('0 commands');
   });
 
   it('reports a failed response through the private error reply', async () => {
-    const { handler, bot, interaction, deferReply, editReply } = fixture();
-    editReply.mockRejectedValueOnce(new Error('Discord request failed'));
+    const { handler, bot, interaction, sink, attempted } = fixture({ failFirstEdit: true });
 
     await handler.execute(interaction, bot);
 
-    expect(deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
-    expect(editReply).toHaveBeenCalledTimes(2);
-    expect(editReply.mock.calls[1]?.[0].content).toMatch(
+    expect(sink.defers).toEqual([{ flags: MessageFlags.Ephemeral }]);
+    expect(attempted).toHaveLength(2);
+    expect(sink.editReplies).toHaveLength(1);
+    expect(sink.editReplies[0]?.content).toMatch(
       /^Could not get the command list\. \(error code: [0-9a-z]{6}\)$/,
     );
   });
@@ -151,9 +168,7 @@ describe('/help autocomplete', () => {
     commandHandlers.set('thread_context', {
       config: { name: 'thread_context', type: 2 },
     } as unknown as Command);
-    const interaction = {
-      options: { getFocused: () => 'THR' },
-    } as unknown as AutocompleteInteraction;
+    const interaction = buildAutocompleteInteraction({ focused: 'THR' });
 
     await expect(handler.autocomplete(interaction, bot)).resolves.toEqual([
       { name: '/thread', value: 'thread' },
@@ -162,9 +177,7 @@ describe('/help autocomplete', () => {
 
   it('returns no suggestions for an unmatched query', async () => {
     const { handler, bot } = fixture();
-    const interaction = {
-      options: { getFocused: () => 'missing' },
-    } as unknown as AutocompleteInteraction;
+    const interaction = buildAutocompleteInteraction({ focused: 'missing' });
 
     await expect(handler.autocomplete(interaction, bot)).resolves.toEqual([]);
   });

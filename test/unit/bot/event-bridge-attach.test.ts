@@ -21,6 +21,9 @@ vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
 
 import { BaseBot, type Config } from '../../../src/bot/index';
+import { quietEnvLoadFailure } from './fixtures';
+
+quietEnvLoadFailure();
 
 interface BridgeFakeClient {
   readonly client: Client;

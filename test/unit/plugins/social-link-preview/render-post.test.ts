@@ -10,6 +10,7 @@ import { ComponentType } from 'discord.js';
 
 import type { Translator } from '../../../../src/core/i18n';
 import type { SocialPost } from '../../../../src/infra/link-preview';
+import { echoTranslator } from '../../../fixtures/runtime';
 import {
   buildPostContainer,
   buildPostEmbeds,
@@ -17,12 +18,13 @@ import {
 } from '../../../../src/plugins/social-link-preview/internal/render-post';
 
 /** Echoes the key's last segment and its params, so assertions see both. */
-const translator = {
+const translator: Translator = {
+  ...echoTranslator(),
   t: vi.fn((key: string, params?: Record<string, unknown>) => {
     const name = key.split('.').pop() ?? key;
     return params === undefined ? name : `${name}(${Object.values(params).join(',')})`;
   }),
-} as unknown as Translator;
+};
 
 const post = (extra: Partial<SocialPost> = {}): SocialPost => ({
   url: 'https://x.com/NASA/status/1',

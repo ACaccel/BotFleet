@@ -48,22 +48,16 @@ vi.mock('../../../src/handlers/commands/registry.generated', async () => {
   };
 });
 
-import type { BaseBot } from '../../../src/bot';
 import type { Command } from '../../../src/handlers/commands';
 import { registerCommands } from '../../../src/handlers/commands';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
 
 const buildBot = (commands: readonly string[] | undefined) => {
-  const error = vi.fn();
-  const logger = { error, info: vi.fn(), warn: vi.fn(), child: (): unknown => logger };
-  return {
-    bot: {
-      config: commands === undefined ? {} : { commands: [...commands] },
-      commandHandlers: new Map<string, Command>(),
-      translator: { t: (key: string) => key },
-      logger,
-    } as unknown as BaseBot,
-    error,
-  };
+  const { bot, logger } = buildFakeBot({
+    config: commands === undefined ? {} : { commands: [...commands] },
+    commandHandlers: new Map<string, Command>(),
+  });
+  return { bot, error: logger.error };
 };
 
 describe('registerCommands', () => {

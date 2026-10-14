@@ -1,23 +1,22 @@
-import { defineWorkspace } from 'vitest/config';
+import type { TestProjectConfiguration } from 'vitest/config';
 import path from 'path';
 
 /**
- * Vitest workspace — defines six independent projects (unit,
+ * Vitest projects — six independent projects (unit,
  * integration, integration-nodb, contract, i18n, tools). Each project's
  * include glob is the ground truth for what files it picks up; the
  * corresponding npm run script (`test:unit`, `test:int`, `test:contract`,
  * `test:i18n`, `test:tools`) selects via `--project <name>`.
  *
- * CI runs the integration and contract projects with `--reporter=json`
- * and fails the build if `numTotalTestSuites` is zero, catching a
- * broken project glob that would otherwise pass silently.
+ * CI runs `vitest list --json` and fails unless every project lists at
+ * least one test, catching a broken project glob that would otherwise
+ * pass silently (see `.github/workflows/ci.yml`).
  *
  * `globalSetup` for the `integration` project owns the
  * mongodb-memory-server lifecycle. `integration-nodb` holds the
  * integration suites that bind a real TCP port but touch no database:
  * they get their own project so a memory-server failure cannot fail
- * tests that never needed a database, and so they run in parallel
- * instead of paying the Mongo suite's single-fork serialisation.
+ * tests that never needed a database.
  */
 /**
  * Path aliases mirrored from `tsconfig.json` so handler-layer unit
@@ -25,13 +24,18 @@ import path from 'path';
  * `handlers` imports).
  */
 /**
- * Force the bootstrap logger's file sink off for every test process.
- * `createBootstrapLogger` (in `src/core/config/`) reads `LOG_DIR` at
- * call time and disables the file router when the value is empty; this
- * keeps integration tests that spin up `BaseBot` from writing a real
- * `logs/<botId>/<date>.log` tree into the working directory.
+ * Environment for every test process, read by `createBootstrapLogger`
+ * (in `src/core/config/`) at call time.
+ *
+ * - `LOG_DIR: ''` turns the file sink off, so tests that spin up
+ *   `BaseBot` do not write a real `logs/<botId>/<date>.log` tree into
+ *   the working directory.
+ * - `LOG_LEVEL: 'fatal'` keeps the console logs of bots booted by tests
+ *   out of the test output. It is the quietest level the typed Env
+ *   schema accepts, so tests that load the Env from `process.env` still
+ *   validate. Tests that assert on log lines inject their own logger.
  */
-const testEnv = { LOG_DIR: '' } as const;
+const testEnv = { LOG_DIR: '', LOG_LEVEL: 'fatal' } as const;
 
 const aliases = {
   '@core': path.resolve(__dirname, 'src/core'),
@@ -46,10 +50,10 @@ const aliases = {
 
 /**
  * Per-test timeout ceiling. The 5s default is marginal for the heavy
- * unit tests that run ESLint (`plugin-ioc-import-rule`) or the handler
- * codegen (`gen-registry`) inline; under vite 7's cold transform they
- * cross 5s in the full parallel suite (they pass in ~2s in isolation).
- * 20s gives headroom without masking a real hang.
+ * unit tests that run ESLint inline (`test/unit/eslint/`); under vite
+ * 7's cold transform they can cross 5s in the full parallel suite
+ * (they pass in about 1s in isolation). 20s gives headroom without
+ * masking a real hang.
  */
 const TEST_TIMEOUT_MS = 20000;
 
@@ -64,7 +68,7 @@ const NO_DB_INTEGRATION = [
   'test/integration/plugins/settings-api-route.int.test.ts',
 ];
 
-export default defineWorkspace([
+export const projects: TestProjectConfiguration[] = [
   {
     test: {
       name: 'unit',
@@ -94,17 +98,19 @@ export default defineWorkspace([
       env: testEnv,
       testTimeout: TEST_TIMEOUT_MS,
       globalSetup: ['./test/integration/setup.ts'],
-      // The integration project shares one mongodb-memory-server
-      // (started by globalSetup). Parallel test files race on the
-      // same database — `dropDatabase` collides with concurrent
-      // index builds on adjacent files. Single-fork keeps the suite
-      // under a few seconds while serialising file execution.
-      // **Contract**: every integration `it()` must wrap its body in
-      // `withFreshConnection` from `test/integration/helpers/mongo.ts`
-      // — that helper is what provides per-test isolation. State
-      // leaks silently between cases if you skip it.
+      // Test files run in parallel forks against the one
+      // mongodb-memory-server started by globalSetup. **Contract**:
+      // every integration `it()` that touches the database must reach
+      // it through `test/integration/helpers/mongo.ts` —
+      // `withFreshConnection`, or `withClosedConnection` for the
+      // closed-connection error path. Each call gets its own uniquely
+      // named database, dropped afterwards; that is the only thing
+      // keeping parallel files and sequential cases apart. A test that
+      // needs another database (the production `MongoConnectionManager`
+      // names databases after guild ids) must use unique names and
+      // drop what it creates; one that needs server-wide state (fail
+      // points) must start its own server.
       pool: 'forks',
-      poolOptions: { forks: { singleFork: true } },
     },
     resolve: { alias: aliases },
   },
@@ -141,4 +147,4 @@ export default defineWorkspace([
     },
     resolve: { alias: aliases },
   },
-]);
+];

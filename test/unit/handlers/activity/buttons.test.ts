@@ -3,11 +3,16 @@
  * limit is enforced, and only the organizer or a manager may close.
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { ButtonInteraction } from 'discord.js';
 
 import ActivityButtons from '../../../../src/handlers/buttons/activity';
 import { ok } from '../../../../src/core/result';
 import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
+import { buildGuild } from '../../../fixtures/discord/guild-builder';
+import {
+  buildButtonInteraction,
+  newInteractionSink,
+} from '../../../fixtures/discord/interaction-builder';
+import { buildGuildMember } from '../../../fixtures/discord/member-builder';
 
 const stored = (overrides: Record<string, unknown> = {}) => ({
   activity_id: 'a1',
@@ -33,19 +38,24 @@ const run = async (
     leave: vi.fn(async () => ok(false)),
     finish: vi.fn(async () => ok(true)),
   };
-  const editReply = vi.fn(async (_options: unknown) => undefined);
-  const interaction = {
+  const sink = newInteractionSink();
+  const interaction = buildButtonInteraction({
     customId: `activity|${action}`,
-    deferReply: vi.fn(async () => undefined),
-    editReply,
+    userId,
+    guild: buildGuild({ id: 'g1' }),
+    sink,
+  });
+  // The button builder has no `deferReply`, message, member or channel.
+  Object.assign(interaction, {
     message: { id: 'a1' },
-    guild: { id: 'g1', channels: { cache: new Map() } },
-    guildId: 'g1',
     channel: null,
-    user: { id: userId },
-    member: { roles: { cache: new Map(roles.map((id) => [id, {}])) } },
+    member: buildGuildMember({ id: userId, roleIds: roles }),
     memberPermissions: { has: () => manager },
-  } as unknown as ButtonInteraction;
+    deferReply: async (opts?: { flags?: number }) => {
+      sink.defers.push(opts ?? {});
+      sink.acknowledged.deferred = true;
+    },
+  });
   const { bot } = buildFakeBot({
     getRepos: () => ({ activity }),
     isAdmin: () => false,
@@ -54,7 +64,7 @@ const run = async (
     jobMap: new Map(),
   });
   await new ActivityButtons().execute(interaction, bot);
-  return { activity, content: (editReply.mock.calls[0]?.[0] as { content: string }).content };
+  return { activity, sink, content: sink.editReplies[0]?.content };
 };
 
 describe('activity buttons', () => {
@@ -81,5 +91,6 @@ describe('activity buttons', () => {
 
     const organizer = await run('close', stored(), { userId: 'creator' });
     expect(organizer.activity.finish).toHaveBeenCalled();
+    expect(organizer.content).toBe('replies:activity.closed');
   });
 });

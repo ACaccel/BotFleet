@@ -10,12 +10,10 @@ import { DiscordAPIError } from 'discord.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { err, ok } from '../../../src/core/result';
-import { createLogger } from '../../../src/core/logger';
-import { systemClock, createFakeClock } from '../../../src/core/time';
+import { createFakeClock } from '../../../src/core/time';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS } from '../../../src/bot/tokens';
 import { databaseErrorFrom } from '../../../src/persistence/error-translator';
-import type { PluginRuntimeContext } from '../../../src/core/plugin';
 import { createTempRolePlugin } from '../../../src/plugins/temp-role';
 import {
   cancelTempRole,
@@ -29,6 +27,7 @@ import {
 import { buildGuild, buildGuildRoles } from '../../fixtures/discord/guild-builder';
 import { buildSendableChannel } from '../../fixtures/discord/channel-builder';
 import type { GuildRegistry } from '../../../src/bot/guild-registry';
+import { buildPluginContext, echoTranslator, silentLogger } from '../../fixtures/runtime';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // A fixed point well in the real future so node-schedule (which runs on
@@ -36,8 +35,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // cancellable Job rather than null for a past date.
 const BASE_NOW = 4_102_444_800_000; // 2100-01-01T00:00:00Z
 
-const silent = createLogger({ level: 'silent', pretty: false });
-const translator = { t: (k: string) => k } as unknown as TempRoleDeps['translator'];
+const silent = silentLogger();
+const translator = echoTranslator();
+
+/** A scheduled job reduced to the one method the plugin calls on it. */
+const makeFakeJob = (): Job => ({ cancel: vi.fn() }) as unknown as Job;
 
 const dbErr = () => err(databaseErrorFrom(new Error('boom'), { operation: 'test' }));
 
@@ -414,7 +416,7 @@ describe('expireTempRole', () => {
     const { deps, repos, guild, editableMessage } = makeExpiringDeps({
       findByRoleId: vi.fn().mockResolvedValue(ok(doc)),
     });
-    const fakeJob = { cancel: vi.fn() } as unknown as Job;
+    const fakeJob = makeFakeJob();
     deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
 
     await expireTempRole(deps, 'g1', 'role-1');
@@ -451,7 +453,7 @@ describe('expireTempRole', () => {
       findByRoleId: vi.fn().mockResolvedValue(ok(undefined)),
     });
     guild.roles.delete.mockRejectedValue(new Error('missing permissions'));
-    const fakeJob = { cancel: vi.fn() } as unknown as Job;
+    const fakeJob = makeFakeJob();
     deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
 
     await expect(expireTempRole(deps, 'g1', 'role-1')).resolves.toBe(false);
@@ -463,7 +465,7 @@ describe('expireTempRole', () => {
   it('keeps tracking when the guild is unavailable', async () => {
     const repos = makeRepos();
     const deps = makeDeps({ repos, guilds: new Map() });
-    const fakeJob = { cancel: vi.fn() } as unknown as Job;
+    const fakeJob = makeFakeJob();
     deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
 
     await expect(expireTempRole(deps, 'g1', 'role-1')).resolves.toBe(false);
@@ -506,12 +508,11 @@ describe('rebootTempRoleJobs', () => {
     container.registerSingleton(TOKENS.DiscordClient, () => deps.client);
     container.registerSingleton(TOKENS.GuildRegistry, () => deps.registry as GuildRegistry);
     container.registerSingleton(TOKENS.JobMap, () => deps.jobMap);
-    const ctx: PluginRuntimeContext = {
+    const ctx = buildPluginContext({
       logger: deps.logger,
-      translator: { t: (k: string) => k } as PluginRuntimeContext['translator'],
       clock: deps.clock,
-      resolve: container.resolve.bind(container) as PluginRuntimeContext['resolve'],
-    };
+      resolve: container.resolve.bind(container),
+    });
 
     await createTempRolePlugin().onGuildDatabaseReady?.(ctx, 'recovered');
 
@@ -579,7 +580,7 @@ describe('rebootTempRoleJobs', () => {
 });
 
 describe('createTempRolePlugin', () => {
-  const buildCtx = (): PluginRuntimeContext => {
+  const buildCtx = () => {
     const container = createContainer();
     container.registerSingleton(TOKENS.GuildRegistry, () => ({
       getRepos: () => undefined,
@@ -592,12 +593,7 @@ describe('createTempRolePlugin', () => {
       () => ({ user: { id: 'bot-1' }, guilds: { cache: new Map() } }) as never,
     );
     container.registerSingleton(TOKENS.JobMap, () => new Map());
-    return {
-      logger: silent,
-      translator: { t: (k: string) => k } as PluginRuntimeContext['translator'],
-      clock: systemClock,
-      resolve: container.resolve.bind(container) as PluginRuntimeContext['resolve'],
-    };
+    return buildPluginContext({ resolve: container.resolve.bind(container) });
   };
 
   it('onReady runs to completion with an empty registry', async () => {
@@ -606,18 +602,14 @@ describe('createTempRolePlugin', () => {
   });
 
   it('onReady swallows a reboot failure and logs it', async () => {
-    const errorSpy = vi.fn();
+    const logger = silentLogger();
+    const errorSpy = vi.spyOn(logger, 'error');
     const container = createContainer();
     // The first dependency resolution throws, exercising onReady's catch.
     container.registerSingleton(TOKENS.DiscordClient, () => {
       throw new Error('resolve boom');
     });
-    const ctx = {
-      logger: { error: errorSpy } as unknown as PluginRuntimeContext['logger'],
-      translator: { t: (k: string) => k } as PluginRuntimeContext['translator'],
-      clock: systemClock,
-      resolve: container.resolve.bind(container) as PluginRuntimeContext['resolve'],
-    };
+    const ctx = buildPluginContext({ logger, resolve: container.resolve.bind(container) });
 
     await expect(createTempRolePlugin().onReady?.(ctx)).resolves.toBeUndefined();
     expect(errorSpy).toHaveBeenCalled();
@@ -646,7 +638,7 @@ describe('cancelTempRole', () => {
     const repos = makeRepos({ findByRoleId: vi.fn().mockResolvedValue(ok(doc)) });
     const { guild, roles } = makeGuild(10);
     const deps = makeDeps({ repos, guilds: new Map([['g1', guild]]) });
-    const fakeJob = { cancel: vi.fn() } as unknown as Job;
+    const fakeJob = makeFakeJob();
     deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
     const error = new Error('Missing Permissions');
     roles.delete.mockRejectedValueOnce(error);
@@ -662,7 +654,7 @@ describe('cancelTempRole', () => {
   it('retains tracking state when the guild is unavailable', async () => {
     const repos = makeRepos({ findByRoleId: vi.fn().mockResolvedValue(ok(doc)) });
     const deps = makeDeps({ repos });
-    const fakeJob = { cancel: vi.fn() } as unknown as Job;
+    const fakeJob = makeFakeJob();
     deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
 
     await expect(cancelTempRole(deps, 'g1', 'role-1', () => true)).rejects.toThrow(
@@ -677,7 +669,7 @@ describe('cancelTempRole', () => {
     const repos = makeRepos({ findByRoleId: vi.fn().mockResolvedValue(ok(doc)) });
     const { guild, roles } = makeGuild(10);
     const deps = makeDeps({ repos, guilds: new Map([['g1', guild]]) });
-    const fakeJob = { cancel: vi.fn() } as unknown as Job;
+    const fakeJob = makeFakeJob();
     deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
     const error = Object.create(DiscordAPIError.prototype) as DiscordAPIError;
     (error as { code: number }).code = 10011;

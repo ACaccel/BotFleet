@@ -13,7 +13,8 @@ import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_RATE_LIMIT } from '../../../src/application/ai/policy';
 import { createLlmChatPlugin } from '../../../src/plugins/llm-chat';
-import type { PluginEventContext } from '../../../src/core/plugin';
+import { buildMessage } from '../../fixtures/discord/message-builder';
+import { buildPluginContext } from '../../fixtures/runtime';
 
 describe('createLlmChatPlugin dependency wiring', () => {
   it('refuses to run an event that somehow precedes init', async () => {
@@ -24,8 +25,8 @@ describe('createLlmChatPlugin dependency wiring', () => {
     }).events?.messageCreate;
     if (handler === undefined) throw new Error('llm-chat must subscribe to messageCreate');
 
-    await expect(
-      handler({} as PluginEventContext, {} as Parameters<typeof handler>[1]),
-    ).rejects.toThrow(/dispatched before init/);
+    await expect(handler(buildPluginContext(), buildMessage() as never)).rejects.toThrow(
+      /dispatched before init/,
+    );
   });
 });

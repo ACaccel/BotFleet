@@ -8,12 +8,16 @@
  * `toggle_role|<roleId>` is the contract the `toggle_role` button
  * handler parses, so a change on either side silently breaks the panel.
  */
-import { PermissionFlagsBits, type ChatInputCommandInteraction } from 'discord.js';
-import { describe, expect, it, vi } from 'vitest';
+import { PermissionFlagsBits, type ActionRowBuilder, type ButtonBuilder } from 'discord.js';
+import { describe, expect, it } from 'vitest';
 
 import RoleMessage from '../../../../src/handlers/commands/role_message/action';
 import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
 import { buildGuild, buildGuildRoles } from '../../../fixtures/discord/guild-builder';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../../fixtures/discord/interaction-builder';
 import { buildGuildMember } from '../../../fixtures/discord/member-builder';
 
 const ROLE_A = '111111111111111111';
@@ -50,41 +54,40 @@ const build = ({
     roles: buildGuildRoles({ roles: existingRoles }),
     me: buildGuildMember({ id: 'bot', highestRolePosition: 10 }),
   });
-  const editReply = vi.fn().mockResolvedValue(undefined);
-  const interaction = {
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply,
-    deferred: true,
-    replied: false,
-    guild: inGuild ? guild : null,
-    member: {
-      id: 'caller',
-      roles: { highest: { position: callerPosition } },
-      permissions: { has: (flag: string) => canManageRoles && flag === 'ManageRoles' },
-    },
-    options: { get: (name: string) => (name === 'roles' ? { value: roles } : undefined) },
-  } as unknown as ChatInputCommandInteraction;
-  return { interaction, editReply };
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({
+    ...(inGuild ? { guild } : { guildId: null }),
+    options: { roles },
+    sink,
+  });
+  // The builder has no guild member; the handler checks ManageRoles and
+  // the role hierarchy against the caller's.
+  const caller = buildGuildMember({ id: 'caller', highestRolePosition: callerPosition });
+  Object.assign(caller, {
+    permissions: { has: (flag: string) => canManageRoles && flag === 'ManageRoles' },
+  });
+  Object.assign(interaction, { member: caller });
+  return { interaction, sink };
 };
 
 const run = async (input: BuildInput) => {
-  const { interaction, editReply } = build(input);
+  const { interaction, sink } = build(input);
   const { bot } = buildFakeBot();
   await new RoleMessage().execute(interaction, bot);
-  return editReply;
+  return sink;
 };
 
 describe('role_message', () => {
   it('renders one toggle_role button per mentioned role, keyed by role id', async () => {
-    const editReply = await run({ roles: `<@&${ROLE_A}> <@&${ROLE_B}>` });
+    const sink = await run({ roles: `<@&${ROLE_A}> <@&${ROLE_B}>` });
 
-    expect(editReply).toHaveBeenCalledTimes(1);
-    const payload = editReply.mock.calls[0]?.[0] as {
-      content: string;
-      components: { components: { data: { custom_id?: string; label?: string } }[] }[];
-    };
-    expect(payload.content).toBe('replies:role_message.prompt');
-    const buttons = payload.components.flatMap((row) => row.components.map((c) => c.data));
+    expect(sink.editReplies).toHaveLength(1);
+    const payload = sink.editReplies[0];
+    expect(payload?.content).toBe('replies:role_message.prompt');
+    const rows = (payload?.components ?? []) as ActionRowBuilder<ButtonBuilder>[];
+    const buttons = rows.flatMap((row) =>
+      row.components.map((c) => c.data as { custom_id?: string; label?: string }),
+    );
     expect(buttons.map((b) => b.custom_id)).toEqual([
       `toggle_role|${ROLE_A}`,
       `toggle_role|${ROLE_B}`,
@@ -93,68 +96,66 @@ describe('role_message', () => {
   });
 
   it('refuses a caller without ManageRoles and builds no panel', async () => {
-    const editReply = await run({ roles: `<@&${ROLE_A}>`, canManageRoles: false });
+    const sink = await run({ roles: `<@&${ROLE_A}>`, canManageRoles: false });
 
-    expect(editReply).toHaveBeenCalledWith({ content: 'replies:role_message.no_permission' });
+    expect(sink.editReplies).toEqual([{ content: 'replies:role_message.no_permission' }]);
   });
 
   it('rejects an option that is not a list of role mentions', async () => {
-    const editReply = await run({ roles: 'Alpha, Beta' });
+    const sink = await run({ roles: 'Alpha, Beta' });
 
-    expect(editReply).toHaveBeenCalledWith({ content: 'replies:role_message.format_error' });
+    expect(sink.editReplies).toEqual([{ content: 'replies:role_message.format_error' }]);
   });
 
   it('names the role it could not resolve rather than posting a dead button', async () => {
-    const editReply = await run({
+    const sink = await run({
       roles: `<@&${ROLE_A}> <@&${ROLE_B}>`,
       existingRoles: [{ id: ROLE_A, name: 'Alpha' }],
     });
 
-    expect(editReply).toHaveBeenCalledWith({
-      content: 'replies:role_message.role_not_found',
-    });
+    expect(sink.editReplies).toEqual([{ content: 'replies:role_message.role_not_found' }]);
   });
 
   it('answers guild_not_found outside a guild', async () => {
-    const editReply = await run({ roles: `<@&${ROLE_A}>`, inGuild: false });
+    const sink = await run({ roles: `<@&${ROLE_A}>`, inGuild: false });
 
-    expect(editReply).toHaveBeenCalledWith({ content: 'errors:command.guild_not_found' });
+    expect(sink.editReplies).toEqual([{ content: 'errors:command.guild_not_found' }]);
   });
 
   it('refuses a role that grants a moderation permission', async () => {
-    const editReply = await run({
+    const sink = await run({
       roles: `<@&${ROLE_A}>`,
       existingRoles: [
         { id: ROLE_A, name: 'Mods', permissions: [PermissionFlagsBits.ModerateMembers] },
       ],
     });
 
-    expect(editReply).toHaveBeenCalledWith(
+    expect(sink.editReplies).toEqual([
       expect.objectContaining({ content: 'replies:role_message.role_not_assignable' }),
-    );
+    ]);
   });
 
   it("refuses a role at or above the caller's highest role", async () => {
-    const editReply = await run({
+    const sink = await run({
       roles: `<@&${ROLE_A}>`,
       existingRoles: [{ id: ROLE_A, name: 'Senior', position: 5 }],
       callerPosition: 5,
     });
 
-    expect(editReply).toHaveBeenCalledWith(
+    expect(sink.editReplies).toEqual([
       expect.objectContaining({ content: 'replies:role_message.role_not_assignable' }),
-    );
+    ]);
   });
 
   it('refuses a role the bot cannot manage', async () => {
-    const editReply = await run({
+    const sink = await run({
       roles: `<@&${ROLE_A}>`,
       existingRoles: [{ id: ROLE_A, name: 'Above bot', position: 10 }],
       callerPosition: 20,
     });
 
-    expect(editReply).toHaveBeenCalledWith(
+    expect(sink.editReplies).toEqual([
       expect.objectContaining({ content: 'replies:role_message.role_not_assignable' }),
-    );
+    ]);
   });
 });

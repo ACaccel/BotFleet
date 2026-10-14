@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Job } from 'node-schedule';
 
 import { JobManager } from '../../../../src/core/scheduling';
-import type { Logger } from '../../../../src/core/logger';
+import { silentLogger } from '../../../fixtures/runtime';
 
 // `JobManager` is a keyed wrapper around `node-schedule`. The scheduler
 // itself is mocked so the tests stay deterministic and never register a
@@ -118,8 +118,9 @@ describe('JobManager', () => {
       fire = cb;
       return fakeJob();
     });
-    const error = vi.fn();
-    const manager = new JobManager(new Map<string, Job>(), { error } as unknown as Logger);
+    const logger = silentLogger();
+    const error = vi.spyOn(logger, 'error');
+    const manager = new JobManager(new Map<string, Job>(), logger);
 
     manager.schedule('giveaway:1', new Date('2030-01-01T00:00:00Z'), async () => {
       throw new Error('draw exploded');
@@ -128,7 +129,7 @@ describe('JobManager', () => {
     await new Promise<void>((r) => setImmediate(r));
 
     expect(error).toHaveBeenCalledTimes(1);
-    expect((error.mock.calls[0] as [{ job: string }])[0].job).toBe('giveaway:1');
+    expect(error.mock.calls[0]?.[0]).toMatchObject({ job: 'giveaway:1' });
   });
 
   it('routes a synchronous throw to the logger', () => {
@@ -137,8 +138,9 @@ describe('JobManager', () => {
       fire = cb;
       return fakeJob();
     });
-    const error = vi.fn();
-    const manager = new JobManager(new Map<string, Job>(), { error } as unknown as Logger);
+    const logger = silentLogger();
+    const error = vi.spyOn(logger, 'error');
+    const manager = new JobManager(new Map<string, Job>(), logger);
 
     manager.scheduleRecurring('refresh', '0 4 * * *', () => {
       throw new Error('sync boom');

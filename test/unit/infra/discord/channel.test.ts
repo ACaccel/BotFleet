@@ -9,8 +9,9 @@ import { describe, expect, it } from 'vitest';
 import type { Channel } from 'discord.js';
 
 import { ancestorChannelIdsOf, parentChannelIdOf } from '../../../../src/infra/discord';
+import { buildTextChannel } from '../../../fixtures/discord/channel-builder';
 
-const ch = (parentId: string | null): Channel => ({ parentId }) as unknown as Channel;
+const ch = (parentId: string | null): Channel => buildTextChannel({ id: 'c', parentId });
 
 describe('parentChannelIdOf', () => {
   it('returns null for null or undefined input', () => {
@@ -19,11 +20,11 @@ describe('parentChannelIdOf', () => {
   });
 
   it("returns a thread's parent id", () => {
-    expect(parentChannelIdOf({ parentId: 'forum-1' } as unknown as Channel)).toBe('forum-1');
+    expect(parentChannelIdOf(ch('forum-1'))).toBe('forum-1');
   });
 
   it('returns null for a top-level channel (parentId null)', () => {
-    expect(parentChannelIdOf({ parentId: null } as unknown as Channel)).toBeNull();
+    expect(parentChannelIdOf(ch(null))).toBeNull();
   });
 
   it('returns null for a channel type that has no parentId property', () => {

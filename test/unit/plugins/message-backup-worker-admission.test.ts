@@ -1,16 +1,16 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ARCHIVE_INVALID_REQUESTS } from '../../../src/core/archive/limits';
 import { ArchiveInvalidRequestMonitor } from '../../../src/plugins/message-backup/runtime/invalid-request-monitor';
 import { ArchiveWorker } from '../../../src/plugins/message-backup/runtime/worker';
 import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
 import { ArchivePolicySchema } from '../../../src/core/archive/policy';
-import { createLogger } from '../../../src/core/logger';
+import { silentLogger } from '../../fixtures/runtime';
 
 it('bounds capture before initialization and drains initialization-waiting events on shutdown', async () => {
   const options = {
     client: { rest: {} },
-    logger: createLogger({ level: 'silent', pretty: false }),
+    logger: silentLogger(),
     guildIds: ['1'],
     config: archiveRuntimeSchema.parse({ max_pending_events: 1 }),
     policy: ArchivePolicySchema.parse({ guildIds: ['1'] }),
@@ -53,7 +53,7 @@ describe('capture admission scope', () => {
   it('ignores out-of-scope events without initializing a database', async () => {
     const worker = new ArchiveWorker({
       client: { rest: {} },
-      logger: createLogger({ level: 'silent', pretty: false }),
+      logger: silentLogger(),
       guildIds: ['1'],
       config: archiveRuntimeSchema.parse({}),
       policy: ArchivePolicySchema.parse({ guildIds: ['1'] }),
@@ -73,8 +73,13 @@ describe('capture admission scope', () => {
 
 describe('invalid-request protection wiring', () => {
   it('checks the shared REST count from start to stop and slows background reads', async () => {
+    // Only the check interval is faked; the checks themselves run on real promises.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const rest = new EventEmitter();
-    const logger = createLogger({ level: 'silent', pretty: false });
+    const logger = silentLogger();
     const warn = vi.spyOn(logger, 'warn');
     const check = vi.spyOn(ArchiveInvalidRequestMonitor.prototype, 'check');
     const worker = new ArchiveWorker({
@@ -89,22 +94,20 @@ describe('invalid-request protection wiring', () => {
       const forbidden = { status: 403, headers: { get: () => null } };
       for (let index = 0; index < ARCHIVE_INVALID_REQUESTS.warning; index += 1)
         rest.emit('response', {}, forbidden);
-      await vi.waitFor(() =>
-        expect(warn).toHaveBeenCalledWith(
-          expect.objectContaining({
-            invalidLast10Minutes: ARCHIVE_INVALID_REQUESTS.warning,
-            level: 'warning',
-            backgroundLimit: 4,
-          }),
-          'Archive invalid Discord requests high; slowing background reads',
-        ),
+      await vi.advanceTimersByTimeAsync(10);
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invalidLast10Minutes: ARCHIVE_INVALID_REQUESTS.warning,
+          level: 'warning',
+          backgroundLimit: 4,
+        }),
+        'Archive invalid Discord requests high; slowing background reads',
       );
       await worker.stop();
-      const checks = check.mock.calls.length;
-      expect(checks).toBeGreaterThan(0);
-      // Stopped: no further checks, and the REST listener is gone.
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(check.mock.calls.length).toBe(checks);
+      // Stopped: five more intervals pass without a check, and the REST listener is gone.
+      await vi.advanceTimersByTimeAsync(50);
+      expect(check).toHaveBeenCalledTimes(1);
       expect(rest.listenerCount('response')).toBe(0);
     } finally {
       await worker.stop();

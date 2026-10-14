@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  ChannelType,
-  MessageFlags,
-  PermissionFlagsBits,
-  type ChatInputCommandInteraction,
-} from 'discord.js';
+import { ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import Thread from '../../../src/handlers/commands/thread';
+import { ok } from '../../../src/core/result';
 import { buildFakeBot, echoTranslatorWithParams } from '../../fixtures/discord/bot-fake';
+import { buildGuild } from '../../fixtures/discord/guild-builder';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
 
 const ADMIN = '100000000000000001';
 const OWNER = '100000000000000002';
@@ -16,10 +17,39 @@ const THREAD = '100000000000000005';
 const BOT = '100000000000000006';
 const GUILD = '100000000000000007';
 
-const build = (action = 'add') => {
-  const setManager = vi.fn().mockResolvedValue({ ok: true, value: undefined });
-  const isManager = vi.fn().mockResolvedValue({ ok: true, value: false });
-  const listManagers = vi.fn().mockResolvedValue({ ok: true, value: [TARGET] });
+interface BuildOptions {
+  readonly actor?: string;
+  readonly target?: string;
+  readonly page?: number;
+  readonly moderationEnabled?: boolean;
+  /** Echo the interpolation params, for replies that carry them. */
+  readonly withParams?: boolean;
+  /** Managers already granted on the thread. */
+  readonly managers?: readonly string[];
+}
+
+const build = (action = 'add', opts: BuildOptions = {}) => {
+  // The repo mocks run over this set, so a test reads back who ended up
+  // a manager rather than which repo method was called.
+  const managers = new Set<string>(opts.managers ?? []);
+  const setManager = vi.fn(
+    async (
+      _bot: string,
+      _thread: string,
+      user: string,
+      _actor: string,
+      enabled: boolean,
+      _at: number,
+    ) => {
+      if (enabled) managers.add(user);
+      else managers.delete(user);
+      return ok(undefined);
+    },
+  );
+  const isManager = vi.fn(async (_bot: string, _thread: string, user: string) =>
+    ok(managers.has(user)),
+  );
+  const listManagers = vi.fn(async () => ok([...managers]));
   const fetchMember = vi.fn().mockResolvedValue({ user: { id: TARGET, bot: false } });
   const fetchMembership = vi.fn().mockResolvedValue({ id: TARGET });
   const has = vi.fn().mockReturnValue(true);
@@ -39,31 +69,34 @@ const build = (action = 'add') => {
     .mockReturnValue({ threadModeration: { setManager, isManager, listManagers } });
   const { bot, logger } = buildFakeBot({
     clientId: BOT,
-    threadModerationEnabled: true,
+    threadModerationEnabled: opts.moderationEnabled ?? true,
     isAdmin: (id: string) => id === ADMIN,
     getRepos,
+    ...(opts.withParams === true ? { translator: echoTranslatorWithParams() } : {}),
   });
-  const data = {
-    user: { id: ADMIN },
-    guild: { id: GUILD, channels: { fetch: fetchThread } },
-    guildId: GUILD,
-    options: {
-      getSubcommandGroup: vi.fn().mockReturnValue('manager'),
-      getSubcommand: vi.fn().mockReturnValue(action),
-      getChannel: vi.fn().mockReturnValue({ id: THREAD }),
-      getUser: vi.fn().mockReturnValue({ id: TARGET }),
-      getInteger: vi.fn().mockReturnValue(null),
-    },
-    deferred: true,
-    replied: false,
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-  };
+  const guild = buildGuild({ id: GUILD });
+  Object.assign(guild.channels, { fetch: fetchThread });
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({
+    userId: opts.actor ?? ADMIN,
+    guild,
+    channels: { thread: { id: THREAD } },
+    users: { user: { id: opts.target ?? TARGET, displayName: 'target' } },
+    options: opts.page === undefined ? {} : { page: opts.page },
+    sink,
+  });
+  // The builder has no subcommand surface; this command always runs
+  // as `/thread manager <action>`.
+  Object.assign(interaction.options, {
+    getSubcommandGroup: () => 'manager',
+    getSubcommand: () => action,
+  });
   return {
     bot,
     logger,
     thread,
-    data,
+    sink,
+    managers,
     getRepos,
     fetchMember,
     fetchMembership,
@@ -72,7 +105,7 @@ const build = (action = 'add') => {
     setManager,
     isManager,
     listManagers,
-    interaction: data as unknown as ChatInputCommandInteraction,
+    interaction,
   };
 };
 
@@ -81,7 +114,7 @@ const run = async (f: ReturnType<typeof build>): Promise<void> => {
 };
 
 const expectReply = (f: ReturnType<typeof build>, key: string): void => {
-  expect(f.data.editReply).toHaveBeenLastCalledWith({
+  expect(f.sink.editReplies.at(-1)).toEqual({
     content: `replies:thread_moderation.${key}`,
     allowedMentions: { parse: [] },
   });
@@ -91,36 +124,35 @@ describe('/thread manager', () => {
   it('lets a configured admin grant an accessible member management of only the selected bot and thread', async () => {
     const f = build();
     await run(f);
-    expect(f.data.deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
+    expect(f.sink.defers).toEqual([{ flags: MessageFlags.Ephemeral }]);
     expect(f.fetchThread).toHaveBeenCalledWith(THREAD, { force: true });
     expect(f.getRepos).toHaveBeenCalledWith(GUILD);
     expect(f.fetchMember).toHaveBeenCalledWith({ user: TARGET, force: true });
     expect(f.has).toHaveBeenCalledWith(PermissionFlagsBits.ViewChannel);
     expect(f.setManager).toHaveBeenCalledWith(BOT, THREAD, TARGET, ADMIN, true, expect.any(Number));
+    expect([...f.managers]).toEqual([TARGET]);
     expectReply(f, 'manager_added');
   });
 
   it.each([OWNER, DELEGATE])(
     'denies non-admin %s even when they manage the thread',
     async (actor) => {
-      const f = build();
-      f.data.user.id = actor;
-      f.isManager.mockResolvedValue({ ok: true, value: true });
+      const f = build('add', { actor, managers: [actor] });
       await run(f);
       expectReply(f, 'manager_admin_only');
       expect(f.fetchThread).not.toHaveBeenCalled();
+      expect([...f.managers]).toEqual([actor]);
       expect(f.setManager).not.toHaveBeenCalled();
       expect(f.listManagers).not.toHaveBeenCalled();
     },
   );
 
   it.each([OWNER, ADMIN, DELEGATE])('does not duplicate authority for %s', async (userId) => {
-    const f = build();
-    f.data.options.getUser.mockReturnValue({ id: userId });
-    if (userId === DELEGATE) f.isManager.mockResolvedValue({ ok: true, value: true });
+    const f = build('add', { target: userId, managers: userId === DELEGATE ? [DELEGATE] : [] });
     await run(f);
     expectReply(f, 'manager_already');
     expect(f.setManager).not.toHaveBeenCalled();
+    expect(f.managers.has(OWNER) || f.managers.has(ADMIN)).toBe(false);
   });
 
   it('refuses bot accounts', async () => {
@@ -128,7 +160,7 @@ describe('/thread manager', () => {
     f.fetchMember.mockResolvedValue({ user: { id: TARGET, bot: true } });
     await run(f);
     expectReply(f, 'protected_user');
-    expect(f.setManager).not.toHaveBeenCalled();
+    expect(f.managers.size).toBe(0);
   });
 
   it.each(['not-thread', 'other-guild', 'missing'])('rejects a %s target', async (kind) => {
@@ -138,7 +170,7 @@ describe('/thread manager', () => {
     if (kind === 'missing') f.fetchThread.mockResolvedValue(null);
     await run(f);
     expectReply(f, 'thread_only');
-    expect(f.setManager).not.toHaveBeenCalled();
+    expect(f.managers.size).toBe(0);
   });
 
   it('rejects applicants without channel visibility', async () => {
@@ -146,7 +178,7 @@ describe('/thread manager', () => {
     f.has.mockReturnValue(false);
     await run(f);
     expectReply(f, 'claim_no_access');
-    expect(f.setManager).not.toHaveBeenCalled();
+    expect(f.managers.size).toBe(0);
   });
 
   it('requires membership before granting access to a private thread', async () => {
@@ -157,7 +189,8 @@ describe('/thread manager', () => {
     );
     await run(f);
     expect(f.fetchMembership).toHaveBeenCalledWith(TARGET);
-    expect(f.setManager).toHaveBeenCalledOnce();
+    expect([...f.managers]).toEqual([TARGET]);
+    expectReply(f, 'manager_added');
   });
 
   it('rejects a private thread applicant whose membership cannot be confirmed', async () => {
@@ -169,7 +202,7 @@ describe('/thread manager', () => {
     f.fetchMembership.mockResolvedValue({ id: DELEGATE });
     await run(f);
     expectReply(f, 'claim_no_access');
-    expect(f.setManager).not.toHaveBeenCalled();
+    expect(f.managers.size).toBe(0);
   });
 
   it('accepts private thread visibility through ManageThreads without explicit membership', async () => {
@@ -177,19 +210,21 @@ describe('/thread manager', () => {
     f.thread.type = ChannelType.PrivateThread;
     await run(f);
     expect(f.fetchMembership).not.toHaveBeenCalled();
-    expect(f.setManager).toHaveBeenCalledOnce();
+    expect([...f.managers]).toEqual([TARGET]);
+    expectReply(f, 'manager_added');
   });
 
   it('does not grant authority to a departed member', async () => {
     const f = build();
     f.fetchMember.mockRejectedValue({ code: 10007 });
     await run(f);
-    expect(f.setManager).not.toHaveBeenCalled();
+    expect(f.managers.size).toBe(0);
     expect(f.logger.error).toHaveBeenCalledOnce();
+    expect(f.sink.editReplies).toHaveLength(1);
   });
 
   it('revokes a departed member without checking membership or visibility', async () => {
-    const f = build('remove');
+    const f = build('remove', { managers: [TARGET] });
     f.fetchMember.mockRejectedValue({ code: 10007 });
     f.has.mockReturnValue(false);
     await run(f);
@@ -203,20 +238,18 @@ describe('/thread manager', () => {
       false,
       expect.any(Number),
     );
+    expect(f.managers.has(TARGET)).toBe(false);
     expectReply(f, 'manager_removed');
   });
 
   it.each([1, 2])(
     'privately lists sorted managers on page %s without pinging them',
     async (page) => {
-      const f = build('list');
       const users = Array.from({ length: 21 }, (_, i) => String(100000000000000010n + BigInt(i)));
-      f.listManagers.mockResolvedValue({ ok: true, value: [...users].reverse() });
-      f.data.options.getInteger.mockReturnValue(page);
-      f.bot.translator = echoTranslatorWithParams();
+      const f = build('list', { page, withParams: true, managers: [...users].reverse() });
       await run(f);
       expect(f.listManagers).toHaveBeenCalledWith(BOT, THREAD);
-      expect(f.data.editReply).toHaveBeenLastCalledWith({
+      expect(f.sink.editReplies.at(-1)).toEqual({
         content: [
           `replies:thread_moderation.manager_list:${JSON.stringify({ count: 21, page, pages: 2 })}`,
           ...users.slice((page - 1) * 20, page * 20).map((id) => `<@${id}> (\`${id}\`)`),
@@ -224,20 +257,19 @@ describe('/thread manager', () => {
         allowedMentions: { parse: [] },
       });
       expect(f.fetchMember).not.toHaveBeenCalled();
+      expect(f.managers.size).toBe(21);
       expect(f.setManager).not.toHaveBeenCalled();
     },
   );
 
   it('explains an empty manager list', async () => {
     const f = build('list');
-    f.listManagers.mockResolvedValue({ ok: true, value: [] });
     await run(f);
     expectReply(f, 'manager_empty');
   });
 
   it.each([0, 2, 1.5])('rejects invalid manager page %s', async (page) => {
-    const f = build('list');
-    f.data.options.getInteger.mockReturnValue(page);
+    const f = build('list', { page, managers: [TARGET] });
     await run(f);
     expectReply(f, 'list_invalid_page');
   });
@@ -245,33 +277,33 @@ describe('/thread manager', () => {
   it.each(['add', 'remove', 'list'])(
     'reports database errors for %s without success',
     async (action) => {
-      const f = build(action);
-      f.bot.translator = echoTranslatorWithParams();
+      const f = build(action, { withParams: true });
       const failure = { ok: false, error: new Error('Storage failure') };
-      f.setManager.mockResolvedValue(failure);
-      f.listManagers.mockResolvedValue(failure);
+      f.setManager.mockResolvedValue(failure as never);
+      f.listManagers.mockResolvedValue(failure as never);
       await run(f);
       expect(f.logger.error).toHaveBeenCalledOnce();
-      expect(f.data.editReply).toHaveBeenLastCalledWith({
-        content: expect.stringMatching(/^replies:thread_moderation.claim_failed:.*traceId/u),
-      });
+      expect(f.sink.editReplies).toEqual([
+        { content: expect.stringMatching(/^replies:thread_moderation.claim_failed:.*traceId/u) },
+      ]);
+      expect(f.managers.size).toBe(0);
     },
   );
 
   it('fails closed when existing management cannot be read', async () => {
     const f = build();
-    f.isManager.mockResolvedValue({ ok: false, error: new Error('Lookup failure') });
+    f.isManager.mockResolvedValue({ ok: false, error: new Error('Lookup failure') } as never);
     await run(f);
-    expect(f.setManager).not.toHaveBeenCalled();
+    expect(f.managers.size).toBe(0);
     expect(f.logger.error).toHaveBeenCalledOnce();
+    expect(f.sink.editReplies).toHaveLength(1);
   });
 
   it('rejects disabled moderation', async () => {
-    const f = build();
-    Object.defineProperty(f.bot, 'threadModerationEnabled', { value: false });
+    const f = build('add', { moderationEnabled: false });
     await run(f);
     expectReply(f, 'disabled');
-    expect(f.setManager).not.toHaveBeenCalled();
+    expect(f.managers.size).toBe(0);
   });
 
   it('reports unavailable storage', async () => {
@@ -279,6 +311,6 @@ describe('/thread manager', () => {
     f.getRepos.mockReturnValue(undefined);
     await run(f);
     expectReply(f, 'unavailable');
-    expect(f.setManager).not.toHaveBeenCalled();
+    expect(f.managers.size).toBe(0);
   });
 });

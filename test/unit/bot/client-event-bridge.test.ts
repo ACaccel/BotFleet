@@ -18,19 +18,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { ClientEventBridge } from '../../../src/bot/client-event-bridge';
 import { ThreadModeration } from '../../../src/bot/thread-moderation';
 import type { GuildInfo } from '../../../src/bot/index';
+import type { Translator } from '../../../src/core/i18n';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS } from '../../../src/bot/tokens';
-import { createLogger } from '../../../src/core/logger';
 import { systemClock } from '../../../src/core/time';
 import { ok } from '../../../src/core/result';
-import type {
-  GuildOnboardingPort,
-  InteractionContext,
-  InteractionRouter,
-  PluginHost,
-} from '../../../src/core/plugin';
+import type { GuildOnboardingPort, InteractionRouter, PluginHost } from '../../../src/core/plugin';
+import { echoTranslator, silentLogger } from '../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
+const silent = silentLogger();
 
 interface FakeClientHandle {
   readonly client: Client;
@@ -83,10 +79,11 @@ const fakeHost = (subscribed: readonly (keyof ClientEvents)[] = []): PluginHost 
 const fakeRouter = (dispatch = vi.fn(async () => {})): InteractionRouter =>
   ({ dispatch }) as unknown as InteractionRouter;
 
-const identityTranslator = {
-  t: (key: string, params?: Record<string, string>) =>
-    params !== undefined ? `${key}|${JSON.stringify(params)}` : key,
-} as unknown as InteractionContext['translator'];
+// Params are appended so a test can see which values reached the template.
+const identityTranslator: Translator = {
+  ...echoTranslator(),
+  t: (key, params) => (params !== undefined ? `${key}|${JSON.stringify(params)}` : key),
+};
 
 const baseConfig = (overrides: {
   host?: PluginHost;
@@ -299,12 +296,7 @@ describe('ClientEventBridge.sendRebootMessages', () => {
     ]);
     const bridge = new ClientEventBridge(fake.client, silent);
     bridge.attach(baseConfig({ guildInfo }));
-    const translator = {
-      t: (key: string, params?: Record<string, string>) =>
-        params !== undefined ? `${key}|${params.botName}` : key,
-    } as unknown as InteractionContext['translator'];
-
-    await expect(bridge.sendRebootMessages(translator)).resolves.toBeUndefined();
+    await expect(bridge.sendRebootMessages(identityTranslator)).resolves.toBeUndefined();
     expect(sends.length).toBe(1);
     expect(sends[0]).toContain('replies:base_bot.reboot_notice');
   });

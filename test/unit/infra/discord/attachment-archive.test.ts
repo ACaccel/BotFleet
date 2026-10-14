@@ -324,16 +324,27 @@ describe('archiveDeletedAttachments', () => {
     const logger = fakeLogger();
     let inFlight = 0;
     let peak = 0;
+    const held: (() => void)[] = [];
     setAxiosGet(async () => {
       inFlight += 1;
       peak = Math.max(peak, inFlight);
-      await new Promise<void>((r) => setTimeout(r, 5));
+      await new Promise<void>((release) => held.push(release));
       inFlight -= 1;
       return { data: Readable.from(['x']) };
     });
 
     const attachments = Array.from({ length: 20 }, (_, i) => attachmentNamed(`bulk-${i}.bin`));
-    await archiveDeletedAttachments(logger, 'g-1', 'm-1', attachments);
+    const archived = archiveDeletedAttachments(logger, 'g-1', 'm-1', attachments);
+    // Each download creates its directory over real I/O before the
+    // request, so release one only after every slot the limiter may
+    // fill is occupied; the peak then never depends on timing.
+    for (let remaining = attachments.length; remaining > 0; remaining -= 1) {
+      await vi.waitFor(() => expect(held.length).toBeGreaterThanOrEqual(Math.min(4, remaining)), {
+        interval: 1,
+      });
+      held.shift()?.();
+    }
+    await archived;
 
     expect((axios.get as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(20);
     // A bulk delete of 100 messages used to open every download at once.

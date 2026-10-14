@@ -5,15 +5,18 @@
  * informational reply.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
+import { MessageFlags, PermissionFlagsBits } from 'discord.js';
 
 import { ok } from '../../../src/core/result';
 import { handleGiveawayDeletePrompt } from '../../../src/handlers/commands/giveaway-shared/delete';
-import type { BaseBot } from '../../../src/bot';
+import { buildFakeBot, echoTranslatorWithParams } from '../../fixtures/discord/bot-fake';
+import { buildGuild } from '../../fixtures/discord/guild-builder';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
 
 const GUILD_ID = 'guild-1';
-
-const translator = { t: (key: string) => key } as unknown as BaseBot['translator'];
 
 const makeRepos = (
   giveaways: ReadonlyArray<{
@@ -28,12 +31,16 @@ const makeRepos = (
   },
 });
 
-const makeBot = (repos: ReturnType<typeof makeRepos>) =>
-  ({
+const makeBot = (
+  repos: ReturnType<typeof makeRepos>,
+  extra: Readonly<Record<string, unknown>> = {},
+) => {
+  const getRepos = (guildId: string) => (guildId === GUILD_ID ? repos : undefined);
+  return buildFakeBot({
     client: { guilds: { cache: new Map([[GUILD_ID, {}]]) } },
-    getRepos: (guildId: string) => (guildId === GUILD_ID ? repos : undefined),
+    getRepos,
     guildRegistry: {
-      getRepos: (guildId: string) => (guildId === GUILD_ID ? repos : undefined),
+      getRepos,
       getChannel: () => undefined,
       getRole: () => undefined,
       listGuildIds: () => [],
@@ -42,18 +49,30 @@ const makeBot = (repos: ReturnType<typeof makeRepos>) =>
     config: {},
     timeZone: 'UTC',
     isAdmin: () => false,
-    requireLogger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
-    translator,
-  }) as unknown as BaseBot;
+    ...extra,
+  }).bot;
+};
 
-const makeInteraction = (manager = true) =>
-  ({
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-    guild: { id: GUILD_ID },
-    user: { id: 'owner-1' },
-    memberPermissions: { has: () => manager },
-  }) as unknown as ChatInputCommandInteraction;
+const makeInteraction = (manager = true) => {
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({
+    userId: 'owner-1',
+    guild: buildGuild({ id: GUILD_ID }),
+    memberPermissions: manager ? [PermissionFlagsBits.ManageMessages] : [],
+    sink,
+  });
+  return { interaction, sink };
+};
+
+interface SelectRow {
+  components: { options: { data: { value: string } }[] }[];
+}
+
+/** The option values of the select menu the prompt rendered into its first row. */
+const offeredValues = (components: readonly unknown[] | undefined): string[] =>
+  (components as SelectRow[] | undefined)?.[0]?.components[0]?.options.map(
+    (option) => option.data.value,
+  ) ?? [];
 
 afterEach(() => vi.clearAllMocks());
 
@@ -63,28 +82,24 @@ describe('handleGiveawayDeletePrompt', () => {
       { message_id: 'm1', prize: 'Nitro', end_time: 4_102_444_800_000 },
       { message_id: 'm2', prize: 'Game key', end_time: 4_102_444_800_000 },
     ]);
-    const bot = makeBot(repos);
-    const interaction = makeInteraction();
+    const { interaction, sink } = makeInteraction();
 
-    await handleGiveawayDeletePrompt(interaction, bot);
+    await handleGiveawayDeletePrompt(interaction, makeBot(repos));
 
-    expect(interaction.deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
-    const editReply = interaction.editReply as unknown as ReturnType<typeof vi.fn>;
-    const arg = editReply.mock.calls[0]?.[0] as { components?: unknown[] };
+    expect(sink.defers).toEqual([{ flags: MessageFlags.Ephemeral }]);
+    const reply = sink.editReplies[0];
+    expect(reply?.content).toBe('replies:giveaway.delete_select_placeholder');
     // Two giveaways fit in a single 25-option select → exactly one row.
-    expect(arg.components).toHaveLength(1);
+    expect(reply?.components).toHaveLength(1);
+    expect(offeredValues(reply?.components)).toEqual(['m1', 'm2']);
   });
 
   it('replies that there are no active giveaways when the list is empty', async () => {
-    const repos = makeRepos([]);
-    const bot = makeBot(repos);
-    const interaction = makeInteraction();
+    const { interaction, sink } = makeInteraction();
 
-    await handleGiveawayDeletePrompt(interaction, bot);
+    await handleGiveawayDeletePrompt(interaction, makeBot(makeRepos([])));
 
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'replies:giveaway.no_active_giveaways',
-    });
+    expect(sink.editReplies).toEqual([{ content: 'replies:giveaway.no_active_giveaways' }]);
   });
 
   it('offers a member without moderation rights only their own giveaways', async () => {
@@ -92,30 +107,25 @@ describe('handleGiveawayDeletePrompt', () => {
       { message_id: 'm1', prize: 'Mine', end_time: 4_102_444_800_000, prize_owner_id: 'owner-1' },
       { message_id: 'm2', prize: 'Theirs', end_time: 4_102_444_800_000, prize_owner_id: 'x' },
     ]);
-    const interaction = makeInteraction(false);
+    const { interaction, sink } = makeInteraction(false);
 
     await handleGiveawayDeletePrompt(interaction, makeBot(repos));
 
-    const editReply = interaction.editReply as unknown as ReturnType<typeof vi.fn>;
-    const arg = editReply.mock.calls[0]?.[0] as {
-      components: { components: { options: { data: { value: string } }[] }[] }[];
-    };
-    const values = arg.components[0]?.components[0]?.options.map((option) => option.data.value);
-    expect(values).toEqual(['m1']);
+    expect(offeredValues(sink.editReplies[0]?.components)).toEqual(['m1']);
   });
 });
 
 it('reports disabled database state with its trace ID', async () => {
-  const repos = makeRepos([]);
-  const bot = makeBot(repos);
-  const interaction = makeInteraction();
-  const translate = vi.fn((key: string) => key);
-  Object.defineProperty(bot, 'translator', { value: { t: translate } });
-  Object.defineProperty(bot, 'connectionManager', {
-    value: { isDisabled: () => ({ traceId: 'trace-db' }) },
+  const bot = makeBot(makeRepos([]), {
+    translator: echoTranslatorWithParams(),
+    connectionManager: { isDisabled: () => ({ traceId: 'trace-db' }) },
   });
+  const { interaction, sink } = makeInteraction();
   bot.guildRegistry.getRepos = () => undefined;
+
   await handleGiveawayDeletePrompt(interaction, bot);
-  expect(translate).toHaveBeenCalledWith('errors:db.guild_disabled', { traceId: 'trace-db' });
-  expect(interaction.editReply).toHaveBeenCalledWith({ content: 'errors:db.guild_disabled' });
+
+  expect(sink.editReplies).toEqual([
+    { content: 'errors:db.guild_disabled:{"traceId":"trace-db"}' },
+  ]);
 });

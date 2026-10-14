@@ -4,21 +4,33 @@
  * and roles may be pinged, `@everyone` and `@here` never.
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { ChatInputCommandInteraction } from 'discord.js';
 
 import Talk from '../../../../src/handlers/commands/talk';
-import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
+import { buildFakeBot, echoTranslatorWithParams } from '../../../fixtures/discord/bot-fake';
+import { buildGuild } from '../../../fixtures/discord/guild-builder';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../../fixtures/discord/interaction-builder';
+import { buildGuildMember } from '../../../fixtures/discord/member-builder';
 
 const HERE = 'c-here';
 const ELSEWHERE = 'c-elsewhere';
 
-const channel = (id: string, canPost: boolean) => ({
-  id,
-  isSendable: () => true,
-  isThread: () => false,
-  permissionsFor: () => ({ has: () => canPost }),
-  send: vi.fn(async (_options: unknown) => undefined),
-});
+/** A channel whose posts are collected, so a test reads what was said where. */
+const channel = (id: string, canPost: boolean) => {
+  const sent: unknown[] = [];
+  return {
+    id,
+    sent,
+    isSendable: () => true,
+    isThread: () => false,
+    permissionsFor: () => ({ has: () => canPost }),
+    send: vi.fn(async (message: unknown) => {
+      sent.push(message);
+    }),
+  };
+};
 
 interface Options {
   readonly content: string;
@@ -29,47 +41,60 @@ interface Options {
 const build = (options: Options, { isAdmin = false, canPostElsewhere = true } = {}) => {
   const here = channel(HERE, true);
   const elsewhere = channel(ELSEWHERE, canPostElsewhere);
-  const editReply = vi.fn(async (_options: unknown) => undefined);
-  const interaction = {
-    deferReply: vi.fn(async () => undefined),
-    deleteReply: vi.fn(async () => undefined),
-    editReply,
-    deferred: true,
-    replied: false,
-    guildId: 'g1',
-    guild: { id: 'g1', channels: { cache: new Map([[ELSEWHERE, elsewhere]]) } },
+  const sink = newInteractionSink();
+  const member = buildGuildMember({ id: 'u1', username: 'speaker', displayName: 'Speaker' });
+  const guild = buildGuild({ id: 'g1' });
+  Object.assign(guild.channels.cache, {
+    get: (id: string) => (id === ELSEWHERE ? elsewhere : undefined),
+  });
+  const interaction = buildChatInputInteraction({
+    guild,
     channel: here,
-    member: { displayName: 'Speaker' },
-    user: { id: 'u1', username: 'speaker', displayName: 'Speaker' },
-    options: {
-      get: (name: string) => (name === 'content' ? { value: options.content } : null),
-      getBoolean: () => options.anonymous ?? null,
-      getChannel: () => (options.channel ? { id: options.channel } : null),
-    },
-  } as unknown as ChatInputCommandInteraction;
-  const { bot, logger } = buildFakeBot({ isAdmin: () => isAdmin });
-  return { interaction, bot, logger, here, elsewhere, editReply };
+    channels: options.channel === undefined ? {} : { channel: { id: options.channel } },
+    options: { content: options.content },
+    sink,
+  });
+  // The builder answers neither boolean options nor a guild member.
+  Object.assign(interaction, { member, user: member.user });
+  Object.assign(interaction.options, { getBoolean: () => options.anonymous ?? null });
+  // No `deleteReply` in the sink; the call is the only observable of
+  // removing the acknowledgement.
+  const deleteReply = vi.fn(async () => undefined);
+  Object.assign(interaction, { deleteReply });
+  const { bot, logger } = buildFakeBot({
+    isAdmin: () => isAdmin,
+    translator: echoTranslatorWithParams(),
+  });
+  return { interaction, bot, logger, here, elsewhere, sink, deleteReply };
 };
 
 describe('/talk', () => {
   it('signs the message in the current channel and allows member and role pings', async () => {
-    const { interaction, bot, here } = build({ content: '<@&2> hi' });
+    const { interaction, bot, here, sink, deleteReply } = build({ content: '<@&2> hi' });
 
     await new Talk().execute(interaction, bot);
 
-    expect(here.send).toHaveBeenCalledWith({
-      content: 'Speaker(speaker): <@&2> hi',
-      allowedMentions: { parse: ['users', 'roles'] },
-    });
+    expect(here.sent).toEqual([
+      {
+        content: 'Speaker(speaker): <@&2> hi',
+        allowedMentions: { parse: ['users', 'roles'] },
+      },
+    ]);
+    expect(deleteReply).toHaveBeenCalledTimes(1);
+    expect(sink.editReplies).toEqual([]);
   });
 
   it('refuses anonymous posting to a member who is not a bot admin', async () => {
-    const { interaction, bot, here, editReply } = build({ content: 'hi', anonymous: true });
+    const { interaction, bot, here, sink, deleteReply } = build({
+      content: 'hi',
+      anonymous: true,
+    });
 
     await new Talk().execute(interaction, bot);
 
-    expect(here.send).not.toHaveBeenCalled();
-    expect(editReply).toHaveBeenCalledWith({ content: 'errors:permission.admin_only_short' });
+    expect(here.sent).toEqual([]);
+    expect(sink.editReplies).toEqual([{ content: 'errors:permission.admin_only_short' }]);
+    expect(deleteReply).not.toHaveBeenCalled();
   });
 
   it('lets an admin post anonymously and logs it', async () => {
@@ -80,10 +105,7 @@ describe('/talk', () => {
 
     await new Talk().execute(interaction, bot);
 
-    expect(here.send).toHaveBeenCalledWith({
-      content: 'hi',
-      allowedMentions: { parse: ['users', 'roles'] },
-    });
+    expect(here.sent).toEqual([{ content: 'hi', allowedMentions: { parse: ['users', 'roles'] } }]);
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({ content: 'hi', userId: 'u1' }),
       expect.any(String),
@@ -93,14 +115,15 @@ describe('/talk', () => {
   it('posts to another channel only where the member may post', async () => {
     const allowed = build({ content: 'hi', channel: ELSEWHERE });
     await new Talk().execute(allowed.interaction, allowed.bot);
-    expect(allowed.elsewhere.send).toHaveBeenCalled();
+    expect(allowed.elsewhere.sent).toEqual([
+      { content: 'Speaker(speaker): hi', allowedMentions: { parse: ['users', 'roles'] } },
+    ]);
+    expect(allowed.here.sent).toEqual([]);
 
     const refused = build({ content: 'hi', channel: ELSEWHERE }, { canPostElsewhere: false });
     await new Talk().execute(refused.interaction, refused.bot);
-    expect(refused.elsewhere.send).not.toHaveBeenCalled();
-    expect(refused.editReply).toHaveBeenCalledWith({
-      content: 'replies:talk.channel_not_allowed',
-    });
+    expect(refused.elsewhere.sent).toEqual([]);
+    expect(refused.sink.editReplies).toEqual([{ content: 'replies:talk.channel_not_allowed' }]);
   });
 
   it('replaces an @everyone message with a warning that pings nobody', async () => {
@@ -108,9 +131,11 @@ describe('/talk', () => {
 
     await new Talk().execute(interaction, bot);
 
-    expect(here.send).toHaveBeenCalledWith({
-      content: 'replies:talk.tag_warning',
-      allowedMentions: { parse: [] },
-    });
+    expect(here.sent).toEqual([
+      {
+        content: 'replies:talk.tag_warning:{"displayName":"Speaker","username":"speaker"}',
+        allowedMentions: { parse: [] },
+      },
+    ]);
   });
 });

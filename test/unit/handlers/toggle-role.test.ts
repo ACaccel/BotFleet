@@ -5,12 +5,16 @@
  * removed. The handler reads `bot.translator`; the fake returns the key
  * so the test can assert which catalog string each branch selects.
  */
-import { describe, expect, it, vi } from 'vitest';
-import { MessageFlags, PermissionFlagsBits, type ButtonInteraction } from 'discord.js';
+import { describe, expect, it } from 'vitest';
+import { MessageFlags, PermissionFlagsBits } from 'discord.js';
 
 import toggle_role from '../../../src/handlers/buttons/toggle_role';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
 import { buildGuild, buildGuildRoles } from '../../fixtures/discord/guild-builder';
+import {
+  buildButtonInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
 import { buildGuildMember, buildMemberRoles } from '../../fixtures/discord/member-builder';
 
 const ROLE_ID = 'role-1';
@@ -40,55 +44,55 @@ const build = (opts: {
     }),
     me: buildGuildMember({ id: 'bot', highestRolePosition: 10 }),
   });
-  const interaction = {
+  const sink = newInteractionSink();
+  const interaction = buildButtonInteraction({
     customId: `toggle_role|${ROLE_ID}`,
-    member,
     guild,
-    reply: vi.fn().mockResolvedValue(undefined),
-  } as unknown as ButtonInteraction;
-  return { interaction, memberRoles };
+    sink,
+  });
+  Object.assign(interaction, { member });
+  return { interaction, memberRoles, sink };
 };
 
 describe('toggle_role button handler', () => {
   it('replies role_not_found when the role no longer exists', async () => {
-    const { interaction, memberRoles } = build({ memberHasRole: false, roleExists: false });
+    const { interaction, memberRoles, sink } = build({ memberHasRole: false, roleExists: false });
 
     await new toggle_role().execute(interaction, bot);
 
-    expect(interaction.reply).toHaveBeenCalledWith({
-      content: 'replies:toggle_role.role_not_found',
-      flags: MessageFlags.Ephemeral,
-    });
+    expect(sink.replies).toEqual([
+      { content: 'replies:toggle_role.role_not_found', flags: MessageFlags.Ephemeral },
+    ]);
     expect(memberRoles.add).not.toHaveBeenCalled();
     expect(memberRoles.remove).not.toHaveBeenCalled();
   });
 
   it('removes the role and confirms when the member already has it', async () => {
-    const { interaction, memberRoles } = build({ memberHasRole: true, roleExists: true });
+    const { interaction, memberRoles, sink } = build({ memberHasRole: true, roleExists: true });
 
     await new toggle_role().execute(interaction, bot);
 
     expect(memberRoles.remove).toHaveBeenCalledWith(ROLE_ID);
-    expect(interaction.reply).toHaveBeenCalledWith({
-      content: 'replies:toggle_role.removed',
-      flags: MessageFlags.Ephemeral,
-    });
+    expect(memberRoles.add).not.toHaveBeenCalled();
+    expect(sink.replies).toEqual([
+      { content: 'replies:toggle_role.removed', flags: MessageFlags.Ephemeral },
+    ]);
   });
 
   it('adds the role and confirms when the member lacks it', async () => {
-    const { interaction, memberRoles } = build({ memberHasRole: false, roleExists: true });
+    const { interaction, memberRoles, sink } = build({ memberHasRole: false, roleExists: true });
 
     await new toggle_role().execute(interaction, bot);
 
     expect(memberRoles.add).toHaveBeenCalledWith(ROLE_ID);
-    expect(interaction.reply).toHaveBeenCalledWith({
-      content: 'replies:toggle_role.added',
-      flags: MessageFlags.Ephemeral,
-    });
+    expect(memberRoles.remove).not.toHaveBeenCalled();
+    expect(sink.replies).toEqual([
+      { content: 'replies:toggle_role.added', flags: MessageFlags.Ephemeral },
+    ]);
   });
 
   it('refuses a role that has since gained a dangerous permission', async () => {
-    const { interaction, memberRoles } = build({
+    const { interaction, memberRoles, sink } = build({
       memberHasRole: false,
       roleExists: true,
       rolePermissions: [PermissionFlagsBits.Administrator],
@@ -97,9 +101,9 @@ describe('toggle_role button handler', () => {
     await new toggle_role().execute(interaction, bot);
 
     expect(memberRoles.add).not.toHaveBeenCalled();
-    expect(interaction.reply).toHaveBeenCalledWith({
-      content: 'replies:toggle_role.role_not_assignable',
-      flags: MessageFlags.Ephemeral,
-    });
+    expect(memberRoles.remove).not.toHaveBeenCalled();
+    expect(sink.replies).toEqual([
+      { content: 'replies:toggle_role.role_not_assignable', flags: MessageFlags.Ephemeral },
+    ]);
   });
 });

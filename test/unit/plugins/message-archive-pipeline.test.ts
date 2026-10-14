@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { ArchivePipelineBudget } from '../../../src/plugins/message-backup/flow/pipeline';
 import {
@@ -239,6 +239,10 @@ describe('shared SDK readiness fallback', () => {
   });
 
   it('holds back a route under an announced wait while other routes of the channel proceed', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const scheduler = new ArchiveScheduler({ concurrency: 2 });
     const telemetry = new ArchiveRestTelemetry(Date.now, (wait) => scheduler.observeWait(wait));
     telemetry.wait({
@@ -268,7 +272,8 @@ describe('shared SDK readiness fallback', () => {
     const blocked = scheduler.run('history:20:a', 'history', async () => {
       read = true;
     });
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Held for the whole announced wait, not just until pending work settles.
+    await vi.advanceTimersByTimeAsync(59_999);
     expect(read).toBe(false);
     scheduler.stop();
     await expect(held).rejects.toThrow();

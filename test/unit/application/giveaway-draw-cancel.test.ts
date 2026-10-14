@@ -12,6 +12,7 @@ import {
   scheduleGiveaway,
   type GiveawayDeps,
 } from '../../../src/application/giveaway/giveaway';
+import { echoTranslator } from '../../fixtures/runtime';
 
 const GUILD_ID = 'guild-1';
 const MESSAGE_ID = 'msg-1';
@@ -58,7 +59,7 @@ const build = (entrantIds: readonly string[], cachedIds: readonly string[]) => {
     registry: { getRepos: () => repos, getChannel: () => undefined, listGuildIds: () => [] },
     jobMap: new Map(),
     logger: { warn: vi.fn(), error: vi.fn() },
-    translator: { t: (key: string) => key },
+    translator: echoTranslator(),
   } as unknown as GiveawayDeps;
   return { deps, channel, repos, usersFetch, membersFetch, edit };
 };

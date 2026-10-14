@@ -13,24 +13,19 @@
  * lists, so every enabled fixture here is built from {@link enabledConfig}; a
  * disabled one carries none of them and must never reach the registry factory.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type MockInstance } from 'vitest';
 import type { Message } from 'discord.js';
 
 import { createSocialLinkPreviewPlugin } from '../../../../src/plugins/social-link-preview';
 import {
   createDefaultLinkPreviewRegistry,
-  type LinkPreviewProviderRegistry,
+  LinkPreviewProviderRegistry,
 } from '../../../../src/infra/link-preview';
-import {
-  createPermissionRankPolicy,
-  type PermissionRankPolicy,
-  type PluginEventContext,
-  type PluginInitContext,
-} from '../../../../src/core/plugin';
+import { createPermissionRankPolicy, type PermissionRankPolicy } from '../../../../src/core/plugin';
 import { createContainer } from '../../../../src/core/ioc';
 import { TOKENS } from '../../../../src/bot/tokens';
-import type { Logger } from '../../../../src/core/logger';
-import type { Translator } from '../../../../src/core/i18n';
+import { buildMessage } from '../../../fixtures/discord/message-builder';
+import { buildPluginContext } from '../../../fixtures/runtime';
 import type * as LinkPreviewModule from '../../../../src/infra/link-preview';
 
 // Spy on the registry factory (wrapping the real impl, so behavior is
@@ -45,19 +40,6 @@ vi.mock('../../../../src/infra/link-preview', async (importOriginal) => {
     createDefaultLinkPreviewRegistry: vi.fn(actual.createDefaultLinkPreviewRegistry),
   };
 });
-
-const makeLogger = (): Logger => {
-  const logger = {
-    error: vi.fn(),
-    warn: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-    trace: vi.fn(),
-    fatal: vi.fn(),
-    child: vi.fn(() => logger),
-  };
-  return logger as unknown as Logger;
-};
 
 /** An empty policy: `social_preview` ceiling defaults to unbounded, so nothing is suppressed. */
 const emptyPolicy = createPermissionRankPolicy({});
@@ -82,22 +64,19 @@ const enabledConfig = (overrides: Record<string, unknown> = {}): Record<string, 
   ...overrides,
 });
 
-const ctx = (policy: PermissionRankPolicy): PluginEventContext => {
+const ctx = (policy: PermissionRankPolicy) => {
   const container = createContainer();
   container.registerSingleton(TOKENS.PermissionRankPolicy, () => policy);
-  return {
-    logger: makeLogger(),
-    translator: { t: vi.fn((k: string) => k) } as unknown as Translator,
-    resolve: container.resolve.bind(container),
-  } as unknown as PluginEventContext;
+  return buildPluginContext({ resolve: container.resolve.bind(container) });
 };
 
 const makeRegistry = (): {
   registry: LinkPreviewProviderRegistry;
-  findProvider: ReturnType<typeof vi.fn>;
+  findProvider: MockInstance;
 } => {
-  const findProvider = vi.fn(() => undefined);
-  return { registry: { findProvider } as unknown as LinkPreviewProviderRegistry, findProvider };
+  // An empty real registry: `findProvider` is a pass-through spy that finds nothing.
+  const registry = new LinkPreviewProviderRegistry([]);
+  return { registry, findProvider: vi.spyOn(registry, 'findProvider') };
 };
 
 interface MsgOpts {
@@ -110,10 +89,12 @@ interface MsgOpts {
   readonly parentId?: string | null;
   /** Maps a channel id to its own parentId, so the ancestry walk can climb. */
   readonly ancestors?: Record<string, string | null>;
+  /** The `reply` spy the plugin posts a preview through. */
+  readonly reply?: ReturnType<typeof vi.fn>;
 }
 
 const makeMessage = (opts: MsgOpts = {}): Message =>
-  ({
+  buildMessage({
     content: opts.content ?? 'see https://x.com/a/status/1',
     author: { bot: opts.bot ?? false, id: opts.authorId ?? '111111111111111111' },
     client: { user: { id: '222222222222222222' } },
@@ -128,7 +109,8 @@ const makeMessage = (opts: MsgOpts = {}): Message =>
         },
       },
     },
-  }) as unknown as Message;
+    ...(opts.reply === undefined ? {} : { reply: opts.reply }),
+  });
 
 /**
  * Deliver one `messageCreate` to a constructed plugin. A plugin that declares
@@ -146,7 +128,7 @@ const deliver = async (
   // The host resolves a plugin's dependencies in `init` and only then
   // attaches its subscriptions, so a hand-driven dispatch runs both steps.
   const context = ctx(policy);
-  await plugin.init?.(context as unknown as PluginInitContext);
+  await plugin.init?.(context);
   // The discord.js event arg is OmitPartialGroupDMChannel<Message>; our fake
   // is structurally a Message, so narrow it to the handler's exact param type.
   await handler(context, message as Parameters<typeof handler>[1]);
@@ -210,7 +192,7 @@ describe('createSocialLinkPreviewPlugin guards', () => {
     // never-called `reply` is the proof that a disabled plugin does nothing —
     // regardless of whether it declines to subscribe or returns early.
     const reply = vi.fn();
-    const message = { ...makeMessage(), reply } as unknown as Message;
+    const message = makeMessage({ reply });
 
     await deliver(createSocialLinkPreviewPlugin({ enabled: false }), message);
 
@@ -230,10 +212,10 @@ describe('createSocialLinkPreviewPlugin guards', () => {
       ok: true,
       value: { kind: 'rewritten-url', url: 'https://proxy.example/a/status/1' },
     });
-    const registry = {
-      findProvider: vi.fn(() => ({ build })),
-    } as unknown as LinkPreviewProviderRegistry;
-    const message = { ...makeMessage({ bot: true }), reply } as unknown as Message;
+    const registry = new LinkPreviewProviderRegistry([
+      { name: 'twitter', canHandle: () => true, build },
+    ]);
+    const message = makeMessage({ bot: true, reply });
 
     await fire(
       enabledConfig({ allowedBotIds: ['111111111111111111'], originalMessageStrategy: 'leave' }),

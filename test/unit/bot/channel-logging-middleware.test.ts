@@ -39,21 +39,18 @@ import { logGuildEvent } from '@core/logger';
 import { sendChannelLog } from '../../../src/infra/discord';
 import { createChannelLoggingMiddleware } from '../../../src/bot/middlewares';
 import { createPermissionRankPolicy } from '../../../src/core/plugin';
-import { createLogger } from '../../../src/core/logger';
 import { createDefaultTranslator, type Translator } from '../../../src/core/i18n';
-import type { BaseBot } from '../../../src/bot/index';
 import type { InteractionContext } from '../../../src/core/plugin';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
 
-const silent = createLogger({ level: 'silent', pretty: false });
 const createdTimestamp = Date.UTC(2026, 9, 13, 6, 0, 0);
 let translator: Translator;
 
-const fakeBot = (botTranslator: Translator | undefined = translator): BaseBot =>
-  ({
-    logger: silent,
+const fakeBot = (botTranslator: Translator | undefined = translator) =>
+  buildFakeBot({
     translator: botTranslator,
     getGuildInfo: () => ({ channels: { debug: { id: 'debug-channel' } } }),
-  }) as unknown as BaseBot;
+  });
 
 const interactionCtx = (channelId: string): InteractionContext =>
   ({
@@ -74,10 +71,15 @@ const interactionCtx = (channelId: string): InteractionContext =>
     },
   }) as unknown as InteractionContext;
 
-const run = async (channelId: string): Promise<void> => {
+/** Runs the middleware once and returns the logger the bot carried. */
+const run = async (channelId: string): Promise<unknown> => {
   const policy = createPermissionRankPolicy({ g1: { channels: { private: 1 } } });
-  const middleware = createChannelLoggingMiddleware(fakeBot(), { policy });
-  await middleware.run(interactionCtx(channelId), async () => undefined);
+  const { bot, logger } = fakeBot();
+  await createChannelLoggingMiddleware(bot, { policy }).run(
+    interactionCtx(channelId),
+    async () => undefined,
+  );
+  return logger;
 };
 
 describe('channel-logging middleware', () => {
@@ -92,10 +94,10 @@ describe('channel-logging middleware', () => {
   });
 
   it('logs a command in a rank-0 channel to the debug feed AND the guild audit log', async () => {
-    await run('public');
+    const botLogger = await run('public');
     expect(sendChannelLog).toHaveBeenCalledTimes(1);
     const [logger, channel, embed, content] = vi.mocked(sendChannelLog).mock.calls[0]!;
-    expect(logger).toBe(silent);
+    expect(logger).toBe(botLogger);
     expect(channel).toEqual({ id: 'debug-channel' });
     expect(content).toBeUndefined();
     expect(embed?.toJSON()).toEqual({
@@ -110,7 +112,7 @@ describe('channel-logging middleware', () => {
     });
     expect(logGuildEvent).toHaveBeenCalledTimes(1);
     expect(logGuildEvent).toHaveBeenCalledWith(
-      silent,
+      botLogger,
       'g1',
       'interaction_create',
       { command: '/ping', user: 'User', channel: 'public' },
@@ -132,7 +134,7 @@ describe('channel-logging middleware', () => {
         data: [{ name: 'private_value', value: 'must-not-be-logged' }],
       },
     });
-    await createChannelLoggingMiddleware(fakeBot(), { policy }).run(ctx, async () => undefined);
+    await createChannelLoggingMiddleware(fakeBot().bot, { policy }).run(ctx, async () => undefined);
     const embed = vi.mocked(sendChannelLog).mock.calls[0]![2]?.toJSON();
     expect(embed?.title).toBe(title);
     expect(JSON.stringify(embed)).not.toContain('must-not-be-logged');
@@ -147,7 +149,7 @@ describe('channel-logging middleware', () => {
       fallbackLocale: locale,
     });
     const policy = createPermissionRankPolicy({});
-    await createChannelLoggingMiddleware(fakeBot(localized), { policy }).run(
+    await createChannelLoggingMiddleware(fakeBot(localized).bot, { policy }).run(
       interactionCtx('public'),
       async () => undefined,
     );
@@ -165,7 +167,7 @@ describe('channel-logging middleware', () => {
       commandName: 'Get avatar',
       options: undefined,
     });
-    await createChannelLoggingMiddleware(fakeBot(), { policy }).run(ctx, async () => undefined);
+    await createChannelLoggingMiddleware(fakeBot().bot, { policy }).run(ctx, async () => undefined);
     expect(vi.mocked(sendChannelLog).mock.calls[0]![2]?.toJSON().title).toBe('Get avatar');
     expect(logGuildEvent).toHaveBeenCalledTimes(1);
   });
@@ -177,7 +179,7 @@ describe('channel-logging middleware', () => {
       isChatInputCommand: () => false,
       isContextMenuCommand: () => false,
     });
-    await createChannelLoggingMiddleware(fakeBot(), { policy }).run(ctx, async () => undefined);
+    await createChannelLoggingMiddleware(fakeBot().bot, { policy }).run(ctx, async () => undefined);
     expect(sendChannelLog).not.toHaveBeenCalled();
     expect(logGuildEvent).not.toHaveBeenCalled();
   });
@@ -186,7 +188,7 @@ describe('channel-logging middleware', () => {
     const policy = createPermissionRankPolicy({});
     const ctx = interactionCtx('dm');
     Object.assign(ctx.interaction, { guildId: null, guild: null });
-    await createChannelLoggingMiddleware(fakeBot(), { policy }).run(ctx, async () => undefined);
+    await createChannelLoggingMiddleware(fakeBot().bot, { policy }).run(ctx, async () => undefined);
     expect(sendChannelLog).not.toHaveBeenCalled();
     expect(logGuildEvent).not.toHaveBeenCalled();
   });
@@ -199,7 +201,7 @@ describe('channel-logging middleware', () => {
 
   it('suppresses the debug feed for a thread nested under a private category (full ancestry)', async () => {
     const policy = createPermissionRankPolicy({ g1: { channels: { cat: 1 } } });
-    const middleware = createChannelLoggingMiddleware(fakeBot(), { policy });
+    const middleware = createChannelLoggingMiddleware(fakeBot().bot, { policy });
     // command in thread 'th' → channel 'ch-cat' (unlisted) → category 'cat' (rank 1);
     // the cache resolves the intermediate channel so the walk reaches the category.
     const ctx = {
@@ -227,7 +229,7 @@ describe('channel-logging middleware', () => {
 
   it('still writes the guild audit log when the dispatched handler throws, then re-throws (try/finally)', async () => {
     const policy = createPermissionRankPolicy({ g1: { channels: { private: 1 } } });
-    const middleware = createChannelLoggingMiddleware(fakeBot(), { policy });
+    const middleware = createChannelLoggingMiddleware(fakeBot().bot, { policy });
     await expect(
       middleware.run(interactionCtx('public'), async () => {
         throw new Error('dispatch failed');

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Translator } from '../../../../src/core/i18n';
 import type { Command, CommandConfig } from '../../../../src/handlers/commands/command';
 import {
   buildCategoryEmbed,
   buildCommandDetail,
   buildHelpOverview,
 } from '../../../../src/handlers/commands/help/build-help-embed';
+import { echoTranslator } from '../../../fixtures/runtime';
 
 /** Echoes keys, so assertions read which catalog entry each part used. */
-const echo = { t: (key: string) => key } as unknown as Translator;
+const echo = echoTranslator();
 
 const command = (config: CommandConfig): Command => ({ config }) as unknown as Command;
 

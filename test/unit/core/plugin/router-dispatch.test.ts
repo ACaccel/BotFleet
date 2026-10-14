@@ -8,13 +8,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { InteractionRouter } from '../../../../src/core/plugin/interaction-router';
 import type { InteractionContext, InteractionMiddleware } from '../../../../src/core/plugin';
-import { createLogger } from '../../../../src/core/logger';
 import {
   buildChatInputInteraction,
   newInteractionSink,
 } from '../../../fixtures/discord/interaction-builder';
+import { echoTranslator, silentLogger } from '../../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
+const silent = silentLogger();
 
 describe('InteractionRouter — chat-input dispatch', () => {
   it('runs middlewares in registration order and forwards the same ctx through next()', async () => {
@@ -47,7 +47,7 @@ describe('InteractionRouter — chat-input dispatch', () => {
     const ctx: InteractionContext = {
       interaction,
       logger: silent,
-      translator: { t: (k: string) => k } as InteractionContext['translator'],
+      translator: echoTranslator(),
       clock: { now: () => 0, nowDate: () => new Date(0) },
       resolve: vi.fn() as InteractionContext['resolve'],
       traceId: 'trace-1',

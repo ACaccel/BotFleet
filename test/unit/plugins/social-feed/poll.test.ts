@@ -17,7 +17,7 @@
  * platform the shipped union never names completes the full path from
  * subscription to delivered message.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type MockInstance } from 'vitest';
 import type { Channel, Client } from 'discord.js';
 import { Types } from 'mongoose';
 
@@ -32,6 +32,7 @@ import {
 import type { GuildRegistry } from '../../../../src/bot/guild-registry';
 import type { Translator } from '../../../../src/core/i18n';
 import type { Logger } from '../../../../src/core/logger';
+import { echoTranslator, silentLogger } from '../../../fixtures/runtime';
 import type { Repos } from '../../../../src/persistence/repositories';
 import type { FeedSubscriptionDoc } from '../../../../src/persistence/schemas/feed-subscription.schema';
 import { createFakeClock } from '../../../../src/core/time';
@@ -45,9 +46,10 @@ const CHANNEL = 'channel-1';
 const NOW_MS = 1_787_800_000_000;
 const PHOTO = { kind: 'photo', url: 'https://cdn.invalid/a.jpg' } as const;
 
-const fakeTranslator = {
-  t: (key: string, params?: Record<string, unknown>) => `${key}:${JSON.stringify(params ?? {})}`,
-} as unknown as Translator;
+const fakeTranslator: Translator = {
+  ...echoTranslator(),
+  t: (key, params) => `${key}:${JSON.stringify(params ?? {})}`,
+};
 
 /**
  * Logger whose children are itself, so `logError`'s `.child()` call is
@@ -57,26 +59,17 @@ const fakeTranslator = {
  */
 const makeLogger = (): {
   logger: Logger;
-  error: ReturnType<typeof vi.fn>;
-  warn: ReturnType<typeof vi.fn>;
+  error: MockInstance;
+  warn: MockInstance;
   bindings: Record<string, unknown>[];
 } => {
-  const error = vi.fn();
-  const warn = vi.fn();
-  const logger = {
-    error,
-    info: vi.fn(),
-    warn,
-    debug: vi.fn(),
-    trace: vi.fn(),
-    fatal: vi.fn(),
-    child: (b: Record<string, unknown>) => {
-      bindings.push(b);
-      return logger;
-    },
-  } as unknown as Logger;
+  const logger = silentLogger();
   const bindings: Record<string, unknown>[] = [];
-  return { logger, error, warn, bindings };
+  vi.spyOn(logger, 'child').mockImplementation((b) => {
+    bindings.push(b);
+    return logger;
+  });
+  return { logger, error: vi.spyOn(logger, 'error'), warn: vi.spyOn(logger, 'warn'), bindings };
 };
 
 /** A post the default (`media_only`) filter accepts. */
@@ -218,8 +211,8 @@ const harness = (
 ): {
   deps: FeedPassDeps;
   fetchTimeline: ReturnType<typeof vi.fn>;
-  errorLog: ReturnType<typeof vi.fn>;
-  warnLog: ReturnType<typeof vi.fn>;
+  errorLog: MockInstance;
+  warnLog: MockInstance;
   logBindings: Record<string, unknown>[];
 } => {
   const fake = buildFakeFeedPlatform({
@@ -239,7 +232,7 @@ const harness = (
   ]);
 
   const guilds = input.guilds ?? new Map([[GUILD, input.repos]]);
-  const registry = {
+  const registry: GuildRegistry = {
     listGuildIds: () => [...guilds.keys()],
     getRepos: (guildId: string) => {
       if (guildId === input.throwForGuild) throw new Error('registry exploded');
@@ -247,7 +240,7 @@ const harness = (
     },
     getChannel: () => undefined,
     getRole: () => undefined,
-  } as unknown as GuildRegistry;
+  };
 
   const channels =
     input.channels ?? new Map(input.channel === undefined ? [] : [[CHANNEL, input.channel]]);

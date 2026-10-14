@@ -6,12 +6,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { buildCommandsFromConfig } from '../../src/register-commands';
-import type { Translator } from '../../src/core/i18n';
+import { echoTranslator } from '../fixtures/runtime';
 
-const translator = {
-  t: (key: string) => key,
-  tStrict: (key: string) => key,
-} as unknown as Translator;
+const translator = echoTranslator();
 
 const namesOf = (body: readonly unknown[]): string[] =>
   body.map((entry) => (entry as { name: string }).name);

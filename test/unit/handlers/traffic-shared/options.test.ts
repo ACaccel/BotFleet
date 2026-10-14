@@ -3,7 +3,6 @@
  * declarations (range choices, the subcommand's `top_n` ceiling) and the
  * parsing (defaults per subcommand, unknown values, `top_n` clamping).
  */
-import type { ChatInputCommandInteraction } from 'discord.js';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -11,13 +10,10 @@ import {
   readTrafficOptions,
   trafficCommandOptions,
 } from '../../../../src/handlers/commands/traffic-shared/options';
+import { buildChatInputInteraction } from '../../../fixtures/discord/interaction-builder';
 
-const interactionWith = (
-  values: Record<string, string | number>,
-): Pick<ChatInputCommandInteraction, 'options'> =>
-  ({
-    options: { get: (name: string) => (name in values ? { value: values[name] } : null) },
-  }) as unknown as Pick<ChatInputCommandInteraction, 'options'>;
+const interactionWith = (values: Record<string, string | number>) =>
+  buildChatInputInteraction({ options: values });
 
 const ACTIVITY = { defaultRange: '7d', maxTopN: 10 } as const;
 const EMOJI = { defaultRange: '30d', maxTopN: 20, adjustableTopN: true } as const;

@@ -13,9 +13,12 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 3. Run `npm run handlers:gen`, include its output, and enable the command in the
    intended bots' `config.json` commands arrays. Update examples and affected docs.
 4. Test happy and failure paths with [Discord fixtures](../../test/fixtures/discord/README.md).
-   For MongoDB, use [`withFreshConnection`](../../test/integration/helpers/mongo.ts).
-   Port-binding tests without MongoDB belong in `integration-nodb` and
-   `NO_DB_INTEGRATION` in [`vitest.workspace.ts`](../../vitest.workspace.ts).
+   For MongoDB, use [`withFreshConnection`](../../test/integration/helpers/mongo.ts),
+   or `withClosedConnection` for the closed-connection error path. Integration
+   files run in parallel, and these helpers give each test its own database;
+   never use a fixed database name. Port-binding tests without MongoDB belong in
+   `integration-nodb` and `NO_DB_INTEGRATION` in
+   [`vitest.projects.ts`](../../vitest.projects.ts).
 5. [Register](local-setup.md#registering-slash-commands) in a test guild, then
    globally when ready. Run the [quality gates](../../CONTRIBUTING.md#quality-gates).
 

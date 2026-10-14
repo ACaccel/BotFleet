@@ -12,23 +12,17 @@
  * rethrown) so the dispatcher's per-subscription isolation is not the
  * only safety net.
  */
-import type { Guild } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createGuildEventsPlugin } from '../../../src/plugins/guild-events';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS } from '../../../src/bot/tokens';
-import { createLogger } from '../../../src/core/logger';
-import { systemClock } from '../../../src/core/time';
-import type {
-  GuildOnboardingPort,
-  GuildOnboardingResult,
-  PluginEventContext,
-  PluginInitContext,
-} from '../../../src/core/plugin';
+import { buildGuild } from '../../fixtures/discord/guild-builder';
+import { buildPluginContext, silentLogger } from '../../fixtures/runtime';
+import type { GuildOnboardingPort, GuildOnboardingResult } from '../../../src/core/plugin';
 import type { GuildRegistry } from '../../../src/bot/guild-registry';
 import { createPermissionRankPolicy } from '../../../src/core/plugin';
 
-const silent = createLogger({ level: 'silent', pretty: false });
+const silent = silentLogger();
 
 const emptyRegistry: GuildRegistry = {
   getRepos: () => undefined,
@@ -37,18 +31,13 @@ const emptyRegistry: GuildRegistry = {
   listGuildIds: () => [],
 };
 
-const buildEventContext = (port: GuildOnboardingPort): PluginEventContext => {
+const buildEventContext = (port: GuildOnboardingPort): ReturnType<typeof buildPluginContext> => {
   const container = createContainer();
   container.registerSingleton(TOKENS.Logger, () => silent);
   container.registerSingleton(TOKENS.GuildOnboardingPort, () => port);
   container.registerSingleton(TOKENS.GuildRegistry, () => emptyRegistry);
   container.registerSingleton(TOKENS.PermissionRankPolicy, () => createPermissionRankPolicy({}));
-  return {
-    logger: silent,
-    translator: undefined,
-    clock: systemClock,
-    resolve: container.resolve.bind(container),
-  } as unknown as PluginEventContext;
+  return buildPluginContext({ logger: silent, resolve: container.resolve.bind(container) });
 };
 
 /**
@@ -58,14 +47,17 @@ const buildEventContext = (port: GuildOnboardingPort): PluginEventContext => {
  */
 const initedPlugin = async (
   port: GuildOnboardingPort,
-): Promise<{ plugin: ReturnType<typeof createGuildEventsPlugin>; ctx: PluginEventContext }> => {
+): Promise<{
+  plugin: ReturnType<typeof createGuildEventsPlugin>;
+  ctx: ReturnType<typeof buildPluginContext>;
+}> => {
   const plugin = createGuildEventsPlugin();
   const ctx = buildEventContext(port);
-  await plugin.init?.(ctx as unknown as PluginInitContext);
+  await plugin.init?.(ctx);
   return { plugin, ctx };
 };
 
-const fakeGuild = (id: string): Guild => ({ id, name: `guild-${id}` }) as unknown as Guild;
+const fakeGuild = (id: string) => buildGuild({ id, name: `guild-${id}` });
 
 describe('guild-events plugin guildCreate subscription', () => {
   it('onboards a newly joined guild through GuildOnboardingPort', async () => {

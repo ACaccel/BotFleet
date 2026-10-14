@@ -5,37 +5,30 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createAutoReplyPlugin } from '../../../src/plugins/auto-reply';
-import { createLogger } from '../../../src/core/logger';
 import { ok } from '../../../src/core/result/result';
 import { TOKENS } from '../../../src/bot/tokens';
-import type { Plugin, PluginEventContext, PluginInitContext } from '../../../src/core/plugin';
+import type { Plugin } from '../../../src/core/plugin';
 import type { GuildRegistry } from '../../../src/bot/guild-registry';
+import { buildPluginContext } from '../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
 const PINGING_REPLY = '@everyone <@&123456789012345678> <@123456789012345678>';
 
-const buildCtx = (findByInput: (input: string) => unknown): PluginEventContext => {
+const buildCtx = (findByInput: (input: string) => unknown) => {
   const registry = {
     getRepos: () => ({ reply: { findByInput: async (input: string) => findByInput(input) } }),
     getChannel: () => undefined,
     getRole: () => undefined,
     listGuildIds: () => [],
   } as unknown as GuildRegistry;
-  return {
-    logger: silent,
-    translator: { t: (key: string) => key },
-    clock: { now: () => 0, nowDate: () => new Date(0) },
-    resolve: ((token: unknown) =>
-      token === TOKENS.GuildRegistry ? registry : undefined) as PluginEventContext['resolve'],
-  } as unknown as PluginEventContext;
+  return buildPluginContext({ services: [[TOKENS.GuildRegistry, registry]] });
 };
 
 const deliver = async (
   plugin: ReturnType<typeof createAutoReplyPlugin>,
-  ctx: PluginEventContext,
+  ctx: ReturnType<typeof buildCtx>,
   message: Parameters<NonNullable<NonNullable<Plugin['events']>['messageCreate']>>[1],
 ): Promise<void> => {
-  await plugin.init?.(ctx as unknown as PluginInitContext);
+  await plugin.init?.(ctx);
   await plugin.events?.messageCreate?.(ctx, message);
 };
 

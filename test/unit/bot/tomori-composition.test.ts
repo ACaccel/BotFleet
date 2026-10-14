@@ -24,6 +24,7 @@ vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
 
 import { BaseBot, type Config } from '../../../src/bot/index';
+import { echoTranslator } from '../../fixtures/runtime';
 import { Tomori } from '../../../src/bot/tomori/tomori';
 import type { Plugin } from '../../../src/core/plugin';
 
@@ -70,10 +71,10 @@ describe('Tomori composition', () => {
 describe('Tomori presence', () => {
   const PRESENCE_TEXT = 'presence-status';
 
-  const fakeTranslator = (text: string): NonNullable<Tomori['translator']> =>
-    ({
-      t: (key: string) => (key === 'replies:tomori.presence_text' ? text : ''),
-    }) as unknown as NonNullable<Tomori['translator']>;
+  const fakeTranslator = (text: string): NonNullable<Tomori['translator']> => ({
+    ...echoTranslator(),
+    t: (key) => (key === 'replies:tomori.presence_text' ? text : ''),
+  });
 
   const buildPresenceHarness = (
     options: { nullUser?: boolean } = {},
@@ -84,19 +85,13 @@ describe('Tomori presence', () => {
   } => {
     let readyHandler: (() => void) | undefined;
     const setPresence = vi.fn();
-    const client = {
+    const client = Object.assign(buildInertClient(), {
       user: options.nullUser ? null : { setPresence },
-      guilds: { cache: new Map() },
-      channels: { cache: new Map() },
-      application: null,
-      on: () => undefined,
       once: (event: unknown, handler: () => void) => {
         if (event === Events.ClientReady) readyHandler = handler;
         return undefined;
       },
-      off: () => undefined,
-      destroy: () => undefined,
-    } as unknown as Client;
+    });
     return { client, fireReady: () => readyHandler?.(), setPresence };
   };
 

@@ -19,7 +19,6 @@ import { Types } from 'mongoose';
 import FeedUnsubscribe from '../../../../src/handlers/commands/feed_unsubscribe/action';
 import { localizeCommandConfig } from '../../../../src/handlers/commands/command';
 import { buildCommandJsonBody } from '../../../../src/handlers/commands/command-builder';
-import type { Translator } from '../../../../src/core/i18n';
 import { MAX_LISTED_REMOVALS } from '../../../../src/handlers/feed-removed-list';
 import { err, ok } from '../../../../src/core/result';
 import { FeedPlatformRegistry, MAX_FEED_ACCOUNTS } from '../../../../src/infra/social-feed';
@@ -32,6 +31,7 @@ import {
   buildChatInputInteraction,
   newInteractionSink,
 } from '../../../fixtures/discord/interaction-builder';
+import { echoTranslator } from '../../../fixtures/runtime';
 import { buildFakeFeedPlatform } from '../../../fixtures/social-feed/fake-platform';
 
 const GUILD_ID = 'g-1';
@@ -39,12 +39,6 @@ const HOME_CHANNEL = 'chan-home';
 const OTHER_CHANNEL = 'chan-other';
 const THREAD_CHANNEL = 'chan-thread';
 const USER_ID = 'u-1';
-
-/**
- * `buildCommandJsonBody` rejects an empty description, so the option
- * order can only be read off a localised config.
- */
-const echoTranslator = { t: (key: string) => key } as unknown as Translator;
 
 /** Any option that narrows the scope, so the command deletes at once. */
 const NARROWED = { platform: 'fake' } as const;
@@ -148,8 +142,10 @@ describe('/feed unsubscribe', () => {
     // order and a stable required-first sort, neither of which the
     // compiler checks, so swapping two keys in `setConfig` reads as a
     // no-op while silently reordering the slash-command UI.
+    // `buildCommandJsonBody` rejects an empty description, so the order can
+    // only be read off a localised config.
     const body = buildCommandJsonBody(
-      localizeCommandConfig(new FeedUnsubscribe().config, echoTranslator),
+      localizeCommandConfig(new FeedUnsubscribe().config, echoTranslator()),
     ) as { readonly options?: readonly { readonly name: string }[] };
 
     expect((body.options ?? []).map((option) => option.name)).toEqual([
@@ -165,7 +161,7 @@ describe('/feed unsubscribe', () => {
     // builder, and dropping it anywhere leaves the hook implemented but
     // never called.
     const body = buildCommandJsonBody(
-      localizeCommandConfig(new FeedUnsubscribe().config, echoTranslator),
+      localizeCommandConfig(new FeedUnsubscribe().config, echoTranslator()),
     ) as {
       readonly options?: readonly { readonly name: string; readonly autocomplete?: boolean }[];
     };

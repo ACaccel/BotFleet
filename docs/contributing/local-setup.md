@@ -5,7 +5,8 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 ## Prerequisites
 
 Install Conda / Miniforge and, for persistent bots, a development MongoDB instance.
-Integration tests use `mongodb-memory-server`.
+Integration tests use `mongodb-memory-server`, with its data on `/dev/shm` when
+that tmpfs is writable (Linux) and in the default temporary directory otherwise.
 
 ```bash
 git clone git@github.com:ACaccel/BotFleet.git

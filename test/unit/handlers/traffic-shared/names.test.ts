@@ -10,25 +10,32 @@ import {
   cachedBotIds,
   resolveUserNames,
 } from '../../../../src/handlers/commands/traffic-shared/names';
+import { buildGuild } from '../../../fixtures/discord/guild-builder';
+import { buildGuildMember } from '../../../fixtures/discord/member-builder';
+
+const botMember = (id: string, displayName: string) => {
+  const member = buildGuildMember({ id, displayName });
+  Object.assign(member.user, { bot: true });
+  return member;
+};
 
 const guildWith = (fetch: (id: string, options: unknown) => Promise<unknown>): Guild =>
-  ({
-    members: {
-      cache: new Map([
-        ['m1', { displayName: 'Cached', user: { bot: false } }],
-        ['b1', { displayName: 'Bot', user: { bot: true } }],
-      ]),
-    },
-    client: {
-      users: {
-        fetch,
-        cache: new Map([
-          ['b2', { bot: true }],
-          ['u9', { bot: false }],
-        ]),
+  Object.assign(
+    buildGuild({
+      members: [buildGuildMember({ id: 'm1', displayName: 'Cached' }), botMember('b1', 'Bot')],
+    }),
+    {
+      client: {
+        users: {
+          fetch,
+          cache: new Map([
+            ['b2', { bot: true }],
+            ['u9', { bot: false }],
+          ]),
+        },
       },
     },
-  }) as unknown as Guild;
+  );
 
 afterEach(() => vi.useRealTimers());
 

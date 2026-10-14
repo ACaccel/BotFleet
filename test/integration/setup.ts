@@ -9,29 +9,57 @@
  *
  * Why one server, not one per suite:
  *   - Spinning a fresh `MongoMemoryServer` costs 1.5–4 seconds
- *     (binary download + bootstrap). Sharing across suites keeps the
- *     integration project under a few seconds end-to-end.
- *   - Per-test isolation is provided by `dropDatabase()` between cases
- *     in the helper layer, which is much cheaper than restart.
+ *     (binary download + bootstrap). Sharing it keeps that cost to one
+ *     start per run.
+ *   - Per-test isolation comes from the helper layer instead: every
+ *     connection gets its own uniquely named database, dropped when the
+ *     test ends, so test files can run in parallel forks against the
+ *     one server.
+ *
+ * The data directory lives on tmpfs when available; see
+ * `test/support/tmpfs-db-path.ts` for why.
  *
  * Why `INTEGRATION_MONGO_URI` and not direct import:
  *   - vitest globalSetup runs in a separate worker scope; module-level
  *     state from this file is not visible to test files. An env var is
  *     the documented hand-off mechanism.
  */
+import { rmSync } from 'node:fs';
+
 import { MongoMemoryServer } from 'mongodb-memory-server';
 
-let server: MongoMemoryServer | undefined;
+import { createTmpfsDbPath } from '../support/tmpfs-db-path';
 
-export const setup = async (): Promise<void> => {
-  server = await MongoMemoryServer.create();
-  process.env.INTEGRATION_MONGO_URI = server.getUri();
-};
+let server: MongoMemoryServer | undefined;
+let tmpfsDbPath: string | undefined;
 
 export const teardown = async (): Promise<void> => {
-  if (server !== undefined) {
-    await server.stop({ doCleanup: true, force: true });
-    server = undefined;
+  try {
+    if (server !== undefined) {
+      await server.stop({ doCleanup: true, force: true });
+      server = undefined;
+    }
+  } finally {
+    // A caller-supplied dbPath is not the server's to delete.
+    if (tmpfsDbPath !== undefined) {
+      rmSync(tmpfsDbPath, { recursive: true, force: true });
+      tmpfsDbPath = undefined;
+    }
+    delete process.env.INTEGRATION_MONGO_URI;
   }
-  delete process.env.INTEGRATION_MONGO_URI;
+};
+
+export const setup = async (): Promise<void> => {
+  tmpfsDbPath = createTmpfsDbPath();
+  try {
+    server = await MongoMemoryServer.create(
+      tmpfsDbPath === undefined ? {} : { instance: { dbPath: tmpfsDbPath } },
+    );
+  } catch (error: unknown) {
+    // Do not rely on vitest calling teardown after a failed setup; a
+    // second call is harmless because teardown is idempotent.
+    await teardown();
+    throw error;
+  }
+  process.env.INTEGRATION_MONGO_URI = server.getUri();
 };

@@ -1,17 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger } from '../../../../src/core/logger';
 import { systemClock } from '../../../../src/core/time';
 import { createContainer, type ServiceContainer } from '../../../../src/core/ioc';
-import {
-  PluginHost,
-  PluginRegistrationError,
-  type Plugin,
-  type PluginHostOptions,
-} from '../../../../src/core/plugin';
+import { PluginHost, PluginRegistrationError, type Plugin } from '../../../../src/core/plugin';
+import { echoTranslator, silentLogger } from '../../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
-
-const fakeTranslator = { t: (k: string) => k } as PluginHostOptions['translator'];
+const silent = silentLogger();
 
 const buildHost = (): {
   host: PluginHost;
@@ -23,7 +16,7 @@ const buildHost = (): {
     host: new PluginHost({
       container,
       logger: silent,
-      translator: fakeTranslator,
+      translator: echoTranslator(),
       clock: systemClock,
     }),
   };

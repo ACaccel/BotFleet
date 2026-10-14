@@ -30,15 +30,15 @@ vi.mock('@button', () => barrelStubs.button);
 vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
 
-import type { BaseBot } from '../../../src/bot/index';
 import { createDispatchMiddleware } from '../../../src/bot/middlewares';
 import type { InteractionContext } from '../../../src/core/plugin';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
 import {
   buildAutocompleteInteraction,
   buildChatInputInteraction,
 } from '../../fixtures/discord/interaction-builder';
 
-const bot = { translator: { t: (key: string) => key } } as unknown as BaseBot;
+const { bot } = buildFakeBot();
 
 const run = async (interaction: unknown): Promise<{ nextCalls: number }> => {
   let nextCalls = 0;

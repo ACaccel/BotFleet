@@ -26,14 +26,18 @@ import { buildFeedMessage, sendFeedPost } from '../../../../src/plugins/social-f
 import { buildFakeFeedPlatform, buildFeedPost } from '../../../fixtures/social-feed/fake-platform';
 import { XPlatform } from '../../../../src/infra/social-feed';
 import { prepareFeedPreview } from '../../../../src/plugins/social-feed/internal/post';
-import { createLogger } from '../../../../src/core/logger';
 import { err, ok } from '../../../../src/core/result';
 import { invalidResponseError, type SocialPost } from '../../../../src/infra/link-preview';
+import { silentLogger } from '../../../fixtures/runtime';
 
 const LOCALES_DIR = path.resolve(__dirname, '..', '..', '..', '..', 'src', 'i18n', 'locales');
 
 const realTranslator = async (): Promise<Translator> =>
   I18NextTranslator.create(loadCatalogResources({ localesDir: LOCALES_DIR }));
+
+/** A channel reduced to the `send` spy; only that method is read by the sender. */
+const sendableChannel = (send: unknown): SendableChannels =>
+  ({ send }) as unknown as SendableChannels;
 
 const samplePost = buildFeedPost({
   id: '2092744659667673582',
@@ -109,7 +113,7 @@ describe('sendFeedPost', () => {
     const send = vi
       .fn<(payload: MessageCreateOptions) => Promise<undefined>>()
       .mockResolvedValue(undefined);
-    await sendFeedPost({ send } as unknown as SendableChannels, announcement, {
+    await sendFeedPost(sendableChannel(send), announcement, {
       result: { kind: 'post', post: socialPost, sourceUrl: samplePost.url },
       translator: await realTranslator(),
     });
@@ -125,18 +129,14 @@ describe('sendFeedPost', () => {
 
   it('sends only the proxy announcement for a rewritten preview', async () => {
     const send = vi.fn();
-    await sendFeedPost(
-      { send } as unknown as SendableChannels,
-      'Announcement https://vx.example/post',
-      {
-        result: {
-          kind: 'rewritten-url',
-          url: 'https://vx.example/post',
-          sourceUrl: samplePost.url,
-        },
-        translator: await realTranslator(),
+    await sendFeedPost(sendableChannel(send), 'Announcement https://vx.example/post', {
+      result: {
+        kind: 'rewritten-url',
+        url: 'https://vx.example/post',
+        sourceUrl: samplePost.url,
       },
-    );
+      translator: await realTranslator(),
+    });
     expect(send).toHaveBeenCalledExactlyOnceWith({
       content: 'Announcement https://vx.example/post',
       allowedMentions: { parse: [] },
@@ -147,7 +147,7 @@ describe('sendFeedPost', () => {
     const send = vi
       .fn<(payload: MessageCreateOptions) => Promise<undefined>>()
       .mockResolvedValue(undefined);
-    await sendFeedPost({ send } as unknown as SendableChannels, announcement, {
+    await sendFeedPost(sendableChannel(send), announcement, {
       result: { kind: 'post', post: videoPost, sourceUrl: samplePost.url },
       translator: await realTranslator(),
       options: {
@@ -171,7 +171,7 @@ describe('sendFeedPost', () => {
     const send = vi
       .fn<(payload: MessageCreateOptions) => Promise<undefined>>()
       .mockResolvedValue(undefined);
-    await sendFeedPost({ send } as unknown as SendableChannels, announcement, {
+    await sendFeedPost(sendableChannel(send), announcement, {
       result: { kind: 'post', post: videoPost, sourceUrl: samplePost.url },
       translator: await realTranslator(),
       options: { downloadVideo: vi.fn().mockResolvedValue(null) },
@@ -189,7 +189,7 @@ describe('sendFeedPost', () => {
     const error = new Error('Missing Permissions');
     const send = vi.fn().mockRejectedValue(error);
     await expect(
-      sendFeedPost({ send } as unknown as SendableChannels, announcement, {
+      sendFeedPost(sendableChannel(send), announcement, {
         result: { kind: 'post', post: socialPost, sourceUrl: samplePost.url },
         translator: await realTranslator(),
       }),
@@ -199,7 +199,7 @@ describe('sendFeedPost', () => {
 
   it('suppresses every mention, so post text cannot ping a role', async () => {
     const send = vi.fn(async () => undefined);
-    const channel = { send } as unknown as SendableChannels;
+    const channel = sendableChannel(send);
 
     await sendFeedPost(channel, 'hello @everyone');
 
@@ -219,7 +219,7 @@ describe('prepareFeedPreview', () => {
         if (outcome === 'throw') throw new Error('Upstream unavailable');
         return outcome === 'null' ? ok(null) : err(invalidResponseError('twitter'));
       });
-      const logger = createLogger({ level: 'silent', pretty: false });
+      const logger = silentLogger();
       const error = vi.spyOn(logger, 'error');
       expect(await prepareFeedPreview(platform, samplePost, logger)).toBeUndefined();
       expect(error).toHaveBeenCalledTimes(outcome === 'null' ? 0 : 1);

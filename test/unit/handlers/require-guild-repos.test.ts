@@ -17,24 +17,16 @@ import { describe, expect, it } from 'vitest';
 import type { BaseBot } from '../../../src/bot/index';
 import { lookupGuildRepos, requireGuildRepos } from '../../../src/handlers/require-guild-repos';
 import { buildFakeBot, echoTranslatorWithParams } from '../../fixtures/discord/bot-fake';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
 
-/** Minimal interaction fake recording reply payloads. */
+/** An un-acknowledged interaction; `undefined` places it outside a guild. */
 const stubInteraction = (guildId: string | undefined) => {
-  const replies: Array<{ content?: string }> = [];
-  return {
-    interaction: {
-      guild: guildId === undefined ? undefined : { id: guildId },
-      deferred: false,
-      replied: false,
-      reply: async (opts: { content?: string }) => {
-        replies.push(opts);
-      },
-      editReply: async (opts: { content?: string }) => {
-        replies.push(opts);
-      },
-    } as never,
-    replies,
-  };
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({ guildId: guildId ?? null, sink });
+  return { interaction, replies: sink.replies };
 };
 
 interface StubBotInput {

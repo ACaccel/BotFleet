@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ok } from '../../../src/core/result';
 import { scheduleGiveaway } from '../../../src/application/giveaway/giveaway';
 import type { GiveawayDeps } from '../../../src/application/giveaway/giveaway';
+import { echoTranslator } from '../../fixtures/runtime';
 
 const GUILD_ID = 'guild-1';
 const CHANNEL_ID = 'thread-99';
@@ -71,7 +72,7 @@ const makeDeps = (
     },
     jobMap: new Map(),
     logger: { error: vi.fn() },
-    translator: { t: (key: string) => key },
+    translator: echoTranslator(),
   }) as unknown as GiveawayDeps;
 
 describe('scheduleGiveaway channel resolution (thread / uncached channel)', () => {

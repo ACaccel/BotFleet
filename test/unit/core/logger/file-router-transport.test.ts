@@ -292,14 +292,14 @@ describe('fixed-path file stream', () => {
     try {
       const sink = createFixedPathFileStream(targetPath);
       sink.write('record\n');
-      // Let the failed open surface. Without the 'error' listener Node
-      // rethrows it as an uncaughtException and the process-level net
-      // treats that as fatal.
-      await new Promise<void>((r) => setTimeout(r, 20));
+      // Wait for the failed open to surface. Without the 'error' listener
+      // Node rethrows it as an uncaughtException and the process-level
+      // net treats that as fatal.
+      await vi.waitFor(() => {
+        expect(stderr.text()).toContain('log sink');
+      });
     } finally {
       stderr.restore();
     }
-
-    expect(stderr.text()).toContain('log sink');
   });
 });

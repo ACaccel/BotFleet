@@ -17,6 +17,10 @@ import { executeModal, registerModals } from '../../../src/handlers/modals';
 import { executeSSM, registerSSMs } from '../../../src/handlers/select-menus';
 import type { BaseBot } from '../../../src/bot';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import {
+  buildModalSubmitInteraction,
+  buildStringSelectInteraction,
+} from '../../fixtures/discord/interaction-builder';
 
 // The two `giveaway_*` components are pure delegations, so the bodies
 // they delegate to are replaced with spies. Their own behaviour is
@@ -40,10 +44,10 @@ beforeEach(() => {
 });
 
 const modalInteraction = (customId: string): ModalSubmitInteraction =>
-  ({ customId }) as unknown as ModalSubmitInteraction;
+  buildModalSubmitInteraction({ customId });
 
 const selectInteraction = (customId: string): StringSelectMenuInteraction =>
-  ({ customId }) as unknown as StringSelectMenuInteraction;
+  buildStringSelectInteraction({ customId, values: [] });
 
 describe('modal barrel', () => {
   it('publishes one handler per generated registry entry', async () => {
@@ -63,9 +67,12 @@ describe('modal barrel', () => {
     const bot = buildHostBot();
     await registerModals(bot);
 
-    await executeModal(modalInteraction('giveaway_create|prize'), bot);
+    const interaction = modalInteraction('giveaway_create|prize');
+
+    await executeModal(interaction, bot);
 
     expect(vi.mocked(handleGiveawayCreate)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(handleGiveawayCreate)).toHaveBeenCalledWith(interaction, bot);
   });
 
   it('ignores a modal another bot in the guild owns', async () => {
@@ -95,9 +102,12 @@ describe('select-menu barrel', () => {
     const bot = buildHostBot();
     await registerSSMs(bot);
 
-    await executeSSM(selectInteraction('giveaway_delete|msg-1'), bot);
+    const interaction = selectInteraction('giveaway_delete|msg-1');
+
+    await executeSSM(interaction, bot);
 
     expect(vi.mocked(handleGiveawayDeleteSelection)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(handleGiveawayDeleteSelection)).toHaveBeenCalledWith(interaction, bot);
   });
 
   it('ignores a select menu another bot in the guild owns', async () => {

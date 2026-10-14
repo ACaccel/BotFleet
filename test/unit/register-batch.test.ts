@@ -102,7 +102,9 @@ describe('runForEachBot', () => {
     const run = async (): Promise<void> => {
       active++;
       maxActive = Math.max(maxActive, active);
-      await new Promise((resolve) => setTimeout(resolve, 1));
+      // One event-loop turn: any run started concurrently would enter
+      // before this one resumes.
+      await new Promise((resolve) => setImmediate(resolve));
       active--;
     };
 

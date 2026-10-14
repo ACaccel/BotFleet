@@ -1,25 +1,16 @@
-import {
-  buildArchiveRepos,
-  buildArchiveWriterRepos,
-} from '../../../src/persistence/repositories/archive-repos';
-import { archiveBackupNotifiers } from '../../../src/plugins/message-backup/runtime/backup-notifier';
-import { ChannelType, type Client, type Guild } from 'discord.js';
 import type { Connection } from 'mongoose';
 import { describe, expect, it, vi } from 'vitest';
-import { ArchivePolicySchema } from '../../../src/core/archive/policy';
-import { createLogger } from '../../../src/core/logger';
-import type { Translator } from '../../../src/core/i18n';
 import type * as StorageModule from '../../../src/infra/archive/storage-usage';
 import { StaticConnectionManager } from '../../../src/infra/mongo/connection-manager';
-import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
-import { collectChannels } from '../../../src/plugins/message-backup/internal/collect-channels';
 import { ArchiveGatewayDecoder } from '../../../src/plugins/message-backup/runtime/gateway-event';
-import { ArchiveWorker } from '../../../src/plugins/message-backup/runtime/worker';
 import { ArchiveScheduler } from '../../../src/plugins/message-backup/flow/scheduler';
 import { withFreshConnection } from '../helpers/mongo';
-
-/** A raw `messages` document, keyed by the Discord message ID. */
-type StoredMessage = { _id: string } & Record<string, any>;
+import {
+  buildArchiveWorker,
+  controlWallClock,
+  stubArchiveInventory,
+  type StoredMessage,
+} from '../../helpers/archive-worker-fixture';
 
 vi.mock('../../../src/plugins/message-backup/internal/collect-channels', () => ({
   collectChannels: vi.fn(),
@@ -52,14 +43,7 @@ type Lists = Record<string, { normal: string[]; burst: string[] }>;
  * them and send Gateway packets through the decoder.
  */
 const fixture = (connection: Connection, inboxLoop = false) => {
-  const channel = { id: '10', name: 'room', type: ChannelType.GuildText, parentId: null };
-  vi.mocked(collectChannels).mockResolvedValue({
-    channels: [channel],
-    liveChannelIds: new Set(['10']),
-    gaps: [],
-    complete: true,
-    locations: [{ ...channel, passes: ['channels'] }],
-  } as unknown as Awaited<ReturnType<typeof collectChannels>>);
+  stubArchiveInventory();
   const lists: Lists = {
     '👍': { normal: ['2001', '2002'], burst: ['2003'] },
     'party:50': { normal: ['2004'], burst: [] },
@@ -89,7 +73,7 @@ const fixture = (connection: Connection, inboxLoop = false) => {
         }
       : {}),
   });
-  const get = vi.fn(async (route: string, options?: { query?: URLSearchParams }) => {
+  const read = async (route: string, options?: { query?: URLSearchParams }) => {
     const reaction = /^\/channels\/10\/messages\/101\/reactions\/(.+)$/.exec(route);
     if (reaction !== null) {
       const users = lists[decodeURIComponent(reaction[1]!)] ?? { normal: [], burst: [] };
@@ -100,35 +84,14 @@ const fixture = (connection: Connection, inboxLoop = false) => {
     const single = /^\/channels\/10\/messages\/(\d+)$/.exec(route);
     if (single !== null) return current(single[1]!);
     throw new Error(`Unexpected route ${route}`);
-  });
-  const client = {
-    channels: { cache: new Map() },
-    guilds: {
-      fetch: async () => ({ id: '1', channels: { cache: new Map() } }) as unknown as Guild,
-    },
-    rest: { get },
-  } as unknown as Client;
-  const logger = createLogger({ level: 'silent', pretty: false });
-  const translator = { t: (key: string) => key } as Translator;
-  const worker = new ArchiveWorker({
-    client,
+  };
+  const { worker, rest, logger } = buildArchiveWorker({
     connections: new StaticConnectionManager(connection),
-    registry: {
-      getRepos: () => undefined,
-      getChannel: () => undefined,
-      getRole: () => undefined,
-      listGuildIds: () => ['1'],
-    },
-    config: archiveRuntimeSchema.parse({}),
-    policy: ArchivePolicySchema.parse({ guildIds: ['1'] }),
-    guildIds: ['1'],
-    logger,
-    translator,
-    backupNotifiers: archiveBackupNotifiers(client, translator),
-    archiveRepos: buildArchiveRepos,
-    writerRepos: buildArchiveWriterRepos,
-    inboxLoop,
+    get: read,
+    // A failed inbox loop round retries after 1 ms instead of a second.
+    worker: { inboxLoop, inboxRetryBaseMs: 1 },
   });
+  const get = rest.get;
   const decoder = new ArchiveGatewayDecoder('process');
   let sequence = 0;
   const packet = async (t: string, data: Record<string, unknown>): Promise<void> => {
@@ -350,23 +313,23 @@ describe('msg-archive live reconciliation safeguards', () => {
     withFreshConnection(async (connection) => {
       const f = fixture(connection);
       const inbox = connection.collection('archive_inbox');
+      const clock = controlWallClock();
       try {
         await f.worker.initialize('1');
         await f.packet('MESSAGE_CREATE', f.message('101'));
+        const now = clock.freeze();
         // The creation failed once and waits for its retry.
-        await inbox.updateOne(
-          { kind: 'snapshot' },
-          { $set: { nextAttemptAt: Date.now() + 60_000 } },
-        );
+        await inbox.updateOne({ kind: 'snapshot' }, { $set: { nextAttemptAt: now + 60_000 } });
         await f.packet('MESSAGE_REACTION_ADD', { message_id: '101', emoji: THUMBS, type: 0 });
         await f.worker.drainInbox('1');
         const waiting = await inbox.findOne({ kind: 'reaction' });
         expect(waiting).toMatchObject({ state: 'pending', attempts: 0 });
-        expect(waiting?.['nextAttemptAt']).toBeGreaterThanOrEqual(Date.now() + 59_000);
+        // The reaction waits exactly as long as the creation it overtook.
+        expect(waiting?.['nextAttemptAt']).toBe(now + 60_000);
         expect(await f.stored()).toBeNull();
         await inbox.updateMany({}, { $unset: { nextAttemptAt: 1 } });
         // The repository caches an empty claim for 250 ms; this edit bypassed it.
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        clock.advance(250);
         await f.worker.drainInbox('1');
         expect(await inbox.countDocuments()).toBe(0);
         // The creation does not claim an empty list; the lists are read whole.

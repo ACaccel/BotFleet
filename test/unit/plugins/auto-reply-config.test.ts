@@ -10,12 +10,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createAutoReplyPlugin } from '../../../src/plugins/auto-reply';
 import { parseAutoReplyConfig } from '../../../src/plugins/auto-reply/config';
-import { createLogger } from '../../../src/core/logger';
 import { TOKENS } from '../../../src/bot/tokens';
-import type { Plugin, PluginEventContext, PluginInitContext } from '../../../src/core/plugin';
+import type { Plugin } from '../../../src/core/plugin';
 import type { GuildRegistry } from '../../../src/bot/guild-registry';
-
-const silent = createLogger({ level: 'silent', pretty: false });
+import { buildPluginContext } from '../../fixtures/runtime';
 
 /** A well-formed snowflake; the schema rejects anything else. */
 const LUCKY_USER_ID = '516912789369913371';
@@ -66,21 +64,15 @@ describe('parseAutoReplyConfig', () => {
   });
 });
 
-/** Minimal event context: only `resolve`, `logger` and `translator` are read. */
-const buildCtx = (): PluginEventContext => {
+/** Minimal event context: only the guild registry is resolved. */
+const buildCtx = () => {
   const registry: GuildRegistry = {
     getRepos: () => undefined,
     getChannel: () => undefined,
     getRole: () => undefined,
     listGuildIds: () => [],
   };
-  return {
-    logger: silent,
-    translator: { t: (key: string) => key },
-    clock: { now: () => 0, nowDate: () => new Date(0) },
-    resolve: ((token: unknown) =>
-      token === TOKENS.GuildRegistry ? registry : undefined) as PluginEventContext['resolve'],
-  } as unknown as PluginEventContext;
+  return buildPluginContext({ services: [[TOKENS.GuildRegistry, registry]] });
 };
 
 /**
@@ -92,7 +84,7 @@ const deliver = async (
   message: Parameters<NonNullable<NonNullable<Plugin['events']>['messageCreate']>>[1],
 ): Promise<void> => {
   const ctx = buildCtx();
-  await plugin.init?.(ctx as unknown as PluginInitContext);
+  await plugin.init?.(ctx);
   await plugin.events?.messageCreate?.(ctx, message);
 };
 

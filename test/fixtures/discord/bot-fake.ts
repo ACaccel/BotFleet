@@ -11,53 +11,19 @@
  * fields their handler actually reads, which doubles as documentation
  * of the handler's real dependency surface.
  */
-import { vi, type Mock } from 'vitest';
-
 import type { BaseBot } from '../../../src/bot';
-
-/**
- * Spy logger with the `child()` self-return the structured logger
- * contract requires, plus a direct handle on each level so a test can
- * assert what was logged.
- */
-interface FakeLogger {
-  readonly error: Mock;
-  readonly warn: Mock;
-  readonly info: Mock;
-  readonly debug: Mock;
-  readonly child: () => FakeLogger;
-}
-
-const buildFakeLogger = (): FakeLogger => {
-  const logger: FakeLogger = {
-    error: vi.fn(),
-    warn: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-    child: () => logger,
-  };
-  return logger;
-};
-
-/**
- * Translator stub that returns the key unchanged. Use it when the
- * assertion is "which key did the handler pick"; interpolation is not
- * part of that question.
- */
-const echoTranslator = (): BaseBot['translator'] =>
-  ({ t: (key: string) => key, tStrict: (key: string) => key }) as unknown as BaseBot['translator'];
+import type { Translator } from '../../../src/core/i18n';
+import { echoTranslator, spyLogger, type SpyLogger } from '../runtime';
 
 /**
  * Translator stub that appends the interpolation params, so a test can
  * assert a placeholder was actually supplied a value. `separator`
  * exists because different suites already assert against `:` or `|`.
  */
-export const echoTranslatorWithParams = (separator = ':'): BaseBot['translator'] =>
-  ({
-    t: (key: string, params?: Record<string, unknown>) =>
-      params === undefined ? key : `${key}${separator}${JSON.stringify(params)}`,
-    tStrict: (key: string) => key,
-  }) as unknown as BaseBot['translator'];
+export const echoTranslatorWithParams = (separator = ':'): Translator => ({
+  ...echoTranslator(),
+  t: (key, params) => (params === undefined ? key : `${key}${separator}${JSON.stringify(params)}`),
+});
 
 /**
  * Build a `BaseBot` stand-in carrying `fields` plus a default echo
@@ -71,8 +37,8 @@ export const echoTranslatorWithParams = (separator = ':'): BaseBot['translator']
  */
 export const buildFakeBot = (
   fields: Readonly<Record<string, unknown>> = {},
-): { readonly bot: BaseBot; readonly logger: FakeLogger } => {
-  const logger = buildFakeLogger();
+): { readonly bot: BaseBot; readonly logger: SpyLogger } => {
+  const logger = spyLogger();
   return {
     logger,
     bot: {

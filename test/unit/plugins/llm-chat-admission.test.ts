@@ -1,12 +1,9 @@
-import type { ClientEvents } from 'discord.js';
+import type { Message } from 'discord.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TOKENS } from '../../../src/bot/tokens';
 import { createContainer } from '../../../src/core/ioc';
-import { createLogger } from '../../../src/core/logger';
-import type { PluginEventContext, PluginInitContext } from '../../../src/core/plugin';
 import { ok } from '../../../src/core/result';
-import { systemClock } from '../../../src/core/time';
 import {
   DEFAULT_RATE_LIMIT,
   parseAiPolicy,
@@ -15,6 +12,8 @@ import {
 import { LLMService } from '../../../src/infra/llm';
 import type { Repos } from '../../../src/persistence/repositories';
 import { createLlmChatPlugin } from '../../../src/plugins/llm-chat';
+import { buildMessage } from '../../fixtures/discord/message-builder';
+import { buildPluginContext, silentLogger } from '../../fixtures/runtime';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -38,7 +37,7 @@ const fixture = async (isAdmin = false, policy: AiPolicy = { rateLimit: DEFAULT_
       ),
     },
   } as unknown as Repos;
-  const logger = createLogger({ level: 'silent', pretty: false });
+  const logger = silentLogger();
   const container = createContainer();
   container.registerSingleton(TOKENS.Env, () => ({}) as never);
   container.registerSingleton(TOKENS.Logger, () => logger);
@@ -48,21 +47,17 @@ const fixture = async (isAdmin = false, policy: AiPolicy = { rateLimit: DEFAULT_
     getRole: () => undefined,
     listGuildIds: () => ['guild-1'],
   }));
-  const services = {
+  // One context serves both lifecycles: `registerInstance` is only legal
+  // during `init`, which is the only phase that calls it.
+  const context = buildPluginContext({
     logger,
-    translator: { t: (key: string) => key } as PluginEventContext['translator'],
-    clock: systemClock,
     resolve: container.resolve.bind(container),
-  };
-  const plugin = createLlmChatPlugin({ clientId: 'bot-1', policy, isAdmin: () => isAdmin });
-  const initContext: PluginInitContext = {
-    ...services,
     registerInstance: (token, instance) => container.registerSingleton(token, () => instance),
-  };
-  await plugin.init?.(initContext);
+  });
+  const plugin = createLlmChatPlugin({ clientId: 'bot-1', policy, isAdmin: () => isAdmin });
+  await plugin.init?.(context);
   const handler = plugin.events?.messageCreate;
   if (handler === undefined) throw new Error('llm-chat must subscribe to messageCreate');
-  const eventContext: PluginEventContext = { ...services, eventName: 'messageCreate' };
   let nextReply = 0;
   const message = ({
     content = '<@bot-1> Hello',
@@ -73,7 +68,7 @@ const fixture = async (isAdmin = false, policy: AiPolicy = { rateLimit: DEFAULT_
     const placeholder = { id: `reply-${++nextReply}`, edit: vi.fn(async () => placeholder) };
     const reply = vi.fn(async (_payload: unknown) => placeholder);
     return {
-      message: {
+      message: buildMessage({
         author: { id: userId, bot: false },
         guildId: 'guild-1',
         channelId: 'channel-1',
@@ -81,7 +76,7 @@ const fixture = async (isAdmin = false, policy: AiPolicy = { rateLimit: DEFAULT_
         reference: refId ? { messageId: refId } : null,
         mentions: { has: () => mention },
         reply,
-      } as unknown as ClientEvents['messageCreate'][0],
+      }),
       reply,
       placeholder,
     };
@@ -91,19 +86,25 @@ const fixture = async (isAdmin = false, policy: AiPolicy = { rateLimit: DEFAULT_
     record,
     windowSince,
     message,
-    dispatch: (msg: ClientEvents['messageCreate'][0]) => handler(eventContext, msg),
+    // The handler's parameter type excludes partial group-DM channels, which the stub never models.
+    dispatch: (msg: Message) => handler(context, msg as never),
   };
 };
+
+const NO_MENTIONS = { parse: [] };
+const THINKING = { content: 'replies:llm_chat.thinking', allowedMentions: NO_MENTIONS };
+const delivered = (content: string) => ({ content, allowedMentions: NO_MENTIONS });
 
 describe('llm-chat admission', () => {
   it.each(['<@bot-1>', '  <@!bot-1>  '])('does not charge an empty mention %s', async (content) => {
     const { message, dispatch, record, windowSince, chat } = await fixture();
     const request = message({ content });
     await dispatch(request.message);
+    // The user sees nothing, and no quota or provider spend is incurred.
+    expect(request.reply).not.toHaveBeenCalled();
     expect(windowSince).not.toHaveBeenCalled();
     expect(record).not.toHaveBeenCalled();
     expect(chat).not.toHaveBeenCalled();
-    expect(request.reply).not.toHaveBeenCalled();
   });
 
   it("does not charge someone replying to another member's session", async () => {
@@ -113,17 +114,27 @@ describe('llm-chat admission', () => {
     record.mockClear();
     windowSince.mockClear();
     chat.mockClear();
-    const request = message({
+    const intruder = message({
       content: 'Continue',
       userId: 'member-2',
       mention: false,
       refId: original.placeholder.id,
     });
-    await dispatch(request.message);
+    await dispatch(intruder.message);
+    expect(intruder.reply).not.toHaveBeenCalled();
     expect(windowSince).not.toHaveBeenCalled();
     expect(record).not.toHaveBeenCalled();
     expect(chat).not.toHaveBeenCalled();
-    expect(request.reply).not.toHaveBeenCalled();
+
+    // The intruder's text never entered the owner's conversation.
+    await dispatch(
+      message({ content: 'Mine', mention: false, refId: original.placeholder.id }).message,
+    );
+    expect(chat.mock.calls[0]?.[0]).toEqual([
+      { role: 'user', content: 'Hello' },
+      { role: 'assistant', content: 'Reply' },
+      { role: 'user', content: 'Mine' },
+    ]);
   });
 
   it('does not charge an empty continuation from the session owner', async () => {
@@ -133,21 +144,35 @@ describe('llm-chat admission', () => {
     record.mockClear();
     windowSince.mockClear();
     chat.mockClear();
-    await dispatch(
-      message({ content: '  ', mention: false, refId: original.placeholder.id }).message,
-    );
+    const blank = message({ content: '  ', mention: false, refId: original.placeholder.id });
+    await dispatch(blank.message);
+    expect(blank.reply).not.toHaveBeenCalled();
     expect(windowSince).not.toHaveBeenCalled();
     expect(record).not.toHaveBeenCalled();
     expect(chat).not.toHaveBeenCalled();
+  });
+
+  it('opens a session by replying with a placeholder that becomes the answer', async () => {
+    const { message, dispatch } = await fixture();
+    const request = message();
+    await dispatch(request.message);
+    expect(request.reply).toHaveBeenCalledExactlyOnceWith(THINKING);
+    expect(request.placeholder.edit).toHaveBeenCalledExactlyOnceWith(delivered('Reply'));
   });
 
   it("records and delivers an owner's valid continuation", async () => {
     const { message, dispatch, record, chat } = await fixture();
     const original = message();
     await dispatch(original.message);
-    await dispatch(
-      message({ content: 'Continue', mention: false, refId: original.placeholder.id }).message,
-    );
+    const followUp = message({
+      content: 'Continue',
+      mention: false,
+      refId: original.placeholder.id,
+    });
+    await dispatch(followUp.message);
+
+    expect(followUp.reply).toHaveBeenCalledExactlyOnceWith(THINKING);
+    expect(followUp.placeholder.edit).toHaveBeenCalledExactlyOnceWith(delivered('Reply'));
     expect(record).toHaveBeenCalledTimes(2);
     expect(chat).toHaveBeenLastCalledWith(
       [
@@ -168,18 +193,21 @@ describe('llm-chat admission', () => {
           finish = () => resolve(ok({ content: 'Reply', usage: null }));
         }),
     );
-    const pending = dispatch(message().message);
+    const first = message();
+    const pending = dispatch(first.message);
     await vi.waitFor(() => expect(chat).toHaveBeenCalledOnce());
     const overlapping = message();
     await dispatch(overlapping.message);
-    expect(overlapping.reply).toHaveBeenCalledWith({
-      content: 'replies:llm_chat.busy',
-      allowedMentions: { parse: [] },
-    });
+    expect(overlapping.reply).toHaveBeenCalledExactlyOnceWith(delivered('replies:llm_chat.busy'));
     expect(record).toHaveBeenCalledOnce();
+    expect(first.placeholder.edit).not.toHaveBeenCalled();
     finish();
     await pending;
-    await dispatch(message().message);
+    expect(first.placeholder.edit).toHaveBeenCalledExactlyOnceWith(delivered('Reply'));
+
+    const retry = message();
+    await dispatch(retry.message);
+    expect(retry.placeholder.edit).toHaveBeenCalledExactlyOnceWith(delivered('Reply'));
     expect(chat).toHaveBeenCalledTimes(2);
     expect(record).toHaveBeenCalledTimes(2);
   });
@@ -189,7 +217,9 @@ describe('llm-chat admission', () => {
     const failed = message();
     failed.reply.mockRejectedValueOnce(new Error('Discord unavailable'));
     await expect(dispatch(failed.message)).rejects.toThrow('Discord unavailable');
-    await dispatch(message().message);
+    const retry = message();
+    await dispatch(retry.message);
+    expect(retry.placeholder.edit).toHaveBeenCalledExactlyOnceWith(delivered('Reply'));
     expect(chat).toHaveBeenCalledOnce();
     expect(record).toHaveBeenCalledTimes(2);
   });
@@ -204,7 +234,10 @@ describe('llm-chat admission', () => {
       },
     });
     const { message, dispatch, record, windowSince, chat } = await fixture(isAdmin, policy);
-    await dispatch(message().message);
+    const request = message();
+    await dispatch(request.message);
+    // Both audiences get the answer; what differs is the model and the quota.
+    expect(request.placeholder.edit).toHaveBeenCalledExactlyOnceWith(delivered('Reply'));
     expect(record).toHaveBeenCalledTimes(isAdmin ? 0 : 1);
     expect(windowSince).toHaveBeenCalledTimes(isAdmin ? 0 : 2);
     expect(chat).toHaveBeenCalledWith(

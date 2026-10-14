@@ -17,7 +17,11 @@ vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
 
 import { BaseBot, type Config } from '../../../src/bot/index';
+import { buildInertClient } from '../../fixtures/discord/client-builder';
 import { ConfigurationError } from '../../../src/core/errors';
+import { quietEnvLoadFailure } from './fixtures';
+
+quietEnvLoadFailure();
 
 interface FakeBits {
   readonly client: Client;
@@ -29,17 +33,11 @@ const buildFake = (init: {
   user: unknown;
 }): FakeBits => {
   const attachSpy = vi.fn();
-  const client = {
+  const client = Object.assign(buildInertClient(), {
     user: init.user,
-    guilds: { cache: new Map() },
-    channels: { cache: new Map() },
     application: { commands: { set: vi.fn(async () => []) } },
     login: init.login,
-    destroy: () => {},
-    on: () => client,
-    once: () => client,
-    off: () => client,
-  } as unknown as Client;
+  });
   return { client, attachSpy };
 };
 

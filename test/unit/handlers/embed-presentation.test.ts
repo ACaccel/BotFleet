@@ -1,26 +1,31 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { UserContextMenuCommandInteraction } from 'discord.js';
+import { describe, expect, it } from 'vitest';
+import type { EmbedBuilder } from 'discord.js';
 
 import MenuGetAvatar from '../../../src/handlers/commands/menu_get_avatar';
 import { dashboardReply } from '../../../src/handlers/commands/traffic-shared/reply';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import {
+  buildUserContextMenuInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
 
 describe('embed presentation', () => {
   it('uses the information accent for the avatar context menu', async () => {
     const avatarUrl = 'https://cdn.example.test/avatar.png';
     const { bot } = buildFakeBot();
-    const editReply = vi.fn();
-    const menu = {
-      deferReply: vi.fn(),
-      editReply,
-      targetUser: { username: 'Alice', displayAvatarURL: () => avatarUrl },
-    } as unknown as UserContextMenuCommandInteraction;
+    const sink = newInteractionSink();
+    const menu = buildUserContextMenuInteraction({
+      targetUser: { id: 'u2', displayName: 'Alice', avatarUrl },
+      sink,
+    });
 
     await new MenuGetAvatar().execute(menu, bot);
 
-    expect(editReply.mock.calls[0]?.[0].embeds[0].toJSON()).toMatchObject({
+    const embed = sink.editReplies[0]?.embeds?.[0] as EmbedBuilder;
+    // The builder appends the requested size, so the largest one is asked for.
+    expect(embed.toJSON()).toMatchObject({
       color: 0x5865f2,
-      image: { url: avatarUrl },
+      image: { url: `${avatarUrl}?size=4096` },
     });
   });
 

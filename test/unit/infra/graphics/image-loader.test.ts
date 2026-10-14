@@ -120,7 +120,9 @@ describe('createImageLoader', () => {
     const fetchBytes = async (): Promise<Buffer> => {
       active += 1;
       peak = Math.max(peak, active);
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      // One event-loop turn lets every download the limiter admits start
+      // before this one finishes, without depending on a timer.
+      await new Promise((resolve) => setImmediate(resolve));
       active -= 1;
       return PNG;
     };

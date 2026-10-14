@@ -173,12 +173,15 @@ const setup = () => {
     inbox: {},
     work: new ArchiveWorkSlot(),
   } as unknown as ArchiveGuildState;
+  // Monotonic clock of the full-backup stop-request throttle.
+  const stopCheck = { now: 0 };
   const options = {
     client: { guilds: { fetch: async () => ({ id: '1' }) } },
     logger: createLogger({ level: 'silent', pretty: false }),
     guildIds: ['1'],
     config: archiveRuntimeSchema.parse({}),
     policy: ArchivePolicySchema.parse({ guildIds: ['1'] }),
+    stopCheckClock: () => stopCheck.now,
   } as unknown as ArchiveWorkerOptions;
   const ctx = new ArchiveWorkerContext(
     options,
@@ -202,7 +205,7 @@ const setup = () => {
   const runner = new ScanRunner(ctx, deps);
   const scan = (mode: ScanMode, runId = mode.kind === 'periodic' ? 'periodic:1' : 'full:1') =>
     runner.scan(state, { runId, cutoff: CUTOFF, mode });
-  return { stores, state, deps, runner, scan };
+  return { stores, state, deps, runner, scan, stopCheck };
 };
 
 /** Replaces the history scan with `run`, which drives the hooks the runner passes. */
@@ -459,10 +462,11 @@ describe('ScanRunner', () => {
   });
 
   it('passes every waiting boundary when a stop lookup fails, then honours a later stop', async () => {
-    const { stores, state, scan } = setup();
+    const { stores, state, scan, stopCheck } = setup();
     const getJob = vi.spyOn(state.repos.jobs, 'getJob');
     getJob.mockRejectedValueOnce(new Error('database timeout'));
     let boundaries: unknown[] = [];
+    let within: unknown;
     let later: unknown;
     history(async (hooks) => {
       boundaries = await Promise.all(
@@ -474,12 +478,19 @@ describe('ScanRunner', () => {
         ),
       );
       stores.stopRequested = true;
-      // A failed lookup still counts toward the 250 ms throttle.
-      await new Promise((resolve) => setTimeout(resolve, 260));
+      // A failed lookup still counts toward the 250 ms throttle: just inside it the
+      // boundary passes without a lookup, and at its end the stop is observed.
+      stopCheck.now += 249;
+      within = await hooks.afterPage().then(
+        () => 'passed',
+        (error) => error,
+      );
+      stopCheck.now += 1;
       later = await hooks.afterPage().catch((error: unknown) => error);
     });
     const result = await scan(FULL_BACKUP);
     expect(boundaries).toEqual(['passed', 'passed', 'passed', 'passed']);
+    expect(within).toBe('passed');
     expect(later).toMatchObject({ name: 'ArchiveJobStoppedError' });
     expect(getJob).toHaveBeenCalledTimes(2);
     expect(result.status).toBe('cancelled');

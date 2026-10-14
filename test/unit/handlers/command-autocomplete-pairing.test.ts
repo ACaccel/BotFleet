@@ -20,13 +20,10 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { Translator } from '../../../src/core/i18n';
 import { createAllSlashCommands } from '../../../src/handlers/commands';
 import { localizeCommandConfig, type CommandConfig } from '../../../src/handlers/commands/command';
 import { buildCommandJsonBody } from '../../../src/handlers/commands/command-builder';
-
-/** `buildCommandJsonBody` rejects an empty description, so keys stand in for copy. */
-const echoTranslator = { t: (key: string) => key } as unknown as Translator;
+import { echoTranslator } from '../../fixtures/runtime';
 
 /** True when any option asks Discord to query the handler as the member types. */
 const declaresAutocompleteOption = (config: CommandConfig): boolean => {
@@ -51,7 +48,7 @@ describe('every registered command', () => {
 
   it.each(registered)('%s builds a Discord command payload', (_name, command) => {
     expect(() =>
-      buildCommandJsonBody(localizeCommandConfig(command.config, echoTranslator)),
+      buildCommandJsonBody(localizeCommandConfig(command.config, echoTranslator())),
     ).not.toThrow();
   });
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import {
   ArchiveScheduler,
@@ -48,9 +48,14 @@ it('bounds independent workers and preserves result ordering', async () => {
 });
 describe('retrying source runner', () => {
   it('runs a retried source again at the tail without holding a worker', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const runs: string[] = [];
+    const b = deferred<void>();
     let failedOnce = false;
-    await runArchiveSources(
+    const run = runArchiveSources(
       ['a', 'b', 'c'],
       async (value) => {
         runs.push(value);
@@ -58,11 +63,16 @@ describe('retrying source runner', () => {
           failedOnce = true;
           return 1;
         }
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        if (value === 'b') await b.promise;
         return undefined;
       },
       1,
     );
+    // The retry of a comes due while b still holds the only worker.
+    await vi.advanceTimersByTimeAsync(1);
+    expect(runs).toEqual(['a', 'b']);
+    b.resolve();
+    await run;
     expect(runs).toEqual(['a', 'b', 'c', 'a']);
   });
 
@@ -81,14 +91,19 @@ describe('retrying source runner', () => {
   });
 
   it('drops waiting retries on abort and validates concurrency', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const controller = new AbortController();
     const worker = vi.fn(async () => {
       controller.abort();
       return 60_000;
     });
-    const started = Date.now();
+    // The fake clock never advances, so the run settles only if the abort dropped
+    // the 60-second retry, and no timer is left behind.
     await runArchiveSources(['a'], worker, 1, controller.signal);
-    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(vi.getTimerCount()).toBe(0);
     expect(worker).toHaveBeenCalledTimes(1);
     await expect(runArchiveSources(['a'], worker, 0)).rejects.toThrow(
       'invalid-archive-concurrency',
@@ -98,18 +113,21 @@ describe('retrying source runner', () => {
   it('drops a retry scheduled while a worker waits for another', async () => {
     const controller = new AbortController();
     const runs: string[] = [];
+    const b = deferred<void>();
     const run = runArchiveSources(
       ['a', 'b'],
       async (value) => {
         runs.push(value);
-        if (value === 'b') await new Promise((resolve) => setTimeout(resolve, 5));
+        if (value === 'b') await b.promise;
         return 60_000;
       },
       2,
       controller.signal,
     );
     await vi.waitFor(() => expect(runs).toHaveLength(2));
+    // a's retry is scheduled and its worker idles; b is still running.
     controller.abort();
+    b.resolve();
     await run;
     expect(runs).toEqual(['a', 'b']);
   });
@@ -136,7 +154,9 @@ describe('worker failure settlement', () => {
       settled = true;
     });
     await vi.waitFor(() => expect(events).toContain('start:b'));
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    // A macrotask runs only after every pending microtask, so an early rejection
+    // would have settled the outcome by now.
+    await new Promise<void>((resolve) => setImmediate(resolve));
     // The failure waits for the source still running.
     expect(settled).toBe(false);
     slow.resolve();
@@ -250,7 +270,7 @@ describe('acknowledged ETA and cutoff', () => {
   });
   it('requires acknowledged verification to finish and bounds sample storage', () => {
     const now = 0;
-    const tracker = new ProgressTracker({ cutoff: new Date(), clock: () => now });
+    const tracker = new ProgressTracker({ cutoff: new Date('2026-01-01'), clock: () => now });
     expect(() => tracker.finish('complete')).toThrow('work-incomplete');
     for (const phase of ['discovery', 'history', 'reactions', 'verification'] as const)
       tracker.setTotal(phase, 0);
@@ -260,7 +280,7 @@ describe('acknowledged ETA and cutoff', () => {
   it.each(['discovery', 'reactions'] as const)(
     'rejects a %s denominator below acknowledged work without changing progress',
     (phase) => {
-      const tracker = new ProgressTracker({ cutoff: new Date('2026-01-01') });
+      const tracker = new ProgressTracker({ cutoff: new Date('2026-01-01'), clock: () => 0 });
       tracker.setTotal(phase, 2);
       tracker.commit(phase, 2, 'acknowledged', 0);
       const before = tracker.checkpoint().phases[phase];
@@ -421,7 +441,7 @@ it('uses recurring work priors without guessing new channel totals', () => {
 
 it('retains subsecond commits in wall-clock throughput samples', () => {
   let now = 0;
-  const tracker = new ProgressTracker({ cutoff: new Date(), clock: () => now });
+  const tracker = new ProgressTracker({ cutoff: new Date('2026-01-01'), clock: () => now });
   tracker.setPhase('history');
   tracker.setTotal('history', 1000);
   for (let page = 0; page < 15; page++) {
@@ -434,7 +454,7 @@ it('retains subsecond commits in wall-clock throughput samples', () => {
 
 it('shows only a current known reaction phase ETA while whole history remains unknown', () => {
   let now = 0;
-  const tracker = new ProgressTracker({ cutoff: new Date(), clock: () => now });
+  const tracker = new ProgressTracker({ cutoff: new Date('2026-01-01'), clock: () => now });
   tracker.setPhase('history');
   const estimator = new KnownPhaseEstimator('reactions', 1000, () => now);
   for (let page = 0; page < 3; page++) {

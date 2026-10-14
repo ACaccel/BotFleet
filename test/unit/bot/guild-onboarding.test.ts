@@ -13,6 +13,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BaseBot } from '../../../src/bot/index';
 import { BaseBotGuildOnboardingPort } from '../../../src/bot/guild-onboarding';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
 
 // Stub the `@cmd` barrel: the real one eagerly loads the generated
 // handler registry (every command module), which in a unit test
@@ -54,11 +55,9 @@ const makeBot = (
         guildInfo.set(id, { ...existing, repos: {} });
       }
     });
-  const bot = {
+  const { bot } = buildFakeBot({
     clientId: 'bot-client',
-    logger: undefined,
     commandHandlers: new Map(),
-    translator: { t: (key: string) => key },
     client: {
       guilds: { cache: new Map([[GUILD_ID, guild]]) },
       application,
@@ -71,7 +70,7 @@ const makeBot = (
     getGuildInfo: (id: string) => guildInfo.get(id),
     getAllGuildInfo: () => guildInfo,
     getRepos: (id: string) => guildInfo.get(id)?.repos,
-  } as unknown as BaseBot;
+  });
   return { bot, commandsSet };
 };
 

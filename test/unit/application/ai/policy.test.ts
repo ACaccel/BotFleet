@@ -84,11 +84,15 @@ describe('model allowlist', () => {
 
 describe('admitAiRequest', () => {
   const HOUR = 60 * 60_000;
+  const DAY = 24 * HOUR;
+  // A fixed instant shared by the caller and the fake repository, so the
+  // window the repository reports never depends on elapsed wall time.
+  const NOW = Date.UTC(2026, 0, 15, 12);
   const repoWith = (hour: number, day: number, oldest: number): AiUsageRepo => ({
     record: vi.fn(async () => ok(undefined)),
     windowSince: vi.fn(async (_user: string, since: Date) =>
       ok({
-        count: since.getTime() > 0 && Date.now() - since.getTime() <= HOUR ? hour : day,
+        count: NOW - since.getTime() <= HOUR ? hour : day,
         oldest: new Date(oldest),
       }),
     ),
@@ -97,23 +101,22 @@ describe('admitAiRequest', () => {
 
   it('admits and records a request under both limits', async () => {
     const repo = repoWith(1, 1, 0);
-    const result = await admitAiRequest(repo, 'u1', Date.now(), limits);
+    const result = await admitAiRequest(repo, 'u1', NOW, limits);
     expect(result).toEqual(ok({ admitted: true }));
-    expect(repo.record).toHaveBeenCalled();
+    expect(repo.record).toHaveBeenCalledWith('u1', new Date(NOW));
   });
 
   it('refuses at the hourly limit until the oldest request ages out', async () => {
-    const now = Date.now();
-    const repo = repoWith(2, 2, now - 10 * 60_000);
-    const result = await admitAiRequest(repo, 'u1', now, limits);
-    expect(result).toEqual(ok({ admitted: false, retryAt: now - 10 * 60_000 + HOUR }));
+    const repo = repoWith(2, 2, NOW - 10 * 60_000);
+    const result = await admitAiRequest(repo, 'u1', NOW, limits);
+    expect(result).toEqual(ok({ admitted: false, retryAt: NOW - 10 * 60_000 + HOUR }));
     expect(repo.record).not.toHaveBeenCalled();
   });
 
   it('refuses at the daily limit', async () => {
-    const now = Date.now();
-    const repo = repoWith(1, 3, now - 2 * HOUR);
-    const result = await admitAiRequest(repo, 'u1', now, limits);
-    expect(result.ok && result.value.admitted).toBe(false);
+    const repo = repoWith(1, 3, NOW - 2 * HOUR);
+    const result = await admitAiRequest(repo, 'u1', NOW, limits);
+    expect(result).toEqual(ok({ admitted: false, retryAt: NOW - 2 * HOUR + DAY }));
+    expect(repo.record).not.toHaveBeenCalled();
   });
 });

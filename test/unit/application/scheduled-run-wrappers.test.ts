@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ok } from '../../../src/core/result';
 import { runGiveawayDraw } from '../../../src/application/giveaway/giveaway';
 import type { GiveawayDeps } from '../../../src/application/giveaway/giveaway';
+import { echoTranslator } from '../../fixtures/runtime';
 
 const GUILD_ID = 'g1';
 
@@ -43,7 +44,7 @@ const buildDeps = (hasRepos: boolean, warn: ReturnType<typeof vi.fn>) =>
     },
     jobMap: new Map(),
     logger: { warn, error: vi.fn(), info: vi.fn() },
-    translator: { t: (key: string) => key },
+    translator: echoTranslator(),
   }) as unknown as GiveawayDeps;
 
 const sendableChannel = () => ({

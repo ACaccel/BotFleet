@@ -7,11 +7,14 @@
  * and none of them reached the operator log with a trace id.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ChatInputCommandInteraction } from 'discord.js';
 
 import RandomRestaurant from '../../../../src/handlers/commands/random_restaurant';
 import { boundedHttp } from '../../../../src/infra/http';
 import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../../fixtures/discord/interaction-builder';
 
 const API_URL = 'https://food.test/recommend';
 
@@ -22,15 +25,10 @@ const buildBot = () => {
   return { bot, error: logger.error };
 };
 
-const buildInteraction = () =>
-  ({
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-    deferred: true,
-    replied: false,
-    guild: { id: 'g1' },
-    options: { get: () => null },
-  }) as unknown as ChatInputCommandInteraction;
+const buildInteraction = () => {
+  const sink = newInteractionSink();
+  return { interaction: buildChatInputInteraction({ guildId: 'g1', sink }), sink };
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -43,11 +41,12 @@ describe('random_restaurant', () => {
       data: { message: 'try this', restaurant: {} },
     } as never);
     const { bot } = buildBot();
-    const interaction = buildInteraction();
+    const { interaction, sink } = buildInteraction();
 
     await new RandomRestaurant().execute(interaction, bot);
 
     expect(get.mock.calls[0]?.[0]).toBe(API_URL);
+    expect(sink.editReplies).toEqual([{ content: 'replies:random_restaurant.description' }]);
   });
 
   it('answers a no-match with the friendly copy and no error log', async () => {
@@ -55,31 +54,29 @@ describe('random_restaurant', () => {
     // object, so reading through it raises a TypeError.
     vi.spyOn(boundedHttp, 'get').mockResolvedValue({ data: {} } as never);
     const { bot, error } = buildBot();
-    const interaction = buildInteraction();
+    const { interaction, sink } = buildInteraction();
     // Mid-afternoon in Taipei, so the late-night branch is not taken.
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-01T06:00:00Z'));
 
     await new RandomRestaurant().execute(interaction, bot);
 
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'replies:random_restaurant.no_match',
-    });
+    expect(sink.editReplies).toEqual([{ content: 'replies:random_restaurant.no_match' }]);
     expect(error).not.toHaveBeenCalled();
   });
 
   it('routes a transport failure through the trace-id error boundary', async () => {
     vi.spyOn(boundedHttp, 'get').mockRejectedValue(new Error('getaddrinfo ENOTFOUND food.test'));
     const { bot, error } = buildBot();
-    const interaction = buildInteraction();
+    const { interaction, sink } = buildInteraction();
 
     await new RandomRestaurant().execute(interaction, bot);
 
     // Previously this printed "no restaurants found" and logged nothing
     // at error level.
-    expect(interaction.editReply).toHaveBeenCalledWith(
+    expect(sink.editReplies).toEqual([
       expect.objectContaining({ content: 'replies:random_restaurant.failed' }),
-    );
+    ]);
     expect(error).toHaveBeenCalled();
   });
 

@@ -1,5 +1,3 @@
-import type { BaseBot } from '@bot';
-import type { AutocompleteInteraction, ChatInputCommandInteraction } from 'discord.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Activity from '../../../src/handlers/commands/activity';
@@ -17,6 +15,11 @@ import GiveawayCreate from '../../../src/handlers/commands/giveaway_create/actio
 import GiveawayDelete from '../../../src/handlers/commands/giveaway_delete/action';
 import ListReply from '../../../src/handlers/commands/list_reply/action';
 import Reply from '../../../src/handlers/commands/reply';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import {
+  buildAutocompleteInteraction,
+  buildChatInputInteraction,
+} from '../../fixtures/discord/interaction-builder';
 
 const families = [
   {
@@ -56,14 +59,25 @@ const families = [
   },
 ];
 
-const bot = {} as BaseBot;
-const interactionFor = (name: string): ChatInputCommandInteraction =>
-  ({
-    options: {
-      getSubcommand: vi.fn().mockReturnValue(name),
-      getSubcommandGroup: vi.fn().mockReturnValue(null),
-    },
-  }) as unknown as ChatInputCommandInteraction;
+const { bot } = buildFakeBot();
+
+// The builders have no subcommand surface; routing reads only these two.
+const routeOf = (name: string) => ({
+  getSubcommand: () => name,
+  getSubcommandGroup: () => null,
+});
+
+const interactionFor = (name: string) => {
+  const interaction = buildChatInputInteraction();
+  Object.assign(interaction.options, routeOf(name));
+  return interaction;
+};
+
+const autocompleteFor = (name: string) => {
+  const interaction = buildAutocompleteInteraction();
+  Object.assign(interaction.options, routeOf(name));
+  return interaction;
+};
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -103,7 +117,7 @@ describe('/feed autocomplete', () => {
     const suggest = vi
       .spyOn(FeedUnsubscribe.prototype, 'autocomplete')
       .mockResolvedValue(suggestions);
-    const interaction = interactionFor('unsubscribe') as unknown as AutocompleteInteraction;
+    const interaction = autocompleteFor('unsubscribe');
     const root = new Feed();
 
     expect(
@@ -117,7 +131,7 @@ describe('/feed autocomplete', () => {
 
   it.each(['subscribe', 'list'])('does not query unsubscribe suggestions for %s', async (name) => {
     const suggest = vi.spyOn(FeedUnsubscribe.prototype, 'autocomplete');
-    const interaction = interactionFor(name) as unknown as AutocompleteInteraction;
+    const interaction = autocompleteFor(name);
 
     await expect(new Feed().autocomplete?.(interaction, bot)).resolves.toEqual([]);
     expect(suggest).not.toHaveBeenCalled();

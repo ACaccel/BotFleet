@@ -10,7 +10,7 @@ const IDLE_MS = 5000;
  * A loop whose rounds follow `script` (a result or an error per call, then idle
  * rounds), recording when each round started.
  */
-const loop = (script: (ArchiveInboxRound | Error)[]) => {
+const loop = (script: (ArchiveInboxRound | Error)[], retryBaseMs?: number) => {
   const controller = new AbortController();
   const starts: number[] = [];
   const failures: number[] = [];
@@ -26,6 +26,7 @@ const loop = (script: (ArchiveInboxRound | Error)[]) => {
     idleMs: IDLE_MS,
     signal: controller.signal,
     onFailure: (_error, count) => failures.push(count),
+    ...(retryBaseMs === undefined ? {} : { retryBaseMs }),
   });
   const run = inbox.run();
   return { inbox, run, round, starts, failures, stop: () => controller.abort() };
@@ -51,6 +52,15 @@ describe('archive inbox loop', () => {
     // After the success the loop idles, then the next failure waits one second again.
     expect(f.starts[9]).toBe(183_000 + IDLE_MS);
     expect(f.starts[10]).toBe(183_000 + IDLE_MS + 1000);
+    f.stop();
+    await f.run;
+  });
+
+  it('doubles a configured first retry wait', async () => {
+    const failure = new Error('database unavailable');
+    const f = loop([failure, failure, failure, idle], 10);
+    await vi.advanceTimersByTimeAsync(70);
+    expect(f.starts).toEqual([0, 10, 30, 70]);
     f.stop();
     await f.run;
   });

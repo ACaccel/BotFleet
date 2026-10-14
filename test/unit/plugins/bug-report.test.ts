@@ -1,24 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBugReportPlugin } from '../../../src/plugins/bug-report';
-import type { PluginEventContext, PluginRuntimeContext } from '../../../src/core/plugin';
+import { buildMessage } from '../../fixtures/discord/message-builder';
+import { buildPluginContext } from '../../fixtures/runtime';
 
 describe('bug-report plugin', () => {
   it('does nothing for a bot without a bug_report block', async () => {
     const resolve = vi.fn();
+    const ctx = buildPluginContext({ resolve });
     const plugin = createBugReportPlugin({
       config: undefined,
       isAdmin: () => false,
       label: () => 'Bot',
     });
 
-    await plugin.onReady?.({ resolve } as unknown as PluginRuntimeContext);
+    await plugin.onReady?.(ctx);
     await plugin.events?.messageCreate?.(
-      { resolve } as unknown as PluginEventContext,
-      {
-        author: { bot: false },
-        guildId: null,
-      } as never,
+      ctx,
+      buildMessage({ author: { bot: false }, guildId: null }) as never,
     );
 
     expect(resolve).not.toHaveBeenCalled();

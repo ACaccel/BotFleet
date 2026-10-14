@@ -38,22 +38,19 @@ vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
 
 import { BaseBot, type Config } from '../../../src/bot/index';
+import { buildInertClient } from '../../fixtures/discord/client-builder';
+import { quietEnvLoadFailure } from './fixtures';
+
+quietEnvLoadFailure();
 
 class MinimalBot extends BaseBot<Config> {}
 
 const buildClient = (user: unknown): Client => {
-  const client = {
+  return Object.assign(buildInertClient(), {
     user,
-    guilds: { cache: new Map() },
-    channels: { cache: new Map() },
     application: { commands: { set: vi.fn(async () => []) } },
     login: async (): Promise<string> => 'ok',
-    destroy: () => {},
-    on: () => client,
-    once: () => client,
-    off: () => client,
-  } as unknown as Client;
-  return client;
+  });
 };
 
 describe('BaseBot startup log', () => {

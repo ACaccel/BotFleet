@@ -16,7 +16,7 @@
   ],
   "project": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "tools/**/*.ts"],
   "vitest": {
-    "config": ["vitest.config.ts", "vitest.workspace.ts"],
+    "config": ["vitest.config.ts", "vitest.projects.ts"],
     "entry": ["test/**/*.test.ts", "test/**/setup.ts"]
   },
   "paths": {
@@ -36,13 +36,10 @@
     "src/persistence/schemas/index.ts",
     "src/core/index.ts",
     "src/core/i18n/index.ts",
-    "src/core/config/index.ts",
     "src/core/errors/index.ts",
     "src/core/ioc/index.ts",
-    "src/core/plugin/index.ts",
     "src/core/result/index.ts",
     "src/infra/llm/index.ts",
-    "src/infra/link-preview/index.ts",
     "src/infra/mongo/index.ts",
     "src/infra/social-feed/index.ts",
     "src/handlers/*/index.ts"

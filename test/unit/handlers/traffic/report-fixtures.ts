@@ -2,8 +2,8 @@
  * Fakes for the `/traffic` subcommand handlers: a statistics reader that
  * answers every requested `activity` section with deterministic data shaped
  * after the approved style-B mockups, a guild with channels, members, emoji and
- * stickers, and an interaction that records its replies. Free of vitest so a
- * render script can reuse it; tests wrap the pieces they need in spies.
+ * stickers, and an interaction that records its replies. Tests wrap the pieces
+ * they need in spies.
  */
 import { ChannelType, PermissionFlagsBits, StickerFormatType } from 'discord.js';
 import type { ChatInputCommandInteraction, Guild } from 'discord.js';
@@ -23,6 +23,14 @@ import type {
   ArchiveStatsRepo,
   TopReactedMessage,
 } from '../../../../src/persistence/repositories/archive-stats.types';
+import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
+import { buildGuild } from '../../../fixtures/discord/guild-builder';
+import { buildGuildMember } from '../../../fixtures/discord/member-builder';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../../fixtures/discord/interaction-builder';
+import { echoTranslator } from '../../../fixtures/runtime';
 
 const GUILD_ID = 'g1';
 export const INVOKER_ID = 'u-invoker';
@@ -384,12 +392,11 @@ const channel = (id: string, name: string, type: ChannelType, parentId: string |
   permissionsFor: () => ({ has: (flag: bigint) => flag === PermissionFlagsBits.ViewChannel }),
 });
 
-const member = (id: string, displayName: string, bot = false, roleIds: readonly string[] = []) => ({
-  id,
-  displayName,
-  user: { id, username: displayName, bot, displayAvatarURL: () => `https://cdn.example/${id}.png` },
-  roles: { cache: new Map(roleIds.map((roleId) => [roleId, { id: roleId }])) },
-});
+const member = (id: string, displayName: string, bot = false, roleIds: readonly string[] = []) => {
+  const built = buildGuildMember({ id, displayName, username: displayName, roleIds });
+  Object.assign(built.user, { bot });
+  return built;
+};
 
 interface FakeGuildOptions {
   readonly emoji?: number;
@@ -456,9 +463,9 @@ export const fakeGuild = (options: FakeGuildOptions = {}): Guild => {
       ] as const;
     }),
   );
-  return {
-    id: GUILD_ID,
-    name: '範例伺服器',
+  // The live channel and member caches, emoji and stickers are richer than the
+  // builder's defaults, so they replace its empty ones.
+  return Object.assign(buildGuild({ id: GUILD_ID, name: '範例伺服器' }), {
     channels: { cache: channels },
     members: { cache: members, fetch: async (id: string) => members.get(id) },
     roles: { cache: new Map([['r1', { id: 'r1', name: '管理員' }]]) },
@@ -476,7 +483,7 @@ export const fakeGuild = (options: FakeGuildOptions = {}): Guild => {
         },
       },
     },
-  } as unknown as Guild;
+  });
 };
 
 export interface Reply {
@@ -502,48 +509,51 @@ interface FakeInteractionOptions {
 export const fakeInteraction = (
   options: FakeInteractionOptions,
 ): { interaction: ChatInputCommandInteraction; replies: Reply[]; deferred: unknown[] } => {
-  const replies: Reply[] = [];
-  const deferred: unknown[] = [];
+  const sink = newInteractionSink();
   const values = options.values ?? {};
-  const interaction = {
-    guild: options.guild === undefined ? fakeGuild() : options.guild,
-    guildId: GUILD_ID,
-    channelId: options.channelId ?? 'c1',
-    user: { id: INVOKER_ID },
-    deferred: false,
-    replied: false,
-    options: {
-      getSubcommand: () => options.subcommand,
-      getSubcommandGroup: () => null,
-      get: (name: string) => (name in values ? { value: values[name] } : null),
-      getChannel: () => ({ id: options.channel ?? 'c1' }),
-      getBoolean: (name: string) => (typeof values[name] === 'boolean' ? values[name] : null),
-      getUser: (name: string) =>
-        name === 'app'
-          ? options.app === undefined
-            ? null
-            : { id: options.app }
-          : (options.user ?? { id: 'a2', username: 'momo' }),
-      getMember: () => null,
-    },
-    deferReply: async (payload: unknown) => {
-      deferred.push(payload);
-      (interaction as { deferred: boolean }).deferred = true;
-    },
-    editReply: async (payload: Reply) => {
-      replies.push(payload);
-    },
-    reply: async (payload: Reply) => {
-      replies.push(payload);
-    },
+  const guild = options.guild === undefined ? fakeGuild() : options.guild;
+  const interaction = buildChatInputInteraction({
+    ...(guild === null ? { guildId: null } : { guild }),
+    userId: INVOKER_ID,
+    channel: { id: options.channelId ?? 'c1' },
+    options: values,
+    channels: { channel: { id: options.channel ?? 'c1' } },
+    sink,
+  });
+  Object.assign(interaction.options, {
+    getSubcommand: () => options.subcommand,
+    getSubcommandGroup: () => null,
+    getBoolean: (name: string) => (typeof values[name] === 'boolean' ? values[name] : null),
+    getUser: (name: string) =>
+      name === 'app'
+        ? options.app === undefined
+          ? null
+          : { id: options.app }
+        : (options.user ?? { id: 'a2', username: 'momo' }),
+    getMember: () => null,
+  });
+
+  // One ordered log across reply, edit, follow-up and delete: the sink keeps
+  // them in separate lists, and a "replaced privately" outcome is their order.
+  const replies: Reply[] = [];
+  const logged = <M extends 'reply' | 'editReply' | 'followUp'>(method: M): void => {
+    const send = interaction[method].bind(interaction) as (payload: unknown) => Promise<unknown>;
+    Object.assign(interaction, {
+      [method]: async (payload: Reply) => {
+        replies.push(payload);
+        await send(payload);
+      },
+    });
+  };
+  logged('reply');
+  logged('editReply');
+  logged('followUp');
+  Object.assign(interaction, {
     deleteReply: async () => {
       replies.push({ deleted: true });
     },
-    followUp: async (payload: Reply) => {
-      replies.push(payload);
-    },
-  };
-  return { interaction: interaction as unknown as ChatInputCommandInteraction, replies, deferred };
+  });
+  return { interaction, replies, deferred: sink.defers };
 };
 
 /** `secret` is rank 2: only an invoker with the `staff` role may count it. */
@@ -555,9 +565,8 @@ export const fakeBot = (
   stats: ArchiveStatsRepo,
   t: (key: string, params?: Record<string, unknown>) => string = (key) => key,
 ): BaseBot =>
-  ({
-    translator: { t },
-    logger: undefined,
-    getRepos: () => ({ archiveStats: stats }) as unknown as Repos,
+  buildFakeBot({
+    translator: { ...echoTranslator(), t },
+    getRepos: () => ({ archiveStats: stats }) as Repos,
     permissionRankPolicy: POLICY,
-  }) as unknown as BaseBot;
+  }).bot;

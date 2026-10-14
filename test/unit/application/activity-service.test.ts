@@ -3,7 +3,7 @@
  * announces once, cancelling stops every job, and a restart closes what
  * expired while the bot was down.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ok, err } from '../../../src/core/result';
 import { databaseErrorFrom } from '../../../src/persistence/error-translator';
@@ -16,8 +16,10 @@ import {
   rebootActivityJobs,
   type ActivityDeps,
 } from '../../../src/application/activity/activity';
+import { echoTranslator } from '../../fixtures/runtime';
 
 const GUILD = 'g1';
+const NOW = Date.UTC(2026, 0, 15, 12);
 
 const doc = (overrides: Record<string, unknown> = {}) => ({
   activity_id: 'a1',
@@ -25,7 +27,7 @@ const doc = (overrides: Record<string, unknown> = {}) => ({
   channel_id: 'c1',
   title: 'Games',
   creator_id: 'creator',
-  expired_at: Date.now() + 60_000,
+  expired_at: NOW + 60_000,
   status: 'open',
   participants: ['u1', 'u2'],
   attendance: [],
@@ -65,10 +67,16 @@ const build = (stored = doc()) => {
     },
     jobMap,
     logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
-    translator: { t: (key: string) => key },
+    translator: echoTranslator(),
   } as unknown as ActivityDeps;
   return { deps, activity, send, edit, jobMap, channel };
 };
+
+// Only Date is faked: the service's default `now` and node-schedule read
+// one fixed instant, so deadlines sit on a known side of it.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'], now: NOW });
+});
 
 afterEach(() => vi.useRealTimers());
 
@@ -85,7 +93,7 @@ describe('activity service', () => {
         title: 'Games',
         description: '',
         creator_id: 'creator',
-        expired_at: Date.now() + 60_000,
+        expired_at: NOW + 60_000,
       }),
     ).rejects.toThrow();
     const message = await send.mock.results[0]?.value;
@@ -116,7 +124,7 @@ describe('activity service', () => {
   });
 
   it('closes an activity whose deadline passed while the bot was down', async () => {
-    const { deps, activity } = build(doc({ expired_at: Date.now() - 1000 }));
+    const { deps, activity } = build(doc({ expired_at: NOW - 1000 }));
 
     await rebootActivityJobs(deps);
 
@@ -124,7 +132,7 @@ describe('activity service', () => {
   });
 
   it('schedules the deadline and start reminder still ahead', async () => {
-    const later = Date.now() + 3_600_000;
+    const later = NOW + 3_600_000;
     const { deps, jobMap } = build(doc({ starts_at: later }));
 
     await rebootActivityJobs(deps);

@@ -2,11 +2,14 @@
  * Mongoose connection helpers for integration suites.
  *
  * Each test should call `withFreshConnection(async (conn) => { ... })`
- * — the helper opens a fresh mongoose connection against the
- * memory-server, runs the body, drops the database, and closes the
- * connection. This guarantees test isolation without the cost of
- * restarting the memory-server between cases.
+ * — the helper opens a mongoose connection to a database no other test
+ * uses, runs the body, drops that database, and closes the connection.
+ * Unique names are what let integration test files run in parallel
+ * forks against the one shared memory-server without racing each
+ * other's `dropDatabase` and index builds.
  */
+import { randomBytes, randomInt } from 'node:crypto';
+
 import mongoose, { type Connection } from 'mongoose';
 
 const requireMongoUri = (): string => {
@@ -20,10 +23,30 @@ const requireMongoUri = (): string => {
   return uri;
 };
 
+/**
+ * The memory-server URI without its database path, the base that
+ * `MongoConnectionManager` appends a guild id to.
+ */
+export const integrationMongoBaseUri = (): string => requireMongoUri().replace(/[^/]*$/, '');
+
+/** A database name no other test uses (well under Mongo's 63-byte limit). */
+const uniqueDbName = (): string => `it_${randomBytes(8).toString('hex')}`;
+
+/**
+ * A digit-only guild id no other test uses. `MongoConnectionManager`
+ * names each guild's database after its id, so tests that drive the
+ * production manager need unique ids for the same isolation
+ * `withFreshConnection` gives everyone else.
+ */
+export const uniqueGuildId = (): string =>
+  `9${Array.from({ length: 17 }, () => randomInt(10)).join('')}`;
+
 export const withFreshConnection = async <T>(
   body: (connection: Connection) => Promise<T>,
 ): Promise<T> => {
-  const connection = await mongoose.createConnection(requireMongoUri()).asPromise();
+  const connection = await mongoose
+    .createConnection(requireMongoUri(), { dbName: uniqueDbName() })
+    .asPromise();
   try {
     return await body(connection);
   } finally {
@@ -31,3 +54,14 @@ export const withFreshConnection = async <T>(
     await connection.close();
   }
 };
+
+/**
+ * Build something (typically a repository) on a live connection, then
+ * close that connection before handing the result back. Calls on the
+ * result fail inside the driver rather than in mongoose's casting
+ * layer, which is the only way to exercise the real `DatabaseError`
+ * classification path.
+ */
+export const withClosedConnection = <T>(
+  build: (connection: Connection) => Promise<T>,
+): Promise<T> => withFreshConnection(build);

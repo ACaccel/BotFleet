@@ -6,6 +6,8 @@ import {
   msgReact,
   scheduleJob,
 } from '../../../src/handlers/commands/discord-helpers';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import { buildMessage } from '../../fixtures/discord/message-builder';
 
 const scheduleJobMock = vi.fn();
 
@@ -47,7 +49,7 @@ describe('buildButtonRows', () => {
 describe('msgReact', () => {
   /** Build a fake `Message` whose `react()` behaviour the test controls. */
   const fakeMessage = (react: () => Promise<unknown>): Message =>
-    ({ id: 'm1', guildId: 'g1', react }) as unknown as Message;
+    buildMessage({ id: 'm1', guildId: 'g1', react });
 
   it('reacts with every emoji in order', async () => {
     const react = vi.fn().mockResolvedValue(undefined);
@@ -68,20 +70,16 @@ describe('msgReact', () => {
       .fn()
       .mockRejectedValueOnce(new Error('rate limited'))
       .mockResolvedValueOnce(undefined);
-    const errorFn = vi.fn();
-    const logger = { child: vi.fn().mockReturnValue({ error: errorFn }) };
+    const { bot, logger } = buildFakeBot();
+    const child = vi.spyOn(logger, 'child');
 
-    await msgReact(
-      fakeMessage(react),
-      ['bad', 'good'],
-      logger as unknown as Parameters<typeof msgReact>[2],
-      'bot-1',
-    );
+    await msgReact(fakeMessage(react), ['bad', 'good'], bot.logger, 'bot-1');
 
     // Both reactions are still attempted despite the first rejecting.
     expect(react).toHaveBeenCalledTimes(2);
-    expect(errorFn).toHaveBeenCalledTimes(1);
-    expect(logger.child).toHaveBeenCalledWith({ bot: 'bot-1', guildId: 'g1' });
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error.mock.calls[0]?.[0]).toMatchObject({ messageId: 'm1', reaction: 'bad' });
+    expect(child).toHaveBeenCalledWith({ bot: 'bot-1', guildId: 'g1' });
   });
 
   it('does not throw when a reaction fails and no logger is supplied', async () => {

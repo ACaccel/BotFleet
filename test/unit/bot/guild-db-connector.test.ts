@@ -15,14 +15,15 @@ import { GuildDbConnector } from '../../../src/bot/guild-db-connector';
 import type { GuildInfo } from '../../../src/bot/index';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS, type ReposFactory } from '../../../src/bot/tokens';
-import { createLogger } from '../../../src/core/logger';
 import { DatabaseError } from '../../../src/core/errors/external-service-error';
 import type { ConnectionManager } from '../../../src/infra/mongo/connection-manager';
 import type { Repos } from '../../../src/persistence/repositories';
+import { buildGuild } from '../../fixtures/discord/guild-builder';
+import { silentLogger } from '../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
+const silent = silentLogger();
 
-const fakeGuild = (id: string, name = `Guild ${id}`): Guild => ({ id, name }) as unknown as Guild;
+const fakeGuild = (id: string, name = `Guild ${id}`): Guild => buildGuild({ id, name });
 
 const fakeRepos = (): Repos => ({}) as unknown as Repos;
 

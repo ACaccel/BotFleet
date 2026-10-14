@@ -1,4 +1,4 @@
-import { MessageFlags, type ButtonInteraction } from 'discord.js';
+import { MessageFlags } from 'discord.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ArchiveButton from '../../../../src/handlers/buttons/archive';
 import type { ArchiveControl } from '../../../../src/application/archive/control';
@@ -63,7 +63,7 @@ const press = async (
     followUp,
   });
   const { bot, logger, createControl } = archiveBot({ control });
-  await new ArchiveButton().execute(interaction as ButtonInteraction, bot);
+  await new ArchiveButton().execute(interaction, bot);
   return { sink, followUp, logger, createControl };
 };
 const titleOf = (sink: ReturnType<typeof newInteractionSink>) =>

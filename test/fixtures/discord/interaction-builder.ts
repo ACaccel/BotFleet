@@ -8,8 +8,13 @@ import type {
   ApplicationCommandOptionChoiceData,
   AutocompleteInteraction,
   ButtonInteraction,
+  Channel,
   ChatInputCommandInteraction,
   Guild,
+  Message,
+  ModalSubmitInteraction,
+  StringSelectMenuInteraction,
+  UserContextMenuCommandInteraction,
 } from 'discord.js';
 
 import { buildGuild } from './guild-builder';
@@ -23,6 +28,8 @@ interface SentMessage {
   readonly content?: string;
   readonly flags?: number;
   readonly components?: readonly unknown[];
+  readonly embeds?: readonly unknown[];
+  readonly allowedMentions?: unknown;
 }
 
 interface InteractionMockSink {
@@ -41,6 +48,11 @@ interface InteractionMockSink {
    * One entry per call, each the full choice list that was offered.
    */
   readonly responses: Array<readonly ApplicationCommandOptionChoiceData[]>;
+  /**
+   * `showModal` calls, each the modal builder as shown. Opaque for the
+   * same reason as `components`: a test reads the builder's JSON.
+   */
+  readonly modals: unknown[];
   /** Acknowledgement state, mirroring what discord.js tracks. */
   readonly acknowledged: { deferred: boolean; replied: boolean };
 }
@@ -55,6 +67,21 @@ interface ResolvedChannelOption {
   readonly id: string;
 }
 
+/** The structural minimum a resolved user option needs. */
+interface ResolvedUserOption {
+  readonly id: string;
+  readonly displayName: string;
+}
+
+/**
+ * `interaction.memberPermissions` answering from a flag list; `null`
+ * outside a guild, as discord.js reports it.
+ */
+const memberPermissionsFrom = (
+  flags: readonly bigint[] | undefined,
+): { has: (flag: bigint) => boolean } | null =>
+  flags === undefined ? null : { has: (flag) => flags.includes(flag) };
+
 interface BuildChatInputInteractionInput {
   readonly commandName?: string;
   readonly userId?: string;
@@ -62,10 +89,14 @@ interface BuildChatInputInteractionInput {
   readonly options?: Readonly<Record<string, string | number | boolean | null>>;
   /** Values `options.getChannel(name)` resolves, keyed by option name. */
   readonly channels?: Readonly<Record<string, ResolvedChannelOption>>;
+  /** Values `options.getUser(name)` resolves, keyed by option name. */
+  readonly users?: Readonly<Record<string, ResolvedUserOption>>;
   /** The invoking channel; also backs `interaction.channelId`. */
   readonly channel?: ResolvedChannelOption | null;
   /** Overrides the default `buildGuild({ id: guildId })`. */
   readonly guild?: Guild;
+  /** Flags the invoker holds in the channel; omitted means `memberPermissions` is `null`. */
+  readonly memberPermissions?: readonly bigint[];
   /** When the interaction was created; defaults to now. */
   readonly createdTimestamp?: number;
   readonly sink?: InteractionMockSink;
@@ -79,6 +110,7 @@ const newSink = (): InteractionMockSink => ({
   updates: [],
   followUps: [],
   responses: [],
+  modals: [],
   acknowledged: { deferred: false, replied: false },
 });
 
@@ -88,6 +120,7 @@ export const buildChatInputInteraction = (
   const sink = input.sink ?? newSink();
   const options = input.options ?? {};
   const channels = input.channels ?? {};
+  const users = input.users ?? {};
   // A guild passed explicitly is authoritative for both fields, so
   // `interaction.guild.id` and `interaction.guildId` cannot disagree.
   const guild =
@@ -105,6 +138,7 @@ export const buildChatInputInteraction = (
     guildId: guild?.id ?? null,
     channel: input.channel ?? null,
     channelId: input.channel?.id ?? 'c-1',
+    memberPermissions: memberPermissionsFrom(input.memberPermissions),
     locale: 'zh-TW',
     // Discord stamps every interaction; `/feed subscribe` measures its
     // batch budget from this, so a fixture without it would silently
@@ -125,6 +159,15 @@ export const buildChatInputInteraction = (
       getString: (name: string) => (options[name] as string | undefined) ?? null,
       getInteger: (name: string) => (options[name] as number | undefined) ?? null,
       getChannel: (name: string) => channels[name] ?? null,
+      // discord.js throws for a missing required option rather than
+      // returning null, so a handler relying on `required` sees the same.
+      getUser: (name: string, required?: boolean) => {
+        const user = users[name];
+        if (user === undefined && required === true) {
+          throw new TypeError(`Required option "${name}" not found`);
+        }
+        return user ?? null;
+      },
     },
     deferReply: async (opts?: { flags?: number }) => {
       sink.defers.push(opts ?? {});
@@ -139,6 +182,11 @@ export const buildChatInputInteraction = (
     },
     followUp: async (opts: SentMessage) => {
       sink.followUps.push(opts);
+    },
+    // Showing a modal is the acknowledgement; a later reply would fail.
+    showModal: async (modal: unknown) => {
+      sink.modals.push(modal);
+      sink.acknowledged.replied = true;
     },
   } as unknown as ChatInputCommandInteraction;
 };
@@ -267,6 +315,235 @@ export const buildAutocompleteInteraction = (
       sink.responses.push(choices);
     },
   } as unknown as AutocompleteInteraction;
+};
+
+/** The sink-recording reply surface, with live acknowledgement getters. */
+const replySurface = (sink: InteractionMockSink) => ({
+  get deferred(): boolean {
+    return sink.acknowledged.deferred;
+  },
+  get replied(): boolean {
+    return sink.acknowledged.replied;
+  },
+  deferReply: async (opts?: { flags?: number }) => {
+    sink.defers.push(opts ?? {});
+    sink.acknowledged.deferred = true;
+  },
+  reply: async (opts: SentMessage) => {
+    sink.replies.push(opts);
+    sink.acknowledged.replied = true;
+  },
+  editReply: async (opts: SentMessage) => {
+    sink.editReplies.push(opts);
+  },
+  followUp: async (opts: SentMessage) => {
+    sink.followUps.push(opts);
+  },
+});
+
+/**
+ * Add the reply surface shared by the component and modal builders to
+ * `fields`: the same sink-recording `deferReply` / `reply` /
+ * `editReply` / `followUp` the chat-input builder exposes. Copied by
+ * descriptor, because spreading would freeze the acknowledgement
+ * getters at their build-time values.
+ */
+const withReplies = <T extends object>(sink: InteractionMockSink, fields: T): T =>
+  Object.defineProperties(fields, Object.getOwnPropertyDescriptors(replySurface(sink)));
+
+/** discord.js throws when a modal field is absent; a fixture returning '' would hide that. */
+const missingField = (id: string): never => {
+  throw new TypeError(`Modal field "${id}" not found`);
+};
+
+interface BuildModalSubmitInteractionInput {
+  /** `<handler>|<payload>`; the leading segment selects the handler. */
+  readonly customId: string;
+  readonly userId?: string;
+  readonly guildId?: string | null;
+  /** Overrides the default `buildGuild({ id: guildId })`. */
+  readonly guild?: Guild;
+  /** The channel the form was opened in; also backs `channelId`. */
+  readonly channel?: Channel | null;
+  /** Submitted text inputs, keyed by component custom ID. */
+  readonly textInputs?: Readonly<Record<string, string>>;
+  /** Submitted string-select values, keyed by component custom ID. */
+  readonly selectValues?: Readonly<Record<string, readonly string[]>>;
+  readonly sink?: InteractionMockSink;
+}
+
+/**
+ * Minimal ModalSubmitInteraction builder. `fields` answers from
+ * `textInputs` / `selectValues` and throws for an absent field, as
+ * discord.js does.
+ */
+export const buildModalSubmitInteraction = (
+  input: BuildModalSubmitInteractionInput,
+): ModalSubmitInteraction => {
+  const sink = input.sink ?? newSink();
+  const textInputs = input.textInputs ?? {};
+  const selectValues = input.selectValues ?? {};
+  const guild =
+    input.guild ?? (input.guildId === null ? null : buildGuild({ id: input.guildId ?? 'g-1' }));
+  return withReplies(sink, {
+    isModalSubmit: () => true,
+    isChatInputCommand: () => false,
+    isButton: () => false,
+    customId: input.customId,
+    user: { id: input.userId ?? 'u-1', displayName: 'tester' },
+    guild,
+    guildId: guild?.id ?? null,
+    channel: input.channel ?? null,
+    channelId: input.channel?.id ?? 'c-1',
+    locale: 'zh-TW',
+    fields: {
+      getTextInputValue: (id: string) => textInputs[id] ?? missingField(id),
+      getStringSelectValues: (id: string) => selectValues[id] ?? missingField(id),
+    },
+  }) as unknown as ModalSubmitInteraction;
+};
+
+interface BuildStringSelectInteractionInput {
+  /** `<handler>|<payload>`; the leading segment selects the handler. */
+  readonly customId: string;
+  readonly values: readonly string[];
+  readonly userId?: string;
+  readonly guildId?: string | null;
+  /** Overrides the default `buildGuild({ id: guildId })`. */
+  readonly guild?: Guild;
+  /** Flags the clicker holds; omitted means `memberPermissions` is `null`. */
+  readonly memberPermissions?: readonly bigint[];
+  /**
+   * Messages `channel.messages.fetch(id)` resolves; any other id
+   * rejects, as an unknown message does. Omitted means no channel.
+   */
+  readonly channelMessages?: Readonly<Record<string, Message>>;
+  readonly sink?: InteractionMockSink;
+}
+
+/**
+ * Minimal StringSelectMenuInteraction builder. `update` and
+ * `deferUpdate` acknowledge, as on the button builder.
+ */
+export const buildStringSelectInteraction = (
+  input: BuildStringSelectInteractionInput,
+): StringSelectMenuInteraction => {
+  const sink = input.sink ?? newSink();
+  const guild =
+    input.guild ?? (input.guildId === null ? null : buildGuild({ id: input.guildId ?? 'g-1' }));
+  const messages = input.channelMessages;
+  const channel =
+    messages === undefined
+      ? null
+      : {
+          id: 'c-1',
+          messages: {
+            fetch: async (id: string) => {
+              const message = messages[id];
+              if (message === undefined) throw new Error('Unknown Message');
+              return message;
+            },
+          },
+        };
+  return withReplies(sink, {
+    isStringSelectMenu: () => true,
+    isChatInputCommand: () => false,
+    isButton: () => false,
+    customId: input.customId,
+    values: input.values,
+    user: { id: input.userId ?? 'u-1', displayName: 'tester' },
+    guild,
+    guildId: guild?.id ?? null,
+    channel,
+    channelId: channel?.id ?? null,
+    memberPermissions: memberPermissionsFrom(input.memberPermissions),
+    locale: 'zh-TW',
+    client: {
+      user: { username: 'Test Bot', displayAvatarURL: () => 'https://example.test/bot.png' },
+    },
+    deferUpdate: async () => {
+      sink.deferUpdates.push({});
+      sink.acknowledged.deferred = true;
+    },
+    update: async (opts: SentMessage) => {
+      sink.updates.push(opts);
+      sink.acknowledged.replied = true;
+    },
+  }) as unknown as StringSelectMenuInteraction;
+};
+
+/** A user as a context-menu target; `avatarUrl` backs `displayAvatarURL`. */
+interface ContextMenuTargetUser {
+  readonly id: string;
+  readonly displayName: string;
+  readonly avatarUrl: string;
+}
+
+/** The target's guild profile; `avatarUrl` set means a server avatar. */
+interface ContextMenuTargetMember {
+  readonly displayName: string;
+  readonly avatarUrl?: string;
+}
+
+interface BuildUserContextMenuInteractionInput {
+  readonly commandName?: string;
+  readonly targetUser: ContextMenuTargetUser;
+  /**
+   * What `guild.members.fetch(targetUser.id)` resolves; `null` makes it
+   * reject, as for a user who is not a member.
+   */
+  readonly targetMember?: ContextMenuTargetMember | null;
+  /** `null` invokes the menu outside a guild. */
+  readonly guildId?: string | null;
+  readonly sink?: InteractionMockSink;
+}
+
+/** discord.js appends the requested size to the CDN URL; mirroring it makes the size visible. */
+const avatarUrlAt = (url: string, opts?: { size?: number }): string =>
+  opts?.size === undefined ? url : `${url}?size=${String(opts.size)}`;
+
+/**
+ * Minimal UserContextMenuCommandInteraction builder. The guild's
+ * `members.fetch` resolves the target's member profile, the only guild
+ * read a user menu makes.
+ */
+export const buildUserContextMenuInteraction = (
+  input: BuildUserContextMenuInteractionInput,
+): UserContextMenuCommandInteraction => {
+  const sink = input.sink ?? newSink();
+  const target = input.targetUser;
+  const member = input.targetMember ?? null;
+  const fetchMember = async (id: string) => {
+    if (member === null || id !== target.id) throw new Error('Unknown Member');
+    return {
+      id: target.id,
+      displayName: member.displayName,
+      // A member without a server avatar has a null hash, like discord.js.
+      avatar: member.avatarUrl === undefined ? null : 'server-hash',
+      displayAvatarURL: (opts?: { size?: number }) =>
+        avatarUrlAt(member.avatarUrl ?? target.avatarUrl, opts),
+    };
+  };
+  const guildId = input.guildId === undefined ? 'g-1' : input.guildId;
+  const guild =
+    guildId === null
+      ? null
+      : { id: guildId, members: { cache: new Map(), me: null, fetch: fetchMember } };
+  return withReplies(sink, {
+    isUserContextMenuCommand: () => true,
+    isContextMenuCommand: () => true,
+    isChatInputCommand: () => false,
+    commandName: input.commandName ?? 'noop',
+    user: { id: 'u-1', displayName: 'tester' },
+    targetUser: {
+      id: target.id,
+      displayName: target.displayName,
+      displayAvatarURL: (opts?: { size?: number }) => avatarUrlAt(target.avatarUrl, opts),
+    },
+    guild,
+    guildId,
+    locale: 'zh-TW',
+  }) as unknown as UserContextMenuCommandInteraction;
 };
 
 export const newInteractionSink = newSink;

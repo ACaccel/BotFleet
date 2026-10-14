@@ -1,4 +1,3 @@
-import type { ChatInputCommandInteraction } from 'discord.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Ai from '../../../src/handlers/commands/ai';
 import AiSettings from '../../../src/handlers/commands/ai_settings/action';
@@ -21,17 +20,21 @@ import TrafficMe from '../../../src/handlers/commands/traffic_me/action';
 import TrafficSticker from '../../../src/handlers/commands/traffic_sticker/action';
 import TrafficUser from '../../../src/handlers/commands/traffic_user/action';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
 
-const interactionFor = (name: string, group: string | null = null) =>
-  ({
-    user: { id: 'member' },
-    options: {
-      getSubcommand: () => name,
-      getSubcommandGroup: () => group,
-    },
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-  }) as unknown as ChatInputCommandInteraction;
+const interactionFor = (name: string, group: string | null = null) => {
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({ userId: 'member', sink });
+  // The builder has no subcommand surface; routing reads only these two.
+  Object.assign(interaction.options, {
+    getSubcommand: () => name,
+    getSubcommandGroup: () => group,
+  });
+  return { interaction, sink };
+};
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -58,20 +61,18 @@ describe('AI, thread, and traffic command groups', () => {
     [Traffic, 'sticker', null, TrafficSticker],
   ] as const)('routes %p %s in group %s to its action', async (Root, name, group, Action) => {
     const execute = vi.spyOn(Action.prototype, 'execute').mockResolvedValue(undefined);
-    const interaction = interactionFor(name, group);
+    const { interaction } = interactionFor(name, group);
     const { bot } = buildFakeBot();
     await new Root().execute(interaction, bot);
     expect(execute).toHaveBeenCalledExactlyOnceWith(interaction, bot);
   });
 
   it.each(['add', 'remove'])('retains admin authorization for AI whitelist %s', async (name) => {
-    const interaction = interactionFor(name, 'whitelist');
+    const { interaction, sink } = interactionFor(name, 'whitelist');
     const getRepos = vi.fn();
     const { bot } = buildFakeBot({ isAdmin: () => false, getRepos });
     await new Ai().execute(interaction, bot);
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'errors:permission.admin_only_short',
-    });
+    expect(sink.editReplies).toEqual([{ content: 'errors:permission.admin_only_short' }]);
     expect(getRepos).not.toHaveBeenCalled();
   });
 

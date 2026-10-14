@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type {
-  PluginEventContext,
-  PluginInitContext,
-  PluginRuntimeContext,
-} from '../../../src/core/plugin';
 import { createMessageBackupPlugin } from '../../../src/plugins/message-backup';
 import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
-import { createLogger } from '../../../src/core/logger';
+import { TOKENS } from '../../../src/bot/tokens';
+import { buildPluginContext } from '../../fixtures/runtime';
 
 const fake = vi.hoisted(() => ({
   pollJobs: vi.fn(),
@@ -30,12 +26,15 @@ const discordClient = {
     ]),
   },
 };
+/** The worker is mocked, so the registry and connections are only passed through. */
 const context = () =>
-  ({
-    resolve: () => discordClient,
-    logger: createLogger({ level: 'silent', pretty: false }),
-    translator: { t: (key: string) => key },
-  }) as unknown as PluginInitContext;
+  buildPluginContext({
+    services: [
+      [TOKENS.DiscordClient, discordClient],
+      [TOKENS.GuildRegistry, {}],
+      [TOKENS.ConnectionManager, {}],
+    ],
+  });
 
 describe('message archive lifecycle', () => {
   beforeEach(() => {
@@ -187,8 +186,7 @@ describe('message archive lifecycle', () => {
     const plugin = createMessageBackupPlugin({ backupServers: ['1', '2'] });
     const ctx = context();
     await plugin.init!(ctx);
-    const raw = (packet: unknown) =>
-      plugin.events!.raw!(ctx as unknown as PluginEventContext, packet, 0) as Promise<void>;
+    const raw = (packet: unknown) => plugin.events!.raw!(ctx, packet, 0) as Promise<void>;
     const ready = (session: string) => ({
       t: 'READY',
       s: 1,
@@ -211,9 +209,7 @@ describe('message archive lifecycle', () => {
       ['2', 'session', undefined],
     ]);
     fake.markGap.mockRejectedValueOnce(new AggregateError([new Error('down')]));
-    await expect(
-      plugin.events!.shardDisconnect!(ctx as unknown as PluginEventContext, {} as never, 0),
-    ).resolves.toBeUndefined();
+    await expect(plugin.events!.shardDisconnect!(ctx, {} as never, 0)).resolves.toBeUndefined();
     await plugin.onShutdown!(ctx);
   });
   it('warns once when a ready shard exposes no session to seed', async () => {
@@ -243,8 +239,7 @@ describe('message archive lifecycle', () => {
     await plugin.init!(ctx);
     // The raw listener only starts receiving after login and the ready hook.
     await plugin.onReady!(ctx);
-    const raw = (packet: unknown) =>
-      plugin.events!.raw!(ctx as unknown as PluginEventContext, packet, 0) as Promise<void>;
+    const raw = (packet: unknown) => plugin.events!.raw!(ctx, packet, 0) as Promise<void>;
     await raw({ t: 'READY', s: 1, d: { session_id: 'replaced', guilds: [{ id: '1' }] } });
     expect(fake.capture).toHaveBeenCalledWith(
       expect.objectContaining({ guildId: '1', kind: 'session' }),
@@ -261,7 +256,7 @@ describe('message archive lifecycle', () => {
     const ctx = context();
     await plugin.init!(ctx);
     const dispatched = plugin.events!.raw!(
-      ctx as unknown as PluginEventContext,
+      ctx,
       {
         t: 'MESSAGE_DELETE_BULK',
         s: 3,
@@ -287,7 +282,7 @@ describe('message archive lifecycle', () => {
     await plugin.init!(ctx);
     await plugin.onReady!(ctx);
     await vi.advanceTimersByTimeAsync(0);
-    const stopped = plugin.onShutdown!(ctx as PluginRuntimeContext);
+    const stopped = plugin.onShutdown!(ctx);
     expect(fake.cancel).toHaveBeenCalled();
     expect(fake.stop).not.toHaveBeenCalled();
     finish();

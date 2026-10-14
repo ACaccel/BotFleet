@@ -5,7 +5,6 @@
  */
 /* eslint-disable import/first */
 import { describe, expect, it, vi } from 'vitest';
-import type { Client } from 'discord.js';
 
 import { barrelStubs } from '../../fixtures/handler-barrel-stubs';
 
@@ -18,10 +17,11 @@ vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
 
 import { BaseBot, type Config } from '../../../src/bot/index';
+import { buildInertClient } from '../../fixtures/discord/client-builder';
 
 class MinimalBot extends BaseBot<Config> {}
 
-const client = { on: () => client, once: () => client, off: () => client } as unknown as Client;
+const client = buildInertClient();
 
 describe('BaseBot config.commands validation', () => {
   it('accepts known command names', () => {

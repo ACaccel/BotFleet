@@ -39,6 +39,9 @@ import { GuildDbConnector } from '../../../src/bot/guild-db-connector';
 import { BaseBot, type Config } from '../../../src/bot/index';
 import type { Repos } from '../../../src/persistence/repositories';
 import { ServiceReadiness } from '../../../src/bot/service-readiness';
+import { quietEnvLoadFailure } from './fixtures';
+
+quietEnvLoadFailure();
 
 /** Build a minimal Discord.js Client fake usable by BaseBot.run(). */
 interface RunFakeClient {

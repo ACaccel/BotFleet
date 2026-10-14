@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { collectMedia } from '../../../../src/handlers/commands/menu_get_sticker/collect-media';
 
 const sticker = (id: string, format: StickerFormatType) =>
-  ({ id, name: `s${id}`, url: `https://media.example/${id}`, format }) as unknown as Sticker;
+  ({ id, name: `s${id}`, url: `https://media.example/${id}`, format }) as Sticker;
 
 describe('collectMedia', () => {
   it('lists stickers, then every distinct custom emoji in the text', () => {

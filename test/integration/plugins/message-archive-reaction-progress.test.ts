@@ -1,27 +1,20 @@
-import {
-  buildArchiveRepos,
-  buildArchiveWriterRepos,
-} from '../../../src/persistence/repositories/archive-repos';
-import { archiveBackupNotifiers } from '../../../src/plugins/message-backup/runtime/backup-notifier';
 import { mongo } from 'mongoose';
-import { ChannelType, type Client, type Guild, type APIEmbed } from 'discord.js';
+import type { APIEmbed } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ArchiveProgressSnapshot } from '../../../src/core/archive/progress';
 import type * as StorageUsageModule from '../../../src/infra/archive/storage-usage';
 import { StaticConnectionManager } from '../../../src/infra/mongo/connection-manager';
-import { ArchiveWorker } from '../../../src/plugins/message-backup/runtime/worker';
 import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
-import { ArchivePolicySchema } from '../../../src/core/archive/policy';
 import { ArchiveLimitExceededError } from '../../../src/core/archive/errors';
 import { ARCHIVE_LIMITS } from '../../../src/core/archive/limits';
-import { createLogger } from '../../../src/core/logger';
-import type { Translator } from '../../../src/core/i18n';
 import { withFreshConnection } from '../helpers/mongo';
-import { collectChannels } from '../../../src/plugins/message-backup/internal/collect-channels';
-
-/** A raw `messages` document, keyed by the Discord message ID. */
-type StoredMessage = { _id: string } & Record<string, any>;
+import { echoTranslator } from '../../fixtures/runtime';
+import {
+  buildArchiveWorker,
+  stubArchiveInventory,
+  type StoredMessage,
+} from '../../helpers/archive-worker-fixture';
 
 vi.mock('../../../src/plugins/message-backup/internal/collect-channels', () => ({
   collectChannels: vi.fn(),
@@ -42,22 +35,8 @@ vi.mock('../../../src/infra/archive/storage-usage', async (original) => {
     },
   };
 });
-function fixture(
-  manager: StaticConnectionManager,
-  debug = false,
-  translator?: Translator,
-  discoveryPasses = true,
-) {
-  const channel = { id: '10', name: 'room', type: ChannelType.GuildText, parentId: null };
-  vi.mocked(collectChannels).mockResolvedValue({
-    channels: [channel],
-    liveChannelIds: new Set(['10']),
-    gaps: [],
-    complete: true,
-    locations: discoveryPasses
-      ? [{ id: channel.id, type: channel.type, name: channel.name, passes: ['channels'] }]
-      : [],
-  } as any);
+function fixture(manager: StaticConnectionManager, debug = false) {
+  stubArchiveInventory();
   const snapshot = {
     id: '101',
     guild_id: '1',
@@ -71,17 +50,6 @@ function fixture(
       { emoji: { id: '50', name: 'first' }, count: 3, count_details: { normal: 2, burst: 1 } },
     ],
   };
-  const get = vi.fn(async (route: string, options?: { query?: URLSearchParams }) =>
-    route === '/channels/10/messages/100'
-      ? { embeds: [], components: [] }
-      : route.includes('/reactions/')
-        ? options?.query?.get('type') === '0'
-          ? [{ id: '1001' }, { id: '1002' }]
-          : [{ id: '1003' }]
-        : route.endsWith('/messages')
-          ? [snapshot]
-          : snapshot,
-  );
   const messages: string[] = [];
   const message = {
     id: '100',
@@ -105,39 +73,23 @@ function fixture(
       return {};
     },
   );
-  const client = {
-    channels: { cache: new Map() },
-    guilds: {
-      fetch: async () => ({ id: '1', channels: { cache: new Map() } }) as unknown as Guild,
-    },
-    rest: { get, patch },
-  } as unknown as Client;
-  const workerTranslator =
-    translator ??
-    ({
-      t: (key: string, values: unknown) => JSON.stringify({ key, values }),
-    } as Translator);
-  const worker = new ArchiveWorker({
-    client,
-    // Tests drain the inbox explicitly; the loop has its own tests.
-    inboxLoop: false,
+  const { worker, rest } = buildArchiveWorker({
     connections: manager,
-    registry: {
-      getRepos: () => undefined,
-      getChannel: () => (debug ? (debugChannel as any) : undefined),
-      getRole: () => undefined,
-      listGuildIds: () => ['1'],
-    },
-    config: archiveRuntimeSchema.parse({}),
-    policy: ArchivePolicySchema.parse({ guildIds: ['1'] }),
-    guildIds: ['1'],
-    logger: createLogger({ level: 'silent', pretty: false }),
-    translator: workerTranslator,
-    backupNotifiers: archiveBackupNotifiers(client, workerTranslator),
-    archiveRepos: buildArchiveRepos,
-    writerRepos: buildArchiveWriterRepos,
+    get: async (route, options) =>
+      route === '/channels/10/messages/100'
+        ? { embeds: [], components: [] }
+        : route.includes('/reactions/')
+          ? options?.query?.get('type') === '0'
+            ? [{ id: '1001' }, { id: '1002' }]
+            : [{ id: '1003' }]
+          : route.endsWith('/messages')
+            ? [snapshot]
+            : snapshot,
+    patch,
+    channel: debug ? debugChannel : undefined,
+    translator: { ...echoTranslator(), t: (key, values) => JSON.stringify({ key, values }) },
   });
-  return { worker, get, patch, snapshot, messages, debugChannel, message };
+  return { worker, get: rest.get, patch, snapshot, messages, debugChannel, message };
 }
 
 describe('reaction identity and job progress integration', () => {
@@ -244,7 +196,7 @@ describe('reaction identity and job progress integration', () => {
             await state.repos.reactions.markReactionsStale('101', Date.now());
           else if (reason === 'a live change is unsettled') state.dirty.observe('101');
           else if (reason === 'capture restarted after the refresh')
-            state.continuity.continuousSince = Date.now() + 1;
+            state.continuity.continuousSince = before?.reactionsFreshAt + 1;
           else if (reason === 'the pass is a full reconciliation')
             state.continuity.fullRequired = true;
           else if (reason === 'the source is scanned fully')

@@ -12,7 +12,10 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   cache: {
-    store: vi.fn(async () => undefined),
+    store: vi.fn(
+      async (_guildId: string, _messageId: string, _attachments: Iterable<{ id: string }>) =>
+        undefined,
+    ),
     archiveCached: vi.fn(async () => 0),
     sweepExpired: vi.fn(async () => 0),
   },
@@ -29,24 +32,20 @@ vi.mock('../../../src/infra/discord', async (importOriginal) => ({
   createAttachmentCache: vi.fn(() => mocks.cache),
 }));
 
-import type { Message, PartialMessage } from 'discord.js';
+import { Collection, type Message, type PartialMessage } from 'discord.js';
 
 import { logGuildEvent } from '@core/logger';
 import { archiveDeletedAttachments, createAttachmentCache } from '../../../src/infra/discord';
 import { createGuildEventsPlugin } from '../../../src/plugins/guild-events';
-import {
-  createPermissionRankPolicy,
-  type PluginEventContext,
-  type PluginInitContext,
-  type PluginRuntimeContext,
-} from '../../../src/core/plugin';
+import { createPermissionRankPolicy } from '../../../src/core/plugin';
 import type { GuildRegistry } from '../../../src/bot/guild-registry';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS } from '../../../src/bot/tokens';
-import { createLogger } from '../../../src/core/logger';
 import { createFakeClock, systemClock, type Clock } from '../../../src/core/time';
+import { buildMessage } from '../../fixtures/discord/message-builder';
+import { buildPluginContext, silentLogger } from '../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
+const silent = silentLogger();
 
 const emptyRegistry: GuildRegistry = {
   getRepos: () => undefined,
@@ -55,7 +54,7 @@ const emptyRegistry: GuildRegistry = {
   listGuildIds: () => [],
 };
 
-const buildCtx = (clock: Clock = systemClock): PluginEventContext => {
+const buildCtx = (clock: Clock = systemClock): ReturnType<typeof buildPluginContext> => {
   const container = createContainer();
   container.registerSingleton(TOKENS.Logger, () => silent);
   container.registerSingleton(TOKENS.GuildRegistry, () => emptyRegistry);
@@ -67,34 +66,24 @@ const buildCtx = (clock: Clock = systemClock): PluginEventContext => {
       commandsRegistered: true,
     }),
   }));
-  return {
-    logger: silent,
-    translator: undefined,
-    clock,
-    resolve: container.resolve.bind(container),
-  } as unknown as PluginEventContext;
+  return buildPluginContext({ logger: silent, clock, resolve: container.resolve.bind(container) });
 };
 
 /** The host resolves dependencies in `init` before attaching subscriptions. */
 const initedPlugin = async (
   rawConfig?: unknown,
   clock: Clock = systemClock,
-): Promise<{ plugin: ReturnType<typeof createGuildEventsPlugin>; ctx: PluginEventContext }> => {
+): Promise<{
+  plugin: ReturnType<typeof createGuildEventsPlugin>;
+  ctx: ReturnType<typeof buildPluginContext>;
+}> => {
   const plugin = createGuildEventsPlugin(rawConfig);
   const ctx = buildCtx(clock);
-  await plugin.init?.(ctx as unknown as PluginInitContext);
+  await plugin.init?.(ctx);
   return { plugin, ctx };
 };
 
 type AttachmentStub = { id: string; name: string; url: string; contentType: string | null };
-
-/** Minimal discord.js Collection surface the handlers touch. */
-const attachmentCollection = (items: readonly AttachmentStub[]): unknown => ({
-  size: items.length,
-  map: (fn: (a: AttachmentStub) => unknown): unknown[] => items.map(fn),
-  forEach: (fn: (a: AttachmentStub) => void): void => items.forEach(fn),
-  values: (): IterableIterator<AttachmentStub> => items[Symbol.iterator](),
-});
 
 const attachment = (id: string): AttachmentStub => ({
   id,
@@ -111,7 +100,7 @@ const message = (
     attachments?: readonly AttachmentStub[];
   } = {},
 ): Message =>
-  ({
+  buildMessage({
     id: overrides.id ?? 'm1',
     content: 'hello',
     author: {
@@ -124,9 +113,8 @@ const message = (
     guild: { id: 'g1', name: 'Guild', channels: { cache: { get: () => undefined } } },
     guildId: overrides.guildId === undefined ? 'g1' : overrides.guildId,
     channel: { id: 'public', parentId: null },
-    partial: false,
-    attachments: attachmentCollection(overrides.attachments ?? []),
-  }) as unknown as Message;
+    attachments: new Collection((overrides.attachments ?? []).map((a) => [a.id, a])),
+  });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -144,9 +132,10 @@ describe('guild-events messageCreate caching', () => {
     await fire(message({ attachments: [attachment('a1'), attachment('a2')] }));
 
     expect(mocks.cache.store).toHaveBeenCalledTimes(1);
-    const [guildId, messageId] = mocks.cache.store.mock.calls[0] as unknown as [string, string];
+    const [guildId, messageId, stored] = mocks.cache.store.mock.calls[0] ?? [];
     expect(guildId).toBe('g1');
     expect(messageId).toBe('m1');
+    expect([...(stored ?? [])].map((a) => a.id)).toEqual(['a1', 'a2']);
   });
 
   it('ignores a bot author, matching what the archive ever records', async () => {
@@ -350,34 +339,34 @@ describe('guild-events TTL sweep lifecycle', () => {
   it('sweeps once at ready against the injected clock, clearing the downtime backlog', async () => {
     const clock = createFakeClock(1_700_000_000_000);
     const { plugin, ctx } = await initedPlugin(undefined, clock);
-    await plugin.onReady?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onReady?.(ctx);
 
     expect(mocks.cache.sweepExpired).toHaveBeenCalledTimes(1);
     // Reading `Date.now()` instead of the injected clock would make the
     // TTL untestable and diverge from the rest of the bot's time source.
     expect(mocks.cache.sweepExpired).toHaveBeenCalledWith(clock.now());
 
-    await plugin.onShutdown?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onShutdown?.(ctx);
   });
 
   it('reports a sweep that actually removed something', async () => {
     mocks.cache.sweepExpired.mockResolvedValue(3);
     const { plugin, ctx } = await initedPlugin();
 
-    await expect(plugin.onReady?.(ctx as unknown as PluginRuntimeContext)).resolves.toBeUndefined();
+    await expect(plugin.onReady?.(ctx)).resolves.toBeUndefined();
 
-    await plugin.onShutdown?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onShutdown?.(ctx);
   });
 
   it('reschedules itself hourly and stops on shutdown', async () => {
     vi.useFakeTimers();
     const { plugin, ctx } = await initedPlugin();
-    await plugin.onReady?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onReady?.(ctx);
 
     await vi.advanceTimersByTimeAsync(ONE_HOUR_MS);
     expect(mocks.cache.sweepExpired).toHaveBeenCalledTimes(2);
 
-    await plugin.onShutdown?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onShutdown?.(ctx);
 
     // A timer that outlives the plugin keeps the process alive and
     // sweeps a tree nobody owns any more.
@@ -390,11 +379,11 @@ describe('guild-events TTL sweep lifecycle', () => {
     mocks.cache.sweepExpired.mockRejectedValueOnce(new Error('disk gone'));
     const { plugin, ctx } = await initedPlugin();
 
-    await plugin.onReady?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onReady?.(ctx);
     await vi.advanceTimersByTimeAsync(ONE_HOUR_MS);
 
     expect(mocks.cache.sweepExpired).toHaveBeenCalledTimes(2);
-    await plugin.onShutdown?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onShutdown?.(ctx);
   });
 
   it('keeps sweeping after a scheduled pass fails', async () => {
@@ -405,16 +394,16 @@ describe('guild-events TTL sweep lifecycle', () => {
     mocks.cache.sweepExpired.mockResolvedValueOnce(0).mockRejectedValueOnce(new Error('disk gone'));
     const { plugin, ctx } = await initedPlugin();
 
-    await plugin.onReady?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onReady?.(ctx);
     await vi.advanceTimersByTimeAsync(2 * ONE_HOUR_MS);
 
     expect(mocks.cache.sweepExpired).toHaveBeenCalledTimes(3);
-    await plugin.onShutdown?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onShutdown?.(ctx);
   });
 
   it('does nothing on ready when the cache is disabled', async () => {
     const { plugin, ctx } = await initedPlugin({ attachment_cache: { enabled: false } });
-    await plugin.onReady?.(ctx as unknown as PluginRuntimeContext);
+    await plugin.onReady?.(ctx);
     expect(mocks.cache.sweepExpired).not.toHaveBeenCalled();
   });
 
@@ -422,8 +411,6 @@ describe('guild-events TTL sweep lifecycle', () => {
     // The contract in `core/plugin/types.ts`: onShutdown may run
     // without a successful init, so it must not touch resolved state.
     const plugin = createGuildEventsPlugin();
-    await expect(
-      plugin.onShutdown?.(buildCtx() as unknown as PluginRuntimeContext),
-    ).resolves.toBeUndefined();
+    await expect(plugin.onShutdown?.(buildCtx())).resolves.toBeUndefined();
   });
 });

@@ -13,17 +13,13 @@ import type { Job } from 'node-schedule';
 
 import { createGiveawayPlugin } from '../../../src/plugins/giveaway';
 import { createActivityPlugin } from '../../../src/plugins/activity';
-import { createLogger } from '../../../src/core/logger';
-import { systemClock } from '../../../src/core/time';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS } from '../../../src/bot/tokens';
 import { DatabaseError } from '../../../src/core/errors';
 import { err, ok, type Result } from '../../../src/core/result';
 import type { GuildRegistry } from '../../../src/bot/guild-registry';
 import type { Repos } from '../../../src/persistence/repositories';
-import type { PluginRuntimeContext } from '../../../src/core/plugin';
-
-const silent = createLogger({ level: 'silent', pretty: false });
+import { buildPluginContext } from '../../fixtures/runtime';
 
 const HOUR_MS = 60 * 60 * 1000;
 const future = (): number => Date.now() + HOUR_MS;
@@ -117,7 +113,7 @@ const buildRegistry = (repos: ReadonlyMap<string, FakeGuildRepos>): GuildRegistr
  * seeded from the registry because the reap path (`deleteActivity` /
  * `deleteGiveaway`) short-circuits on a guild the client does not know.
  */
-const buildCtx = (registry: GuildRegistry, jobMap: Map<string, Job>): PluginRuntimeContext => {
+const buildCtx = (registry: GuildRegistry, jobMap: Map<string, Job>) => {
   const guilds = new Map<string, unknown>(
     registry
       .listGuildIds()
@@ -136,12 +132,7 @@ const buildCtx = (registry: GuildRegistry, jobMap: Map<string, Job>): PluginRunt
       }) as never,
   );
   container.registerSingleton(TOKENS.JobMap, () => jobMap);
-  return {
-    logger: silent,
-    translator: { t: (k: string) => k } as PluginRuntimeContext['translator'],
-    clock: systemClock,
-    resolve: container.resolve.bind(container) as PluginRuntimeContext['resolve'],
-  };
+  return buildPluginContext({ resolve: container.resolve.bind(container) });
 };
 
 const jobMap = new Map<string, Job>();

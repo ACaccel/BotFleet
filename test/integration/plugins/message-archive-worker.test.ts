@@ -1,11 +1,8 @@
-import {
-  archiveBackupNotifiers,
-  type ArchivePanelDelivery,
-} from '../../../src/plugins/message-backup/runtime/backup-notifier';
+import type { ArchivePanelDelivery } from '../../../src/plugins/message-backup/runtime/backup-notifier';
 import { ARCHIVE_PERIODIC_RETRY_DELAY_MS } from '../../../src/core/archive/schedule';
 import { MongoArchiveScheduleRepo } from '../../../src/persistence/repositories/archive-schedule.repo';
 import type * as StorageModule from '../../../src/infra/archive/storage-usage';
-import { type Client, type Guild, ChannelType } from 'discord.js';
+import { type Client, ChannelType } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
   StaticConnectionManager,
@@ -15,17 +12,13 @@ import { asGuildId } from '../../../src/core/ids';
 import { ArchiveGatewayDecoder } from '../../../src/plugins/message-backup/runtime/gateway-event';
 import type { ArchiveGatewayReadiness } from '../../../src/plugins/message-backup/runtime/gateway-readiness';
 import { archiveControlFor } from '../../helpers/archive-control';
-import {
-  buildArchiveRepos,
-  buildArchiveWriterRepos,
-} from '../../../src/persistence/repositories/archive-repos';
+import { buildArchiveRepos } from '../../../src/persistence/repositories/archive-repos';
 import { ARCHIVE_LIMITS } from '../../../src/core/archive/limits';
 import {
   ArchiveCapacityError,
   ArchiveContinuityConflictError,
 } from '../../../src/core/archive/errors';
-import { ArchiveWorker } from '../../../src/plugins/message-backup/runtime/worker';
-import { archiveRuntimeSchema } from '../../../src/plugins/message-backup/config';
+import type { ArchiveWorker } from '../../../src/plugins/message-backup/runtime/worker';
 import {
   ArchivePolicySchema,
   INTERACTION_RECORD_EXCLUDED_FIELDS,
@@ -36,13 +29,15 @@ import type {
   ArchivePeriodicRun,
 } from '../../../src/core/archive/types';
 import { ARCHIVE_RESCAN_SAFETY_MS } from '../../../src/core/archive/continuity';
-import { createLogger } from '../../../src/core/logger';
-import type { Translator } from '../../../src/core/i18n';
 import { withFreshConnection } from '../helpers/mongo';
+import {
+  buildArchiveWorker,
+  controlWallClock,
+  stubArchiveInventory,
+  type StoredMessage,
+  type WallClock,
+} from '../../helpers/archive-worker-fixture';
 import { collectChannels } from '../../../src/plugins/message-backup/internal/collect-channels';
-
-/** A raw `messages` document, keyed by the Discord message ID. */
-type StoredMessage = { _id: string } & Record<string, any>;
 
 vi.mock('../../../src/plugins/message-backup/internal/collect-channels', () => ({
   collectChannels: vi.fn(),
@@ -74,8 +69,15 @@ const rawMessage = () => ({
   embeds: [],
   reactions: [],
 });
+/** Message 100 is the periodic panel; history pages and single reads return `read()`. */
+const restRead = (read: () => Record<string, unknown>) => async (route: string) =>
+  route === '/channels/10/messages/100'
+    ? { embeds: [], components: [] }
+    : route.endsWith('/messages')
+      ? [read()]
+      : read();
 const fixture = (
-  manager: StaticConnectionManager,
+  manager: ConnectionManager,
   read: () => Record<string, unknown> = rawMessage,
   notifications?: {
     send: ReturnType<typeof vi.fn>;
@@ -85,56 +87,18 @@ const fixture = (
   config: Record<string, unknown> = {},
   extra: Partial<ConstructorParameters<typeof ArchiveWorker>[0]> = {},
 ) => {
-  const channel = { id: '10', name: 'room', type: ChannelType.GuildText, parentId: null };
-  vi.mocked(collectChannels).mockResolvedValue({
-    channels: [channel],
-    liveChannelIds: new Set(['10']),
-    gaps: [],
-    complete: true,
-    locations: [{ id: channel.id, name: channel.name, type: channel.type, passes: ['channels'] }],
-  } as unknown as Awaited<ReturnType<typeof collectChannels>>);
-  const client = {
-    channels: { cache: new Map() },
-    guilds: {
-      fetch: async () => ({ id: '1', channels: { cache: new Map() } }) as unknown as Guild,
-    },
-    rest: {
-      get: vi.fn(async (route: string) =>
-        route === '/channels/10/messages/100'
-          ? { embeds: [], components: [] }
-          : route.endsWith('/messages')
-            ? [read()]
-            : read(),
-      ),
-      ...(notifications === undefined ? {} : { patch: notifications.patch }),
-      ...(notifications?.delete === undefined ? {} : { delete: notifications.delete }),
-    },
-  } as unknown as Client;
-  const logger = createLogger({ level: 'silent', pretty: false });
-  const translator = { t: (key: string) => key } as Translator;
-  const worker = new ArchiveWorker({
-    client,
+  stubArchiveInventory();
+  const { worker, client, logger } = buildArchiveWorker({
     connections: manager,
-    registry: {
-      getRepos: () => undefined,
-      getChannel: () =>
-        notifications === undefined
-          ? undefined
-          : ({ id: '10', isSendable: () => true, send: notifications.send } as never),
-      getRole: () => undefined,
-      listGuildIds: () => ['1'],
-    },
-    config: archiveRuntimeSchema.parse(config),
-    policy: ArchivePolicySchema.parse({ guildIds: ['1'] }),
-    guildIds: ['1'],
-    logger,
-    translator,
-    backupNotifiers: archiveBackupNotifiers(client, translator),
-    archiveRepos: buildArchiveRepos,
-    writerRepos: buildArchiveWriterRepos,
-    // Tests drain the inbox explicitly; the loop has its own tests.
-    inboxLoop: false,
-    ...extra,
+    get: restRead(read),
+    patch: notifications?.patch,
+    delete: notifications?.delete,
+    channel:
+      notifications === undefined
+        ? undefined
+        : { id: '10', isSendable: () => true, send: notifications.send },
+    config,
+    worker: extra,
   });
   return { worker, client, logger };
 };
@@ -145,25 +109,7 @@ const inventory = (
   channels: { id: string; name: string }[],
   gaps: { pass: string; channelId?: string; reason: string }[] = [],
   hidden: { id: string; name: string }[] = [],
-) => {
-  const readable = channels.map((channel) => ({
-    ...channel,
-    type: ChannelType.GuildText,
-    parentId: null,
-  }));
-  vi.mocked(collectChannels).mockResolvedValue({
-    channels: readable,
-    liveChannelIds: new Set([...channels, ...hidden].map((channel) => channel.id)),
-    gaps,
-    complete: gaps.length === 0,
-    locations: [...channels, ...hidden].map((channel) => ({
-      id: channel.id,
-      name: channel.name,
-      type: ChannelType.GuildText,
-      passes: ['channels'],
-    })),
-  } as unknown as Awaited<ReturnType<typeof collectChannels>>);
-};
+) => stubArchiveInventory({ readable: channels, gaps, hidden });
 
 type Db = Parameters<Parameters<typeof withFreshConnection>[0]>[0];
 /** Snowflake of the first possible message at `timestamp`. */
@@ -472,14 +418,17 @@ describe('msg-archive worker integration', () => {
         });
         passing = worker.scheduledPeriodic('1', 60_000);
         await entered;
+        // Progress publishes on its own async chain; wait for its edit and stored panel.
+        await vi.waitFor(async () => {
+          expect(edits().length).toBeGreaterThan(0);
+          expect((await store.read()).summary).toMatchObject({ channelId: '10', messageId: '71' });
+        });
         expect(summaries()).toEqual([
           expect.objectContaining({ title: 'replies:archive.summary_title_running' }),
         ]);
-        expect(edits().length).toBeGreaterThan(0);
         expect(
           edits().every((embed) => embed?.title === 'replies:archive.summary_title_running'),
         ).toBe(true);
-        expect((await store.read()).summary).toMatchObject({ channelId: '10', messageId: '71' });
         expect(notifications.delete).not.toHaveBeenCalled();
         release();
         await passing;
@@ -638,8 +587,11 @@ describe('msg-archive worker integration', () => {
         });
         passing = worker.scheduledPeriodic('1', 60_000);
         await entered;
-        expect(notifications.send).toHaveBeenCalledTimes(2);
-        expect((await store.read()).summary).toMatchObject({ channelId: '10', messageId: '81' });
+        // The retried send and its stored panel land on the progress chain, not this one.
+        await vi.waitFor(async () => {
+          expect(notifications.send).toHaveBeenCalledTimes(2);
+          expect((await store.read()).summary).toMatchObject({ channelId: '10', messageId: '81' });
+        });
         expect(await runs(connection).findOne({})).toMatchObject({ status: 'running' });
         release();
         await passing;
@@ -1560,10 +1512,18 @@ describe('msg-archive worker integration', () => {
     Object.assign(new Error(`Discord API error ${code}`), { code, status });
 
   const inboxOf = (connection: Db) => connection.collection('archive_inbox');
-  /** Outlasts the repository's short empty-inbox cache after editing an event directly. */
-  const edit = async (connection: Db, eventId: string, fields: Record<string, unknown>) => {
+  /**
+   * Edits an event directly, then moves the clock past the inbox repository's 250 ms
+   * empty-claim cache, which the direct edit bypassed.
+   */
+  const edit = async (
+    connection: Db,
+    clock: WallClock,
+    eventId: string,
+    fields: Record<string, unknown>,
+  ) => {
     await inboxOf(connection).updateOne({ eventId }, { $set: fields });
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    clock.advance(250);
   };
   const seedChannel = (connection: Db) =>
     connection
@@ -1793,6 +1753,7 @@ describe('msg-archive worker integration', () => {
   it('retries transient failures uncounted and dead-letters them a day after the first', async () =>
     withFreshConnection(async (connection) => {
       const { worker, client } = fixture(new StaticConnectionManager(connection));
+      const clock = controlWallClock();
       failingReconcile(client, discordError(0, 503));
       try {
         const state = await worker.initialize('1');
@@ -1803,7 +1764,7 @@ describe('msg-archive worker integration', () => {
         expect(event).toMatchObject({ state: 'pending', attempts: 0 });
         expect(event?.['firstFailedAt']).toBeGreaterThanOrEqual(before);
         expect(event?.['nextAttemptAt']).toBeGreaterThanOrEqual(before + 60_000);
-        await edit(connection, 'flaky', {
+        await edit(connection, clock, 'flaky', {
           nextAttemptAt: 0,
           firstFailedAt: Date.now() - 86_400_000,
         });
@@ -1860,6 +1821,7 @@ describe('msg-archive worker integration', () => {
     withFreshConnection(async (connection) => {
       const { worker, client } = fixture(new StaticConnectionManager(connection));
       const control = await archiveControlFor(connection);
+      const clock = controlWallClock();
       try {
         const state = await worker.initialize('1');
         // A first full pass makes the following runs incremental.
@@ -1874,16 +1836,16 @@ describe('msg-archive worker integration', () => {
           expect(event?.['nextAttemptAt']).toBeGreaterThanOrEqual(
             before + 60_000 * 2 ** (attempts - 1),
           );
-          await edit(connection, 'poison', { nextAttemptAt: 0 });
+          await edit(connection, clock, 'poison', { nextAttemptAt: 0 });
         }
         // The tenth counted failure still retries, at the one-hour cap.
-        await edit(connection, 'poison', { attempts: 9 });
+        await edit(connection, clock, 'poison', { attempts: 9 });
         let before = Date.now();
         await worker.drainInbox('1');
         const tenth = await inboxOf(connection).findOne({ eventId: 'poison' });
         expect(tenth).toMatchObject({ state: 'pending', attempts: 10 });
         expect(tenth?.['nextAttemptAt']).toBeGreaterThanOrEqual(before + 3_600_000);
-        await edit(connection, 'poison', { nextAttemptAt: 0 });
+        await edit(connection, clock, 'poison', { nextAttemptAt: 0 });
         await worker.drainInbox('1');
         const dead = await inboxOf(connection).findOne({ eventId: 'poison' });
         expect(dead).toMatchObject({
@@ -2294,32 +2256,25 @@ describe('msg-archive Gateway continuity', () => {
   it('records a Gateway gap for every other guild when one guild fails', async () =>
     withFreshConnection(async (connection) => {
       const manager = new StaticConnectionManager(connection);
-      const { client, logger } = fixture(manager);
       const unavailable = new Error('guild 2 database unavailable');
-      const translator = { t: (key: string) => key } as Translator;
-      const worker = new ArchiveWorker({
-        client,
+      const { worker } = buildArchiveWorker({
         connections: {
           getConnection: async (guildId: string) => {
             if (guildId === '2') throw unavailable;
             return manager.getConnection(asGuildId(guildId));
           },
         } as unknown as ConnectionManager,
-        registry: {
-          getRepos: () => undefined,
-          getChannel: () => undefined,
-          getRole: () => undefined,
-          listGuildIds: () => ['1', '2'],
+        get: restRead(rawMessage),
+        worker: {
+          registry: {
+            getRepos: () => undefined,
+            getChannel: () => undefined,
+            getRole: () => undefined,
+            listGuildIds: () => ['1', '2'],
+          },
+          policy: ArchivePolicySchema.parse({ guildIds: ['1', '2'] }),
+          guildIds: ['2', '1'],
         },
-        config: archiveRuntimeSchema.parse({}),
-        policy: ArchivePolicySchema.parse({ guildIds: ['1', '2'] }),
-        guildIds: ['2', '1'],
-        logger,
-        translator,
-        backupNotifiers: archiveBackupNotifiers(client, translator),
-        archiveRepos: buildArchiveRepos,
-        writerRepos: buildArchiveWriterRepos,
-        inboxLoop: false,
       });
       try {
         const failure = await worker.markGap('gateway-disconnect').catch((error: unknown) => error);

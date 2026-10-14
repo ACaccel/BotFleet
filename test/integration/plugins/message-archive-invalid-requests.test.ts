@@ -1,13 +1,13 @@
 import type { Connection } from 'mongoose';
 import { describe, expect, it, vi } from 'vitest';
 import { ARCHIVE_INVALID_REQUESTS } from '../../../src/core/archive/limits';
-import type { Translator } from '../../../src/core/i18n';
-import { createLogger } from '../../../src/core/logger';
 import { MongoArchiveScheduleRepo } from '../../../src/persistence/repositories/archive-schedule.repo';
 import { ArchiveScheduler } from '../../../src/plugins/message-backup/flow/scheduler';
 import { ArchiveInvalidRequestMonitor } from '../../../src/plugins/message-backup/runtime/invalid-request-monitor';
 import { NotificationRecovery } from '../../../src/plugins/message-backup/runtime/notification-recovery';
 import { withFreshConnection } from '../helpers/mongo';
+import { silentLogger } from '../../fixtures/runtime';
+import { keyWithParamsTranslator } from '../../helpers/archive-worker-fixture';
 
 const { warning, critical, windowMs } = ARCHIVE_INVALID_REQUESTS;
 
@@ -17,7 +17,7 @@ const workerProcess = (connection: Connection, send: ReturnType<typeof vi.fn>, s
   let count = 0;
   const repo = new MongoArchiveScheduleRepo(connection, 3_600_000);
   const scheduler = new ArchiveScheduler({ concurrency: 8 });
-  const logger = createLogger({ level: 'silent', pretty: false });
+  const logger = silentLogger();
   const warn = vi.spyOn(logger, 'warn');
   const error = vi.spyOn(logger, 'error');
   const isDisabled = vi.fn((_guildId: string): { traceId: string } | undefined => undefined);
@@ -27,10 +27,7 @@ const workerProcess = (connection: Connection, send: ReturnType<typeof vi.fn>, s
       logger,
       connections: { isDisabled },
       registry: { getChannel: () => ({ isSendable: () => true, send }) },
-      translator: {
-        t: (key: string, params?: Record<string, unknown>) =>
-          params === undefined ? key : `${key}${JSON.stringify(params)}`,
-      } as Translator,
+      translator: keyWithParamsTranslator(),
     },
     telemetry: { invalidLast10Minutes: () => count },
     scheduler,

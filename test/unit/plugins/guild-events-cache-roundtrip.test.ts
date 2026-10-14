@@ -30,23 +30,19 @@ import axios from 'axios';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { Message } from 'discord.js';
+import { Collection, type Message } from 'discord.js';
 import { Readable } from 'node:stream';
 
 import { archiveDeletedAttachments, createAttachmentCache } from '../../../src/infra/discord';
 import { createGuildEventsPlugin } from '../../../src/plugins/guild-events';
-import {
-  createPermissionRankPolicy,
-  type PluginEventContext,
-  type PluginInitContext,
-} from '../../../src/core/plugin';
+import { createPermissionRankPolicy } from '../../../src/core/plugin';
 import type { GuildRegistry } from '../../../src/bot/guild-registry';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS } from '../../../src/bot/tokens';
-import { createLogger } from '../../../src/core/logger';
-import { systemClock } from '../../../src/core/time';
+import { buildMessage } from '../../fixtures/discord/message-builder';
+import { buildPluginContext, silentLogger } from '../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
+const silent = silentLogger();
 
 const emptyRegistry: GuildRegistry = {
   getRepos: () => undefined,
@@ -55,7 +51,7 @@ const emptyRegistry: GuildRegistry = {
   listGuildIds: () => [],
 };
 
-const buildCtx = (): PluginEventContext => {
+const buildCtx = (): ReturnType<typeof buildPluginContext> => {
   const container = createContainer();
   container.registerSingleton(TOKENS.Logger, () => silent);
   container.registerSingleton(TOKENS.GuildRegistry, () => emptyRegistry);
@@ -67,22 +63,10 @@ const buildCtx = (): PluginEventContext => {
       commandsRegistered: true,
     }),
   }));
-  return {
-    logger: silent,
-    translator: undefined,
-    clock: systemClock,
-    resolve: container.resolve.bind(container),
-  } as unknown as PluginEventContext;
+  return buildPluginContext({ logger: silent, resolve: container.resolve.bind(container) });
 };
 
 type AttachmentStub = { id: string; name: string; url: string; contentType: string | null };
-
-const attachmentCollection = (items: readonly AttachmentStub[]): unknown => ({
-  size: items.length,
-  map: (fn: (a: AttachmentStub) => unknown): unknown[] => items.map(fn),
-  forEach: (fn: (a: AttachmentStub) => void): void => items.forEach(fn),
-  values: (): IterableIterator<AttachmentStub> => items[Symbol.iterator](),
-});
 
 const attachment = (id: string, name: string): AttachmentStub => ({
   id,
@@ -92,22 +76,13 @@ const attachment = (id: string, name: string): AttachmentStub => ({
 });
 
 const message = (attachments: readonly AttachmentStub[]): Message =>
-  ({
+  buildMessage({
     id: 'm-1',
     content: 'hello',
-    author: {
-      bot: false,
-      id: 'u1',
-      username: 'user',
-      displayName: 'User',
-      displayAvatarURL: () => 'https://example.test/a.png',
-    },
     guild: { id: 'g1', name: 'Guild', channels: { cache: { get: () => undefined } } },
-    guildId: 'g1',
     channel: { id: 'public', parentId: null },
-    partial: false,
-    attachments: attachmentCollection(attachments),
-  }) as unknown as Message;
+    attachments: new Collection(attachments.map((a) => [a.id, a])),
+  });
 
 const A1 = '1300000000000000001';
 const A2 = '1300000000000000002';
@@ -122,7 +97,7 @@ describe('guild-events attachment cache round trip', () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'guild-events-roundtrip-'));
     cacheRoot = path.join(root, 'attachment_cache');
     archiveRoot = path.join(root, 'deleted_attachments');
-    (axios.get as unknown as ReturnType<typeof vi.fn>) = vi.fn(async () => ({
+    vi.mocked(axios.get).mockImplementation(async () => ({
       data: Readable.from(['payload']),
     }));
   });
@@ -133,7 +108,7 @@ describe('guild-events attachment cache round trip', () => {
 
   const initedPlugin = async (): Promise<{
     plugin: ReturnType<typeof createGuildEventsPlugin>;
-    ctx: PluginEventContext;
+    ctx: ReturnType<typeof buildPluginContext>;
   }> => {
     const plugin = createGuildEventsPlugin(undefined, {
       cache: createAttachmentCache({
@@ -148,7 +123,7 @@ describe('guild-events attachment cache round trip', () => {
       }),
     });
     const ctx = buildCtx();
-    await plugin.init?.(ctx as unknown as PluginInitContext);
+    await plugin.init?.(ctx);
     return { plugin, ctx };
   };
 

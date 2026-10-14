@@ -8,7 +8,6 @@
  */
 /* eslint-disable import/first */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ChatInputCommandInteraction } from 'discord.js';
 
 const scheduledCallbacks: Array<() => void> = [];
 vi.mock('node-schedule', () => ({
@@ -21,7 +20,14 @@ vi.mock('node-schedule', () => ({
 }));
 
 import BanUser from '../../../../src/handlers/commands/ban_user';
+import { echoTranslator } from '../../../fixtures/runtime';
 import { buildFakeBot } from '../../../fixtures/discord/bot-fake';
+import { buildGuild } from '../../../fixtures/discord/guild-builder';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../../fixtures/discord/interaction-builder';
+import { buildGuildMember } from '../../../fixtures/discord/member-builder';
 
 const GUILD_ID = 'g1';
 const TARGET_ID = 'u-target';
@@ -45,14 +51,12 @@ const build = (fixture: Fixture) => {
     id: 'judge-1',
     guildId: GUILD_ID,
   };
-  const member = {
-    id: TARGET_ID,
-    displayName: 'Target',
-    user: { bot: fixture.targetIsBot ?? false, tag: 'target#1', displayName: 'Target' },
-    timeout: vi.fn(async () => {
-      if (!fixture.timeoutSucceeds) throw new Error('Missing Permissions');
-    }),
-  };
+  const member = buildGuildMember({ id: TARGET_ID, displayName: 'Target' });
+  const timeout = vi.fn(async () => {
+    if (!fixture.timeoutSucceeds) throw new Error('Missing Permissions');
+  });
+  Object.assign(member, { timeout });
+  Object.assign(member.user, { bot: fixture.targetIsBot ?? false, tag: 'target#1' });
   const clientListeners = new Map<string, unknown>();
   const send = vi.fn(async (_options: unknown) => judgeMessage);
   const { bot, logger } = buildFakeBot({
@@ -66,22 +70,36 @@ const build = (fixture: Fixture) => {
         : { roles: { ban_user: { id: fixture.voterRoleId ?? 'role-1' } } },
   });
 
-  const interaction = {
-    deferReply: vi.fn(async () => undefined),
-    deleteReply: vi.fn(async () => undefined),
-    editReply: vi.fn(async () => undefined),
-    deferred: true,
-    replied: false,
-    guild: { id: GUILD_ID, members: { cache: new Map([[TARGET_ID, member]]) } },
-    member: { displayName: 'Initiator' },
-    user: { id: 'u-init', username: 'initiator' },
-    channel: { isSendable: () => true, send },
-    options: {
-      get: (name: string) => (name === 'user' ? { value: TARGET_ID } : undefined),
-    },
-  } as unknown as ChatInputCommandInteraction;
+  const channel = { id: 'c1', isSendable: () => true, send };
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({
+    userId: 'u-init',
+    guild: buildGuild({ id: GUILD_ID, members: [member] }),
+    channel,
+    options: { user: TARGET_ID },
+    sink,
+  });
+  // The builder has no `deleteReply`, guild member or username; removing
+  // the acknowledgement is only observable as the call.
+  const deleteReply = vi.fn(async () => undefined);
+  Object.assign(interaction, {
+    deleteReply,
+    member: buildGuildMember({ id: 'u-init', displayName: 'Initiator' }),
+  });
+  Object.assign(interaction.user, { username: 'initiator' });
 
-  return { bot, interaction, member, reply, send, error: logger.error, clientListeners };
+  return {
+    bot,
+    interaction,
+    sink,
+    member,
+    timeout,
+    reply,
+    send,
+    deleteReply,
+    error: logger.error,
+    clientListeners,
+  };
 };
 
 afterEach(() => {
@@ -91,12 +109,18 @@ afterEach(() => {
 
 describe('ban_user judgement', () => {
   it('times the target out when the vote threshold is met', async () => {
-    const { bot, interaction, member, reply } = build({ votes: 5, timeoutSucceeds: true });
+    const { bot, interaction, timeout, reply, sink, deleteReply } = build({
+      votes: 5,
+      timeoutSucceeds: true,
+    });
 
     await new BanUser().execute(interaction, bot);
     expect(scheduledCallbacks).toHaveLength(1);
+    // The invoking acknowledgement is replaced by the public vote message.
+    expect(sink.defers).toEqual([{}]);
+    expect(deleteReply).toHaveBeenCalledOnce();
     scheduledCallbacks[0]?.();
-    await vi.waitFor(() => expect(member.timeout).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(timeout).toHaveBeenCalledTimes(1));
 
     expect(reply).toHaveBeenCalledWith('replies:ban_user.timed_out');
   });
@@ -119,13 +143,13 @@ describe('ban_user judgement', () => {
   });
 
   it('reports a vote that fell short without timing anyone out', async () => {
-    const { bot, interaction, member, reply } = build({ votes: 1, timeoutSucceeds: true });
+    const { bot, interaction, timeout, reply } = build({ votes: 1, timeoutSucceeds: true });
 
     await new BanUser().execute(interaction, bot);
     scheduledCallbacks[0]?.();
     await vi.waitFor(() => expect(reply).toHaveBeenCalledWith('replies:ban_user.vote_failed'));
 
-    expect(member.timeout).not.toHaveBeenCalled();
+    expect(timeout).not.toHaveBeenCalled();
   });
 
   it('routes a rejected judgement to the logger rather than an unhandled rejection', async () => {
@@ -134,8 +158,11 @@ describe('ban_user judgement', () => {
 
     // node-schedule discards the value its callback returns, so without
     // the wrapper the rejection had no path back to this vote.
-    (bot.translator as unknown as { t: () => string }).t = () => {
-      throw new Error('catalog exploded');
+    bot.translator = {
+      ...echoTranslator(),
+      t: () => {
+        throw new Error('catalog exploded');
+      },
     };
     expect(() => scheduledCallbacks[0]?.()).not.toThrow();
     await vi.waitFor(() => expect(error).toHaveBeenCalled());
@@ -144,7 +171,7 @@ describe('ban_user judgement', () => {
 
 describe('ban_user vote call', () => {
   it('refuses a bot target before any vote is posted', async () => {
-    const { bot, interaction, send } = build({
+    const { bot, interaction, send, sink, deleteReply } = build({
       votes: 5,
       timeoutSucceeds: true,
       targetIsBot: true,
@@ -152,9 +179,8 @@ describe('ban_user vote call', () => {
 
     await new BanUser().execute(interaction, bot);
 
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: 'replies:ban_user.cannot_ban_bot',
-    });
+    expect(sink.editReplies).toEqual([{ content: 'replies:ban_user.cannot_ban_bot' }]);
+    expect(deleteReply).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
     expect(scheduledCallbacks).toHaveLength(0);
   });

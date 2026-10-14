@@ -1,18 +1,17 @@
-import mongoose, { type Connection, Types } from 'mongoose';
+import { type Connection, Types } from 'mongoose';
 import { describe, expect, it } from 'vitest';
 import { DatabaseError } from '../../../src/core/errors';
 import { asGuildId } from '../../../src/core/ids';
 import { isErr, isOk, unwrap } from '../../../src/core/result';
 import {
   StaticConnectionManager,
-  buildGuildMongoUri,
   type GuildConnection,
 } from '../../../src/infra/mongo/connection-manager';
 import {
   MongoFeedSubscriptionRepo,
   type FeedSubscriptionUpsertInput,
 } from '../../../src/persistence/repositories/feed-subscription.repo';
-import { withFreshConnection } from '../helpers/mongo';
+import { withClosedConnection, withFreshConnection } from '../helpers/mongo';
 
 const guildId = asGuildId('999999999999999999');
 
@@ -43,23 +42,10 @@ const subscription = (
   ...overrides,
 });
 
-/**
- * Open a second connection to the same memory-server and close it, so a
- * repo method fails inside the driver rather than inside mongoose's
- * casting layer. This is the only way to exercise the real
- * `databaseErrorFrom` classification path.
- */
-const buildRepoOnClosedConnection = async (): Promise<MongoFeedSubscriptionRepo> => {
-  const uri = process.env.INTEGRATION_MONGO_URI;
-  if (uri === undefined) throw new Error('INTEGRATION_MONGO_URI not set');
-  const baseUri = uri.replace(/[^/]*$/, '');
-  const connection = await mongoose
-    .createConnection(buildGuildMongoUri(baseUri, guildId))
-    .asPromise();
-  const repo = new MongoFeedSubscriptionRepo(await openGuild(connection));
-  await connection.close();
-  return repo;
-};
+const buildRepoOnClosedConnection = (): Promise<MongoFeedSubscriptionRepo> =>
+  withClosedConnection(
+    async (connection) => new MongoFeedSubscriptionRepo(await openGuild(connection)),
+  );
 
 describe('MongoFeedSubscriptionRepo — lookup (integration)', () => {
   it('find returns ok(undefined) when the channel has no such subscription', async () => {

@@ -12,12 +12,12 @@ import { ApplicationCommandType, PermissionFlagsBits } from 'discord.js';
 import type { Translator } from '../../../src/core/i18n';
 import { localizeCommandConfig, type CommandConfig } from '../../../src/handlers/commands/command';
 
-/** Translator stub that echoes the requested key. */
-const echoTranslator = (): Translator =>
-  ({
-    t: (key: string) => `[${key}]`,
-    tStrict: (key: string) => `[${key}]`,
-  }) as unknown as Translator;
+/** Translator stub that brackets the requested key, so a resolved string is never the bare key. */
+const bracketTranslator = (): Translator => ({
+  t: (key) => `[${key}]`,
+  tStrict: (key) => `[${key}]`,
+  listMissingKeys: () => ({ en: [], 'zh-TW': [] }),
+});
 
 describe('localizeCommandConfig', () => {
   it('localizes groups, nested subcommands, options, and choices without mutation', () => {
@@ -40,7 +40,7 @@ describe('localizeCommandConfig', () => {
       ],
     };
     const snapshot = structuredClone(config);
-    const localized = localizeCommandConfig(config, echoTranslator());
+    const localized = localizeCommandConfig(config, bracketTranslator());
     expect(localized.guildOnly).toBe(true);
     expect(localized.defaultMemberPermissions).toBe(PermissionFlagsBits.ManageGuild);
     expect(localized.subcommandGroups?.[0]).toEqual({
@@ -73,7 +73,7 @@ describe('localizeCommandConfig', () => {
   });
   it('resolves a chat-input command description from commands:<name>.description', () => {
     const config: CommandConfig = { name: 'add_reply' };
-    const localized = localizeCommandConfig(config, echoTranslator());
+    const localized = localizeCommandConfig(config, bracketTranslator());
     expect(localized.name).toBe('add_reply');
     expect(localized.description).toBe('[commands:add_reply.description]');
   });
@@ -88,7 +88,7 @@ describe('localizeCommandConfig', () => {
         ],
       },
     };
-    const localized = localizeCommandConfig(config, echoTranslator());
+    const localized = localizeCommandConfig(config, bracketTranslator());
     expect(localized.options?.string?.[0]?.description).toBe(
       '[commands:add_reply.options.keyword.description]',
     );
@@ -105,7 +105,7 @@ describe('localizeCommandConfig', () => {
       name: 'feed_unsubscribe',
       options: { string: [{ name: 'account', required: false, autocomplete: true }] },
     };
-    const localized = localizeCommandConfig(config, echoTranslator());
+    const localized = localizeCommandConfig(config, bracketTranslator());
     expect(localized.options?.string?.[0]?.autocomplete).toBe(true);
   });
 
@@ -116,7 +116,7 @@ describe('localizeCommandConfig', () => {
         string: [{ name: 'frequency', required: false, choices: [{ value: 'asc' }] }],
       },
     };
-    const localized = localizeCommandConfig(config, echoTranslator());
+    const localized = localizeCommandConfig(config, bracketTranslator());
     expect(localized.options?.string?.[0]?.choices?.[0]).toEqual({
       value: 'asc',
       name: '[commands:sample_command.options.frequency.choices.asc]',
@@ -136,7 +136,7 @@ describe('localizeCommandConfig', () => {
         ],
       },
     };
-    const localized = localizeCommandConfig(config, echoTranslator());
+    const localized = localizeCommandConfig(config, bracketTranslator());
     expect(localized.options?.string?.[0]?.choices?.[0]).toEqual({
       name: '高松燈',
       value: '高松燈',
@@ -148,7 +148,7 @@ describe('localizeCommandConfig', () => {
       name: 'menu_get_avatar',
       type: ApplicationCommandType.User,
     };
-    const localized = localizeCommandConfig(config, echoTranslator());
+    const localized = localizeCommandConfig(config, bracketTranslator());
     expect(localized.name).toBe('[commands:menu_get_avatar.name]');
     expect(localized.description).toBe('');
     expect(localized.type).toBe(ApplicationCommandType.User);
@@ -156,7 +156,7 @@ describe('localizeCommandConfig', () => {
 
   it('does not mutate the input config', () => {
     const config: CommandConfig = { name: 'help' };
-    localizeCommandConfig(config, echoTranslator());
+    localizeCommandConfig(config, bracketTranslator());
     expect(config).toEqual({ name: 'help' });
   });
 

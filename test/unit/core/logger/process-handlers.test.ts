@@ -13,11 +13,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   __resetProcessHandlersForTests,
-  createLogger,
   getTransientNetworkErrorCount,
   getUnhandledRejectionCount,
   installProcessHandlers,
 } from '../../../../src/core/logger';
+import { silentLogger } from '../../../fixtures/runtime';
 
 const noopShutdown = async (): Promise<void> => undefined;
 
@@ -59,7 +59,7 @@ describe('installProcessHandlers', () => {
   });
 
   it('only attaches handlers once across repeated install calls (idempotent)', () => {
-    const logger = createLogger({ level: 'silent', pretty: false });
+    const logger = silentLogger();
     // Vitest installs its own listeners on these events; measure the
     // delta our installer contributes rather than the absolute count.
     const baselineRejection = process.listenerCount('unhandledRejection');
@@ -83,7 +83,7 @@ describe('installProcessHandlers', () => {
   it.each(['SIGINT', 'SIGTERM'] as const)(
     '%s runs the graceful shutdown and then exits 0',
     async (signal) => {
-      const logger = createLogger({ level: 'silent', pretty: false });
+      const logger = silentLogger();
       const exitCodes: number[] = [];
       let shutdownCalls = 0;
       installProcessHandlers({
@@ -103,7 +103,7 @@ describe('installProcessHandlers', () => {
   );
 
   it('exits immediately on a second SIGINT instead of waiting for the in-flight shutdown', async () => {
-    const logger = createLogger({ level: 'silent', pretty: false });
+    const logger = silentLogger();
     const exitCodes: number[] = [];
     let shutdownCalls = 0;
     let releaseShutdown: () => void = () => {};
@@ -136,7 +136,7 @@ describe('installProcessHandlers', () => {
   });
 
   it('exits non-zero when the graceful shutdown itself throws', async () => {
-    const logger = createLogger({ level: 'silent', pretty: false });
+    const logger = silentLogger();
     const exitCodes: number[] = [];
     installProcessHandlers({
       logger,
@@ -155,7 +155,7 @@ describe('installProcessHandlers', () => {
   });
 
   it('escalates the exit status when a fatal fault lands during a clean shutdown', async () => {
-    const logger = createLogger({ level: 'silent', pretty: false });
+    const logger = silentLogger();
     const exitCodes: number[] = [];
     let releaseShutdown: () => void = () => {};
     const shutdownGate = new Promise<void>((resolve) => {
@@ -179,7 +179,7 @@ describe('installProcessHandlers', () => {
   });
 
   it('emitting unhandledRejection bumps the counter without exiting', async () => {
-    const logger = createLogger({ level: 'silent', pretty: false });
+    const logger = silentLogger();
     const before = getUnhandledRejectionCount();
     installProcessHandlers({ logger, gracefulShutdown: noopShutdown });
     process.emit('unhandledRejection', new Error('test'), Promise.resolve());
@@ -189,7 +189,7 @@ describe('installProcessHandlers', () => {
   });
 
   it('downgrades a transient-network uncaughtException: counts it, never shuts down', async () => {
-    const logger = createLogger({ level: 'silent', pretty: false });
+    const logger = silentLogger();
     let shutdownCalls = 0;
     const before = getTransientNetworkErrorCount();
     installProcessHandlers({

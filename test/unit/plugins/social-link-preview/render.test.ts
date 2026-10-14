@@ -18,19 +18,21 @@ import {
 } from '../../../../src/plugins/social-link-preview/internal/render';
 import type { Translator } from '../../../../src/core/i18n';
 import type { LinkPreviewResult } from '../../../../src/infra/link-preview';
+import { buildMessage } from '../../../fixtures/discord/message-builder';
+import { echoTranslator } from '../../../fixtures/runtime';
 
-const makeTranslator = (): Translator =>
-  ({
-    t: vi.fn((key: string, params?: { provider?: string; count?: number | string }) => {
-      const statistics: Record<string, string> = {
-        'replies:social_link_preview.engagement_likes': '👍',
-        'replies:social_link_preview.engagement_comments': '💬',
-        'replies:social_link_preview.engagement_shares': '🔄',
-      };
-      const icon = statistics[key];
-      return icon === undefined ? `${key}|${params?.provider ?? ''}` : `${icon} ${params?.count}`;
-    }),
-  }) as unknown as Translator;
+const makeTranslator = (): Translator => ({
+  ...echoTranslator(),
+  t: vi.fn((key: string, params?: { provider?: string; count?: number | string }) => {
+    const statistics: Record<string, string> = {
+      'replies:social_link_preview.engagement_likes': '👍',
+      'replies:social_link_preview.engagement_comments': '💬',
+      'replies:social_link_preview.engagement_shares': '🔄',
+    };
+    const icon = statistics[key];
+    return icon === undefined ? `${key}|${params?.provider ?? ''}` : `${icon} ${params?.count}`;
+  }),
+});
 
 interface ReplyPayload {
   content?: string;
@@ -43,12 +45,12 @@ interface ReplyPayload {
 
 const makeMessage = (): { message: Message; replies: ReplyPayload[] } => {
   const replies: ReplyPayload[] = [];
-  const message = {
+  const message = buildMessage({
     reply: vi.fn(async (payload: ReplyPayload) => {
       replies.push(payload);
-      return {} as Message;
+      return {};
     }),
-  } as unknown as Message;
+  });
   return { message, replies };
 };
 

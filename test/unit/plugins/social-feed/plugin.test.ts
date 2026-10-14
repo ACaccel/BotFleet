@@ -5,12 +5,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createLogger } from '../../../../src/core/logger';
 import { TOKENS } from '../../../../src/bot/tokens';
-import type { PluginRuntimeContext } from '../../../../src/core/plugin';
 import { createSocialFeedPlugin } from '../../../../src/plugins/social-feed';
 import { runFeedPass } from '../../../../src/plugins/social-feed/internal';
 import { FeedPlatformRegistry } from '../../../../src/infra/social-feed';
+import { buildPluginContext } from '../../../fixtures/runtime';
 
 // Replace the pass with a controllable spy so the loop tests can force a
 // throw without touching the network, Mongo, or Discord. `vi.mock` is
@@ -87,15 +86,17 @@ describe('createSocialFeedPlugin — shape and config', () => {
 describe('createSocialFeedPlugin — poll loop', () => {
   const mockedRunFeedPass = vi.mocked(runFeedPass);
 
-  const buildCtx = (): PluginRuntimeContext =>
-    ({
-      logger: createLogger({ level: 'silent', pretty: false }),
-      translator: { t: (key: string) => key },
-      // The pass is mocked, so empty stubs satisfy the seams `onReady`
-      // resolves; only the platform registry has a real instance, to
-      // prove the container fallback path resolves at all.
-      resolve: (t: unknown) => (t === TOKENS.FeedPlatformRegistry ? platforms : {}),
-    }) as unknown as PluginRuntimeContext;
+  // The pass is mocked, so empty stubs satisfy the seams `onReady`
+  // resolves; only the platform registry has a real instance, to prove
+  // the container fallback path resolves at all.
+  const buildCtx = () =>
+    buildPluginContext({
+      services: [
+        [TOKENS.FeedPlatformRegistry, platforms],
+        [TOKENS.GuildRegistry, {}],
+        [TOKENS.DiscordClient, {}],
+      ],
+    });
 
   beforeEach(() => {
     vi.useFakeTimers();

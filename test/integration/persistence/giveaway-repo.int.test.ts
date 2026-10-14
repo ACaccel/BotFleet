@@ -1,17 +1,13 @@
-import mongoose from 'mongoose';
 import { describe, expect, it } from 'vitest';
 import { asGuildId } from '../../../src/core/ids';
 import { DatabaseError } from '../../../src/core/errors';
 import { isErr, unwrap } from '../../../src/core/result';
-import {
-  StaticConnectionManager,
-  buildGuildMongoUri,
-} from '../../../src/infra/mongo/connection-manager';
+import { StaticConnectionManager } from '../../../src/infra/mongo/connection-manager';
 import {
   MongoGiveawayRepo,
   type GiveawayInput,
 } from '../../../src/persistence/repositories/giveaway.repo';
-import { withFreshConnection } from '../helpers/mongo';
+import { withClosedConnection, withFreshConnection } from '../helpers/mongo';
 
 const guildId = asGuildId('999999999999999999');
 const buildRepo = async (m: StaticConnectionManager): Promise<MongoGiveawayRepo> =>
@@ -63,18 +59,10 @@ describe('MongoGiveawayRepo (integration)', () => {
   });
 
   it('listAll resolves to err(DatabaseError) when the connection is closed', async () => {
-    const baseUri = (() => {
-      const uri = process.env.INTEGRATION_MONGO_URI;
-      if (uri === undefined) throw new Error('INTEGRATION_MONGO_URI not set');
-      return uri.replace(/[^/]*$/, '');
-    })();
-    const connection = await mongoose
-      .createConnection(buildGuildMongoUri(baseUri, guildId))
-      .asPromise();
-    const repo = new MongoGiveawayRepo(
-      await new StaticConnectionManager(connection).getConnection(guildId),
+    const repo = await withClosedConnection(
+      async (connection) =>
+        new MongoGiveawayRepo(await new StaticConnectionManager(connection).getConnection(guildId)),
     );
-    await connection.close();
 
     const result = await repo.listAll();
     expect(isErr(result)).toBe(true);
