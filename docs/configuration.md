@@ -308,8 +308,9 @@ available on nijika only; another bot listing `db` fails startup.
 
 1. Create a MongoDB user limited to `readAnyDatabase`; see
    [deployment](contributing/deployment.md#read-only-inspection-account).
-2. Set `MONGO_INSPECT_URI` in `src/bot/nijika/.env`, for example
-   `mongodb://inspector:<password>@127.0.0.1:27017/?authSource=admin`.
+2. Set `MONGO_INSPECT_URI` in `src/bot/nijika/.env` to
+   `mongodb://inspector@127.0.0.1:27017/?authSource=admin`, adding the user's
+   password after `inspector`, separated by a colon.
 3. Add `db` to nijika's `commands` and
    [register commands](contributing/local-setup.md#registering-slash-commands).
 
