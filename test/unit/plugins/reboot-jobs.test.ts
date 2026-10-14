@@ -89,7 +89,8 @@ class FakeGuildRepos {
           ? ok(this.rows.map((r) => ({ activity_id: r.id, expired_at: r.deadline })))
           : this.list(),
       findByActivityId: async (id: string) => this.find(id),
-      deleteByActivityId: async (id: string) => this.remove(id),
+      // Closing an overdue activity settles it; the fake records that as removal.
+      finish: async (id: string) => this.remove(id),
     };
     const giveaway = {
       listAll: async () =>
@@ -99,7 +100,8 @@ class FakeGuildRepos {
       findByMessageId: async (id: string) => this.find(id),
       deleteByMessageId: async (id: string) => this.remove(id),
     };
-    return { activity, giveaway } as unknown as Repos;
+    const rollCall = { listOpen: async () => ok([]) };
+    return { activity, giveaway, rollCall } as unknown as Repos;
   }
 }
 
@@ -158,7 +160,7 @@ describe.each([
   {
     label: 'activity',
     create: createActivityPlugin,
-    jobKey: (id: string) => `activity:${id}`,
+    jobKey: (id: string) => `activity:close:${id}`,
   },
 ])('$label plugin onReady — job reboot', ({ create, jobKey }) => {
   it('rebuilds only the recovered guild without replacing healthy jobs', async () => {

@@ -45,6 +45,16 @@ Behaviour changes in the remaining commands:
   thread.
 - `/ban_user` and `/roll_call` speak as each bot's persona; Nijika's vote call ends
   with its own line.
+- **`/activity`** is rebuilt around buttons: `create` opens a form (optional start
+  time, capacity and a `role` limit), members join or withdraw with buttons,
+  participants are pinged when sign-ups close and when it starts, and `cancel`
+  (organizer or moderators) replaces `delete`. `/activity list` shows open
+  activities in channels you can see. Activities posted before this release keep
+  working, but their old ✅ reactions are not counted.
+- **`/roll_call`** posts a list with a Check in button, takes a `role`, `users` or
+  an `activity` (by name, not consumed) and an optional `deadline`, and marks
+  absentees when it closes. Roll calls from an activity show attendance on its
+  post. The ✅-reaction tally is removed.
 
 Register commands again after deploying so Discord shows the new options.
 

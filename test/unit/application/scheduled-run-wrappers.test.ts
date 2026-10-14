@@ -1,5 +1,5 @@
 /**
- * The deferred-job wrappers around `scheduleGiveaway` / `scheduleActivity`.
+ * The deferred-job wrapper around `scheduleGiveaway`.
  *
  * A job callback has no user to answer, so before these wrappers a
  * missing channel or a deleted announcement was indistinguishable from
@@ -11,8 +11,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { ok } from '../../../src/core/result';
 import { runGiveawayDraw } from '../../../src/application/giveaway/giveaway';
 import type { GiveawayDeps } from '../../../src/application/giveaway/giveaway';
-import { runActivityRollUp } from '../../../src/application/activity/activity';
-import type { ActivityDeps } from '../../../src/application/activity/activity';
 
 const GUILD_ID = 'g1';
 
@@ -46,7 +44,7 @@ const buildDeps = (hasRepos: boolean, warn: ReturnType<typeof vi.fn>) =>
     jobMap: new Map(),
     logger: { warn, error: vi.fn(), info: vi.fn() },
     translator: { t: (key: string) => key },
-  }) as unknown as GiveawayDeps & ActivityDeps;
+  }) as unknown as GiveawayDeps;
 
 const sendableChannel = () => ({
   isSendable: () => true,
@@ -71,20 +69,6 @@ const repos = () => ({
     ),
     deleteByMessageId: vi.fn().mockResolvedValue(ok(true)),
   },
-  activity: {
-    findByActivityId: vi.fn().mockResolvedValue(
-      ok({
-        activity_id: 'a1',
-        message_id: 'm1',
-        channel_id: 'c1',
-        title: 'Movie night',
-        description: '',
-        expired_at: 0,
-        participants: [],
-      }),
-    ),
-    setParticipants: vi.fn().mockResolvedValue(ok(true)),
-  },
 });
 
 describe('runGiveawayDraw', () => {
@@ -97,21 +81,6 @@ describe('runGiveawayDraw', () => {
   it('records the outcome when the draw cannot complete', async () => {
     const warn = vi.fn();
     await runGiveawayDraw(buildDeps(false, warn), GUILD_ID, 'm1');
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect((warn.mock.calls[0] as [{ outcome: string }])[0].outcome).toBe('no_db');
-  });
-});
-
-describe('runActivityRollUp', () => {
-  it('stays quiet when the roll-up completes', async () => {
-    const warn = vi.fn();
-    await runActivityRollUp(buildDeps(true, warn), GUILD_ID, 'a1');
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it('records the outcome when the roll-up cannot complete', async () => {
-    const warn = vi.fn();
-    await runActivityRollUp(buildDeps(false, warn), GUILD_ID, 'a1');
     expect(warn).toHaveBeenCalledTimes(1);
     expect((warn.mock.calls[0] as [{ outcome: string }])[0].outcome).toBe('no_db');
   });

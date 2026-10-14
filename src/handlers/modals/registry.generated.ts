@@ -4,9 +4,11 @@
 // `npm run handlers:gen:check`.
 
 import type { ModalHandler } from '.';
-import { default as Handler_0 } from './ai_settings';
-import { default as Handler_1 } from './giveaway_create';
+import { default as Handler_0 } from './activity_create';
+import { default as Handler_1 } from './ai_settings';
+import { default as Handler_2 } from './giveaway_create';
 export const MODAL_REGISTRY = {
-  ai_settings: Handler_0,
-  giveaway_create: Handler_1,
+  activity_create: Handler_0,
+  ai_settings: Handler_1,
+  giveaway_create: Handler_2,
 } as const satisfies Readonly<Record<string, new () => ModalHandler>>;

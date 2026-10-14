@@ -17,6 +17,7 @@ import type { ArchiveStatsRepo } from './archive-stats.types';
 import { MongoFeedSubscriptionRepo, type FeedSubscriptionRepo } from './feed-subscription.repo';
 import { MongoGiveawayRepo, type GiveawayRepo } from './giveaway.repo';
 import { MongoReplyRepo, type ReplyRepo } from './reply.repo';
+import { MongoRollCallRepo, type RollCallRepo } from './roll-call.repo';
 import { MongoTempRoleRepo, type TempRoleRepo } from './temp-role.repo';
 import { MongoThreadModerationRepo, type ThreadModerationRepo } from './thread-moderation.repo';
 import { MongoUserApiSettingRepo, type UserApiSettingRepo } from './user-api-setting.repo';
@@ -60,6 +61,7 @@ export {
 export { MongoFetchRepo } from './fetch.repo';
 export { MongoGiveawayRepo, type GiveawayRepo, type GiveawayInput } from './giveaway.repo';
 export { MongoReplyRepo, type ReplyRepo } from './reply.repo';
+export { MongoRollCallRepo, type RollCallRepo, type RollCallInput } from './roll-call.repo';
 export { MongoTempRoleRepo, type TempRoleRepo, type TempRoleInput } from './temp-role.repo';
 export { MongoThreadModerationRepo, type ThreadModerationRepo } from './thread-moderation.repo';
 export {
@@ -81,6 +83,7 @@ export interface Repos {
   readonly archiveStats: ArchiveStatsRepo;
   readonly giveaway: GiveawayRepo;
   readonly reply: ReplyRepo;
+  readonly rollCall: RollCallRepo;
   readonly tempRole: TempRoleRepo;
   readonly threadModeration: ThreadModerationRepo;
   readonly userApiSetting: UserApiSettingRepo;
@@ -99,6 +102,7 @@ export const buildRepos = (conn: GuildConnection): Repos => ({
   archiveStats: new MongoArchiveStatsRepo(conn),
   giveaway: new MongoGiveawayRepo(conn),
   reply: new MongoReplyRepo(conn),
+  rollCall: new MongoRollCallRepo(conn),
   tempRole: new MongoTempRoleRepo(conn),
   threadModeration: new MongoThreadModerationRepo(conn),
   userApiSetting: new MongoUserApiSettingRepo(conn),

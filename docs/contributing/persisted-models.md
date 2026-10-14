@@ -39,6 +39,13 @@ persist across restarts; their operator controls live in
 [Discord](../message-archive.md#discord-controls). Keep message content and raw errors
 out of panels and reports.
 
+`Activity` stores an activity's state, participants and roll-call attendance,
+keyed by its announcement message ID; `RollCall` stores who was called and who
+checked in. Joining and checking in are single conditional updates, so concurrent
+clicks cannot exceed a capacity or count twice. Both expire seven days after
+closing through a TTL index on `purge_at`; earlier activity rows without the new
+fields read as open activities with no creator.
+
 `AiUsage` records only a member ID and request timestamp in each guild database;
 its compound lookup index serves rolling usage windows and its timestamp index
 expires records after 25 hours. Keep admission through `AiUsageRepo`, without

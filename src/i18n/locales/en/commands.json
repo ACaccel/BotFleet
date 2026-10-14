@@ -97,13 +97,19 @@
     }
   },
   "roll_call": {
-    "description": "Roll call",
+    "description": "Call members, a role or an activity's participants; called members check in with a button",
     "options": {
-      "users": {
-        "description": "Users or roles to call (ex: @user1 @role1 @user2...)"
+      "role": {
+        "description": "Role to call"
       },
-      "activity_id": {
-        "description": "Activity ID (used to roll-call activity participants)"
+      "users": {
+        "description": "Members to call; mention one or more"
+      },
+      "activity": {
+        "description": "Call this activity's participants"
+      },
+      "deadline": {
+        "description": "Close automatically after (e.g. 10m, 2h; at most 1d)"
       }
     }
   },
@@ -230,27 +236,24 @@
     }
   },
   "activity": {
-    "description": "Manage activities",
+    "description": "Start and manage activities",
     "subcommands": {
       "create": {
-        "description": "Create an activity",
+        "description": "Start an activity in this channel; only members who can see it can join",
         "options": {
-          "title": {
-            "description": "Activity title"
-          },
-          "duration": {
-            "description": "Activity duration (1s, 1m, 1h, 1d, 1w)"
-          },
-          "description": {
-            "description": "Activity description (optional)"
+          "role": {
+            "description": "Only this role may join (optional)"
           }
         }
       },
-      "delete": {
-        "description": "Delete an activity",
+      "list": {
+        "description": "List open activities you can see"
+      },
+      "cancel": {
+        "description": "Cancel an activity (organizer or moderators)",
         "options": {
-          "activity_id": {
-            "description": "Activity ID"
+          "activity": {
+            "description": "Activity to cancel"
           }
         }
       }

@@ -281,33 +281,6 @@ describe('catalog runtime behaviour', () => {
     }
   });
 
-  it('keeps roll_call.announcement_header prefixed by roll_call.trigger_prefix', () => {
-    // The reaction tally recognises its own announcement by matching
-    // `trigger_prefix` against the start of the posted message, which is
-    // built from `announcement_header`. The two are separate catalog
-    // entries, so a translator editing the header in isolation would
-    // silently switch the tally off for that locale — the exact defect
-    // the hard-coded zh-TW prefix used to cause for `en`.
-    const resources = loadCatalogResources({ localesDir: LOCALES_DIR });
-    for (const locale of ['zh-TW', 'en'] as const) {
-      const rollCall = (resources[locale].replies as Record<string, unknown>).roll_call as {
-        announcement_header?: string;
-        trigger_prefix?: string;
-      };
-      const header = rollCall.announcement_header ?? '';
-      const prefix = rollCall.trigger_prefix ?? '';
-      expect(
-        prefix.length,
-        `replies:roll_call.trigger_prefix (${locale}) must be present`,
-      ).toBeGreaterThan(0);
-      expect(
-        header.startsWith(prefix),
-        `replies:roll_call.announcement_header (${locale}) must start with trigger_prefix, ` +
-          'otherwise the reaction tally never matches its own announcement',
-      ).toBe(true);
-    }
-  });
-
   it('spells each feed platform identically in the choice catalog and the shared map', () => {
     // A platform now gets named from two places: the `platform` option's
     // choice label, which is per-locale catalog copy, and

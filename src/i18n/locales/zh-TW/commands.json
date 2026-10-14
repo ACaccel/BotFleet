@@ -97,13 +97,19 @@
     }
   },
   "roll_call": {
-    "description": "點名",
+    "description": "點名成員、身分組或活動參加者,被點到的人按按鈕簽到",
     "options": {
-      "users": {
-        "description": "被點名者或身分組 (ex: @user1 @role1 @user2...)"
+      "role": {
+        "description": "要點名的身分組"
       },
-      "activity_id": {
-        "description": "活動ID (用於連動活動參與者點名)"
+      "users": {
+        "description": "要點名的成員,直接 @ 提及,可以多個"
+      },
+      "activity": {
+        "description": "點名這個活動的參加者"
+      },
+      "deadline": {
+        "description": "多久後自動結束(例:10m、2h,最長 1d)"
       }
     }
   },
@@ -230,27 +236,24 @@
     }
   },
   "activity": {
-    "description": "管理活動",
+    "description": "發起與管理活動",
     "subcommands": {
       "create": {
-        "description": "建立活動",
+        "description": "在這個頻道發起活動,只有看得到頻道的人能報名",
         "options": {
-          "title": {
-            "description": "活動標題"
-          },
-          "duration": {
-            "description": "活動時限 (1s, 1m, 1h, 1d, 1w)"
-          },
-          "description": {
-            "description": "活動描述 (optional)"
+          "role": {
+            "description": "只開放這個身分組報名(選填)"
           }
         }
       },
-      "delete": {
-        "description": "刪除活動",
+      "list": {
+        "description": "列出你看得到的進行中活動"
+      },
+      "cancel": {
+        "description": "取消活動(發起人或管理員)",
         "options": {
-          "activity_id": {
-            "description": "活動ID"
+          "activity": {
+            "description": "要取消的活動"
           }
         }
       }

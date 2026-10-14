@@ -51,7 +51,11 @@ describe('modal barrel', () => {
 
     await registerModals(bot);
 
-    expect([...bot.modalHandlers.keys()].sort()).toEqual(['ai_settings', 'giveaway_create']);
+    expect([...bot.modalHandlers.keys()].sort()).toEqual([
+      'activity_create',
+      'ai_settings',
+      'giveaway_create',
+    ]);
   });
 
   it('routes a customId to the handler its leading segment names', async () => {

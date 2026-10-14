@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Activity from '../../../src/handlers/commands/activity';
 import ActivityCreate from '../../../src/handlers/commands/activity_create/action';
-import ActivityDelete from '../../../src/handlers/commands/activity_delete/action';
+import ActivityList from '../../../src/handlers/commands/activity_list/action';
+import ActivityCancel from '../../../src/handlers/commands/activity_cancel/action';
 import AddReply from '../../../src/handlers/commands/add_reply/action';
 import DeleteReply from '../../../src/handlers/commands/delete_reply/action';
 import Feed from '../../../src/handlers/commands/feed';
@@ -41,7 +42,8 @@ const families = [
     Root: Activity,
     actions: [
       { name: 'create', Action: ActivityCreate },
-      { name: 'delete', Action: ActivityDelete },
+      { name: 'list', Action: ActivityList },
+      { name: 'cancel', Action: ActivityCancel },
     ],
   },
   {

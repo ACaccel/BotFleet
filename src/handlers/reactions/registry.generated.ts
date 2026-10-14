@@ -4,7 +4,4 @@
 // `npm run handlers:gen:check`.
 
 import type { ReactionHandler } from '.';
-import { default as Handler_0 } from './roll_call';
-export const REACTION_REGISTRY = {
-  roll_call: Handler_0,
-} as const satisfies Readonly<Record<string, new () => ReactionHandler>>;
+export const REACTION_REGISTRY = {} as const satisfies Readonly<Record<string, new () => ReactionHandler>>;

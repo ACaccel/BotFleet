@@ -101,6 +101,15 @@ Text that members author and the bot re-posts carries explicit `allowedMentions`
 - A `/ban_user` vote pings only the guild's `roles.ban_user`, and nobody when it is
   unset; bots cannot be voted on.
 - Giveaway results ping only the winners and the prize owner; the prize text cannot.
+- Activity announcements ping only their participants, and a roll call only the
+  members it calls (at most 50).
+
+Activities and roll calls are button-driven and persisted per guild. The activity
+plugin rebuilds both on startup and database recovery: an activity whose
+sign-up deadline passed while the bot was down closes immediately, a start
+reminder more than an hour late is skipped, and a roll call past its deadline
+closes and records attendance on its activity. Closed records expire after seven
+days through TTL indexes.
 
 Self-service role buttons grant only roles that pass
 [`isSelfAssignableRole`](../src/infra/discord/self-assignable-role.ts): below the

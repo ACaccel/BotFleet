@@ -1,15 +1,22 @@
-import type { ChatInputCommandInteraction, GuildMember } from 'discord.js';
-import { MessageFlags } from 'discord.js';
+import {
+  MessageFlags,
+  type AutocompleteInteraction,
+  type ChatInputCommandInteraction,
+} from 'discord.js';
 import type { BaseBot } from '@bot';
-import { Command } from '@cmd';
-import { msgReact } from '../discord-helpers';
+import { Command, type CommandSuggestions } from '@cmd';
 
+import { parseDuration } from '@core/scheduling';
+import { startRollCall } from '../../../application/roll-call/roll-call';
 import { replyForError } from '../../../infra/discord/reply-for-error';
-import { ROLL_CALL_MAX_TARGETS, resolveRollCallTargets } from './resolve-targets';
-import { createGuildMemberSource } from './member-source';
-import { rollCallOutcomeReply } from './outcome-reply';
-import { activityParticipantsReply, claimActivityParticipants } from './activity-participants';
 import { getOptionalString } from '../../../infra/discord/options';
+import { visibleActivities } from '../activity-shared/visible';
+import { buildRollCallDepsFromBot } from './deps-from-bot';
+import { resolveCallList } from './call-list';
+
+/** Roll calls stay open between one minute and a day. */
+const MAX_DEADLINE_MS = 24 * 60 * 60_000;
+
 export default class roll_call extends Command {
   constructor() {
     super();
@@ -18,117 +25,78 @@ export default class roll_call extends Command {
       category: 'server_activity',
       guildOnly: true,
       options: {
+        role: [{ name: 'role', required: false }],
         string: [
-          {
-            name: 'users',
-            required: false,
-          },
-          {
-            name: 'activity_id',
-            required: false,
-          },
+          { name: 'users', required: false, maxLength: 1000 },
+          { name: 'activity', required: false, autocomplete: true },
+          { name: 'deadline', required: false, maxLength: 10 },
         ],
       },
     });
   }
 
+  /** Activities in channels the member can see, newest first. */
+  public override autocomplete = async (
+    interaction: AutocompleteInteraction,
+    bot: BaseBot,
+  ): Promise<CommandSuggestions> => {
+    const guild = interaction.guild;
+    const repos = guild ? bot.getRepos(guild.id) : undefined;
+    if (!guild || !repos) return [];
+    const result = await repos.activity.listAll();
+    if (!result.ok) return [];
+    const typed = interaction.options.getFocused().toLowerCase();
+    return visibleActivities(guild, interaction.user.id, result.value)
+      .filter((doc) => doc.status !== 'cancelled' && doc.title.toLowerCase().includes(typed))
+      .sort((a, b) => b.expired_at - a.expired_at)
+      .map((doc) => ({ name: doc.title, value: doc.activity_id }));
+  };
+
   public override async execute(
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const t = (key: string, params?: Record<string, string | number>): string =>
+      bot.translator?.t(key, params) ?? '';
     try {
-      const users = getOptionalString(interaction, 'users');
-      const activity_id = getOptionalString(interaction, 'activity_id');
-
-      if (!users && !activity_id) {
-        await interaction.reply({
-          content: bot.translator?.t('replies:roll_call.missing_target') ?? '',
-          flags: MessageFlags.Ephemeral,
-        });
+      const guild = interaction.guild;
+      const channel = interaction.channel;
+      if (!guild || !channel?.isSendable()) {
+        await interaction.editReply({ content: t('errors:command.channel_not_found') });
+        return;
+      }
+      const deadlineRaw = getOptionalString(interaction, 'deadline');
+      const offset = deadlineRaw === undefined ? undefined : parseDuration(deadlineRaw.trim());
+      if (
+        offset === null ||
+        (offset !== undefined && (offset < 60_000 || offset > MAX_DEADLINE_MS))
+      ) {
+        await interaction.editReply({ content: t('replies:roll_call.invalid_deadline') });
         return;
       }
 
-      const validUsers: GuildMember[] = [];
-
-      if (activity_id) {
-        const guild = interaction.guild;
-        // A repo `err` inside the claim is re-thrown into the
-        // surrounding catch, which stamps a trace id.
-        const outcome = await claimActivityParticipants(
-          guild,
-          guild === null ? undefined : bot.getRepos(guild.id),
-          activity_id,
-        );
-        if (outcome.status !== 'ok') {
-          const { key, params } = activityParticipantsReply(outcome, activity_id);
-          await interaction.reply({
-            content: bot.translator?.t(key, params) ?? '',
-            flags: MessageFlags.Ephemeral,
-          });
-          return;
-        }
-        validUsers.push(...outcome.members);
-      } else if (users) {
-        const guild = interaction.guild;
-        if (!guild) {
-          await interaction.reply({
-            content: bot.translator?.t('errors:command.guild_not_found') ?? '',
-            flags: MessageFlags.Ephemeral,
-          });
-          return;
-        }
-
-        // A full member fetch is required so role membership reflects
-        // every member, not just the gateway cache. It can exceed the
-        // 3s interaction window, so acknowledge first with a defer.
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        const source = createGuildMemberSource(guild, await guild.members.fetch());
-        const outcome = resolveRollCallTargets(users, source, ROLL_CALL_MAX_TARGETS);
-        if (outcome.status !== 'ok') {
-          const { key, params } = rollCallOutcomeReply(outcome);
-          await interaction.editReply({
-            content: bot.translator?.t(key, { persona: bot.personaName, ...params }) ?? '',
-          });
-          return;
-        }
-        validUsers.push(...outcome.members);
+      const list = await resolveCallList(interaction, bot, guild);
+      if (list.status === 'refused') {
+        await interaction.editReply({
+          content: t(list.key, { persona: bot.personaName, ...list.params }),
+        });
+        return;
       }
-
-      let announcement =
-        bot.translator?.t('replies:roll_call.announcement_header', {
-          userId: interaction.user.id,
-          persona: bot.personaName,
-        }) ?? '';
-      if (activity_id) {
-        announcement +=
-          bot.translator?.t('replies:roll_call.activity_id_line', { id: activity_id }) ?? '';
-      }
-      let id = 1;
-      validUsers.forEach((user) => {
-        announcement += `${id}. <@${user.id}>\n`;
-        id += 1;
+      const outcome = await startRollCall(buildRollCallDepsFromBot(bot), {
+        guild,
+        channel,
+        creatorId: interaction.user.id,
+        targets: list.targets,
+        persona: bot.personaName,
+        ...(list.activityId === undefined ? {} : { activityId: list.activityId }),
+        ...(offset === undefined ? {} : { deadline: Date.now() + offset }),
       });
-
-      const ch = interaction.channel;
-      if (!ch?.isSendable()) return;
-      const msg = await ch.send({ content: announcement });
-      void msgReact(msg, ['<:slowpoke_wave_lr:1178718404102848573>'], bot.logger, bot.clientId);
-      // The users branch defers (see above); the activity branch does
-      // not. Send the confirmation through whichever channel is open.
-      const sent = bot.translator?.t('replies:roll_call.sent') ?? '';
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: sent });
-      } else {
-        await interaction.reply({ content: sent, flags: MessageFlags.Ephemeral });
-      }
+      await interaction.editReply({
+        content: outcome === 'started' ? t('replies:roll_call.sent') : t('errors:db.not_found'),
+      });
     } catch (error) {
-      await replyForError(
-        interaction,
-        bot,
-        error,
-        'replies:roll_call.failed',
-        interaction.guild?.id,
-      );
+      await replyForError(interaction, bot, error, 'replies:roll_call.failed', interaction.guildId);
     }
   }
 }

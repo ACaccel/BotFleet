@@ -21,6 +21,7 @@ import { fetchSchema, type FetchDoc } from './fetch.schema';
 import { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
 import { messageSchema, type MessageDoc } from './message.schema';
 import { replySchema, type ReplyDoc } from './reply.schema';
+import { rollCallSchema, type RollCallDoc } from './roll-call.schema';
 import { tempRoleSchema, type TempRoleDoc } from './temp-role.schema';
 import {
   threadMessageSourceSchema,
@@ -45,6 +46,7 @@ export { fetchSchema, type FetchDoc } from './fetch.schema';
 export { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
 export { messageSchema, type MessageDoc } from './message.schema';
 export { replySchema, type ReplyDoc } from './reply.schema';
+export { rollCallSchema, type RollCallDoc } from './roll-call.schema';
 export { tempRoleSchema, type TempRoleDoc } from './temp-role.schema';
 export {
   threadMessageSourceSchema,
@@ -70,6 +72,7 @@ export const SCHEMAS = {
   UserApiSetting: userApiSettingSchema,
   FeedSubscription: feedSubscriptionSchema,
   AiUsage: aiUsageSchema,
+  RollCall: rollCallSchema,
 } as const;
 
 export type SchemaName = keyof typeof SCHEMAS;
@@ -95,4 +98,5 @@ export interface DocByName {
   UserApiSetting: UserApiSettingDoc;
   FeedSubscription: FeedSubscriptionDoc;
   AiUsage: AiUsageDoc;
+  RollCall: RollCallDoc;
 }
