@@ -25,6 +25,7 @@
  */
 import { timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
@@ -144,9 +145,12 @@ export const createSettingsApiPlugin = (
         // The port is operator-supplied via the validated env (deps.port),
         // not config.json; the bind host is the (non-secret) config field.
         const listening = app.listen(deps.port, config.host, () => {
+          // Report the bound port, not the configured one: they differ when
+          // the configured port is 0 (OS-assigned).
+          const { port } = listening.address() as AddressInfo;
           logSystem(
             ctx.logger,
-            `settings-api server listening on ${config.host}:${deps.port}${config.basePath}`,
+            `settings-api server listening on ${config.host}:${port}${config.basePath}`,
           );
           // Startup is settled. A socket error from here on is a runtime
           // event, and `reject` would silently discard it against an

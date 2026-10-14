@@ -20,6 +20,7 @@
  */
 import express, { type Express } from 'express';
 import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 import { TOKENS } from '../../bot/tokens';
 import { closeServerBounded } from '../../core/http';
@@ -103,7 +104,10 @@ export const createEarthquakePlugin = (
 
       await new Promise<void>((resolve, reject) => {
         const listening = app.listen(config.port, () => {
-          logSystem(ctx.logger, `earthquake webhook server is running on port ${config.port}`);
+          // Report the bound port, not the configured one: they differ when
+          // the configured port is 0 (OS-assigned).
+          const { port } = listening.address() as AddressInfo;
+          logSystem(ctx.logger, `earthquake webhook server is running on port ${port}`);
           // Startup is settled. A socket error from here on is a runtime
           // event, and `reject` would silently discard it against an
           // already-settled promise — swap in a logging handler.
