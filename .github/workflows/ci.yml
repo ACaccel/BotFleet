@@ -63,6 +63,36 @@ jobs:
           '
       - run: npm run test:coverage
 
+  migration-drill:
+    # The MongoDB migration drill skips itself unless
+    # MIGRATION_TEST_BIN_DIR names real database binaries, so `tests`
+    # never executes it. This job provisions the pinned runtime and
+    # fails when the drill is skipped rather than run.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/npm-install
+      - name: Provision the pinned MongoDB runtime
+        shell: bash
+        run: CONDA_EXE="$CONDA/bin/conda" bash scripts/setup-mongo.sh "$RUNNER_TEMP/mongodb"
+      - name: Run the migration drill and require it to execute
+        shell: bash
+        run: |
+          set -euo pipefail
+          export MIGRATION_TEST_BIN_DIR="$RUNNER_TEMP/mongodb/bin"
+          # Appended so the database runtime's own node cannot shadow
+          # the project runtime that npm-install put first on PATH.
+          export PATH="$PATH:$MIGRATION_TEST_BIN_DIR"
+          report="$RUNNER_TEMP/migration-drill.json"
+          npm run test:tools -- tools/migration/mongo.integration.test.ts \
+            --reporter=default --reporter=json --outputFile.json="$report"
+          jq -e '
+            if .numTotalTests > 0 and .numPassedTests == .numTotalTests
+            then "Migration drill ran \(.numPassedTests) tests."
+            else error("Migration drill did not run: \(.numPassedTests) of \(.numTotalTests) passed, \(.numPendingTests) skipped.")
+            end
+          ' "$report"
+
   security:
     runs-on: ubuntu-latest
     # The only job that needs more than the workflow-level `contents:

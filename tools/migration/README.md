@@ -156,6 +156,21 @@ credential is supported. Replica sets, sharding, other administrative users,
 and version upgrades are outside scope. Database verification compares counts
 and metadata, not each document's content; complete writer shutdown is required.
 
-Tests: `npm run test:tools -- tools/migration`. For an isolated real MongoDB drill, set
-`MIGRATION_TEST_BIN_DIR` to a directory containing the database binaries and put
-`mongosh` on PATH. Tests never use the production database or bot credentials.
+## Tests
+
+`npm run test:tools -- tools/migration` runs the unit tests. The isolated MongoDB
+drill (`mongo.integration.test.ts`) exports and restores both runtime layouts
+against a throwaway `mongod`; it is skipped unless `MIGRATION_TEST_BIN_DIR` names
+a directory containing `mongod`, `mongodump` and `mongorestore`, with `mongosh`
+on PATH. The CI `migration-drill` job provisions them with `scripts/setup-mongo.sh`
+and fails if the drill is skipped. To run it locally:
+
+```bash
+CONDA_EXE="$(command -v conda)" bash scripts/setup-mongo.sh /tmp/botfleet-mongo
+MIGRATION_TEST_BIN_DIR=/tmp/botfleet-mongo/bin PATH="$PATH:/tmp/botfleet-mongo/bin" \
+  npm run test:tools -- tools/migration/mongo.integration.test.ts
+```
+
+`setup-mongo.sh` refuses to run while the checkout has deployment state under
+`.deploy/`; use a separate clone in that case. Tests never use the production
+database or bot credentials.

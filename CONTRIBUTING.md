@@ -79,7 +79,9 @@ For focused development, use `test:unit`, `test:int`, `test:contract`,
 [Git hooks](docs/contributing/local-setup.md#local-git-hooks) run staged checks
 and the local gates before pushing to `dev`. After pushing, confirm GitHub CI
 is green with `gh run list --branch dev` and fix failures. Gitleaks and CodeQL
-run on GitHub only. The live `npm run smoke` check is separate from CI; see
+run on GitHub only. CI also runs the isolated MongoDB
+[migration drill](tools/migration/README.md#tests), which `test:coverage` skips
+without database binaries. The live `npm run smoke` check is separate from CI; see
 [operations](docs/contributing/operations.md#pre-deploy-smoke).
 
 ## Architectural rules

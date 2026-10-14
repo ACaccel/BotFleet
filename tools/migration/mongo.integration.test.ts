@@ -11,7 +11,7 @@ import {
   existsSync,
   readdirSync,
 } from 'node:fs';
-import { createServer, createConnection } from 'node:net';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -35,29 +35,49 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-async function ready(port: number, child: ChildProcess): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (child.exitCode !== null) throw new Error('Isolated mongod exited before readiness');
-    const connected = await new Promise<boolean>((resolve) => {
-      const socket = createConnection({ host: '127.0.0.1', port });
-      socket.setTimeout(100);
-      socket.once('connect', () => {
-        socket.destroy();
-        resolve(true);
-      });
-      socket.once('error', () => {
-        socket.destroy();
-        resolve(false);
-      });
-      socket.once('timeout', () => {
-        socket.destroy();
-        resolve(false);
-      });
-    });
-    if (connected) return;
-    await delay(100);
+// mongod's EXIT_NET_ERROR: its listener could not bind the requested port.
+const MONGOD_BIND_FAILURE = 48;
+const READINESS_TIMEOUT_MS = 30000;
+const PORT_ATTEMPTS = 3;
+
+/**
+ * Wait for mongod's own "Waiting for connections" log entry rather than
+ * probing the port, which could reach whichever process took it. The log
+ * goes to a file: the drill blocks in spawnSync, so a stdout pipe would
+ * go undrained and stall mongod. Returns the exit code when mongod dies first.
+ */
+async function listening(child: ChildProcess, logPath: string): Promise<'listening' | number> {
+  const deadline = Date.now() + READINESS_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) return child.exitCode ?? -1;
+    if (existsSync(logPath) && readFileSync(logPath, 'utf8').includes('"id":23016'))
+      return 'listening';
+    await delay(50);
   }
   throw new Error('Isolated mongod readiness timed out');
+}
+
+/**
+ * The port is chosen before mongod binds it, so another process can take
+ * it in between; a bind failure retries on a fresh port.
+ */
+async function startMongod(
+  configFor: (port: number, logPath: string) => string,
+  logDirectory: string,
+  children: ChildProcess[],
+): Promise<{ child: ChildProcess; port: number }> {
+  for (let attempt = 1; ; attempt++) {
+    const port = await freePort();
+    const logPath = join(logDirectory, `source-mongo-${attempt}.log`);
+    const child = spawn(join(binDirectory!, 'mongod'), ['--config', configFor(port, logPath)], {
+      stdio: 'ignore',
+    });
+    children.push(child);
+    const outcome = await listening(child, logPath);
+    if (outcome === 'listening') return { child, port };
+    if (outcome !== MONGOD_BIND_FAILURE || attempt === PORT_ATTEMPTS)
+      throw new Error(`Isolated mongod exited with ${outcome} before readiness`);
+  }
 }
 
 async function stop(child: ChildProcess): Promise<void> {
@@ -154,24 +174,19 @@ it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
       );
     }
     try {
-      const port = await freePort();
       const sourceData = join(directory, 'source-data');
       mkdirSync(sourceData, { mode: 0o700 });
-      const sourceProcess = spawn(
-        join(binDirectory!, 'mongod'),
-        [
-          '--config',
+      const { child: sourceProcess, port } = await startMongod(
+        (candidate, logPath) =>
           privateFile({
             security: { authorization: 'enabled' },
-            net: { bindIp: '127.0.0.1', port },
+            net: { bindIp: '127.0.0.1', port: candidate },
             storage: { dbPath: sourceData },
-            systemLog: { destination: 'file', path: join(directory, 'source-mongo.log') },
+            systemLog: { destination: 'file', path: logPath },
           }),
-        ],
-        { stdio: 'ignore' },
+        directory,
+        children,
       );
-      children.push(sourceProcess);
-      await ready(port, sourceProcess);
       succeed(
         invoke('create-user', `mongodb://127.0.0.1:${port}/admin`, {
           user,

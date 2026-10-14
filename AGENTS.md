@@ -94,7 +94,8 @@ npm run security
 The project hooks run fast staged checks before a commit and these local gates
 before a push to `dev`; see `docs/contributing/local-setup.md`. Two CI checks
 cannot run locally — **`gitleaks`** (secret scan) and CodeQL — and run only on
-GitHub. A `dev` commit triggers the full CI on push, so after
+GitHub. CI also runs the isolated MongoDB migration drill, which `test:coverage`
+skips without database binaries (see `tools/migration/README.md#tests`). A `dev` commit triggers the full CI on push, so after
 committing you MUST confirm that CI run is green (`gh run list --branch dev`)
 and fix any red immediately — CI is a gate, not a passive signal.
 
