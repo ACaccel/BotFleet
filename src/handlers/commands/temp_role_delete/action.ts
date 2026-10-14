@@ -43,7 +43,6 @@ export default class temp_role_delete extends Command {
       }
       const key = {
         cancelled: 'cancelled',
-        delete_failed: 'cancel_failed',
         not_temp_role: 'not_temp_role',
         forbidden: 'cancel_forbidden',
       };

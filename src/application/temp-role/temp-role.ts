@@ -334,7 +334,6 @@ export const createTempRole = async (
 /** Outcome of {@link cancelTempRole}. */
 type CancelTempRoleOutcome =
   | { readonly status: 'cancelled' }
-  | { readonly status: 'delete_failed' }
   | { readonly status: 'not_temp_role' }
   | { readonly status: 'forbidden' }
   | { readonly status: 'no_db' };

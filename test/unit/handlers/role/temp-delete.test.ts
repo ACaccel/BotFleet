@@ -158,4 +158,14 @@ describe('/role temp delete', () => {
     expect(getRepos).not.toHaveBeenCalled();
     expect(deleteByRoleId).not.toHaveBeenCalled();
   });
+
+  it('reports a refused Discord deletion and keeps the record', async () => {
+    const { bot, interaction, sink, deleteRole, deleteByRoleId } = build({ userId: CREATOR_ID });
+    deleteRole.mockRejectedValue(new Error('Missing Permissions'));
+
+    await new TempRoleDelete().execute(interaction, bot);
+
+    expect(sink.editReplies).toEqual([{ content: 'replies:temp_role.failed' }]);
+    expect(deleteByRoleId).not.toHaveBeenCalled();
+  });
 });
