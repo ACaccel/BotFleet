@@ -92,6 +92,7 @@ describe('select-menu barrel', () => {
 
     expect([...bot.ssmHandlers.keys()].sort()).toEqual([
       'bug_ticket_pick',
+      'db_view',
       'delete_reply',
       'giveaway_delete',
       'help_category',

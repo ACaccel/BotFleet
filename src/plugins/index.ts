@@ -19,3 +19,4 @@ export { createSocialLinkPreviewPlugin } from './social-link-preview';
 export { createIdentitySyncPlugin } from './identity-sync';
 export { createSocialFeedPlugin } from './social-feed';
 export { createBugReportPlugin } from './bug-report';
+export { createDbInspectPlugin } from './db-inspect';

@@ -19,6 +19,7 @@ export {
   ArchiveAccessError,
   ArchiveInputError,
 } from './archive-control-error';
+export { DbInspectError, type DbInspectErrorCode } from './db-inspect-error';
 export {
   ExternalServiceError,
   type ExternalServiceErrorCode,

@@ -199,6 +199,28 @@ describe('loadEnv', () => {
       ).toThrow(EnvLoadError);
     });
 
+    it('accepts an optional MONGO_INSPECT_URI and names it when invalid', () => {
+      expect(
+        loadEnv({
+          exitOnFailure: false,
+          source: { ...validBase, MONGO_INSPECT_URI: 'mongodb://reader@db.example.com:27017' },
+        }).MONGO_INSPECT_URI,
+      ).toBe('mongodb://reader@db.example.com:27017');
+      let failure: unknown;
+      try {
+        loadEnv({
+          exitOnFailure: false,
+          source: { ...validBase, MONGO_INSPECT_URI: 'http://example.com' },
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(EnvLoadError);
+      expect((failure as EnvLoadError).issues.map((issue) => issue.message)).toContain(
+        'MONGO_INSPECT_URI must use the mongodb:// or mongodb+srv:// scheme',
+      );
+    });
+
     it('rejects when requirePort=true but PORT is missing', () => {
       expect(() =>
         loadEnv({

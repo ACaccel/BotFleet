@@ -225,7 +225,8 @@
       "roll_call": "Call `users`, a `role`, or an `activity`'s participants (up to 50; no @everyone). Called members press Check in; when the `deadline` passes or the caller closes it, absentees are listed. A roll call taken from an activity shows its attendance on the activity post.",
       "talk": "Signed as \"display name(username)\" by default; `channel` posts elsewhere, but only where you can post yourself. Members and roles can be pinged, @everyone/@here cannot. `anonymous` posts unsigned, bot admins only.",
       "thread": "`ban`/`allow`/`list` run inside a thread for its owner, delegates and bot admins; `claim` requests delegated management; `manager` is for bot admins.",
-      "traffic": "Counts activity in channels you can see; `user` is private by default, the others public, and `visibility` changes either."
+      "traffic": "Counts activity in channels you can see; `user` is private by default, the others public, and `visibility` changes either.",
+      "db": "Bot admins only, on Nijika. A read-only view of every guild database: statistics, fields, browsing with filters, and single documents. Every option offers a list to pick from, and it works in DMs."
     }
   },
   "level_detail": {
@@ -991,6 +992,100 @@
       "perfect_2": "Today's best, full marks!",
       "bonus_1": "Off the charts! That score broke the scale!",
       "bonus_2": "11? Rules are made to be broken!"
+    }
+  },
+  "db_inspect": {
+    "unavailable": "Database inspection is unavailable: the read-only connection did not open. Check the bot's log.",
+    "guild_required": "In a DM, choose the server to inspect with the `guild` option.",
+    "unknown_guild": "There is no database for server `{{guild}}`.",
+    "unknown_collection": "This database has no `{{collection}}` collection.",
+    "unknown_field": "This collection has no field `{{field}}`. Pick one from the list.",
+    "partial_filter": "A filter needs all of `field`, `operator` and `value`.",
+    "invalid_operator": "Field `{{field}}` does not support the \"{{operator}}\" comparison. Pick one from the list.",
+    "invalid_value": "That value does not match field `{{field}}` ({{type}}). Write dates as `YYYY-MM-DD` or ISO.",
+    "invalid_sort": "Cannot sort by `{{sort}}`. Pick an order from the list.",
+    "not_found": "There is no document with ID `{{id}}`.",
+    "session_expired": "This panel has expired. Run `/db list` again.",
+    "not_invoker": "Only the admin who ran this query can use this panel.",
+    "failed": "The database query failed (error ID: {{traceId}}). Check the bot's log.",
+    "not_joined": "not joined",
+    "unregistered": "unregistered",
+    "indexed": "indexed",
+    "guild": "**Server** {{guild}}",
+    "stats": {
+      "title": "Database statistics",
+      "total": "{{collections}} collections · {{size}} total",
+      "line": "`{{name}}` — {{count}} documents · {{size}} · {{indexes}} indexes",
+      "empty": "This database has no collections."
+    },
+    "schema": {
+      "title": "Fields of {{collection}}",
+      "count": "**Documents** about {{count}}",
+      "unregistered": "This collection is not registered in the bot's code; it may be left over from a removed feature.",
+      "inferred": "Fields are inferred from recent documents and may be incomplete.",
+      "indexes": "**Indexes** {{indexes}}",
+      "sample_title": "Newest document",
+      "no_sample": "This collection has no documents."
+    },
+    "list": {
+      "title": "{{collection}}",
+      "filter": "**Filter** `{{field}}` {{operator}} `{{value}}`",
+      "unindexed": "This field has no index; on a large collection the query may be slow or time out.",
+      "empty": "No documents match.",
+      "total_capped": "{{count}}+",
+      "footer": "Page {{page}}/{{pages}} · {{total}} documents · {{sort}}",
+      "view_placeholder": "View details"
+    },
+    "document": {
+      "title": "{{collection}} · {{id}}",
+      "attached": "The document is long; the full JSON is attached.",
+      "names": "Names"
+    },
+    "message": {
+      "author": "Author",
+      "channel": "Channel",
+      "time": "Time",
+      "deleted": "Deleted",
+      "attachments": "Attachments",
+      "no_content": "(no text content)"
+    },
+    "operators": {
+      "eq": "equals",
+      "contains": "contains",
+      "gt": "greater than (after)",
+      "lt": "less than (before)",
+      "exists": "field exists"
+    },
+    "sort": {
+      "asc": "ascending (oldest first)",
+      "desc": "descending (newest first)"
+    },
+    "collections": {
+      "activities": "Activities and sign-ups",
+      "aiusages": "AI usage records",
+      "archive_channels": "Archived channel details",
+      "archive_control_confirmations": "Archive control confirmations",
+      "archive_gateway_continuity": "Live capture continuity",
+      "archive_gc_checkpoints": "Archive cleanup progress",
+      "archive_inbox": "Pending live capture events",
+      "archive_jobs": "Full backup jobs",
+      "archive_leases": "Archive process leases",
+      "archive_periodic_runs": "Periodic backup runs",
+      "archive_reactions": "Archived reactions",
+      "archive_schedule": "Periodic backup schedule",
+      "archive_storage_usage": "Archive storage usage",
+      "bugtickets": "Bug report tickets",
+      "feedsubscriptions": "Social feed subscriptions",
+      "fetches": "Legacy message fetch progress",
+      "gay_readings": "Daily /gay readings",
+      "giveaways": "Giveaways",
+      "messages": "Archived messages",
+      "replies": "Auto-replies",
+      "rollcalls": "Roll calls",
+      "temproles": "Temporary roles",
+      "threadmessagesources": "Thread reply sources",
+      "threadmoderations": "Thread moderation",
+      "userapisettings": "AI user settings"
     }
   }
 }

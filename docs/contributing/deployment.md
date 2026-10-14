@@ -32,6 +32,20 @@ The database must already be initialized. Preparation preserves its absolute
 config and generating a foreground copy for systemd. It does not provision data
 or rotate credentials.
 
+### Read-only inspection account
+
+Nijika's [`/db`](../configuration.md#database-inspection) needs its own MongoDB
+user with only `readAnyDatabase`; startup rejects an account with any write action.
+Create it once as a database administrator, entering the password at the prompt:
+
+```javascript
+use admin
+db.createUser({ user: 'inspector', pwd: passwordPrompt(), roles: [{ role: 'readAnyDatabase', db: 'admin' }] })
+```
+
+Put its URI in `src/bot/nijika/.env` as `MONGO_INSPECT_URI`, never in command
+arguments or deployment settings, then restart nijika.
+
 ## Commands
 
 ```bash

@@ -21,6 +21,7 @@ import type { Logger } from '../core/logger';
 import type { GuildOnboardingPort, PermissionRankPolicy } from '../core/plugin';
 import type { Clock } from '../core/time';
 import type { ArchiveControlFactory } from '../application/archive/control';
+import type { DbInspectService } from '../application/db-inspect/service';
 import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { ModelCatalog } from '../infra/llm/models-catalog';
 import type { ConnectionManager } from '../infra/mongo/connection-manager';
@@ -113,6 +114,12 @@ interface Tokens {
    * `BaseBot.archiveControlFactory`, and tests substitute a fake.
    */
   readonly ArchiveControlFactory: ServiceToken<ArchiveControlFactory>;
+  /**
+   * Read-only database inspection behind `/db`. Published by the
+   * db-inspect plugin, which only nijika registers; the command reads it
+   * through `BaseBot.dbInspectService`.
+   */
+  readonly DbInspectService: ServiceToken<DbInspectService>;
 }
 
 export const TOKENS: Tokens = {
@@ -131,4 +138,5 @@ export const TOKENS: Tokens = {
   DefaultModelResolver: token<DefaultModelResolver>('DefaultModelResolver'),
   FeedPlatformRegistry: token<FeedPlatformRegistry>('FeedPlatformRegistry'),
   ArchiveControlFactory: token<ArchiveControlFactory>('ArchiveControlFactory'),
+  DbInspectService: token<DbInspectService>('DbInspectService'),
 };

@@ -62,7 +62,8 @@
   },
   "bot": {
     "login_failed": "登入 Discord 失敗({{clientId}})。",
-    "login_no_user": "登入 Discord 後未取得 user({{clientId}})。"
+    "login_no_user": "登入 Discord 後未取得 user({{clientId}})。",
+    "inspect_account_invalid": "資料庫檢視帳號設定錯誤：`MONGO_INSPECT_URI` 必須是只能讀取的帳號。"
   },
   "unexpected": "指令執行時發生未預期的錯誤,管理員已收到通知(錯誤編號:{{traceId}})。",
   "graphics": {

@@ -23,6 +23,7 @@ const FULL_SOURCE: NodeJS.ProcessEnv = {
   TOKEN: 'real-bot-token-value-xyz',
   CLIENT_ID: '123456789012345678',
   MONGO_URI: 'mongodb://db.internal:27017',
+  MONGO_INSPECT_URI: 'mongodb://inspector@db.internal:27017/?authSource=admin',
   MONGO_RECOVERY_INTERVAL_MS: '5000',
   PORT: '8080',
   NODE_ENV: 'test',

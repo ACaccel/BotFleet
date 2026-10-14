@@ -46,6 +46,15 @@ const collectRegisteredPluginIds = (): string[] => {
 };
 
 describe('Tomori composition', () => {
+  it('refuses the nijika-only db command', () => {
+    expect(
+      () =>
+        new Tomori(buildInertClient(), 'token', '', 'bot-client', {
+          commands: ['db'],
+        } satisfies Config),
+    ).toThrow(/available only on nijika/);
+  });
+
   it('registers the full interactive plugin set including guild-events', () => {
     const ids = collectRegisteredPluginIds();
     expect(new Set(ids)).toEqual(

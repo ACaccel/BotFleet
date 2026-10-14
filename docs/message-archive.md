@@ -35,6 +35,9 @@ delete existing records.
 Raw API payloads, interaction tokens and command names, avatars, voice waveforms
 and per-event reaction histories are excluded.
 
+Nijika's admins can read archived documents, message content included, through the
+read-only [`/db`](configuration.md#database-inspection) command.
+
 ### Message documents
 
 `messages` holds one document per message, schema version 3. Field names follow

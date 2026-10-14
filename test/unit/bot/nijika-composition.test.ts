@@ -10,6 +10,9 @@
  * optional CWA key reach the factory, and the plugin is registered
  * whether or not a key is set.
  *
+ * It pins the `/db` wiring: the db-inspect plugin is registered only when
+ * `config.commands` lists `db`, and only with `MONGO_INSPECT_URI`.
+ *
  * It also pins the one service nijika's constructor binds itself: the
  * feed platform registry, which the `/feed_*` commands resolve through
  * `BaseBot.feedPlatformRegistry` and which must therefore exist before
@@ -39,7 +42,11 @@ import type { Plugin } from '../../../src/core/plugin';
 import { createEarthquakePlugin } from '../../../src/plugins/earthquake/plugin';
 
 /** Build nijika with the minimum config its constructor requires. */
-const buildNijika = (config: Record<string, unknown> = {}, cwaApiKey?: string): Nijika =>
+const buildNijika = (
+  config: Record<string, unknown> = {},
+  cwaApiKey?: string,
+  mongoInspectUri?: string,
+): Nijika =>
   new Nijika(
     buildInertClient(),
     'token',
@@ -48,9 +55,10 @@ const buildNijika = (config: Record<string, unknown> = {}, cwaApiKey?: string): 
     { commands: [], level_roles: {}, ...config },
     3000,
     cwaApiKey,
+    mongoInspectUri,
   );
 
-const collectRegisteredPluginIds = (): string[] => {
+const collectRegisteredPluginIds = (build: () => Nijika = () => buildNijika()): string[] => {
   const ids: string[] = [];
   const useSpy = vi.spyOn(BaseBot.prototype, 'use').mockImplementation(function (
     this: BaseBot,
@@ -60,7 +68,7 @@ const collectRegisteredPluginIds = (): string[] => {
     return this;
   });
   try {
-    buildNijika();
+    build();
   } finally {
     useSpy.mockRestore();
   }
@@ -117,6 +125,19 @@ describe('Nijika composition', () => {
     buildNijika();
     expect(createEarthquakePlugin).toHaveBeenCalledWith({ port: 3000, cwaApiKey: undefined });
     expect(collectRegisteredPluginIds()).toContain('earthquake');
+  });
+
+  it('registers db-inspect only when config.commands lists db', () => {
+    expect(collectRegisteredPluginIds()).not.toContain('db-inspect');
+    expect(
+      collectRegisteredPluginIds(() =>
+        buildNijika({ commands: ['db'] }, undefined, 'mongodb://reader@db.example.com:27017'),
+      ),
+    ).toContain('db-inspect');
+  });
+
+  it('refuses to enable db without MONGO_INSPECT_URI', () => {
+    expect(() => buildNijika({ commands: ['db'] })).toThrow(/MONGO_INSPECT_URI/);
   });
 
   it('rejects a malformed platform block at composition time', () => {

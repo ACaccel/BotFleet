@@ -225,7 +225,8 @@
       "roll_call": "點名 `users`、`role` 或某個 `activity` 的參加者(上限 50 人,不能點 @everyone)。被點到的人按「簽到」;`deadline` 到期或發起人按「結束點名」後會列出缺席者。從活動發起的點名,出席人數會顯示在活動訊息上。",
       "talk": "預設會署名「暱稱(帳號)」;`channel` 可以發到其他頻道,但你本人必須能在該頻道發言。可以 tag 成員與身分組,不能 @everyone/@here。`anonymous` 不署名發送,僅限 bot 管理員。",
       "thread": "`ban`/`allow`/`list` 在討論串內由擁有者、代理管理者或 bot 管理員使用;`claim` 申請成為代理管理者;`manager` 僅 bot 管理員。",
-      "traffic": "統計看得到的頻道活動;`user` 預設只有你看得到,其他子命令預設公開,可用 `visibility` 調整。"
+      "traffic": "統計看得到的頻道活動;`user` 預設只有你看得到,其他子命令預設公開,可用 `visibility` 調整。",
+      "db": "僅限 bot 管理員使用，只在 Nijika 提供。唯讀查看所有伺服器的資料庫：統計、欄位、瀏覽與篩選、單筆內容；每個選項都有選單可選，也可以在 DM 中使用。"
     }
   },
   "level_detail": {
@@ -991,6 +992,100 @@
       "perfect_2": "今天的最佳,滿分送上!",
       "bonus_1": "破表了!這分數超出量表了!",
       "bonus_2": "11 分?規則就是用來打破的!"
+    }
+  },
+  "db_inspect": {
+    "unavailable": "資料庫檢視目前無法使用：唯讀連線沒有成功開啟，請查看 bot 的 log。",
+    "guild_required": "在 DM 中請用 `guild` 選項選擇要查看的伺服器。",
+    "unknown_guild": "找不到伺服器 `{{guild}}` 的資料庫。",
+    "unknown_collection": "這個資料庫沒有 `{{collection}}` collection。",
+    "unknown_field": "這個 collection 沒有欄位 `{{field}}`，請從選單選擇。",
+    "partial_filter": "篩選需要同時填寫 `field`、`operator` 和 `value`。",
+    "invalid_operator": "欄位 `{{field}}` 不支援「{{operator}}」這個比較方式，請從選單選擇。",
+    "invalid_value": "這個值不符合欄位 `{{field}}` 的型別（{{type}}）。日期請用 `YYYY-MM-DD` 或 ISO 格式。",
+    "invalid_sort": "無法用 `{{sort}}` 排序，請從選單選擇。",
+    "not_found": "找不到 ID 為 `{{id}}` 的資料。",
+    "session_expired": "這個面板已過期，請重新執行 `/db list`。",
+    "not_invoker": "只有執行這個查詢的管理員可以操作這個面板。",
+    "failed": "資料庫查詢失敗（錯誤代碼：{{traceId}}），請查看 bot 的 log。",
+    "not_joined": "未加入",
+    "unregistered": "未登記",
+    "indexed": "有索引",
+    "guild": "**伺服器** {{guild}}",
+    "stats": {
+      "title": "資料庫統計",
+      "total": "{{collections}} 個 collection · 共 {{size}}",
+      "line": "`{{name}}` — {{count}} 筆 · {{size}} · {{indexes}} 個索引",
+      "empty": "這個資料庫沒有任何 collection。"
+    },
+    "schema": {
+      "title": "{{collection}} 的欄位",
+      "count": "**筆數** 約 {{count}}",
+      "unregistered": "這個 collection 沒有登記在 bot 的程式中，可能是已移除功能留下的資料。",
+      "inferred": "欄位是從最近的資料推測的，不一定完整。",
+      "indexes": "**索引** {{indexes}}",
+      "sample_title": "最新一筆資料",
+      "no_sample": "這個 collection 沒有資料。"
+    },
+    "list": {
+      "title": "{{collection}}",
+      "filter": "**篩選** `{{field}}` {{operator}} `{{value}}`",
+      "unindexed": "這個欄位沒有索引，大型 collection 的查詢可能較慢或逾時。",
+      "empty": "沒有符合條件的資料。",
+      "total_capped": "{{count}}+",
+      "footer": "第 {{page}}/{{pages}} 頁 · 共 {{total}} 筆 · {{sort}}",
+      "view_placeholder": "檢視詳細內容"
+    },
+    "document": {
+      "title": "{{collection}} · {{id}}",
+      "attached": "內容較長，完整 JSON 在附件中。",
+      "names": "名稱對照"
+    },
+    "message": {
+      "author": "作者",
+      "channel": "頻道",
+      "time": "時間",
+      "deleted": "刪除時間",
+      "attachments": "附件",
+      "no_content": "（沒有文字內容）"
+    },
+    "operators": {
+      "eq": "等於",
+      "contains": "包含",
+      "gt": "大於（晚於）",
+      "lt": "小於（早於）",
+      "exists": "欄位存在"
+    },
+    "sort": {
+      "asc": "由小到大（舊到新）",
+      "desc": "由大到小（新到舊）"
+    },
+    "collections": {
+      "activities": "活動與報名",
+      "aiusages": "AI 使用紀錄",
+      "archive_channels": "備份的頻道資訊",
+      "archive_control_confirmations": "備份操作確認",
+      "archive_gateway_continuity": "即時擷取的連續性紀錄",
+      "archive_gc_checkpoints": "備份清理進度",
+      "archive_inbox": "待處理的即時擷取事件",
+      "archive_jobs": "完整備份工作",
+      "archive_leases": "備份程序租約",
+      "archive_periodic_runs": "日常備份紀錄",
+      "archive_reactions": "備份的 reaction",
+      "archive_schedule": "日常備份排程",
+      "archive_storage_usage": "備份儲存用量",
+      "bugtickets": "問題回報單",
+      "feedsubscriptions": "社群動態訂閱",
+      "fetches": "舊版訊息抓取進度",
+      "gay_readings": "每日 /gay 結果",
+      "giveaways": "抽獎",
+      "messages": "備份的訊息",
+      "replies": "自動回覆",
+      "rollcalls": "點名",
+      "temproles": "臨時身分組",
+      "threadmessagesources": "討論串回覆來源",
+      "threadmoderations": "討論串管理",
+      "userapisettings": "AI 使用者設定"
     }
   }
 }

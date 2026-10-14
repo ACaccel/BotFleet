@@ -648,5 +648,66 @@
         }
       }
     }
+  },
+  "db": {
+    "description": "Inspect the bot's databases read-only (bot admins only)",
+    "subcommands": {
+      "stats": {
+        "description": "Show each collection's document count and size",
+        "options": {
+          "guild": {
+            "description": "Guild database to inspect (defaults to this server; required in DMs)"
+          }
+        }
+      },
+      "schema": {
+        "description": "Show a collection's fields and its newest document",
+        "options": {
+          "collection": {
+            "description": "Collection to describe"
+          },
+          "guild": {
+            "description": "Guild database to inspect (defaults to this server; required in DMs)"
+          }
+        }
+      },
+      "list": {
+        "description": "Browse a collection's documents, optionally filtered",
+        "options": {
+          "collection": {
+            "description": "Collection to browse"
+          },
+          "guild": {
+            "description": "Guild database to inspect (defaults to this server; required in DMs)"
+          },
+          "field": {
+            "description": "Field to filter on"
+          },
+          "operator": {
+            "description": "How to compare the field"
+          },
+          "value": {
+            "description": "Value to compare with (dates accept YYYY-MM-DD)"
+          },
+          "sort": {
+            "description": "Sort order (newest first by default)"
+          }
+        }
+      },
+      "get": {
+        "description": "Show one document in full",
+        "options": {
+          "collection": {
+            "description": "Collection holding the document"
+          },
+          "id": {
+            "description": "Document ID"
+          },
+          "guild": {
+            "description": "Guild database to inspect (defaults to this server; required in DMs)"
+          }
+        }
+      }
+    }
   }
 }

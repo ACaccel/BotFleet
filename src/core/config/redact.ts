@@ -11,7 +11,7 @@
  *   - Generic: apiKey, password, secret, client_secret, refresh_token, access_token, private_key
  *   - LLM providers in dependency graph (@anthropic-ai/sdk, openai, @google/generative-ai,
  *     xAI via the OpenAI-compatible client): anthropic*, openai*, google*, gemini*, xai*
- *   - Data store: mongoURI
+ *   - Data store: mongoURI, mongo_inspect_uri
  *   - Other keys carried in the typed Env: cwa_api_key
  *
  * Every secret-shaped key of `Env` must appear here in lower case; the
@@ -45,6 +45,8 @@ export const REDACT_FIELD_NAMES = Object.freeze([
   // Data store
   'mongoURI',
   'mongo_uri',
+  'mongo_inspect_uri',
+  'mongoInspectUri',
 
   // LLM provider keys (project uses @anthropic-ai/sdk, openai, @google/generative-ai)
   'anthropic_api_key',

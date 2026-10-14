@@ -648,5 +648,66 @@
         }
       }
     }
+  },
+  "db": {
+    "description": "唯讀查看 bot 的資料庫（限 bot 管理員）",
+    "subcommands": {
+      "stats": {
+        "description": "查看各 collection 的筆數與大小",
+        "options": {
+          "guild": {
+            "description": "要查看的伺服器資料庫（預設為目前伺服器，DM 中必填）"
+          }
+        }
+      },
+      "schema": {
+        "description": "查看 collection 的欄位與最新一筆資料",
+        "options": {
+          "collection": {
+            "description": "要查看的 collection"
+          },
+          "guild": {
+            "description": "要查看的伺服器資料庫（預設為目前伺服器，DM 中必填）"
+          }
+        }
+      },
+      "list": {
+        "description": "瀏覽 collection 的資料，可加上篩選條件",
+        "options": {
+          "collection": {
+            "description": "要瀏覽的 collection"
+          },
+          "guild": {
+            "description": "要查看的伺服器資料庫（預設為目前伺服器，DM 中必填）"
+          },
+          "field": {
+            "description": "篩選的欄位"
+          },
+          "operator": {
+            "description": "比較方式"
+          },
+          "value": {
+            "description": "比較的值（日期可用 YYYY-MM-DD）"
+          },
+          "sort": {
+            "description": "排序方式（預設新到舊）"
+          }
+        }
+      },
+      "get": {
+        "description": "查看單筆資料的完整內容",
+        "options": {
+          "collection": {
+            "description": "資料所在的 collection"
+          },
+          "id": {
+            "description": "資料的 ID"
+          },
+          "guild": {
+            "description": "要查看的伺服器資料庫（預設為目前伺服器，DM 中必填）"
+          }
+        }
+      }
+    }
   }
 }

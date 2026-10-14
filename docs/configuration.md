@@ -30,6 +30,7 @@ placeholders fail startup; there is no root `.env.example`.
 | `LOG_RETENTION_DAYS`                                                   | Days of file logs to keep, default `60`; `0` keeps all                                           |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                                                   |
 | `CWA_API_KEY`                                                          | Optional nijika key for [earthquake reports](#earthquake-alerts-and-reports); blank means absent |
+| `MONGO_INSPECT_URI`                                                    | Read-only account for nijika's [`/db`](#database-inspection); required once `db` is enabled      |
 | `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup                                       |
 
 ### Log retention
@@ -52,7 +53,7 @@ The optional base fields are defined by [Config](../src/bot/index.ts).
 
 | Field                         | Purpose                                                                                                                                                     |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                       | Bot-admin IDs for `/ai whitelist`, anonymous `/talk`, closing `/bug_report` tickets, msg-archive's `/archive` and its notices; default `[]`                 |
+| `admin`                       | Bot-admin IDs for `/ai whitelist`, anonymous `/talk`, closing `/bug_report` tickets, nijika's `/db`, msg-archive's `/archive` and notices; default `[]`     |
 | `language`                    | `zh-TW` (default) or `en`; also controls registered command text                                                                                            |
 | `timeZone`                    | IANA zone for report calendars, such as `/traffic` days and heat maps; default `UTC`; an unknown zone stops startup                                         |
 | `commands`                    | Commands to expose; an unknown name stops startup and registration; [register again](contributing/local-setup.md#registering-slash-commands) after changing |
@@ -298,6 +299,24 @@ settings HTTP API or rewrite its configuration.
 For a local process, stop it and run `npm run gopher` again. For a managed
 deployment, restart `botfleet@gopher.service`; its release links to the same
 local configuration. See [deployment](contributing/deployment.md).
+
+### Database inspection
+
+Nijika's `/db` gives its `admin` users a read-only, ephemeral view of every guild
+database on the server, message content included. It is off by default and
+available on nijika only; another bot listing `db` fails startup.
+
+1. Create a MongoDB user limited to `readAnyDatabase`; see
+   [deployment](contributing/deployment.md#read-only-inspection-account).
+2. Set `MONGO_INSPECT_URI` in `src/bot/nijika/.env`, for example
+   `mongodb://inspector:<password>@127.0.0.1:27017/?authSource=admin`.
+3. Add `db` to nijika's `commands` and
+   [register commands](contributing/local-setup.md#registering-slash-commands).
+
+Listing `db` without `MONGO_INSPECT_URI` fails startup. An account that is not
+authenticated or holds any write action disables the db-inspect plugin, which
+withholds readiness; `/db` then answers that it is unavailable. See
+[database inspection](architecture.md#database-inspection) for limits and audit logs.
 
 ## Channel privacy
 

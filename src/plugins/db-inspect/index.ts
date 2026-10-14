@@ -1,0 +1,1 @@
+export { createDbInspectPlugin } from './plugin';

@@ -9,6 +9,10 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 2. [`buildRepos` / `Repos`](../../src/persistence/repositories/index.ts).
 3. Role-aware initialization in [`src/infra/mongo/`](../../src/infra/mongo/);
    model registration derives from the schema registry.
+4. The `/db` [inspection catalog](../../src/persistence/inspect/catalog.ts): fields
+   derive from the schema; add summary fields, and a
+   `replies:db_inspect.collections.<name>` description in every locale. A collection
+   read without a schema goes in its schemaless list; a test checks both.
 
 Read and write every collection through a repository in
 [`src/persistence/repositories/`](../../src/persistence/repositories/), including
@@ -37,7 +41,7 @@ see [archive contracts](../message-archive.md#scope-and-retention).
 Full-backup jobs, periodic-pass records, schedule notices and confirmation tokens
 persist across restarts; their operator controls live in
 [Discord](../message-archive.md#discord-controls). Keep message content and raw errors
-out of panels and reports.
+out of panels and reports; admin-only `/db` is the exception.
 
 `Activity` stores an activity's state, participants and roll-call attendance,
 keyed by its announcement message ID; `RollCall` stores who was called and who

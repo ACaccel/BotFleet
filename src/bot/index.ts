@@ -55,6 +55,7 @@ import type { ModelCatalog } from '../infra/llm/models-catalog';
 import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { FeedPlatformRegistry } from '../infra/social-feed';
 import type { ArchiveControlFactory } from '../application/archive/control';
+import type { DbInspectService } from '../application/db-inspect/service';
 
 import { ClientEventBridge, type ClientEventBridgeSuppression } from './client-event-bridge';
 import { installClientSafetyListeners } from './client-safety-listeners';
@@ -73,6 +74,9 @@ import { parseThreadModerationConfig, ThreadModeration } from './thread-moderati
  * the same per-guild connection pool), and tests / multi-cluster
  * setups that pass distinct URIs get distinct managers.
  */
+/** The `/db` command, hosted only by personalities that support it. */
+const DB_INSPECT_COMMAND = 'db';
+
 const sharedConnectionManagers = new Map<string, MongoConnectionManager>();
 const sharedConnectionManagerForUri = (
   uri: string,
@@ -318,6 +322,15 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     return this.container.tryResolve<ArchiveControlFactory>(TOKENS.ArchiveControlFactory);
   }
 
+  /**
+   * Read-only database inspection for `/db`, published by the db-inspect
+   * plugin that only nijika registers; `undefined` elsewhere and when the
+   * plugin failed to open its read-only connection.
+   */
+  public get dbInspectService(): DbInspectService | undefined {
+    return this.container.tryResolve<DbInspectService>(TOKENS.DbInspectService);
+  }
+
   /** Bot-scoped {@link Translator}. Undefined only in the pre-`run()` window. */
   public translator: Translator | undefined;
 
@@ -348,6 +361,14 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   public personaName = '';
   /** The bot's closing line on a `/ban_user` vote call; may be empty. */
   public voteFlavor = '';
+
+  /**
+   * Whether this personality hosts the read-only `/db` inspection. Read
+   * during construction, so an override must return a constant.
+   */
+  protected supportsDbInspect(): boolean {
+    return false;
+  }
 
   /** Archive mutation authority is granted only by the worker composition root. */
   protected archiveOwner(): ArchiveOwner | undefined {
@@ -396,6 +417,9 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     );
     if (unknownCommands.length > 0) {
       throw new Error(`Unknown command(s) in config.commands: ${unknownCommands.join(', ')}`);
+    }
+    if ((config.commands ?? []).includes(DB_INSPECT_COMMAND) && !this.supportsDbInspect()) {
+      throw new Error(`config.commands: ${DB_INSPECT_COMMAND} is available only on nijika`);
     }
     this.timeZone = config.timeZone ?? 'UTC';
     try {

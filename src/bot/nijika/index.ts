@@ -17,7 +17,8 @@ bootstrapPersonality({
   // `requirePort` above guarantees `env.PORT` is defined; the assertion
   // documents that invariant for the type checker.
   // `CWA_API_KEY` is optional: without it the earthquake plugin runs the
-  // webhook alone and skips CWA report polling.
+  // webhook alone and skips CWA report polling. `MONGO_INSPECT_URI` is
+  // checked by `Nijika` only when `config.commands` lists `db`.
   build: (client, env) =>
     new Nijika(
       client,
@@ -27,5 +28,6 @@ bootstrapPersonality({
       config,
       env.PORT as number,
       env.CWA_API_KEY,
+      env.MONGO_INSPECT_URI,
     ),
 });

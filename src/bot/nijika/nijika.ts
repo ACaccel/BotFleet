@@ -5,6 +5,7 @@ import {
   createAutoReplyPlugin,
   createActivityPlugin,
   createBugReportPlugin,
+  createDbInspectPlugin,
   createEarthquakePlugin,
   createGiveawayPlugin,
   createGuildEventsPlugin,
@@ -60,6 +61,8 @@ export class Nijika extends BaseBot<NijikaConfig> {
    * @param cwaApiKey - Central Weather Administration open-data key
    *   (`Env.CWA_API_KEY`), threaded the same way. When absent the
    *   earthquake plugin skips report polling and keeps only the webhook.
+   * @param mongoInspectUri - Read-only account for `/db`
+   *   (`Env.MONGO_INSPECT_URI`); required when `config.commands` lists `db`.
    */
   public constructor(
     client: Client,
@@ -69,6 +72,7 @@ export class Nijika extends BaseBot<NijikaConfig> {
     config: NijikaConfig,
     webhookPort: number,
     cwaApiKey: string | undefined,
+    mongoInspectUri: string | undefined,
   ) {
     super(client, token, mongoURI, clientId, config);
     // `helpMessage` is resolved from this key inside BaseBot.run()
@@ -113,5 +117,16 @@ export class Nijika extends BaseBot<NijikaConfig> {
     // Earthquake early-warning webhook (its `start` hook owns the Express
     // route) plus the CWA report poller, which runs only with a key.
     this.use(createEarthquakePlugin({ port: webhookPort, cwaApiKey }));
+    if ((this.config.commands ?? []).includes('db')) {
+      if (mongoInspectUri === undefined) {
+        throw new Error('config.commands lists db, which requires MONGO_INSPECT_URI');
+      }
+      // Read-only `/db` inspection on its own verified read-only account.
+      this.use(createDbInspectPlugin({ uri: mongoInspectUri }));
+    }
+  }
+
+  protected override supportsDbInspect(): boolean {
+    return true;
   }
 }

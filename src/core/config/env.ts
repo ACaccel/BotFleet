@@ -49,19 +49,20 @@ const nonPlaceholder = (label: string) =>
       `${label} contains a placeholder substring (e.g. "your_token", "changeme")`,
     );
 
-const mongoUriSchema = z
-  .string()
-  .refine(
-    (v) => v.startsWith('mongodb://') || v.startsWith('mongodb+srv://'),
-    'MONGO_URI must use the mongodb:// or mongodb+srv:// scheme',
-  )
-  .refine((v) => {
-    try {
-      return new URL(v).hostname.length > 0;
-    } catch {
-      return false;
-    }
-  }, 'MONGO_URI must include a non-empty host');
+const mongoUriSchema = (label: string) =>
+  z
+    .string()
+    .refine(
+      (v) => v.startsWith('mongodb://') || v.startsWith('mongodb+srv://'),
+      `${label} must use the mongodb:// or mongodb+srv:// scheme`,
+    )
+    .refine((v) => {
+      try {
+        return new URL(v).hostname.length > 0;
+      } catch {
+        return false;
+      }
+    }, `${label} must include a non-empty host`);
 
 // Optional third-party API keys (the LLM providers and the CWA open-data
 // API). These live in the typed Env so their consumers receive them
@@ -99,7 +100,12 @@ const envShape = {
     .optional(),
   TOKEN: nonPlaceholder('TOKEN'),
   CLIENT_ID: nonPlaceholder('CLIENT_ID'),
-  MONGO_URI: mongoUriSchema.optional(),
+  MONGO_URI: mongoUriSchema('MONGO_URI').optional(),
+  /**
+   * Read-only account for nijika's `/db` inspection. Required only when
+   * nijika enables that command; startup rejects an account that can write.
+   */
+  MONGO_INSPECT_URI: mongoUriSchema('MONGO_INSPECT_URI').optional(),
   /** Cooldown and polling interval for transient per-guild connection failures. */
   MONGO_RECOVERY_INTERVAL_MS: z.coerce.number().int().positive().max(2_147_483_647).default(60_000),
   /** HTTP port for nijika's earthquake webhook. */

@@ -62,7 +62,8 @@
   },
   "bot": {
     "login_failed": "Failed to log in to Discord ({{clientId}}).",
-    "login_no_user": "Logged in to Discord but no user was returned ({{clientId}})."
+    "login_no_user": "Logged in to Discord but no user was returned ({{clientId}}).",
+    "inspect_account_invalid": "The database inspection account is misconfigured: `MONGO_INSPECT_URI` must be a read-only account."
   },
   "unexpected": "An unexpected error occurred while running the command. An administrator has been notified (error ID: {{traceId}}).",
   "graphics": {

@@ -71,6 +71,9 @@ Every bot shares the framework capabilities:
   [`/traffic` dashboards](docs/message-archive.md#activity-reports) on the archive:
   dashboard images in embeds (two for the activity reports), public unless requested
   otherwise.
+- **Database inspection.** Nijika's admins browse any guild database read-only
+  with [`/db`](docs/configuration.md#database-inspection): statistics, fields,
+  filtered pages and single documents, with every option offered as a list.
 - **Command logs.** Compact debug-channel embeds show the full command name,
   user and channel mentions, and execution time. See
   [configuration](docs/configuration.md#common-bot-settings).
@@ -126,6 +129,7 @@ lists that command's paths and options. Admin-only paths are hidden from non-adm
 | Server and roles  | `/role`, `/level_detail`, `/roll_call`, `/ban_user`                                            |
 | Bot persona       | `/talk`, `/change_avatar`                                                                      |
 | Utilities and fun | `/help`, `/bug_report`, `/random_restaurant`, `/give_score`, `/gay`                            |
+| Administration    | `/db stats`, `schema`, `list`, `get` (nijika only)                                             |
 | Context menus     | Get avatar (from a member or a message author), get sticker, score a message                   |
 
 Upgrading from standalone commands such as `/feed_subscribe`, or from the removed

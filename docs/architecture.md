@@ -289,6 +289,36 @@ at confirmation and subscription checks the bot's ability to post.
 Rank gates govern Discord disclosure, not host storage: logs and attachment caches
 may contain private-channel data. See [attachment storage](configuration.md#attachment-storage).
 
+## Database inspection
+
+Nijika's `/db` reads any guild database through the db-inspect plugin and
+[`DbInspectService`](../src/application/db-inspect/service.ts):
+
+- **Read-only account.** Plugin `init` opens a separate client on
+  `MONGO_INSPECT_URI` and rejects an unauthenticated account or one granting any
+  action beyond read and statistics. It bypasses `MongoConnectionManager`, whose
+  model registration builds indexes and would create a database for a guild without one.
+- **Catalog.** [`INSPECT_CATALOG`](../src/persistence/inspect/catalog.ts) derives
+  fields, enum values, index keys and timestamp fields from the schema registry,
+  and lists collections that repositories use without a schema; their fields, and
+  those of unregistered collections, are inferred from the newest documents.
+- **Structured filters.** A filter is a catalog field, an operator valid for its
+  type and a value converted to that type; values never become query operators,
+  and `contains` matches literally. No raw queries or aggregation.
+- **Limits.** Queries stop after 5 seconds (autocomplete 1.5 seconds), filtered
+  counts at 10,000, and paging at the first 10,000 matches. Sorting is limited to
+  `_id` and leading index keys; filters on unindexed fields are flagged as slow.
+- **Sessions.** A result panel's buttons carry a token for an in-memory session
+  bound to the invoker, expiring 15 minutes after last use or on restart.
+- **Access and audit.** Only `admin` IDs may run the command or its components;
+  autocomplete returns nothing to others. Replies are ephemeral with no mentions.
+  Each read logs `ops:db_inspect.read` with the user, database, collection and
+  filter, never results.
+
+`/db` is a deliberate exception to [privacy-aware data commands](#privacy-aware-data-commands)
+and to the archive rule that panels omit message content: it serves bot admins
+only, privately.
+
 ## Deployment boundary
 
 The launcher selects the project Conda runtime. Independent systemd units use release

@@ -44,6 +44,13 @@ export const ops = {
     autocompleteExpired: (commandName: string, code: number | string): string =>
       `ops:command.autocomplete_expired | autocomplete for /${commandName} not delivered (code=${code}).`,
   },
+  dbInspect: {
+    /**
+     * Audit line for one `/db` read. The structured fields name the member,
+     * database, collection and filter; results are never logged.
+     */
+    read: (action: string): string => `ops:db_inspect.read | /db ${action}`,
+  },
   feed: {
     /**
      * A destination channel the bot cannot post in. The permission
