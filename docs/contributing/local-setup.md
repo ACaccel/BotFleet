@@ -70,6 +70,9 @@ cp src/bot/nijika/config.example.json src/bot/nijika/config.json
 Create `src/bot/nijika/.env` with `TOKEN`, `CLIENT_ID`, and required feature
 credentials. Keep both files out of version control; see [configuration](../configuration.md).
 
+CI copies each bot's configuration example before type checks and tests.
+These copies contain placeholders only.
+
 ## Running a personality
 
 ```bash

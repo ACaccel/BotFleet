@@ -47,6 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/npm-install
+      - uses: ./.github/actions/seed-bot-config
       - name: Require tests in every Vitest project
         shell: bash
         run: |
