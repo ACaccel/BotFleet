@@ -21,7 +21,7 @@ import type { Job } from 'node-schedule';
 import type { GuildLookup } from '../guild-lookup';
 import { bindTranslator, type Translator } from '../../core/i18n';
 import { logError, type Logger } from '../../core/logger';
-import { JobManager } from '@core/scheduling';
+import { JobManager, retryWithBackoff } from '@core/scheduling';
 import type { Clock } from '../../core/time';
 import type { TempRoleDoc } from '../../persistence/schemas/temp-role.schema';
 
@@ -370,26 +370,9 @@ export const cancelTempRole = async (
   return { status: 'cancelled' };
 };
 
-/**
- * Same exponential-backoff retry as the giveaway / activity reboot.
- * Without it a transient Mongo blip during boot would silently leave a
- * guild's temp roles un-rebuilt for the process lifetime.
- */
 const REBOOT_MAX_ATTEMPTS = 3;
-const rebootRetry = async <T>(op: () => Promise<T>): Promise<T> => {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < REBOOT_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      return await op();
-    } catch (err) {
-      lastErr = err;
-      if (attempt < REBOOT_MAX_ATTEMPTS - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 250 * Math.pow(2, attempt)));
-      }
-    }
-  }
-  throw lastErr;
-};
+const rebootRetry = <T>(op: () => Promise<T>): Promise<T> =>
+  retryWithBackoff(op, REBOOT_MAX_ATTEMPTS);
 
 /**
  * Rebuild every guild's expiry jobs on boot: re-schedule still-pending

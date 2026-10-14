@@ -21,7 +21,7 @@ import type { Translator } from '../../core/i18n';
 import { logError, type Logger } from '../../core/logger';
 import type { Message } from 'discord.js';
 
-import { JobManager } from '@core/scheduling';
+import { JobManager, retryWithBackoff } from '@core/scheduling';
 
 const msgReact = async (
   logger: Logger,
@@ -318,26 +318,9 @@ export const runGiveawayDraw = async (
   );
 };
 
-/**
- * Same exponential-backoff retry as `activity.rebootRetry`. Without
- * it, a transient Mongo blip during boot would silently leave the
- * guild's scheduled giveaways un-rebuilt for the process lifetime.
- */
 const REBOOT_MAX_ATTEMPTS = 3;
-const rebootRetry = async <T>(op: () => Promise<T>): Promise<T> => {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < REBOOT_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      return await op();
-    } catch (err) {
-      lastErr = err;
-      if (attempt < REBOOT_MAX_ATTEMPTS - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 250 * Math.pow(2, attempt)));
-      }
-    }
-  }
-  throw lastErr;
-};
+const rebootRetry = <T>(op: () => Promise<T>): Promise<T> =>
+  retryWithBackoff(op, REBOOT_MAX_ATTEMPTS);
 
 export const rebootGiveawayJobs = async (
   deps: GiveawayDeps,

@@ -11,6 +11,7 @@
 import { localSlotOf, type StatsGranularity, type StatsWindow } from '../../../core/archive/stats';
 
 import type { TrafficRange } from './types';
+import { zoneOffsetMs } from '../../../core/time';
 
 const DAY_MS = 86_400_000;
 
@@ -40,29 +41,6 @@ export interface Period {
   /** IANA zone from the bot's `config.timeZone`. */
   readonly timeZone: string;
 }
-
-/** Milliseconds the zone is ahead of UTC at `atMs`. */
-const zoneOffsetMs = (timeZone: string, atMs: number): number => {
-  const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
-  const format = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-  });
-  for (const part of format.formatToParts(atMs)) parts[part.type] = part.value;
-  const asUtc = Date.UTC(
-    Number(parts.year),
-    Number(parts.month) - 1,
-    Number(parts.day),
-    Number(parts.hour),
-    Number(parts.minute),
-  );
-  return asUtc - Math.floor(atMs / 60_000) * 60_000;
-};
 
 /** Local midnight starting the day `daysBack` days before the one containing `atMs`. */
 const localMidnight = (atMs: number, daysBack: number, timeZone: string): number => {
