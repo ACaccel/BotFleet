@@ -50,8 +50,8 @@ Every bot shares the framework capabilities:
   [thread moderation](docs/thread-moderation.md) with paginated ban lists,
   delegated management approved by DM and deletion of attributable bot replies.
 - **Community tools.** Giveaways, activities, temporary notification roles,
-  role-claim messages, level roles and restaurant picks. `/give_score` and `/gay`
-  give stable daily readings in the bot's configured time zone, with member and
+  role-claim messages, level roles and restaurant picks. `/give_score` (also a
+  message menu) and `/gay` give stable daily readings in the bot's configured time zone, with member and
   pair options and mention-safe replies.
 - **Social media.** Rich previews for shared links and per-channel subscriptions to
   social feeds. X links and subscriptions use custom cards for text and photos,
@@ -125,7 +125,7 @@ lists that command's paths and options. Admin-only paths are hidden from non-adm
 | Server and roles  | `/role`, `/level_detail`, `/roll_call`, `/ban_user`                                            |
 | Bot persona       | `/talk`, `/change_avatar`                                                                      |
 | Utilities and fun | `/help`, `/bug_report`, `/random_restaurant`, `/give_score`, `/gay`                            |
-| Context menus     | Get avatar (from a member or a message author), get sticker                                    |
+| Context menus     | Get avatar (from a member or a message author), get sticker, score a message                   |
 
 Upgrading from standalone commands such as `/feed_subscribe`, or from the removed
 `/emoji_frequency`, `/sticker_frequency` and `/db_list_message`? See

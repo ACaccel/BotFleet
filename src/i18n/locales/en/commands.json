@@ -71,6 +71,9 @@
   "menu_get_sticker": {
     "name": "Get emoji/sticker URL"
   },
+  "menu_give_score": {
+    "name": "Score this message"
+  },
   "random_restaurant": {
     "description": "Random restaurant picker (Taipei / parts of New Taipei)",
     "options": {

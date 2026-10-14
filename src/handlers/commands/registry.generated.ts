@@ -19,13 +19,14 @@ import { default as Handler_11 } from './level_detail';
 import { default as Handler_12 } from './menu_author_avatar';
 import { default as Handler_13 } from './menu_get_avatar';
 import { default as Handler_14 } from './menu_get_sticker';
-import { default as Handler_15 } from './random_restaurant';
-import { default as Handler_16 } from './reply';
-import { default as Handler_17 } from './role';
-import { default as Handler_18 } from './roll_call';
-import { default as Handler_19 } from './talk';
-import { default as Handler_20 } from './thread';
-import { default as Handler_21 } from './traffic';
+import { default as Handler_15 } from './menu_give_score';
+import { default as Handler_16 } from './random_restaurant';
+import { default as Handler_17 } from './reply';
+import { default as Handler_18 } from './role';
+import { default as Handler_19 } from './roll_call';
+import { default as Handler_20 } from './talk';
+import { default as Handler_21 } from './thread';
+import { default as Handler_22 } from './traffic';
 export const COMMAND_REGISTRY = {
   activity: Handler_0,
   ai: Handler_1,
@@ -42,11 +43,12 @@ export const COMMAND_REGISTRY = {
   menu_author_avatar: Handler_12,
   menu_get_avatar: Handler_13,
   menu_get_sticker: Handler_14,
-  random_restaurant: Handler_15,
-  reply: Handler_16,
-  role: Handler_17,
-  roll_call: Handler_18,
-  talk: Handler_19,
-  thread: Handler_20,
-  traffic: Handler_21,
+  menu_give_score: Handler_15,
+  random_restaurant: Handler_16,
+  reply: Handler_17,
+  role: Handler_18,
+  roll_call: Handler_19,
+  talk: Handler_20,
+  thread: Handler_21,
+  traffic: Handler_22,
 } as const satisfies Readonly<Record<string, new () => Command>>;

@@ -71,6 +71,9 @@
   "menu_get_sticker": {
     "name": "取得表符/貼圖連結"
   },
+  "menu_give_score": {
+    "name": "幫這則訊息打分"
+  },
   "random_restaurant": {
     "description": "隨機推薦餐廳(台北/部分新北地區)",
     "options": {
