@@ -30,8 +30,9 @@ Behaviour changes in the remaining commands:
   `data/avatars/` instead of an external host; copy each `avatar_file` named in
   [`identity.json`](../src/handlers/commands/change_avatar/identity.json) there
   before deploying.
-- **`/level_detail`** takes `rank_from` and `count` (1-10) instead of `left` and
-  `right`.
+- **`/level_detail`** drops `left` and `right`. Without options it shows a paged
+  leaderboard embed; `rank` opens the page holding that rank, and `member` shows
+  one member's level card.
 - **`/giveaway`** limits durations to 1 minute-30 days and draws overdue giveaways
   after a restart instead of discarding them. `/giveaway delete` cancels only your
   own giveaways unless you can manage messages or events, and marks the

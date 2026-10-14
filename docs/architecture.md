@@ -131,6 +131,11 @@ expiry job if Discord refuses deletion. `/role sync` resolves configured level
 roles by ID, bounds member batches and role-edit concurrency, and reports
 failures; it adds the target role before removing obsolete level roles.
 
+`/level_detail` and `/role sync` share one MEE6 leaderboard read per guild, cached
+for five minutes ([`mee6-shared/leaderboard.ts`](../src/handlers/commands/mee6-shared/leaderboard.ts)).
+The public leaderboard's ◀ / ▶ buttons carry `level_page|<invokerId>|<page>`; only
+the invoker may page, and each press re-reads the cached board and clamps the page.
+
 ## Discord presentation colors
 
 [`presentation-colors.ts`](../src/infra/discord/presentation-colors.ts) owns the

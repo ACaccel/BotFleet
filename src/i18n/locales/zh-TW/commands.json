@@ -52,13 +52,13 @@
     }
   },
   "level_detail": {
-    "description": "查看 MEE6 等級排行中某段名次的詳細數據",
+    "description": "查看 MEE6 等級排行榜,或某位成員的等級卡片",
     "options": {
-      "rank_from": {
-        "description": "從第幾名開始"
+      "rank": {
+        "description": "跳到這個名次所在的頁面並標示出來"
       },
-      "count": {
-        "description": "顯示幾人(1-10,預設 10)"
+      "member": {
+        "description": "查看這位成員的等級卡片(與 rank 同時填寫時以此為準)"
       }
     }
   },

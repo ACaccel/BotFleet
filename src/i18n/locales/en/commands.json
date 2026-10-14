@@ -52,13 +52,13 @@
     }
   },
   "level_detail": {
-    "description": "Show MEE6 leaderboard details for a range of ranks",
+    "description": "Show the MEE6 level leaderboard, or one member's level card",
     "options": {
-      "rank_from": {
-        "description": "First rank to show"
+      "rank": {
+        "description": "Open the page holding this rank and mark it"
       },
-      "count": {
-        "description": "How many ranks to show (1-10, default 10)"
+      "member": {
+        "description": "Show this member's level card (takes priority over rank)"
       }
     }
   },
