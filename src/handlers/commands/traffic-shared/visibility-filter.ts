@@ -1,31 +1,29 @@
 /**
- * Privacy filter for `/traffic`: the channels whose archived messages a reply may
- * count. The result feeds every member statistic as `channelId: { $in: [...] }`;
- * `/traffic emoji` and `/traffic sticker` deliberately skip it.
+ * Privacy filter for `/traffic`: the channels whose archived messages a reply
+ * may count, fed to every member statistic as `channelId: { $in: [...] }`
+ * (`/traffic emoji` and `/traffic sticker` deliberately skip it).
  *
- * Candidates are the `archive_channels` records plus the live guild cache, so
- * archived threads and deleted channels are judged instead of silently dropped.
- * A channel counts only when every gate passes:
- *   (a) operator rank — its effective rank (own rank and every ancestor, resolved
- *       through the cache or the recorded parents) is at most the ceiling:
- *         - `ephemeral` → the invoker's rank (only they see the reply);
- *         - `public`    → `min(invoker rank, command channel rank)`;
- *   (b) Discord access for the INVOKER (never the counted member):
- *         - a live channel needs View Channel;
- *         - a thread (live or archived) is judged through its parent: View Channel
- *           on the parent, plus Manage Threads for a private thread, because
- *           members of a private thread cannot be verified without an API call per
- *           thread; a recorded thread of unknown type is treated as private;
- *         - a channel missing from the cache counts only when its record says it
- *           was deleted and `@everyone` could view it; a thread whose parent is gone
- *           follows the parent's record, and a private one never counts;
- *   (c) `public` only — audience coverage: every role (`@everyone` included) that
- *       can view the command channel can also view the channel, judged through the
- *       parent for a thread, so a public reply never shows the command channel
- *       activity its readers cannot see. Private threads never count in public.
+ * Candidates are `archive_channels` records plus the live guild cache, so
+ * archived threads and deleted channels are judged rather than dropped. A
+ * channel counts only when every gate passes:
+ *   (a) operator rank — its effective rank (own rank and every ancestor) is
+ *       at most the invoker's rank (`ephemeral`) or
+ *       `min(invoker rank, command channel rank)` (`public`);
+ *   (b) Discord access for the INVOKER (never the counted member): View
+ *       Channel on a live channel; for a thread, View Channel on the parent
+ *       plus Manage Threads if private, because private-thread membership
+ *       cannot be verified without an API call per thread (unknown type
+ *       counts as private); a channel missing from the cache counts only if
+ *       recorded as deleted and viewable by `@everyone`; a thread whose
+ *       parent is gone follows the parent's record, and a private one never
+ *       counts;
+ *   (c) `public` only — every role that can view the command channel can
+ *       also view the channel (through the parent for a thread), so a public
+ *       reply never exposes activity its readers cannot see. Private threads
+ *       never count in public.
  *
- * {@link resolveVisibleChannelIds} is pure; `allowed-channels.ts` adapts a
- * discord.js guild and member to it.
+ * {@link resolveVisibleChannelIds} is pure; `allowed-channels.ts` adapts
+ * discord.js objects to it.
  */
 import {
   CATEGORY_CHANNEL_TYPE,

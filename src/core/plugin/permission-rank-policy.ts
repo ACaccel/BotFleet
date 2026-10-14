@@ -1,28 +1,21 @@
 /**
- * PermissionRankPolicy — operator-defined privacy / clearance ranking for
- * channels and users, resolved once from static `config.json` at composition
- * time.
+ * Operator-defined privacy / clearance ranking for channels and users,
+ * resolved once from `config.json` at composition time.
  *
- * This is ORTHOGONAL to Discord's own permission system
- * (`PermissionsBitField`, channel overwrites): it is a numeric ranking the
- * server operator declares in config, consumed by bot features to decide
- * what to surface where. Two subjects:
+ * ORTHOGONAL to Discord's permission system: a numeric ranking the operator
+ * declares, consumed by features to decide what to surface where. A CHANNEL
+ * carries a privacy rank (higher = more private); a USER carries a clearance
+ * rank from their ranked roles (higher = sees more).
  *
- *   - a CHANNEL carries a privacy rank (higher = more private);
- *   - a USER carries a clearance rank derived from their ranked roles
- *     (higher = sees more).
+ * A feature suppresses output in a channel whose effective rank exceeds the
+ * feature's ceiling ({@link PermissionRankPolicy.isSuppressed}).
+ * Clearance-based consumers compose
+ * {@link PermissionRankPolicy.channelRank},
+ * {@link PermissionRankPolicy.userRank}, and
+ * {@link PermissionRankPolicy.visibilityCeiling} directly.
  *
- * A feature SUPPRESSES its output for a channel when the channel's effective
- * rank exceeds the feature's configured ceiling ({@link
- * PermissionRankPolicy.isSuppressed}). A consumer that gates visibility by
- * user clearance composes the rank primitives directly ({@link
- * PermissionRankPolicy.channelRank} / {@link PermissionRankPolicy.userRank} /
- * {@link PermissionRankPolicy.visibilityCeiling}).
- *
- * Layer constraint (mirrors `guild-onboarding-port.ts`): this module uses only
- * primitive types and `zod` — no discord.js, no persistence — so `core` gains
- * no dependency on those layers. Discord ids arrive as plain strings (matching
- * `GuildRegistry`); the policy never resolves them against the live client.
+ * Discord ids are plain strings; the policy never resolves them against the
+ * live client.
  */
 import { z } from 'zod';
 

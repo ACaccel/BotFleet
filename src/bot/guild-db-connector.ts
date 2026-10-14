@@ -1,17 +1,15 @@
 /**
  * Owns per-guild MongoDB connection lifecycle on behalf of BaseBot.
  *
- * Single responsibility: orchestrate the per-guild fan-out that opens
- * each guild's connection through {@link ReposFactory} and surfaces the
- * shared {@link ConnectionManager}'s `traceId` on the boot log so
- * support can correlate the user-facing `errors:db.guild_disabled`
- * message back to the structured log line.
+ * Orchestrates the per-guild fan-out that opens each guild's connection
+ * through {@link ReposFactory} and surfaces the shared
+ * {@link ConnectionManager}'s `traceId` on the boot log so support can
+ * correlate the user-facing `errors:db.guild_disabled` message back to the
+ * structured log line.
  *
- * The shared {@link ConnectionManager} (resolved via the IoC container)
- * still owns the actual classification + disabling logic; this class
- * is a thin orchestration layer. It is one of the three
- * collaborators BaseBot composes; it is intentionally NOT registered
- * as an IoC token (no plugin needs to reach it).
+ * The {@link ConnectionManager} (resolved via the IoC container) still owns
+ * the classification and disabling logic. This class is intentionally NOT
+ * registered as an IoC token (no plugin needs to reach it).
  */
 import { isTransient } from '../persistence/error-translator';
 import type { ServiceContainer } from '../core/ioc';

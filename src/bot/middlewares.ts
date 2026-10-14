@@ -1,11 +1,6 @@
 /**
  * Default interaction middlewares for {@link InteractionRouter}.
  *
- * The router is BaseBot's primary dispatch path. The functions here
- * express the "switch by interaction type" routing and the
- * channel-logging behaviour as Chain-of-Responsibility stages.
- *
- * Two middlewares ship today:
  *   - {@link createDispatchMiddleware} — terminal stage. Routes the
  *     interaction to the right `execute*` dispatcher based on its
  *     discriminant, including the autocomplete branch, which is
@@ -15,8 +10,8 @@
  *     sink. Consults the {@link PermissionRankPolicy} so commands run in
  *     channels above the `channel_logging` rank ceiling stay out of the
  *     debug feed (the durable guild audit log is never suppressed).
- *     Implemented as a middleware so a bot that wants a different logging
- *     policy declares one instead of overriding the command dispatcher.
+ *     A middleware so a bot that wants a different logging policy
+ *     declares one instead of overriding the command dispatcher.
  */
 import { EMBED_COLORS } from '../infra/discord/presentation-colors';
 import { EmbedBuilder, MessageFlags, channelMention, userMention } from 'discord.js';

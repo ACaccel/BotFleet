@@ -2,24 +2,21 @@
  * Identity-sync routine: applies the bot's avatar + per-guild nickname,
  * either by mirroring a source user (sync mode) or from a static fallback.
  *
- * Kept free of scheduling and IoC so it is unit-testable with a fake
- * client. The plugin owns the schedule and the cross-run {@link IdentitySyncState};
- * this module is the pure "apply once" step.
+ * Free of scheduling and IoC so it is unit-testable with a fake client; the
+ * plugin owns the schedule and the cross-run {@link IdentitySyncState}.
  *
  * Nickname semantics: in sync mode the bot mirrors the source user's
- * PER-GUILD display name (i.e. their server nickname, `GuildMember.displayName`
- * = nickname ?? global name), resolved separately in each guild — NOT the
- * source's global `User.displayName`. The avatar is necessarily global
+ * PER-GUILD display name (`GuildMember.displayName` = nickname ?? global
+ * name), resolved separately in each guild — NOT the source's global
+ * `User.displayName`. The avatar is necessarily global
  * (`ClientUser.setAvatar` is account-wide), so it mirrors the source user's
  * global avatar.
  *
  * Avatar rate-limit discipline: Discord throttles `PATCH /users/@me`
  * aggressively, so the avatar is only re-uploaded when it would actually
- * change. In sync mode that means the source user's avatar HASH differs
- * from the last one applied (comparing the bot's own re-hashed avatar would
- * never match the source's hash, so we track the source hash instead). In
- * fallback mode a one-shot marker prevents re-uploading the same local file
- * on every daily tick.
+ * change. In sync mode the source user's avatar HASH is tracked (the bot's
+ * own re-hashed avatar would never match it). In fallback mode a one-shot
+ * marker prevents re-uploading the same local file on every daily tick.
  */
 import type { Client, Guild, GuildMember } from 'discord.js';
 

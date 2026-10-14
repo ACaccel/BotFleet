@@ -1,39 +1,24 @@
 /**
  * Threads provider. Rewrites a post URL onto one of the operator-configured
- * embed-proxy domains so Discord renders an embed. Matches both the legacy
- * `threads.net` and current `threads.com` hosts.
+ * embed-proxy domains so Discord renders an embed. Matches both the
+ * `threads.net` and `threads.com` hosts.
  *
- * On top of the generic rewrite template this provider expands the
- * `/share/<token>` short links the Threads app's share button emits. The
- * token is opaque — it carries no post id — so every embed proxy serves a
- * login wall for it; only the canonical `/@user/post/<id>` permalink is
- * previewable. The expansion is a redirect chase, but two Threads quirks
- * make it unlike Facebook's: the redirect is served only to a minimal
- * User-Agent (see {@link SHARE_RESOLVE_USER_AGENT}), and the permalink is
- * an intermediate hop rather than the chain's destination (see
- * {@link resolveShareLink}). Hence the hop-scanning resolution instead of
- * `OgClient.resolveCanonical`.
+ * It also expands the `/share/<token>` short links the app's share button
+ * emits: the token carries no post id, so every proxy serves a login wall for
+ * it. Unlike Facebook's, the redirect is served only to a minimal User-Agent
+ * (see {@link SHARE_RESOLVE_USER_AGENT}) and the permalink is an intermediate
+ * hop, not the chain's destination (see {@link resolveShareLink}).
  *
- * Threads proxies differ per post type, so the probe loop's quality tiers
- * pick the right one per post rather than a fixed host. `fzthreads.com`
- * serves a fetchable `og:video` and the real post image, and resolves
- * login-restricted posts. For a post with no media of its own it answers
- * with the author's profile avatar as `og:image`, which the weak-image tier
- * demotes below any proxy holding a real post asset while still ranking it
- * above a text-only embed (see {@link LOW_VALUE_IMAGE_PATTERNS}).
- * `viewthreads.com` used to serve the real post image as well; it currently
- * answers with only a generic `@user on Threads` title, which
- * {@link isPlaceholder} rejects, so it stays listed only as a fallback that
- * starts contributing again on its own if it recovers.
- *
- * `fixthreads.seria.moe` redirects every post back to threads.com,
- * `vxthreads.net` times out, `fixthreads.net` and the `threadsez.*` hosts no
- * longer resolve, and a login wall carries a generic Instagram logo as
- * `og:image` and so is rejected by the shared junk-marker filter rather than
- * posted as a broken card. Per-host validation is what keeps all of this
- * honest as proxies come and go: each host is tried until one yields media,
- * and while every proxy is degraded Threads previews are skipped silently
- * with no bare link posted.
+ * Proxies differ per post type, so the probe loop's quality tiers pick one per
+ * post rather than a fixed host. `fzthreads.com` serves `og:video` and the real
+ * post image and resolves login-restricted posts; for a post without media it
+ * answers with the author's avatar, which the weak-image tier ranks below real
+ * post assets but above a text-only embed (see {@link LOW_VALUE_IMAGE_PATTERNS}).
+ * `viewthreads.com` currently answers with a generic title that
+ * {@link isPlaceholder} rejects; it stays listed as a fallback that recovers on
+ * its own. A login wall's generic Instagram `og:image` is rejected by the
+ * shared junk-marker filter. While every proxy is degraded, Threads previews
+ * are skipped silently with no bare link posted.
  */
 import { ok } from '../../../core/result';
 

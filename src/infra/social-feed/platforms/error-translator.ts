@@ -4,16 +4,13 @@
  *
  * Duck-typed on the axios error shape (`code` for transport failures,
  * `response.status` for HTTP responses) rather than `axios.isAxiosError`,
- * which an auto-mocked `axios` neuters in unit tests — the same approach
- * as `infra/link-preview/error-translator.ts` and
- * `infra/llm/selfhosted-client.ts`. The original error survives as
- * `cause` for observability.
+ * which an auto-mocked `axios` neuters in unit tests. The original error
+ * survives as `cause` for observability.
  *
- * The platform name travels as data so the catalog templates can name
- * it, but `OPERATION` below deliberately does not: it records the class
- * that actually issued the request, which is what an operator greps on.
- * A second platform with its own client therefore needs its own
- * translator rather than reusing this one.
+ * The platform name travels as data so the catalog templates can name it,
+ * but `OPERATION` below deliberately does not: it records the class that
+ * actually issued the request, which is what an operator greps on. A second
+ * platform with its own client therefore needs its own translator.
  */
 import { FeedError, type FeedErrorCode } from '../../../core/errors';
 

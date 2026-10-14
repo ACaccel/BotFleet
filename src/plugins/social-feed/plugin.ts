@@ -5,19 +5,16 @@
  * Lifecycle wiring only; the pass itself lives in `internal/poll.ts`.
  * `onReady` runs one pass immediately (so a restart surfaces anything
  * missed while the bot was down) and then drives a self-rescheduling
- * `setTimeout` loop, mirroring `message-backup`.
+ * `setTimeout` loop, mirroring `message-backup`. Every pass is wrapped
+ * so a throw is logged and the loop always reschedules itself.
  *
- * Factory pattern (mirrors `createSocialLinkPreviewPlugin`): config is
- * parsed once at composition time — a malformed block fails the boot,
- * not the first pass — and the loop's mutable state is captured in the
- * closure, so the returned object is pure data.
+ * Config is parsed once at composition time — a malformed block fails the
+ * boot, not the first pass — and the loop's mutable state is captured in
+ * the factory closure (mirrors `createSocialLinkPreviewPlugin`).
  *
  * Subscriptions live in each guild's database rather than in config, so
  * there is no startup reconciliation: deleting a subscription deletes
  * its cursor with it, and nothing can be orphaned.
- *
- * Every pass is wrapped so a throw is logged and the loop always
- * reschedules itself.
  */
 import { logError, logSystem } from '../../core/logger';
 import type { Plugin } from '../../core/plugin';

@@ -73,9 +73,7 @@ type ScheduleGiveawayOutcome =
 
 /**
  * Outcome of {@link deleteGiveaway}; the handler maps each variant to an
- * i18n key. A raw English reason string was previously interpolated
- * straight into the localised reply, so a zh-TW user saw
- * "無法刪除抽獎: Database not found".
+ * i18n key so no raw English reason reaches a localised reply.
  */
 type DeleteGiveawayOutcome =
   | { readonly status: 'deleted' }

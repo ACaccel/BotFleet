@@ -7,17 +7,13 @@
  * a keystroke, and the answer is already stored: the option names
  * accounts *this guild subscribed*, not accounts that exist.
  *
- * Scope mirrors what the command would delete if the member sent it
- * now, so the list never suggests something the command would then
- * refuse or miss: the `channel` option once they have filled it in,
- * otherwise the invoking channel, narrowed by `platform` when set.
+ * Scope mirrors what the command would delete if sent now (the `channel`
+ * option, else the invoking channel, narrowed by `platform`), so nothing
+ * suggested is then refused or missed.
  *
- * The same visibility gate the command and its confirmation button use
- * applies here too. Suggestions are a read of guild state, and a
- * channel the invoker cannot see must not leak its subscriptions
- * through a dropdown any more than through a reply — with the
- * difference that here the refusal is silent, because an autocomplete
- * interaction has no way to explain itself.
+ * The command's visibility gate applies here too, so a channel the invoker
+ * cannot see does not leak its subscriptions through the dropdown; the
+ * refusal is silent because autocomplete cannot explain itself.
  */
 import type { AutocompleteInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';

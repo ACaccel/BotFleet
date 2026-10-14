@@ -1,32 +1,18 @@
 /**
- * Bilibili provider. Rewrites a video URL onto one of the operator's
- * configured embed-proxy domains so Discord renders a
- * playable video / rich embed. Each candidate host is validated (OG probe)
- * before being posted. Only original bilibili video hosts match — proxy
- * hosts are excluded so an already-fixed link the user posted is left
- * untouched.
+ * Bilibili provider. Host-swaps a video URL onto a configured embed proxy
+ * (BiliFix `vxbilibili.com`, BilibiliEZ `bilibiliez.com`), validating each
+ * candidate with an OG probe. Proxy hosts never match, so a link the user
+ * already fixed is left untouched.
  *
- * Proxy services: BiliFix (`vxbilibili.com`) and BilibiliEZ
- * (`bilibiliez.com`) both fix bilibili embeds by a plain host-swap, exactly
- * like fxtwitter/vxtwitter for Twitter.
+ * Scope is `/video/<BV…|av…>` pages plus `b23.tv` short links. A `b23.tv`
+ * token carries no video id, so it is expanded via
+ * {@link OgClient.resolveCanonical} and proxied only when it resolves to a
+ * video page; anything else is skipped silently. Only the `?p=` part
+ * selector is kept; tracking params are dropped.
  *
- * Scope is bilibili.com video pages (`/video/<BV…|av…>`) plus `b23.tv` short
- * links that resolve to one. A `b23.tv` token carries no video id, so — like
- * the Facebook share-link path — it is first expanded to its canonical
- * permalink via {@link OgClient.resolveCanonical} (a browser-UA redirect
- * chase) and only proxied when the resolved URL is a bilibili video page;
- * anything else (live / dynamic / article / bangumi, or a failed resolution)
- * is skipped silently. The `?p=` page selector (which part of a multi-part
- * video) is meaningful, so it is preserved while every other query param
- * (bilibili tracking such as `spm_id_from` / `vd_source`) is dropped — the
- * proxy needs only the path and the part index.
- *
- * The trailing slash is stripped from the path: vxbilibili answers a
- * `/video/<BV>/` request with a 307 that DOWNGRADES to `http://…/video/<BV>`
- * (no slash), and Discord's crawler refuses an https→http downgrade, so the
- * embed never renders. Posting the canonical no-slash URL is served 200
- * directly, so Discord unfurls it. (Our own probe followed the 307 and so
- * masked the failure.)
+ * The trailing slash is stripped: vxbilibili answers `/video/<BV>/` with a
+ * 307 that downgrades to `http://`, which Discord's crawler refuses, so the
+ * embed never renders. Our own probe follows the 307 and would mask this.
  */
 import { ok } from '../../../core/result';
 

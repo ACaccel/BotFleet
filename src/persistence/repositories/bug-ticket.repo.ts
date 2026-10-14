@@ -1,8 +1,6 @@
 /**
  * `BugTicketRepo` — `/bug_report` ticket metadata in the hub guild's
  * database.
- *
- * **Error boundary**: every method returns `Result<T, DatabaseError>`.
  */
 import type { DatabaseError } from '../../core/errors/external-service-error';
 import { err, ok, type Result } from '../../core/result';

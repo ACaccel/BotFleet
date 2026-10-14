@@ -1,7 +1,5 @@
 /**
  * `AiUsageRepo` — per-member AI request log for rate limiting.
- *
- * **Error boundary**: every method returns `Result<T, DatabaseError>`.
  */
 import type { DatabaseError } from '../../core/errors/external-service-error';
 import { err, ok, type Result } from '../../core/result';
@@ -15,7 +13,6 @@ export interface UsageWindow {
 }
 
 export interface AiUsageRepo {
-  /** Record one request by `userId` at `at`. */
   record(userId: string, at: Date): Promise<Result<void, DatabaseError>>;
   /** Requests by `userId` at or after `since`. */
   windowSince(userId: string, since: Date): Promise<Result<UsageWindow, DatabaseError>>;

@@ -6,9 +6,8 @@
  * `for (...) await interaction.followUp(...)` inside the handler's
  * `try` — has a specific failure mode: when page 3 of 5 is rejected,
  * the rejection escapes to the handler's `catch`, `replyForError` calls
- * `editReply`, and the error line **overwrites page 1**. The user is
- * left with an error where the header used to be, pages 4 and 5 never
- * sent, and no indication that anything was delivered at all.
+ * `editReply`, and the error line **overwrites page 1**, leaving pages
+ * 4 and 5 unsent and no indication that anything was delivered.
  *
  * So each page is isolated. A page that fails is logged and skipped,
  * the remaining pages still go out, and the partial delivery is
@@ -16,8 +15,7 @@
  * everything already on screen is real output that must survive.
  *
  * Ordering is sequential on purpose: Discord renders follow-ups in
- * arrival order, and `Promise.all` would interleave a paginated list
- * into nonsense.
+ * arrival order, and `Promise.all` would interleave the pages.
  */
 import {
   MessageFlags,

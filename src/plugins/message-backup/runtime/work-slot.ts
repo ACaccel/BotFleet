@@ -1,6 +1,6 @@
 import type { ArchiveFullBackupPatch } from '../../../persistence/repositories/archive-job.repo';
 
-/** A full backup's terminal state whose write failed every attempt (A13). */
+/** A full backup's terminal state whose write failed every attempt. */
 export interface ArchivePendingFinish {
   jobId: string;
   terminal: ArchiveFullBackupPatch;

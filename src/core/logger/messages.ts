@@ -1,33 +1,14 @@
 /**
- * Centralised operator-facing log message templates.
+ * Operator-facing log message templates.
  *
- * Inline log literals scattered across callsites are hard to grep,
- * cannot carry stable event codes, and quietly drift when the same
- * idea is logged from multiple places. Routing operator-facing lines
- * through this module avoids all three.
+ * Centralising them keeps lines greppable by their `ops:<area>.<event>`
+ * prefix, gives each event a stable code, and stops the same idea drifting
+ * when logged from several places. New operator-facing lines belong here;
+ * throwaway debug lines may stay inline, and errors forwarded via
+ * `logger.errorLogger(..., err)` take the `Error` value, not a message.
  *
- * The constants below live in one file so:
- *   - `grep -rn ops:<event-id>` finds every callsite at once.
- *   - A future migration to structured logging (event codes + JSON
- *     payloads) is mechanical — replace one constant, ripple through
- *     every caller without touching their bodies.
- *   - Reviewers can spot inline log literals as code smell: anything
- *     not routed through this module is implicitly ad-hoc.
- *
- * Discipline: new operator-facing log lines that survive PR review
- * SHOULD land here first. Throwaway debug log lines inside a single
- * function body MAY stay inline. Per-handler error bodies forwarded
- * verbatim from caught exceptions (`logger.errorLogger(..., err)`)
- * do not pass through here — that path takes the `Error` value, not
- * a message string.
- *
- * Format conventions:
- *   - Each event is a `() => string` (or arrow with params) returning
- *     the rendered line. The function form lets the caller pass
- *     contextual values without exposing the underlying template
- *     string to inline mutation.
- *   - Lines start with an `ops:<area>.<event>` prefix so log filtering
- *     by area is a single grep.
+ * Each event is a function returning the rendered line, so callers pass
+ * values without touching the template.
  */
 
 export const ops = {

@@ -1,12 +1,9 @@
 /**
  * Bounded exponential-backoff retry for transient outbound failures.
  *
- * Lives in `core/` for the same reason `core/scheduling` does: it is
- * pure infrastructure with no Discord, Mongo, or SDK coupling (only
- * `setTimeout` and `Math.random`), and two independent background loops
- * share it — the message-backup channel walker (Discord REST) and the
- * social-feed poller (a third-party HTTP API). Both need the same
- * policy: absorb a transient blip, surface a real failure immediately.
+ * Shared by the message-backup channel walker (Discord REST) and the
+ * social-feed poller (a third-party HTTP API), which need the same policy:
+ * absorb a transient blip, surface a real failure immediately.
  *
  * Relationship to `isTransientNetworkError` (`core/errors`): that
  * predicate answers a narrower question — "is this thrown value one of
@@ -17,9 +14,8 @@
  * retry is cheap whereas swallowing an uncaught exception is not. The
  * two stay separate so widening the retry policy can never widen what
  * the crash handler tolerates. The OS socket codes below overlap with
- * that predicate's whitelist on purpose: the overlap is a consequence of
- * both lists describing real transient failures, not a shared source,
- * and each list is maintained on its own.
+ * that predicate's whitelist because both describe real transient
+ * failures; each list is maintained on its own.
  */
 
 /** Attempts made before a retryable failure is rethrown. */

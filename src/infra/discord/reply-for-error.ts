@@ -1,31 +1,19 @@
 /**
- * Handler-boundary error reply helper.
+ * Handler-boundary error reply helper. Every handler `catch` routes a
+ * failure to two channels:
  *
- * Every handler's `catch` block routes a failure down two independent
- * channels:
+ *   1. **Operator** — always a structured log line with the full error and
+ *      a `traceId`.
+ *   2. **User** — one localised reply: a {@link DomainError}'s `messageKey`
+ *      and `messageParams`, or for anything else the command's
+ *      `replies:<feature>.failed` copy carrying the `traceId`.
  *
- *   1. **Operator channel** — a structured log line carrying the full
- *      error (stack, `cause`, `context.operation`) plus the `traceId`.
- *      This always fires, regardless of the error's type.
- *   2. **User channel** — a single localised `editReply` / `reply`:
- *      - the error is a {@link DomainError} → use its taxonomy-driven
- *        `messageKey` + `messageParams`; the bot-personality tone for
- *        these lives in the `errors.json` catalog copy.
- *      - the error is **not** a `DomainError` (an unexpected bug, an
- *        unwrapped infra failure) → fall back to the command's own
- *        toned `replies:<feature>.failed` copy, interpolating a
- *        `traceId` so an operator can correlate the user's screenshot
- *        with the structured log line.
+ * Both channels live in one helper so the `traceId` the user sees is
+ * guaranteed to match the logged one.
  *
- * Folding both channels into one boundary helper is deliberate: it is
- * the only way to *guarantee* the `traceId` shown to the user is the
- * same one written to the operator log. A two-call shape
- * (`logError(...)` then a separate reply) would let the two ids drift.
- *
- * The helper swallows expired-interaction Discord errors — see
- * `isExpiredInteractionError` — the same way {@link requireGuildRepos}'s
- * `replyOrEdit` does: a dead interaction cannot be replied to, and
- * re-throwing would only walk into the dispatcher's outer catch.
+ * Expired-interaction errors (see `isExpiredInteractionError`) are
+ * swallowed, as in {@link requireGuildRepos}: a dead interaction cannot be
+ * replied to, and re-throwing would only reach the dispatcher's outer catch.
  */
 import type { ContextMenuCommandInteraction, RepliableInteraction } from 'discord.js';
 import { MessageFlags } from 'discord.js';

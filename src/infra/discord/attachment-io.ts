@@ -6,8 +6,7 @@
  *
  * Both callers need the same guarantees — a wall-clock deadline, a size
  * ceiling, a bounded redirect chain, no truncated file left behind, and
- * no silent overwrite of an earlier forensic file — so the mechanics
- * live here once instead of being copied into each.
+ * no silent overwrite of an earlier forensic file.
  *
  * The download slots are process-wide, so cache traffic and delete-time
  * fallbacks compete for the same four. That is deliberate: a per-call

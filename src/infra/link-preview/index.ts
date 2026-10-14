@@ -1,13 +1,7 @@
 /**
- * `infra/link-preview` barrel.
- *
- * The link-preview Strategy lives in the infra layer because every
- * member here is an outbound boundary: the rewrite providers map a post
- * URL onto a third-party embed-proxy domain, the Bahamut provider scrapes
- * OpenGraph via the SSRF-safe `OgClient`, and `error-translator` maps
- * HTTP failures into the shared domain taxonomy. Discord-specific
- * rendering lives in `infra/discord/social-preview.ts`; consuming plugins
- * own reply/send adapters and message suppression.
+ * `infra/link-preview` barrel. Discord-specific rendering lives in
+ * `infra/discord/social-preview.ts`; consuming plugins own reply/send
+ * adapters and message suppression.
  */
 export type {
   LinkPreviewProvider,

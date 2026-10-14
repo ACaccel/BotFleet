@@ -20,7 +20,7 @@ import { Events } from 'discord.js';
 import type { Translator } from '../core/i18n';
 import { type ServiceContainer, type ServiceToken } from '../core/ioc';
 import { logError, logGuildEvent, logSystem, ops, type Logger } from '../core/logger';
-// Audit-log coverage note (proposal-derived event table):
+// Audit-log coverage:
 //   - `interaction_create` lines emit from `createChannelLoggingMiddleware`.
 //   - `message_update` / `message_delete` / `guild_member_update` /
 //     `guild_create` lines emit from `GuildEventsPlugin`. A bulk purge
@@ -146,10 +146,6 @@ export class ClientEventBridge {
       }),
     );
   }
-
-  // ------------------------------------------------------------------
-  // Internal helpers
-  // ------------------------------------------------------------------
 
   /** Install the raw `client.on(...)` branches the bridge owns. */
   private installRawListeners(config: ClientEventBridgeConfig): void {

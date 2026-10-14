@@ -1,20 +1,18 @@
 /**
  * Instagram provider. Rewrites a post / reel / TV URL onto one of the
  * operator's configured embed-proxy domains so Discord renders a playable
- * embed. The priority list + per-host validation mitigates
- * Instagram's intermittent reel-video availability (bot-blocking): if the
- * first proxy returns only an image, a later one may yield the video.
- * Both the canonical `/reel/<id>` form and the author-prefixed
- * `/<username>/reel/<id>` form (produced by profile / share links) are
- * matched; bare profile URLs (`/<username>/`) are rejected — nothing to
- * preview.
+ * embed. The priority list and per-host validation mitigate Instagram's
+ * intermittent reel-video availability: if the first proxy returns only an
+ * image, a later one may yield the video. Both `/reel/<id>` and the
+ * author-prefixed `/<username>/reel/<id>` forms are matched; bare profile
+ * URLs are rejected, as there is nothing to preview.
  *
  * App share links (`/share/<token>`, `/share/reel/<token>`, `/share/p/<token>`)
- * carry an opaque token instead of a post id. They are passed to the proxies
- * unchanged: the InstaFix-family proxies resolve the token server-side, and
- * instagram.com serves this host only its single-page-app shell for them, so
- * a local redirect chase could not resolve them anyway. A proxy that fails to
- * resolve one answers with a placeholder that the junk-marker filter rejects.
+ * carry an opaque token instead of a post id and are passed to the proxies
+ * unchanged: InstaFix-family proxies resolve the token server-side, while
+ * instagram.com serves this host only its single-page-app shell, so a local
+ * redirect chase could not resolve them. A proxy that fails to resolve one
+ * answers with a placeholder that the junk-marker filter rejects.
  */
 import { createRewriteProvider } from './rewrite-provider';
 import type { OgClient } from '../og-client';

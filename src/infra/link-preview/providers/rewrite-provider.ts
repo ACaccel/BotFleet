@@ -1,43 +1,28 @@
 /**
- * Template for proxy-rewrite providers (Strategy + Template Method).
+ * Template for proxy-rewrite providers (Twitter/X, Instagram, Threads,
+ * Facebook): a post URL is rewritten onto a third-party embed proxy so
+ * Discord unfurls it. Proxies die and vary per content, so the provider
+ * validates first, probing its priority-ordered `proxyHosts` via
+ * {@link OgClient} with the Discord crawler UA, and picks:
  *
- * Every video-capable source (Twitter/X, Instagram, Threads, Facebook)
- * shares one shape: a post URL is rewritten onto a third-party embed-proxy
- * domain so DISCORD unfurls it into a playable video / rich embed. Because
- * proxy domains die and vary in per-content support, the provider VALIDATES
- * before returning: it probes a priority-ordered list of proxy hosts,
- * fetching each candidate's OpenGraph (via {@link OgClient}, with the Discord
- * crawler UA so it sees exactly what Discord will), and picks the best:
+ *   - the first host with a video — returned immediately;
+ *   - else the first with a post image;
+ *   - else the first whose only images are low-value stand-ins (an author
+ *     avatar some proxies serve when they cannot resolve the post's media),
+ *     which must lose to a real asset but still beat a bare title;
+ *   - else the first with a title;
+ *   - else `ok(null)`, so the orchestrator skips silently and no dead link is
+ *     ever posted.
  *
- *   - first host whose OG has a video  -> return immediately (playable);
- *   - else the first host with a post image (remembered, keep looking for video);
- *   - else the first host whose only images are low-value stand-ins — some
- *     proxies fall back to the author's avatar when they cannot resolve the
- *     post's own media, which is technically an image but carries none of the
- *     post's content, so it must lose to a proxy holding the real asset while
- *     still beating a bare title;
- *   - else the first host with a title  (text-only, weakest fallback);
- *   - else nothing usable -> `ok(null)` so the orchestrator skips silently
- *     and NO bare/dead link is ever posted.
+ * A probe finally served from the source site (`sourceDomains`) is skipped
+ * however good its metadata looks: the proxy punted, and what the source
+ * serves this host (typically a login wall) says nothing about what Discord's
+ * crawler gets.
  *
- * A candidate is ranked only if the proxy actually served it. When the probe
- * is finally served from the source site itself (`sourceDomains`) the proxy
- * has punted: it could not fetch the post and redirected to instagram.com /
- * x.com / ... instead. The OpenGraph read there is what the source serves to
- * THIS host's address, not what Discord's crawler will get from its own —
- * typically a login wall with a title and no content — so such a host is
- * skipped outright, however good its metadata looks.
- *
- * Per-host probe failures are logged at debug (proxy flakiness is expected),
- * never surfaced as `Err`, and never end the walk: every host is probed
- * until one yields a video or the list runs out, so a dead host early in
- * the list costs its `ctx.timeoutMs` and nothing more. That per-host
- * timeout is the only bound, which makes worst-case latency the list
- * length times the timeout — the operator keeps the lists short.
- *
- * The per-source files supply `matches` (pure predicate), the `proxyHosts`
- * list, and `toProxyUrl`. Results stay neutral, optionally retaining metadata
- * for a custom card; this boundary must not import discord.js.
+ * Per-host failures are logged at debug and never end the walk, so a dead
+ * host costs only its `ctx.timeoutMs`; worst-case latency is list length
+ * times that timeout, so operators keep the lists short. Results stay
+ * neutral; this boundary must not import discord.js.
  */
 import { ok, type Result } from '../../../core/result';
 

@@ -7,9 +7,6 @@
  * awaits `close` therefore stalls the whole graceful-shutdown sequence
  * until the process is killed, which is exactly the outcome the
  * SIGINT handler exists to avoid.
- *
- * Layer purity: only Node built-ins, so `core/**` stays free of
- * third-party SDK imports. The caller supplies its own logger.
  */
 import type { Server } from 'node:http';
 

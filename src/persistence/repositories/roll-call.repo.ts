@@ -1,7 +1,6 @@
 /**
  * `RollCallRepo` — roll-call state, one collection per guild.
  *
- * **Error boundary**: every method returns `Result<T, DatabaseError>`.
  * Check-in and close are conditional updates, so a late click or a
  * double close changes nothing.
  */

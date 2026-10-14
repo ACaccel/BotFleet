@@ -1,32 +1,19 @@
 /**
- * Smoke check — boundary-integration sanity for a bot deployment.
+ * Smoke check — connectivity probe for a bot deployment. Each step is
+ * timeboxed:
+ *   1. `loadEnv()` from the bot's `.env`, catching misconfiguration before login.
+ *   2. Optional MongoDB admin ping, skipped when `MONGO_URI` is absent.
+ *   3. Discord login, waiting for `ready` and checking the user id matches
+ *      `CLIENT_ID` (token / id mismatch, intent rejection, network issues).
  *
- * What it does (in order, each step timeboxed):
- *   1. `loadEnv()` from the target bot's `.env`. Catches misconfigured
- *      deployments before they reach the Discord login step.
- *   2. (Optional) `mongoose.createConnection(MONGO_URI)` + admin ping.
- *      Skipped when MONGO_URI is absent — some bots don't need Mongo.
- *   3. `discord.js` login with TOKEN, wait for the `ready` event, and
- *      verify the bot's user id matches CLIENT_ID. Catches token / id
- *      mismatch, intent rejections, and missing-network issues.
+ * It does not register commands, start plugins or the BaseBot lifecycle, or
+ * send messages: a round-trip would need a known guild and command, which the
+ * script must not assume.
  *
- * What it does NOT do:
- *   - Register slash commands (`npm run register` is the canonical path).
- *   - Spin up plugins, web routes, or the BaseBot lifecycle. Smoke is
- *     a connectivity probe, not a full boot.
- *   - Send messages to a live guild. The previous plan considered a
- *     self-`/ping` round-trip; that requires a known guild + command,
- *     neither of which the smoke script should assume.
+ * Exits 1 with the failing step on stderr so a pipeline can act on it.
  *
- * Exit code is 0 on full success and 1 on any failure; the failure
- * step is printed to stderr so a CI / deployment pipeline can act on
- * it.
- *
- * Usage:
- *   npm run smoke              # defaults to --bot nijika
- *   npm run smoke -- --bot konata
- *   npm run smoke -- -b msg-archive
- *   SMOKE_TIMEOUT_MS=60000 npm run smoke -- --bot tomori
+ * Usage: `npm run smoke -- --bot <name>` (default nijika; `-b` short form);
+ * `SMOKE_TIMEOUT_MS` overrides the step timeout.
  */
 import * as path from 'node:path';
 import { Client, GatewayIntentBits } from 'discord.js';

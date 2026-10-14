@@ -8,21 +8,14 @@
  * pass with no cross-module notification.
  *
  * Failure isolation is layered so a background loop can never be taken
- * down by one bad guild, subscription, or send: a guild whose
- * subscription read fails is skipped, an upstream read that fails skips
- * only the subscriptions on that account, each subscription is wrapped
- * individually, and the plugin wrapping this reschedules itself in a
- * `finally`.
+ * down by one bad guild, upstream account, subscription, or send: each is
+ * isolated, and the plugin wrapping this reschedules itself in a `finally`.
  *
- * Cursor discipline — the invariant the whole design rests on:
- *   - the stored cursor is always a post that was *actually delivered*
- *     (or, when a subscription is first seeded, the baseline that
- *     suppresses backfill);
- *   - it advances only after a successful send, so a failed send is
- *     retried on the next pass instead of being skipped;
- *   - it is compared by post id through the platform, never by
- *     timestamp, because an upstream's `since` parameter only gates a
- *     `204` and does not filter the page it returns.
+ * Cursor invariant: the stored cursor is always a post actually delivered
+ * (or the seed baseline that suppresses backfill); it advances only after a
+ * successful send, so a failed send retries next pass; and it is compared by
+ * post id, never timestamp, because an upstream `since` only gates a `204`
+ * and does not filter the page.
  */
 import type { Client, SendableChannels } from 'discord.js';
 

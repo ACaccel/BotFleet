@@ -7,11 +7,6 @@ import type { Logger } from '../logger';
  * Keyed wrapper around `node-schedule` that owns the lifecycle of a set
  * of scheduled jobs.
  *
- * Lives in `core/` because it is pure infrastructure: it depends only on
- * `node-schedule` and has no Discord / Mongo coupling. Both the giveaway
- * and activity plugins schedule deferred work, so the wrapper is shared
- * here rather than living inside a single plugin's `internal/`.
- *
  * The job `Map` is supplied by the caller so the plugin can keep its own
  * persistent job registry; `JobManager` is a thin stateless view over it.
  *

@@ -200,10 +200,6 @@ export class PluginLifecycleRunner {
     }
   }
 
-  // -------------------------------------------------------------------
-  // Internals
-  // -------------------------------------------------------------------
-
   private async runPhase(
     phase: 'init' | 'start' | 'onReady',
     invoke: (

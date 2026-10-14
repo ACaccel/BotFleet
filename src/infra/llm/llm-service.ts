@@ -1,11 +1,10 @@
 /**
  * LLMService — Strategy dispatcher over a {@link LlmProviderRegistry}.
  *
- * Responsibility split: the registry owns provider lookup / lifetime;
- * the service owns the per-call contract (web-search compatibility
- * check, call delegation). Plugin / handler code depends only on this
- * class via DI — never on a concrete provider — so swapping a provider
- * (or adding a new one) does not ripple beyond the registry.
+ * The registry owns provider lookup / lifetime; the service owns the
+ * per-call contract (web-search compatibility check, call delegation).
+ * Consumers depend only on this class via DI, never on a concrete
+ * provider.
  *
  * `chat()` returns `Result<LLMResult, LlmProviderError>`. Both expected
  * failure modes (the registry's missing-key gate, and the upstream SDK
@@ -14,11 +13,6 @@
  * web-search-capable model from a provider that lacks the capability)
  * stay as thrown native errors — the Result contract is for recoverable
  * boundary failures only.
- *
- * Provider resolution goes through `registry.tryResolve`, which returns
- * a Result-shaped value carrying an already-translated
- * `LlmProviderError`, so this method short-circuits on the missing-key
- * path with a clean Result branch.
  */
 import { LlmProviderError } from '../../core/errors';
 import { err, ok, type Result } from '../../core/result';

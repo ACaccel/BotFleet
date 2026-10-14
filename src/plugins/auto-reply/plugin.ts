@@ -6,20 +6,16 @@
  *   - Hard-coded reaction to the "肥貓晚安" line (fires even for bots).
  *   - DB-backed reply lookup via `ReplyRepo.findByInput`; random pick
  *     when multiple replies match the same input.
- *   - Per-user lucky replies, declared in the operator's `auto_reply`
- *     config block (see `./config.ts`).
- *   - Global lucky "[*]" reply at the configured probability.
+ *   - Per-user lucky replies from the operator's `auto_reply` config
+ *     block (see `./config.ts`), and a global lucky "[*]" reply at the
+ *     configured probability.
  *   - `長髮男` regex reply.
  *   - `<count>d<sides>` dice expression with 0 < count < 100 and
  *     0 < sides < 2^30 bounds.
  *
- * Factory pattern (mirrors `createSocialLinkPreviewPlugin`): the
- * operator config is parsed once and captured in the closure, so the
- * returned object is pure data.
- *
- * DI: the plugin resolves {@link GuildRegistry} once in `init` and the
- * subscription closes over it, so a message event costs no container
- * lookup.
+ * The operator config is parsed once and captured in the factory closure
+ * (mirrors `createSocialLinkPreviewPlugin`); {@link GuildRegistry} is
+ * resolved once in `init`, so a message event costs no container lookup.
  */
 import { areAutoRepliesSuppressed } from '../../infra/discord/suppressed-auto-replies';
 import { TOKENS } from '../../bot/tokens';

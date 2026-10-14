@@ -5,10 +5,8 @@
  * answer but a question: it has to name the channel and the exact
  * number at stake, and it has to carry the two buttons that decide.
  *
- * The copy is deliberately blunt about being irreversible. The
- * ephemeral confirmation that used to follow the deletion told a member
- * what had already happened; this one is the last point at which they
- * can still say no.
+ * The copy is deliberately blunt about being irreversible: this is the
+ * last point at which a member can still say no.
  */
 import type { InteractionEditReplyOptions } from 'discord.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';

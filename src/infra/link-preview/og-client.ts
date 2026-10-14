@@ -1,60 +1,34 @@
 /**
- * OgClient — SSRF-safe OpenGraph metadata fetcher.
+ * OgClient — the link-preview layer's single, SSRF-safe network boundary.
+ * Rewrite providers validate each candidate proxy URL with the Discord
+ * crawler UA, so they observe what Discord's unfurl sees; the Bahamut provider
+ * scrapes the source page; the X provider reads a JSON API
+ * ({@link OgClient.fetchJson}). Every failure lands on the Result's Err rail
+ * (via {@link translateLinkPreviewError}) so callers can stay silent.
  *
- * The single network boundary for the link-preview layer. Two callers:
- *   - the rewrite providers, which fetch each candidate proxy URL to
- *     VALIDATE (before posting) that Discord will get media — using the
- *     Discord crawler UA so we observe exactly what Discord's unfurl sees;
- *   - the Bahamut provider, which scrapes the source page's OpenGraph;
- *   - the X provider, which reads a post from a JSON API ({@link OgClient.fetchJson}).
- * Modeled on `infra/llm/selfhosted-client.ts`: axios + Result + the shared
- * {@link translateLinkPreviewError}. Never throws a `DomainError` — every
- * failure lands on the Result's Err rail so the caller can stay silent.
+ * Discord's unfurl accepts either an HTML page with OpenGraph tags or a
+ * redirect straight to a `video/*` / `image/*` file (e.g. `kkinstagram` 302s a
+ * reel to an Instagram CDN `*.mp4`). So a media `Content-Type` is itself a
+ * valid preview and its body is never downloaded; anything else is read as
+ * HTML up to `<head>` and scanned with a bounded regex. `finalUrl` is
+ * reported because a proxy that cannot fetch a post tends to redirect back to
+ * the source site, whose answer to this host says nothing about what it
+ * serves Discord's crawler.
  *
- * What Discord's unfurl actually accepts — and what we must mirror to
- * validate faithfully — is one of two things at the proxy URL:
- *   1. an HTML page carrying OpenGraph tags (most proxies), or
- *   2. a redirect (for a bot UA) straight to a `video/*` / `image/*` file
- *      that Discord embeds directly (e.g. `kkinstagram` 302s a reel to a
- *      `*.mp4` on the Instagram CDN).
- * So the response is classified by its final `Content-Type`: a media type
- * is itself a valid playable preview (no body is downloaded), otherwise the
- * body is treated as HTML and only its `<head>` is read for `<meta>` tags.
- * The URL the response was finally served from is reported alongside
- * (`finalUrl`): a proxy that cannot fetch a post tends to redirect back to
- * the source site, and what the source then serves THIS host says nothing
- * about what it will serve Discord's crawler — the rewrite providers use
- * `finalUrl` to recognise and skip that case.
- *
- * SSRF mitigations (the initial host always comes from the operator's
- * configured proxy-host allow-list, or the provider's `canHandle` host
- * allow-list — never arbitrary user input; only the path/query is
- * user-derived):
- *   - Follow at most {@link SAFE_MAX_REDIRECTS} redirects (proxies redirect
- *     to a render / CDN host, and Discord's crawler follows them — so we
- *     must too, or validation false-negatives), but the `beforeRedirect`
- *     guard rejects any hop targeting a private / loopback / link-local
- *     address or a non-`http(s)` scheme. So a crafted redirect to an
- *     internal address still cannot be chased.
- *   - Response is streamed and read incrementally: a media `Content-Type`
- *     is classified from headers alone (the multi-MB body is never pulled),
- *     and an HTML body is read only up to the `<head>` close or a byte cap,
+ * SSRF mitigations (the initial host always comes from an operator or
+ * provider allow-list; only the path and query are user-derived):
+ *   - At most {@link SAFE_MAX_REDIRECTS} redirects are followed, because
+ *     Discord's crawler follows them too, but `beforeRedirect` rejects any hop
+ *     to a private / loopback / link-local address or a non-`http(s)` scheme.
+ *   - The body is streamed and capped at the `<head>` close or a byte limit,
  *     so a hostile or huge page cannot exhaust memory.
- *   - `timeout` bounds time-to-headers; an explicit read deadline bounds the
- *     body read, so a slow trickle cannot stall the event handler.
- *
- * Name resolution is bounded separately, because the request timeout
- * cannot reach it: Node's default `dns.lookup` runs `getaddrinfo` on the
- * libuv threadpool, where a query to a host whose name servers have gone
- * silent (a dead embed proxy, typically) holds a thread for tens of seconds
- * after axios has already given up. A few such probes fill the pool and
- * every other lookup in the process — the Discord API, the database, the
- * LLM providers — queues behind them. So every probe resolves through a
- * c-ares resolver with its own per-query timeout, off the threadpool (see
- * {@link createBoundedLookup}); a dead proxy costs one short DNS timeout
- * and nothing else.
- * Only the `<head>` is scanned for `<meta>` tags via a bounded regex, so
- * no heavy HTML parser dependency is introduced.
+ *   - `timeout` bounds time-to-headers and a read deadline bounds the body,
+ *     so a slow trickle cannot stall the event handler.
+ *   - DNS is bounded separately: Node's `dns.lookup` blocks a libuv
+ *     threadpool thread for tens of seconds on a dead proxy's silent name
+ *     servers, and a few such probes stall every other lookup in the process.
+ *     Probes resolve through a c-ares resolver with its own timeout instead
+ *     (see {@link createBoundedLookup}).
  */
 import { promises as dnsPromises, type LookupAddress, type LookupOptions } from 'node:dns';
 import http from 'node:http';

@@ -1,45 +1,25 @@
 /**
- * GuildEventsPlugin — mirrors message edits/deletes and role changes
- * to a guild's configured `event` channel.
+ * GuildEventsPlugin — records message edits/deletes and role changes, and
+ * mirrors them to a guild's configured `event` channel.
  *
- * Behaviours:
- *   - `messageCreate`: cache the message's attachments to disk. Discord
- *     purges an attachment's CDN object nearly synchronously with the
- *     deletion, so downloading at `messageDelete` usually 404s; holding
- *     the bytes beforehand is what makes the forensic archive real.
- *     Best-effort and fire-and-forget — caching never gates a message.
- *   - `messageUpdate`: when the content actually changed, record the edit
- *     locally and — unless rank-suppressed — mirror an embed describing the
- *     diff to the `event` channel.
- *   - `messageDelete`: same shape; the embed attaches images / non-image
- *     file URLs separately, and every attachment is archived to disk —
- *     from the cache when it holds the message, otherwise by download.
- *   - `messageDeleteBulk`: archives each deleted message's cached
- *     attachments and records one audit line per rescued message. A
- *     bulk purge carries no hydrated content, so it mirrors no embed;
- *     this subscription exists to rescue bytes that would otherwise
- *     expire in the cache.
- *   - `guildMemberUpdate`: when role membership changes, send a role-
- *     delta embed (added / removed).
- *   - `guildCreate`: when the bot joins a new guild, onboard it
- *     (connect its per-guild database, register slash commands)
- *     through the typed {@link GuildOnboardingPort} resolved from the
- *     IoC container, so no plugin code reaches into `BaseBot`
- *     internals.
+ *   - `messageCreate`: cache attachments to disk, best-effort and never
+ *     gating the message. Discord purges the CDN object almost as soon as a
+ *     message is deleted, so downloading at `messageDelete` usually 404s.
+ *   - `messageUpdate` / `messageDelete`: when content changed (or on delete),
+ *     record the event locally and mirror an embed; a delete also archives
+ *     every attachment, from the cache when possible, else by download.
+ *   - `messageDeleteBulk`: carries no hydrated content, so it mirrors nothing;
+ *     it rescues cached attachments and records one audit line per rescued
+ *     message before the cache expires them.
+ *   - `guildMemberUpdate`: role-delta embed.
+ *   - `guildCreate`: onboard the guild through {@link GuildOnboardingPort},
+ *     so no plugin code reaches into `BaseBot` internals.
  *
- * Dependencies are resolved once in `init` into a typed bundle the event
- * subscriptions close over, rather than per event.
- *
- * Rank gates DISCLOSURE only. For `messageUpdate` / `messageDelete` the
- * handlers ask the {@link PermissionRankPolicy} whether the `guild_events`
- * feature is suppressed for the message's
- * channel. Suppression withholds the Discord `event`-channel embed, but the
- * local record — the `logGuildEvent` audit line and the attachment archival —
- * runs UNCONDITIONALLY for every non-bot guild message.
- * Private (rank-1+) channels are therefore fully recorded server-side yet
- * never mirrored to Discord. The factory parses its own `guild_events` block
- * (the repo-wide plugin-config convention) and keeps the returned object pure
- * data.
+ * Rank gates disclosure only: {@link PermissionRankPolicy} may suppress the
+ * `event`-channel embed for a channel, but the local record (the
+ * `logGuildEvent` audit line and attachment archival) runs unconditionally
+ * for every non-bot guild message. Private channels are therefore fully
+ * recorded server-side yet never mirrored to Discord.
  */
 import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
 import {

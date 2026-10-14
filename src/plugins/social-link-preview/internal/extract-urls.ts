@@ -1,19 +1,16 @@
 /**
  * Extract candidate URLs from a message's text.
  *
- * Pure and side-effect free so it is exhaustively unit-testable. Returns
- * de-duplicated, parsed {@link URL}s in first-seen order, bounded by a
- * hard scan limit so a paste-bomb cannot blow up the per-message work.
- * The caller (orchestrator) caps how many of these actually become
- * previews — extraction returns every candidate so a supported link is
- * not crowded out by an unsupported one appearing earlier.
+ * Returns de-duplicated, parsed {@link URL}s in first-seen order, bounded by
+ * a hard scan limit so a paste-bomb cannot blow up the per-message work. The
+ * caller caps how many become previews; extraction returns every candidate so
+ * a supported link is not crowded out by an unsupported one appearing earlier.
  *
  * URLs the user wrapped in angle brackets (`<https://...>`) are skipped:
- * that is Discord's explicit "do not embed this" syntax, so generating a
- * preview would contradict the user's intent. URLs inside a code span or
- * code block are skipped for the same reason (Discord does not embed them),
- * and so are URLs inside a spoiler (`||...||`): Discord blurs a spoilered
- * link's embed, but the preview reply would show the content in the clear.
+ * that is Discord's explicit "do not embed this" syntax. URLs inside a code
+ * span or block are skipped for the same reason (Discord does not embed
+ * them), and so are URLs inside a spoiler (`||...||`): Discord blurs a
+ * spoilered link's embed, but the preview reply would show it in the clear.
  */
 
 /**

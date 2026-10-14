@@ -1,32 +1,14 @@
 /**
- * Standard service tokens — the composition root's binding catalog.
+ * Standard service tokens — the composition root's binding catalog. It
+ * names every concrete service type the bot wires, so it lives in `bot/`
+ * rather than `core/ioc`, which provides only the container mechanism.
  *
- * Lives under `src/bot/` (not `src/core/ioc/`) because the catalog is
- * the one place that must name every concrete service type the bot
- * wires: a Mongo connection manager, the repository bundle, the LLM
- * model catalog. Declaring it inside `core/` would
- * force `core` to import from `infra/`, `persistence/`, and `plugins/`
- * — a dependency running the wrong way through the layer stack. The
- * container mechanism itself (`ServiceToken`, `token()`,
- * `ServiceContainer`) stays in `core/ioc`, which knows nothing about
- * what gets bound.
+ * Repository access is a factory token, `(g: GuildId) => Promise<Repos>`,
+ * rather than a scoped registration: one explicit line in the composition
+ * root instead of a scope object threaded through the whole call graph.
  *
- * Centralised so:
- *   - Token naming is reviewed in one place (no `MESSAGE_REPO_FACTORY`
- *     vs `MessageRepoFactory` drift across PRs).
- *   - The full catalog is visible to readers learning the container.
- *   - New service additions land here, not scattered across modules.
- *
- * Repository access is exposed as a **factory token** of shape
- * `(g: GuildId) => Promise<Repos>` rather than scoped registrations:
- * a factory token is one explicit line in the composition root, where
- * a per-request scope object would have to be threaded through the
- * whole call graph.
- *
- * Plugins import `TOKENS` from here directly (`../../bot/tokens`); the
- * ESLint `no-restricted-imports` rule for `src/plugins/**` keeps
- * `core/ioc` — the container's write side — out of reach so this stays
- * the single legal source.
+ * Plugins import `TOKENS` from here; ESLint keeps `core/ioc` (the
+ * container's write side) out of their reach.
  */
 import type { Client } from 'discord.js';
 import type { Job } from 'node-schedule';

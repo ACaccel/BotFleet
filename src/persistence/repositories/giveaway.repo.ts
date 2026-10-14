@@ -4,11 +4,6 @@
  * Documents are keyed by the announcement Discord `message_id`. The
  * scheduler reads pending giveaways on boot, the announcement creates
  * one, and the schedule callback (or a manual cancel) deletes it.
- *
- * **Error boundary**: every method returns
- * `Result<T, DatabaseError>`. A mongoose failure is translated by the
- * shared `databaseErrorFrom` translator and returned as `err`; a
- * missing lookup is a success (`ok(undefined)`).
  */
 import type { DatabaseError } from '../../core/errors/external-service-error';
 import { err, ok, type Result } from '../../core/result';
@@ -32,7 +27,6 @@ export interface GiveawayRepo {
   listAll(): Promise<Result<readonly GiveawayDoc[], DatabaseError>>;
   /** Look up by announcement message id; `ok(undefined)` when absent. */
   findByMessageId(message_id: string): Promise<Result<GiveawayDoc | undefined, DatabaseError>>;
-  /** Persist a new giveaway and return the stored doc. */
   create(input: GiveawayInput): Promise<Result<GiveawayDoc, DatabaseError>>;
   /** Delete by announcement message id; `ok(true)` when a doc was removed. */
   deleteByMessageId(message_id: string): Promise<Result<boolean, DatabaseError>>;

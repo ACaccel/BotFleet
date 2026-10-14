@@ -61,13 +61,6 @@ const ConfigSchema = z
 
 type GuildEventsPluginConfig = z.infer<typeof ConfigSchema>;
 
-/**
- * Parse a raw `guild_events` config block into a fully-defaulted,
- * validated config. Passing `undefined` (the block is absent) yields
- * the all-defaults configuration rather than throwing.
- *
- * @throws {z.ZodError} when a provided value is the wrong type or an
- *   unknown key is present (fail-fast at composition time).
- */
+/** An absent block yields the defaults. */
 export const parseGuildEventsConfig = (raw: unknown): GuildEventsPluginConfig =>
   ConfigSchema.parse(raw ?? {});

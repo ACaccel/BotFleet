@@ -1,26 +1,22 @@
 /**
  * Age-based retention for the file log tree.
  *
- * Several bot processes (tomori, nijika, msg-archive, ...) share one
- * log root and each prunes it on its own schedule, so a pass must be
- * idempotent and tolerate another process deleting the same file
- * (`ENOENT`) mid-walk. Age is read from the date embedded in the file
- * name, never from mtime: a host migration reset every mtime to the
- * copy time, which would have made the whole history look fresh (or,
- * with a naive cutoff, brand new files look old).
+ * Several bot processes share one log root and each prunes it on its own
+ * schedule, so a pass must be idempotent and tolerate another process
+ * deleting the same file (`ENOENT`) mid-walk. Age is read from the date
+ * embedded in the file name, never from mtime: a host migration resets
+ * every mtime to the copy time.
  *
- * Only two name shapes are ever deleted, both produced by this code
- * base: the sink's `<YYYY-MM-DD>.log` and the msg-archive transcript's
- * `<prefix>-<YYYY-MM-DD>_<HH-MM-SS>.log`. Anything else under the root
- * (an operator's notes, `error.log`, a rotated archive) is left alone.
- * Only regular files are unlinked and symlinks are neither followed nor
- * removed, so a link cannot make the pruner reach outside the tree.
+ * Only two name shapes are ever deleted: the sink's `<YYYY-MM-DD>.log` and
+ * the msg-archive transcript's `<prefix>-<YYYY-MM-DD>_<HH-MM-SS>.log`.
+ * Anything else under the root (an operator's notes, `error.log`, a rotated
+ * archive) is left alone. Only regular files are unlinked and symlinks are
+ * neither followed nor removed, so a link cannot make the pruner reach
+ * outside the tree.
  *
  * Failures never throw out of this module: the logger is the thing being
- * maintained, so they are handed to the caller's `onFailure` (stderr in
- * production) and the bot keeps running.
- *
- * Layer purity: Node built-ins only.
+ * maintained, so they go to the caller's `onFailure` and the bot keeps
+ * running.
  */
 import { readdir, rmdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';

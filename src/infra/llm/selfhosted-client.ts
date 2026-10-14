@@ -1,19 +1,16 @@
 /**
- * SelfHostedLlmClient — outbound adapter for a lightweight self-hosted
- * LLM HTTP endpoint.
+ * SelfHostedLlmClient: outbound adapter for a lightweight self-hosted LLM
+ * HTTP endpoint.
  *
- * This client deliberately does NOT implement the {@link LLMProvider}
- * Strategy in `./types.ts`: the self-hosted endpoint's contract differs
- * from the SDK-backed providers in every dimension that interface
- * assumes —
+ * Deliberately does NOT implement the {@link LLMProvider} Strategy in
+ * `./types.ts`: the endpoint's contract differs from the SDK-backed
+ * providers in every dimension that interface assumes:
  *   - the request is a single baked `user` message carrying the whole
  *     transcript, not a multi-turn `messages` array with a system prompt;
  *   - the response is `{ status, response }`, not an SDK completion;
  *   - there is no API key, model id, or temperature to thread through.
- * Forcing it into `LLMProvider` would mean stubbing all of those, so it
- * lives here as a focused single-method client. It still sits on the
- * same `src/infra/llm/` SDK boundary and maps failures into the shared
- * {@link ExternalServiceError} taxonomy so callers handle them uniformly.
+ * Failures map into the shared {@link ExternalServiceError} taxonomy so
+ * callers handle them uniformly.
  */
 import axios from 'axios';
 import { z } from 'zod';

@@ -5,18 +5,15 @@
  * The translator is duck-typed on `status` (HTTP code) and the
  * provider-specific error payload — every supported SDK (OpenAI,
  * Anthropic, Gemini, xAI through OpenAI-compat) exposes a `.status`
- * field on its error subclass, and the surrounding HTTP body carries
- * the provider's machine-readable code (e.g. OpenAI's
- * `context_length_exceeded`, Anthropic's `rate_limit_error`).
+ * field on its error subclass, and the HTTP body carries the provider's
+ * machine-readable code (e.g. OpenAI's `context_length_exceeded`,
+ * Anthropic's `rate_limit_error`).
  *
- * Why a free function rather than per-provider methods:
- *   - Each provider's classification rules share a structural core
- *     (401 → INVALID_API_KEY, 429 → RATE_LIMITED, 5xx → UPSTREAM_5XX).
- *   - Provider-specific overrides (context-length detection) plug in
- *     via the `extraContextLengthCheck` predicate without forcing the
- *     provider class to re-implement the common cases.
- *   - The shape stays testable in isolation — contract tests can
- *     drive it with fixture errors directly.
+ * A free function rather than per-provider methods because the
+ * classification rules share a structural core (401 → INVALID_API_KEY,
+ * 429 → RATE_LIMITED, 5xx → UPSTREAM_5XX); provider-specific overrides
+ * (context-length detection) plug in via the `extraContextLengthCheck`
+ * predicate.
  */
 import { LlmProviderError, type LlmProviderErrorCode } from '../../core/errors';
 import type { LLMProviderName } from './types';

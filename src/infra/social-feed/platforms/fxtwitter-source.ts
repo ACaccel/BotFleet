@@ -1,36 +1,25 @@
 /**
- * `FxTwitterTimelineSource` — reads an account's recent posts from an
- * FxTwitter-compatible JSON API (`GET {base}/2/profile/{account}/statuses`).
+ * Reads an account's recent posts from an FxTwitter-compatible JSON API
+ * (`GET {base}/2/profile/{account}/statuses`).
  *
- * Chosen over X's official API because that API has no free tier and
- * bills per post read, which a five-minute poller cannot justify. The
- * trade-off is a community-run upstream that may change or disappear —
- * absorbed three ways: this class is one {@link XTimelineSource}
- * implementation behind a seam, `apiBaseUrl` can point at a self-hosted
- * instance, and the consuming plugin defaults to disabled.
+ * X's official API has no free tier and bills per post read, which a
+ * five-minute poller cannot justify. The risk of a community-run upstream is
+ * contained by the {@link XTimelineSource} seam, a self-hostable
+ * `apiBaseUrl`, and the consuming plugin defaulting to disabled.
  *
- * Upstream behaviours this client is built around (all verified against
- * the live API, and none of them documented):
- *
- *   - **`count` is ignored.** The endpoint always returns a full page
- *     (~20 entries), so the caller caps how many it acts on. No `count`
- *     is sent rather than sending a parameter that does nothing.
- *   - **`since` gates the status code, it does not filter.** With
- *     `since` set, a timeline holding nothing newer answers `204`;
- *     otherwise it answers `200` with the **whole** page, including
- *     posts far older than `since`. It is therefore a bandwidth
- *     optimisation only — de-duplication is the caller's job.
- *   - **`since` is a strict `>`.** `since = <newest post's timestamp>`
- *     answers `204`. A post created in the same second as the newest one
- *     already seen would stay invisible while that cursor holds, which
- *     is why the caller periodically re-reads with no `since` at all.
- *   - **Entries are not ordered by `created_timestamp`.** A repost
- *     carries the *original* post's timestamp while sitting at its
- *     repost position, so the sequence is only monotonic once reposts
- *     are dropped. Callers sort defensively.
- *   - **`404` is a valid JSON body**, not just a status — an unknown or
- *     renamed account. The `validateStatus` below turns it into a thrown
- *     error so it reaches the taxonomy translator like any other failure.
+ * Undocumented upstream behaviours, verified against the live API:
+ *   - `count` is ignored; a full page (~20) always returns, so none is sent
+ *     and the caller caps how many it acts on.
+ *   - `since` gates the status code, it does not filter: nothing newer
+ *     answers `204`, otherwise `200` with the whole page. De-duplication is
+ *     the caller's job.
+ *   - `since` is a strict `>`, so a post in the same second as the cursor
+ *     stays hidden; the caller periodically re-reads without `since`.
+ *   - Entries are not ordered by `created_timestamp` (a repost carries the
+ *     original's timestamp), so callers sort defensively.
+ *   - `404` with a JSON body means an unknown or renamed account;
+ *     `validateStatus` below turns it into a thrown error for the taxonomy
+ *     translator.
  */
 import axios from 'axios';
 import { z } from 'zod';

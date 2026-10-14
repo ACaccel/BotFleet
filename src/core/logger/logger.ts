@@ -1,28 +1,20 @@
 /**
  * Structured logger built on pino.
  *
- * Design points:
- *   - One {@link Logger} interface, structurally compatible with pino's
- *     own logger so we can hand a pino instance straight back to it,
- *     while leaving room for an in-memory fake in tests.
- *   - Redact path list is derived from `src/core/config/redact.ts`
- *     (single source of truth shared with the env loader).
- *   - Child loggers compose: bot-scoped → guild-scoped →
- *     interaction-scoped (with `traceId`). The InteractionRouter
- *     generates the `traceId` value and binds it on the child logger.
- *     Do NOT introduce AsyncLocalStorage to push traceId through the
- *     call stack — handlers receive their child logger explicitly via
- *     the interaction context.
- *   - `err()` accepts a DomainError or any unknown thrown value; pino's
- *     default error serialiser preserves stack + `cause`. We additionally
- *     log the DomainError JSON shape under the `err` key so structured
- *     consumers see `kind`, `code`, `messageKey`, etc.
+ *   - {@link Logger} is structurally compatible with pino's logger, so a pino
+ *     instance satisfies it and tests can substitute an in-memory fake.
+ *   - Redact paths come from `src/core/config/redact.ts`, shared with the
+ *     env loader.
+ *   - Child loggers compose bot → guild → interaction, with a `traceId`
+ *     bound by the InteractionRouter. Do NOT use AsyncLocalStorage to
+ *     propagate `traceId`; handlers receive their child logger via the
+ *     interaction context.
+ *   - `err()` also logs the DomainError JSON shape under `err`, so
+ *     structured consumers see `kind`, `code`, `messageKey`, etc. alongside
+ *     the stack and `cause`.
  *
- * Boot order:
- *   env loader runs first (writes JSON to stderr directly — no logger
- *   dependency). Logger initialises after env is parsed because it
- *   reads LOG_LEVEL and NODE_ENV. See `src/core/config/env.ts` header
- *   for the contract.
+ * The logger initialises after the env loader because it reads `LOG_LEVEL`
+ * and `NODE_ENV`; see the `src/core/config/env.ts` header.
  */
 import pino, {
   multistream,

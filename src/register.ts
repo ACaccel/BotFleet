@@ -1,46 +1,21 @@
 /**
- * Slash-command registration CLI.
+ * Slash-command registration CLI. Flags and usage: `REGISTER_USAGE` in
+ * `register-args.ts` and `docs/contributing/local-setup.md`.
  *
- * The default registration scope is **global**: a single
- * `rest.put(Routes.applicationCommands)` call publishes the bot's
- * command set to every guild it is in (and every guild it joins
- * later). The guild-side path is an opt-in dev path via
- * `--dev-guild <id>` so iteration on a single test guild stays
- * instant (Discord propagation for global commands can take up to an
- * hour).
+ * Registration is global by default, because one
+ * `Routes.applicationCommands` PUT covers every current and future guild.
+ * Global propagation can take up to an hour, so `--dev-guild <id>` registers
+ * on one guild for instant iteration.
  *
- * The `--cleanup-guild-commands` flag wipes guild-scoped
- * registrations: it iterates `userGuilds()` and PUTs an empty array
- * to each guild's command bucket. Run it once to clear any
- * guild-scoped entries so users do not see duplicates alongside the
- * global commands.
+ * A global run also clears guild-scoped registrations from every guild, so a
+ * stale one (e.g. from a `--dev-guild` run) cannot shadow or duplicate the
+ * global command; `--keep-guild-commands` skips that step when guild-scoped
+ * commands are intentional.
  *
- * Usage:
- *   npm run register                                   # every configured bot, global (default)
- *   npm run register -t nijika                         # one bot, global (default; also prunes guild-scoped commands)
- *   npm run register -t nijika --dev-guild ID          # one bot, guild-side fast iteration
- *   npm run register [-t nijika] --dry-run             # print resolved command text, register nothing
- *   npm run register [-t nijika] --keep-guild-commands # global registration without pruning guild commands
- *   npm run register [-t nijika] --cleanup-guild-commands # only clear guild-scoped commands
- *
- * No `--` separator is needed: npm consumes the flags and exports them as
- * `npm_config_*`, which `parseRegisterArgs` reads alongside argv. The
- * older `npm run register -- -t nijika ...` form still works.
- *
- * Without `-t`, every bot personality under `src/bot/` that has both
- * `config.json` and `.env` is registered in turn (others are skipped with
- * a warning). One bot failing does not stop the rest; the process exits 1
- * if any bot failed, after a per-bot summary.
- *
- * The default global registration registers the global command set AND clears
- * guild-scoped registrations from every guild, so a stale guild-scoped
- * command (e.g. from a prior `--dev-guild` run) cannot keep overriding
- * the global one. Pass `--keep-guild-commands` to skip that step on
- * large bots or when guild-scoped commands are intentional.
- *
- * Command text is localised to the bot's `config.language` (see
- * `buildRegisterTranslator`). Global registrations can take up to an hour
- * to propagate; use `--dev-guild` for instant iteration.
+ * Without `-t`, every bot under `src/bot/` with both `config.json` and `.env`
+ * is registered in turn. One bot failing does not stop the rest; the process
+ * exits 1 after a per-bot summary if any failed. Command text is localised
+ * to the bot's `config.language` (see `buildRegisterTranslator`).
  */
 import { REST, Routes } from 'discord.js';
 import fs from 'fs';

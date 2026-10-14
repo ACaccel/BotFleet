@@ -6,11 +6,6 @@
  * Update semantics are a partial `updateOne($set: patch)` — provider,
  * model, temperature, system_prompt, and web_search may each be
  * updated independently.
- *
- * Error boundary: every method returns `Result<T, DatabaseError>`. A
- * mongoose failure is translated by the shared `databaseErrorFrom`
- * translator and returned as `err`; a missing lookup is a success
- * (`ok(undefined)`).
  */
 import type { DatabaseError } from '../../core/errors/external-service-error';
 import { err, ok, type Result } from '../../core/result';

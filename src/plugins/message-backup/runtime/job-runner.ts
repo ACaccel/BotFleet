@@ -18,7 +18,7 @@ import { archiveGapReason } from './scan-contract';
 import type { ScanRunner } from './scan-runner';
 import type { ArchiveGuildState, ArchiveWorkerContextFor } from './worker-context';
 
-/** Bounded retries for a job's terminal write (A13): 1, 2, 4 and 8 seconds apart. */
+/** Bounded retries for a job's terminal write: 1, 2, 4 and 8 seconds apart. */
 const TERMINAL_WRITE_ATTEMPTS = 5;
 const TERMINAL_WRITE_BACKOFF_MS = 1000;
 const RELEASED_FIELDS = ['activeSlot', 'claimToken', 'leaseUntil'] as const;
@@ -237,7 +237,7 @@ export class JobRunner {
   }
 
   /**
-   * Writes a job's terminal state with bounded retries (A13). If every attempt
+   * Writes a job's terminal state with bounded retries. If every attempt
    * fails, the state is kept in memory and retried before any other work; after a
    * restart the job is queued again instead.
    */

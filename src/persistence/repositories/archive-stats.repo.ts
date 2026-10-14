@@ -1,32 +1,22 @@
 /**
- * `ArchiveStatsRepo` — read-only statistics over the message archive for the
- * `/traffic` commands. Every method is a MongoDB aggregation that groups and counts
- * in the database and returns plain result objects, never message documents.
+ * `ArchiveStatsRepo` — read-only `/traffic` statistics. Every method is a MongoDB
+ * aggregation that counts in the database and returns plain results, never
+ * message documents.
  *
- * Available to every bot through its reader connection (D13): it only reads
- * `messages`, `archive_channels`, `archive_reactions` and, to tell whether a full
- * backup has completed, `archive_jobs`. Writes stay with
- * msg-archive through `ArchiveRepo`.
+ * Every bot reaches it through its reader connection because it only reads
+ * `messages`, `archive_channels`, `archive_reactions` and `archive_jobs` (to tell
+ * whether a full backup has completed); writes stay with msg-archive.
  *
- * Counting rules (shared with `core/archive/stats`): the time is the message's
- * `createdTimestamp`; deleted messages count; documents without `author`
- * (tombstones, unresolved identities) never count; bot and webhook messages do not
- * count except as interaction records in {@link ArchiveStatsRepo.appUsage}; only
- * default (0) and reply (19) messages count. Member statistics are limited to the
- * caller's visible `channelIds`; emoji and sticker usage deliberately cover every
- * channel and show no channel information.
+ * Counting rules (shared with `core/archive/stats`): time is `createdTimestamp`;
+ * deleted messages count; documents without `author` never count; bot and webhook
+ * messages count only as interaction records in {@link ArchiveStatsRepo.appUsage};
+ * only default (0) and reply (19) messages count. Member statistics are limited to
+ * the caller's visible `channelIds`; emoji and sticker usage deliberately cover
+ * every channel and show no channel information.
  *
- * Member statistics come from {@link ArchiveStatsRepo.activity}, which computes every
- * requested section with `$facet` in a single indexed scan; report assembly lives in
- * `archive-stats.report.ts` and the types in `archive-stats.types.ts`.
- *
- * Errors: every query runs with `maxTimeMS` (60 seconds by default). Exceeding it
- * returns `err(DatabaseError)` with code `DATABASE_QUERY_TIMEOUT`, which the
- * commands answer with "range too large". Other failures are translated by
- * `databaseErrorFrom`. Invalid arguments (an empty or inverted window, an unknown
- * time zone, a non-positive limit, no section) are programmer errors and throw
- * `TypeError` / `RangeError`; the query types already reject an unknown or missing
- * section and retention without a previous window at compile time.
+ * Errors: every query runs with `maxTimeMS` (60 seconds by default); exceeding it
+ * returns `DATABASE_QUERY_TIMEOUT`, which the commands answer with "range too
+ * large". Invalid arguments are programmer errors and throw.
  */
 import {
   assertTimeZone,

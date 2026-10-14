@@ -4,14 +4,13 @@
  * A reply carries a `message_reference` to its parent, and when the parent
  * was deleted between the event and the reply Discord rejects the whole
  * request as an invalid form body (`50035`) with a
- * `MESSAGE_REFERENCE_UNKNOWN_MESSAGE` field error. That is a race any
- * reply that does real work first will lose sometimes — a preview probe
- * or an LLM call is plenty of time for the author to withdraw the
- * message — and it is nobody's defect, so it must not be filed at the
- * same severity as a rejected payload.
+ * `MESSAGE_REFERENCE_UNKNOWN_MESSAGE` field error. Any reply that does real
+ * work first (a preview probe, an LLM call) will sometimes lose this race;
+ * it is nobody's defect and must not be filed at the same severity as a
+ * rejected payload.
  *
- * `50035` alone is not enough: it is Discord's catch-all for every
- * malformed payload, so the field error is checked as well.
+ * `50035` alone is not enough: it is Discord's catch-all for every malformed
+ * payload, so the field error is checked as well.
  */
 import { DiscordAPIError } from 'discord.js';
 

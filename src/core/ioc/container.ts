@@ -1,31 +1,18 @@
 /**
- * Manual IoC container for BotFleet.
+ * Manual IoC container: no reflect-metadata or decorators, debuggable in
+ * isolation, and smaller than any DI framework at this project's scale.
  *
- * Why hand-rolled and not Inversify / tsyringe / NestJS:
- *   - No reflect-metadata, no decorators, no class-emit gymnastics.
- *   - The implementation fits in this file and is debuggable in isolation.
- *   - At this project's scale a DI framework adds more surface than it
- *     removes; this module is the deliberate alternative.
+ * {@link ServiceToken} handles have symbol identity and an invariant phantom
+ * type, so `ServiceToken<Dog>` is not assignable to `ServiceToken<Animal>`.
+ * Factories receive only the read-only {@link Resolver}; composition roots
+ * own the {@link ServiceContainer}.
  *
- * Public surface:
- *   - {@link ServiceToken} + {@link token}: typed handles with symbol
- *     identity (collision-proof) and an invariant phantom field so
- *     `ServiceToken<Dog>` is not assignable to `ServiceToken<Animal>`.
- *   - {@link Resolver}: read-only side, the only thing factories receive.
- *   - {@link ServiceContainer}: read + register, owned by composition roots.
+ * Singleton is the only lifetime: every bound service is process-scoped, and
+ * per-guild state is reached through explicit factory tokens.
  *
- * Singleton is the only lifetime. Every service the bot binds is
- * process-scoped, and per-guild state is reached through explicit
- * factory tokens (`ReposFactory`) rather than a container scope — one
- * line in the composition root instead of a scope object threaded
- * through the whole call graph.
- *
- * Service-locator guard:
- *   Only composition roots (`src/bot/**`) and tests are allowed to
- *   import this module. ESLint's `no-restricted-imports` enforces this so
- *   `handlers/`, `plugins/`, `persistence/`, `infra/` may not call
- *   `container.resolve()` directly — they receive dependencies via
- *   constructor parameters or the plugin host's typed resolver.
+ * Only composition roots (`src/bot/**`) and tests may import this module
+ * (ESLint `no-restricted-imports`), so layered code receives dependencies
+ * instead of calling `container.resolve()`.
  */
 
 /**

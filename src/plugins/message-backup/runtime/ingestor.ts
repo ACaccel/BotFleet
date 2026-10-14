@@ -464,7 +464,7 @@ export class HistoryIngestor {
 
   /**
    * Whether a periodic pass may keep a message's published reaction lists instead of
-   * rereading them (C3). Gateway capture has been lossless since `continuousSince`
+   * rereading them. Gateway capture has been lossless since `continuousSince`
    * and every later reaction change reaches the inbox, so lists completely
    * refreshed after it stay current while the message has no unsettled live
    * change. The page must still report the same reactions and counts, read without
@@ -509,7 +509,7 @@ export class HistoryIngestor {
   }
 
   /**
-   * One message's membership refresh during a history page (A6). A failure confined
+   * One message's membership refresh during a history page. A failure confined
    * to that message (a list that kept changing, an incomplete or unavailable list, an
    * unknown message) leaves it marked stale, keeping its previous complete list, and
    * the page still checkpoints. Failures that would hit every message the same way

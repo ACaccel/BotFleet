@@ -1,27 +1,23 @@
 /**
- * Twitter / X provider. Only original tweet hosts match — proxy hosts are
- * excluded so an already-fixed link the user posted is left untouched.
+ * Twitter / X provider. Proxy hosts never match, so a link the user already
+ * fixed is left untouched.
  *
  * With `apiBaseUrls` configured, the post is read from an FxTwitter-compatible
- * JSON API and rendered as a custom card, except where an embed proxy does
- * better:
+ * JSON API:
  *   - a post without video becomes a custom card (`post`);
- *   - a video post is rewritten onto the first proxy that serves a playable
- *     `og:video`, because Discord plays a proxy's video natively at full
- *     quality while a bot can only upload a size-capped copy;
- *   - a video post that no proxy can play becomes a custom card, and the
- *     renderer uploads the video itself;
- *   - a post flagged possibly sensitive is left to a proxy, so Discord's
- *     unfurl applies each viewer's sensitive-media setting;
+ *   - a video post goes to the first proxy serving a playable `og:video`,
+ *     because Discord plays a proxy's video at full quality while a bot can
+ *     only upload a size-capped copy; failing that, it becomes a custom card
+ *     and the renderer uploads the video;
+ *   - a possibly sensitive post is left to a proxy, so Discord applies each
+ *     viewer's sensitive-media setting;
  *   - when no API answers, the provider behaves as if none were configured.
- * Without `apiBaseUrls` every tweet is rewritten onto a validated proxy.
+ * Without `apiBaseUrls`, every tweet is rewritten onto a validated proxy.
  *
- * Host order matters for the proxy list: the FxEmbed family (`fxtwitter.com`
- * and its aliases) publishes media through an `application/activity+json`
- * alternate link rather than OpenGraph, so the validation probe sees no
- * `og:video` and grades a video tweet text-tier. A host that does serve
- * `og:video` therefore belongs ahead of it, or every video scores as a bare
- * title — and, with the API configured, is re-uploaded instead of proxied.
+ * Proxy order matters: the FxEmbed family (`fxtwitter.com` and aliases)
+ * publishes media via an `application/activity+json` link rather than
+ * OpenGraph, so the probe grades its video tweets text-tier. Hosts serving
+ * `og:video` must come first, or videos are re-uploaded instead of proxied.
  */
 import { ok } from '../../../core/result';
 

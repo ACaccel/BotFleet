@@ -1,17 +1,12 @@
 /**
- * The "this interaction is already dead" test every acknowledgement
- * path needs.
+ * The "this interaction is already dead" test every acknowledgement path
+ * needs.
  *
- * Three call sites reach for the same two Discord error codes — the
- * reply-or-edit guards in `reply-for-error.ts` and
- * `require-guild-repos.ts`, and the autocomplete dispatcher — and each
- * of them swallows the error rather than re-throwing, because there is
- * no longer anyone to tell. Two copies of the set had already drifted
- * apart in their comments; a third would have been the point where
- * they drifted in content.
- *
- * It lives in `infra/discord` rather than `handlers/` because `plugins`
- * and `handlers` are sibling layers and both acknowledge interactions.
+ * Several call sites (the reply-or-edit guards in `reply-for-error.ts` and
+ * `require-guild-repos.ts`, and the autocomplete dispatcher) share the same
+ * two Discord error codes, and each swallows the error rather than
+ * re-throwing because there is no longer anyone to tell. One shared set
+ * keeps them from drifting apart.
  */
 import { DiscordAPIError } from 'discord.js';
 

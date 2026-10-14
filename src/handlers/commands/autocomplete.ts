@@ -1,28 +1,17 @@
 /**
- * Autocomplete dispatch — the terminal stage for an
- * `ApplicationCommandAutocomplete` interaction.
+ * Terminal stage for an `ApplicationCommandAutocomplete` interaction.
  *
- * Split from `executeCommand` because the two answer to opposite
- * contracts. A slash command may reply, defer, and report a failure to
- * the member; an autocomplete interaction may do exactly one thing —
- * `respond` with a list, once, within three seconds — and has no way to
- * say that anything went wrong. So every unusable state here resolves
- * to an empty list: an unknown command, a command with no
- * {@link Command.autocomplete} hook, a hook that threw, or a `respond`
- * Discord refused.
+ * Separate from `executeCommand` because autocomplete may only `respond`
+ * once, within three seconds, and cannot report failure. Every unusable
+ * state therefore resolves to an empty list: an unknown command, a missing
+ * {@link Command.autocomplete} hook, a hook that threw, or a refused
+ * `respond`. Only the last two are logged; the first two are configuration
+ * mismatches caught by `command-autocomplete-pairing.test.ts`, and logging
+ * them would write a line per keystroke.
  *
- * Only the last two are logged. The first two are configuration states
- * rather than failures — Discord asks for suggestions only on an option
- * a handler flagged, so a missing hook means the flag and the hook were
- * declared apart, which `command-autocomplete-pairing.test.ts` catches
- * before it ships. Logging them here would instead write a line per
- * keystroke for a mistake no operator can act on.
- *
- * The same asymmetry is why the hook returns suggestions rather than
- * sending them. Discord's limits live here, applied to whatever a hook
- * hands back, so no handler can produce a payload the API rejects — and
- * a rejected payload is invisible to the member, which makes it exactly
- * the kind of bug that survives for months.
+ * Hooks return suggestions rather than sending them so Discord's limits are
+ * applied here; a payload the API rejects is invisible to the member and
+ * easily survives unnoticed.
  */
 import type { AutocompleteInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';

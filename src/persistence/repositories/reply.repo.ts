@@ -1,11 +1,6 @@
 /**
  * `ReplyRepo` — auto-reply pair storage. One per guild; pairs are
  * keyed by an exact-match `input` and produce a `reply` string.
- *
- * **Error boundary**: every method returns
- * `Result<T, DatabaseError>`. A mongoose failure is translated by the
- * shared `databaseErrorFrom` translator and returned as `err`; a
- * missing lookup is a success (`ok(undefined)`).
  */
 import type { DatabaseError } from '../../core/errors/external-service-error';
 import { err, ok, type Result } from '../../core/result';
@@ -17,7 +12,6 @@ export interface ReplyRepo {
   /** Exact-pair existence check (used by add_reply to dedupe). */
   findExactPair(input: string, reply: string): Promise<Result<readonly ReplyDoc[], DatabaseError>>;
 
-  /** All replies registered under `input`. */
   findByInput(input: string): Promise<Result<readonly ReplyDoc[], DatabaseError>>;
 
   /** Every pair in the guild, for the keyword overview. */
@@ -26,7 +20,6 @@ export interface ReplyRepo {
   /** Find by Mongoose `_id` rendered as a string (delete_reply SSM). */
   findById(id: string): Promise<Result<ReplyDoc | undefined, DatabaseError>>;
 
-  /** Create a new pair, recording who added it, and return the persisted doc. */
   create(input: string, reply: string, createdBy: string): Promise<Result<ReplyDoc, DatabaseError>>;
 
   /** Delete by `_id`; `ok(true)` when a document was removed. */

@@ -45,13 +45,6 @@ const ConfigSchema = z
 
 export type LlmAutoReplyPluginConfig = z.infer<typeof ConfigSchema>;
 
-/**
- * Parse a raw `llm_auto_reply` config block into a fully-defaulted,
- * validated config. Passing `undefined` (the block is absent) yields the
- * all-defaults, disabled configuration rather than throwing.
- *
- * @throws {z.ZodError} when a provided value is the wrong type or an
- *   unknown key is present (fail-fast at composition time).
- */
+/** An absent block yields the disabled defaults. */
 export const parseLlmAutoReplyConfig = (raw: unknown): LlmAutoReplyPluginConfig =>
   ConfigSchema.parse(raw ?? {});

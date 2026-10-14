@@ -11,14 +11,11 @@
  *     party wrote, or a fragment of a conversation, into a channel that
  *     asked for one account's posts.
  *   - **Subscription filter**, the operator-chosen media and keyword
- *     narrowing, whose defaults reproduce the historical behaviour of
- *     forwarding only media-carrying posts.
+ *     narrowing, whose defaults forward only media-carrying posts.
  *
- * Everything here reads {@link FeedPost} fields only; ordering and
- * cursor comparison are delegated to the platform, so no
- * platform-specific arithmetic (X's snowflake ids) leaks into the
- * plugin. Kept free of I/O so every rule is unit-testable without a
- * network, a database, or a Discord client.
+ * Reads {@link FeedPost} fields only; ordering and cursor comparison are
+ * delegated to the platform, so no platform-specific arithmetic (X's
+ * snowflake ids) leaks into the plugin. Free of I/O.
  */
 import type { FeedPlatform, FeedPost } from '../../../infra/social-feed';
 import type { FeedMediaFilter } from '../../../persistence/schemas/feed-subscription.schema';

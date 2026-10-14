@@ -54,12 +54,9 @@ const ConfigSchema = z
 type AutoReplyPluginConfig = z.infer<typeof ConfigSchema>;
 
 /**
- * Parse a raw `auto_reply` config block. Passing `undefined` (the block
- * is absent) yields the all-defaults configuration rather than throwing.
+ * An absent block yields the defaults.
  *
- * @throws {z.ZodError} when a provided value is the wrong type, an
- *   unknown key is present, or a probability falls outside 0–1
- *   (fail-fast at composition time).
+ * @throws {z.ZodError} on an invalid block, including a probability outside 0–1.
  */
 export const parseAutoReplyConfig = (raw: unknown): AutoReplyPluginConfig =>
   ConfigSchema.parse(raw ?? {});

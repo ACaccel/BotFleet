@@ -1,26 +1,17 @@
 /**
- * Platform-neutral social-feed types and the {@link FeedPlatform}
- * Strategy interface.
+ * Platform-neutral social-feed types and the {@link FeedPlatform} Strategy.
+ * Everything returned is neutral data with no discord.js types, so a
+ * platform stays unit-testable without a client.
  *
- * Lives in the infra layer alongside `infra/llm/` and
- * `infra/link-preview/` because it is an outbound boundary: an
- * implementation reads an account's recent posts over HTTP. Everything
- * returned here is neutral data — no discord.js types, no rendering —
- * so the consuming plugin orchestrates Discord delivery through shared
- * adapters and a platform stays unit-testable without a client.
- *
- * Why a Strategy: the operations that differ between X, Bluesky, or any
- * later source are not just "fetch" but also how an account name is
- * spelled, how two post ids order, and what URL Discord can unfurl.
- * Pinning the plugin and the subscription commands to
- * {@link FeedPlatform} keeps a new source to one new file in
- * `./platforms/` plus one composition-root line, and keeps
+ * Platforms differ not only in fetching but in account spelling, post-id
+ * ordering and the URL Discord can unfurl. Pinning the plugin and the
+ * subscription commands to {@link FeedPlatform} keeps a new source to one
+ * file in `./platforms/` plus one composition-root line, and keeps
  * platform-specific arithmetic (X's snowflake ids) out of the plugin.
  *
- * Error contract: `fetchTimeline` and `normalizeAccount` MUST translate
- * every failure onto the Result's Err rail. They never throw a
- * `DomainError` — a feed read is background work whose failure is
- * logged and retried on the next pass, never surfaced to a channel.
+ * Error contract: `fetchTimeline` and `normalizeAccount` return every
+ * failure on the Err rail and never throw: a feed read is background work
+ * whose failure is logged and retried on the next pass.
  */
 import type { FeedError } from '../../core/errors';
 import type { Result } from '../../core/result';

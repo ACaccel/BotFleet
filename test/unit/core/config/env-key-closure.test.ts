@@ -2,11 +2,10 @@
  * Env key-closure contract.
  *
  * `loadEnv` projects the parsed environment onto the schema's own keys
- * so `.passthrough()` cannot leak unknown variables to callers. That
- * projection used to be a hand-written destructure, and it silently
- * dropped an optional API key — the key existed in the schema and in the
- * `Env` type, but never reached the returned object, so its feature
- * reported "service unavailable" on a correctly configured deployment.
+ * so `.passthrough()` cannot leak unknown variables to callers. A
+ * hand-written projection can silently drop a key that the schema and the
+ * `Env` type both declare, so its feature reports "service unavailable" on
+ * a correctly configured deployment.
  *
  * The contract asserted here is closure in both directions: every key
  * the schema declares comes back out, and nothing else does.

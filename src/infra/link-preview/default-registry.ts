@@ -1,18 +1,16 @@
 /**
  * Default {@link LinkPreviewProviderRegistry} wired with every production
  * provider, in priority order. Built via {@link createDefaultLinkPreviewRegistry}
- * so a test can construct its own partial registry without the real
- * providers.
+ * so a test can construct its own partial registry.
  *
  * Every rewrite provider's proxy-host list is a required dependency. The
  * domains are third-party embed-fix services whose uptime and policies
  * change faster than releases ship, so they are operator configuration
- * (the plugin's `social_link_preview` block) and never code: a list baked
- * in here would keep pointing at a dead host until someone cut a release.
- * Requiring the fields is what forces a new rewrite provider to be given a
- * configured list rather than inheriting a stale built-in one.
- * `enabledProviders` is the kill-switch: a subset allow-list (from
- * `config.providers`) drops any source whose proxy is misbehaving.
+ * (the plugin's `social_link_preview` block) and never code. Requiring the
+ * fields forces a new rewrite provider to be given a configured list
+ * rather than inheriting a stale built-in one. `enabledProviders` is the
+ * kill-switch: a subset allow-list (from `config.providers`) drops any
+ * source whose proxy is misbehaving.
  *
  * Adding a new provider:
  *   1. Implement {@link LinkPreviewProvider} (or reuse `createRewriteProvider`).

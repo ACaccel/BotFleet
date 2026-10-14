@@ -3,8 +3,7 @@
  *
  * A message that @-mentions the bot fires a reply deterministically,
  * bypassing the random probability gate (and the cooldown / in-flight /
- * window guards) — the same role the old `fatcat_reply` keyword played, now
- * mirroring konata's llm-chat trigger. The downstream `messageCount`
+ * window guards), mirroring konata's llm-chat trigger. The downstream `messageCount`
  * requirement still applies — a mention only skips the dice roll, not the
  * context check. The probabilistic automatic reply is unaffected.
  *

@@ -1,31 +1,23 @@
 /**
  * Pre-delete attachment cache.
  *
- * Discord purges an attachment's CDN object nearly synchronously with
- * the message deletion, so the download `attachment-archive` starts
- * from `messageDelete` usually races and loses: the signed URL is still
- * valid, the object behind it is already gone. The only reliable way to
- * keep the bytes is to hold them before the deletion happens. This
- * module downloads every attachment when its message is created and, at
- * delete time, renames the cached copy into the archive tree instead of
- * touching the network.
+ * Discord purges an attachment's CDN object almost as soon as its message is
+ * deleted, so a download started from `messageDelete` usually loses the
+ * race. This module downloads attachments on message create and, at delete
+ * time, moves the cached copy into the archive tree instead of using the
+ * network.
  *
- * Layout: `<cacheRoot>/<guildId>/<messageId>/<attachmentId>-<name>`.
- * Keying by message id is what lets a deletion — single or bulk — find
- * its files with one `readdir`.
+ * The layout `<cacheRoot>/<guildId>/<messageId>/<attachmentId>-<name>` lets
+ * a single or bulk deletion find its files with one `readdir`.
  *
- * Privacy: while an entry lives, a copy of every recent attachment sits
- * on the bot host, not only the deleted ones. The TTL sweep bounds that
- * window; see the `permission_rank` note in `docs/architecture.md`.
+ * Privacy: a copy of every recent attachment sits on the bot host until the
+ * TTL sweep removes it; see the `permission_rank` note in
+ * `docs/architecture.md`.
  *
- * Availability: caching writes bytes nobody asked for, so it yields the
- * volume before filling it — new entries stop while free space is under
- * the configured floor. The delete-time paths are never gated by it:
- * declining to archive loses evidence outright, while declining to
- * cache only forfeits a head start on it.
- *
- * Every operation swallows its own failures. Caching is a best-effort
- * side channel and must never disturb the message flow that triggers it.
+ * New entries stop while free space is under the configured floor, but
+ * delete-time paths are never gated: declining to archive loses evidence
+ * outright. Every operation swallows its own failures so caching never
+ * disturbs the message flow.
  */
 import type { Attachment } from 'discord.js';
 import fs from 'fs';

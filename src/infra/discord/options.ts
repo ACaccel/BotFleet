@@ -2,11 +2,10 @@
  * Typed accessors for slash-command options.
  *
  * discord.js types `CommandInteractionOption.value` as
- * `string | number | boolean | undefined`, so reading an option meant
- * writing `interaction.options.get('x')?.value as string` at roughly
- * forty call sites. That cast is a lie in two directions: it hides a
- * missing option behind `undefined`-typed-as-`string`, and it silently
- * accepts a value of the wrong primitive type.
+ * `string | number | boolean | undefined`, so a bare
+ * `interaction.options.get('x')?.value as string` cast hides a missing
+ * option behind `undefined`-typed-as-`string` and silently accepts a
+ * value of the wrong primitive type.
  *
  * These helpers make the two cases explicit:
  *

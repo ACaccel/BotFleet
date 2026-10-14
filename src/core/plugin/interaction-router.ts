@@ -2,23 +2,16 @@
  * InteractionRouter — Chain-of-Responsibility middleware engine.
  *
  * Each middleware sees the `InteractionContext` and decides whether to
- * call `next()` (advance the chain) or short-circuit (skip remaining
- * middleware). Failure semantics:
+ * call `next()` (advance the chain) or short-circuit. Failure semantics:
  *   - A middleware that throws aborts the chain. The exception bubbles
- *     to the caller of `dispatch()` and is the caller's responsibility
- *     to translate into a user-facing reply (the outermost catch in
- *     BaseBot's interaction listener performs this translation).
+ *     to the caller of `dispatch()`, which must translate it into a
+ *     user-facing reply (BaseBot's interaction listener does).
  *   - A middleware that completes without calling `next()` ends the
  *     chain cleanly — typical of permission gates or rate limiters
  *     that reply to the user directly.
  *
- * Construction is two-step:
- *   1. `new InteractionRouter()` — empty.
- *   2. `router.use(...)` — push middleware in execution order.
- *
- * Once `dispatch()` has been called, further `use()` calls still
- * affect future dispatches (the middleware list is mutable but
- * immutable per-dispatch — snapshot taken at dispatch entry).
+ * `use()` pushes middleware in execution order. `dispatch()` snapshots
+ * the list at entry, so a later `use()` affects only future dispatches.
  */
 import type { InteractionContext, InteractionMiddleware } from './types';
 

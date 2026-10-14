@@ -1,52 +1,27 @@
 /**
- * In-process file-routing sink for pino.
+ * In-process file-routing sink for pino: each JSON Lines record goes to a
+ * file chosen from its `bot` / `guildId` bindings, rotating at local
+ * midnight.
  *
- * Each JSON Lines record written here is dispatched to a file chosen
- * from its `bot` / `guildId` bindings, rotating on the local-time day
- * boundary. The sink runs in the same Node process as the bot (as a
- * `Writable` consumed by {@link import('pino').multistream}) — no
- * worker thread, no `require.resolve` dance for TypeScript source vs.
- * compiled output, and a clean `close` that flushes every cached file
- * descriptor synchronously enough for graceful shutdown.
+ * The sink is a `Writable` in a {@link import('pino').multistream}, not a
+ * worker-thread transport, and that is deliberate: it shares the bot's event
+ * loop so `installProcessHandlers` can close every cached fd on the same tick
+ * during shutdown, and `pino-abstract-transport` needs a JS worker entry point
+ * that is awkward under `ts-node`.
  *
- * The in-process multistream design is final, not a stopgap. The
- * routing rules are pure record-content branching plus a write-stream
- * cache, the sink shares the bot's event loop (so `installProcessHandlers`
- * can close every cached fd on the same tick during shutdown), and
- * `pino-abstract-transport` would require a JS worker entry point that
- * is awkward under `ts-node`. Do not switch to a worker-thread transport.
+ * Routing: records with `guildId` go to
+ * `<rootDir>/<bot>/<guildId>/<YYYY-MM-DD>.log`; others to
+ * `<rootDir>/<bot>/<YYYY-MM-DD>.log`.
  *
- * Routing rules:
- *   - records carrying `guildId` →
- *     `<rootDir>/<bot>/<guildId>/<YYYY-MM-DD>.log`
- *   - records without `guildId` (system / bot-level lines) →
- *     `<rootDir>/<bot>/<YYYY-MM-DD>.log`
+ * Every record MUST carry `bot` (the composition root binds it). A record
+ * without it throws synchronously; there is deliberately no fallback file,
+ * which would hide the mis-binding. `bot` is stripped from the record because
+ * the directory already names it; `guildId` stays as a join key for
+ * downstream aggregators that never see the file path.
  *
- * Every record MUST carry a `bot` binding — the composition root
- * attaches `{ bot: clientId }` at logger construction so this is an
- * invariant, not a hope. A record without `bot` is a contract bug and
- * the sink throws synchronously inside the write path; there is
- * deliberately no `_unbound` fallback file because silently shuttling
- * mis-bound lines into a junk directory hides the underlying mistake.
- *
- * `bot` is path-encoded only, not field-encoded: the routing step
- * extracts `bot` to choose the file path, then strips it from the
- * record before serialising. Every line under `logs/<bot>/...` already
- * names the owning bot via its parent directory, so re-stating it
- * inside each JSON object is dead weight that bloats both disk usage
- * and `jq` output. `guildId` is left in the record on purpose —
- * downstream aggregators (cross-guild dashboards, archival pipelines)
- * use it as a join key without access to the originating file path.
- *
- * Retention: when `retentionDays` is set the stream also runs the
- * {@link startLogRetention} schedule over `rootDir` (see
- * `./log-retention`), which owns the age rules.
- *
- * Layer purity: only Node built-ins (`fs`, `path`, `stream`). No
- * discord.js / mongoose / our own infra — `core/**` stays clean. The
- * `time` field on each record is left as pino's UTC ISO so the file
- * is unambiguous to read across timezones; only *file selection* uses
- * local time so rotation happens at the operator's midnight.
+ * `time` stays pino's UTC ISO so files read unambiguously across time zones;
+ * only file selection uses local time. When `retentionDays` is set the stream
+ * also runs {@link startLogRetention} over `rootDir`.
  */
 import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
 import { dirname, join } from 'node:path';

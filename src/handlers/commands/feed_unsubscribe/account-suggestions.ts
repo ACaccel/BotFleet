@@ -8,15 +8,13 @@
  * picks; a value carrying just the candidate would silently discard the
  * accounts they had already named.
  *
- * Those earlier segments are re-parsed with `parseFeedAccounts` — the
- * same function the command itself reads the option with — so the
- * echoed prefix is exactly what the deletion will act on. A suggestion
- * that normalised the list differently from the command would quietly
- * change the scope the member thought they had chosen.
+ * Earlier segments are re-parsed with `parseFeedAccounts` — the same
+ * function the command reads the option with — so the echoed prefix is
+ * exactly what the deletion will act on; a different normalisation would
+ * quietly change the scope the member chose.
  *
- * Pure: it takes documents and strings, so the matching, the exclusion
- * and the length bounds are testable without an interaction or a
- * database.
+ * Pure: it takes documents and strings, so it is testable without an
+ * interaction or a database.
  */
 import type { FeedSubscriptionDoc } from '../../../persistence/schemas/feed-subscription.schema';
 import {

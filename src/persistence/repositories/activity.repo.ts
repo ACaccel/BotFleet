@@ -1,7 +1,6 @@
 /**
  * `ActivityRepo` — sign-up activity state, one collection per guild.
  *
- * **Error boundary**: every method returns `Result<T, DatabaseError>`.
  * Joining is a single conditional update so concurrent clicks cannot
  * exceed the capacity or add a member twice.
  */

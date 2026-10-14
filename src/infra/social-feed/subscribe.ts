@@ -1,19 +1,16 @@
 /**
  * The domain sequence a subscription command runs before it writes:
- * canonicalise the handle, and — only when the subscription is new —
- * read the upstream once to prove the account exists and to anchor a
- * cursor.
+ * canonicalise the handle, and, only when the subscription is new, read the
+ * upstream once to prove the account exists and to anchor a cursor.
  *
- * It lives in infra rather than in the handler for two reasons. It is
- * the platform-facing half of subscribing, so it belongs next to
- * {@link FeedPlatform} and the baseline rule it composes; and keeping
- * it out of `index.ts` leaves the handler holding only Discord work,
- * which is the layer split the 150-line handler cap exists to enforce.
+ * It is the platform-facing half of subscribing, so it sits next to
+ * {@link FeedPlatform} and the baseline rule it composes, leaving the
+ * handler with only Discord work.
  *
  * The upstream read is skipped for an existing subscription on purpose.
- * Re-running the command is how a filter is changed, the stored cursor
- * is preserved either way, and an upstream outage must not stand
- * between a member and turning a keyword off.
+ * Re-running the command is how a filter is changed, the stored cursor is
+ * preserved either way, and an upstream outage must not stand between a
+ * member and turning a keyword off.
  */
 import { ok, type Result } from '../../core/result';
 import { resolveBaselineCursor, type FeedBaselineCursor } from './baseline';

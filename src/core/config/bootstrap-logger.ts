@@ -1,28 +1,12 @@
 /**
- * Bootstrap logger built directly from `process.env` reads.
+ * Logger built directly from `process.env` (`LOG_LEVEL`, `NODE_ENV`,
+ * `LOG_DIR`, `LOG_RETENTION_DAYS`) for the window before `loadEnv()` runs.
  *
- * Lives under `src/core/config/**` so the `no-restricted-syntax` rule
- * that bans `process.env` reads outside `core/config` is satisfied
- * without an eslint-disable waiver. It:
- *
- *   - reads `LOG_LEVEL` / `NODE_ENV` / `LOG_DIR` / `LOG_RETENTION_DAYS`
- *   - validates the level against the typed allowlist
- *   - pretty-prints outside production
- *   - opts into the file-router sink via `createFileSink` (the
- *     composition-root factory in `core/logger/file-router-transport`),
- *     so `createLogger` itself stays free of file-system concerns
- *
- * Used as the lazy IoC Logger factory in `BaseBot.run()`: the factory
- * needs a Logger BEFORE `loadEnv()` runs, so a typed-Env-based logger
- * build is not possible at that point. This bootstrap exists precisely
- * to cover that pre-env window.
- *
- * Note on `NODE_ENV`: the historical `nodeEnv === 'test'` branch that
- * force-disabled the file sink is gone. Tests that need a logger build
- * one with `createLogger({ ... })` directly (no `extraStreams`) and
- * therefore never construct a file sink in the first place — the env
- * detection was dead-defensive code that bled the test environment
- * back into the production code path for no operational benefit.
+ * `BaseBot.run()` uses it as the lazy IoC Logger factory, which needs a
+ * Logger before a typed `Env` exists. It validates the level, pretty-prints
+ * outside production, and opts into the file sink via `createFileSink` so
+ * `createLogger` stays free of file-system concerns. Tests build loggers
+ * with `createLogger` directly and so never construct a file sink.
  */
 import { createFileSink, createLogger, type Logger, type LogLevel } from '../logger';
 import { DEFAULT_LOG_RETENTION_DAYS, parseLogRetentionDays } from '../logger/log-retention';

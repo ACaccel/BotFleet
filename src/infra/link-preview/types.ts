@@ -1,47 +1,28 @@
 /**
- * Link-preview provider types and Strategy interface.
+ * Link-preview provider types and Strategy interface. Providers return
+ * neutral data only; Discord message assembly belongs to the infra/discord
+ * renderer and the consuming plugin.
  *
- * The link-preview Strategy lives in the infra layer (`src/infra/link-preview/`,
- * alongside `infra/llm/` and `infra/discord/`) because it is an outbound
- * boundary: providers either rewrite a URL to a third-party embed-proxy
- * domain or fetch a page's OpenGraph metadata. Discord-specific assembly
- * is handled by the shared infra/discord renderer and consuming plugin's
- * send/reply adapter — providers return neutral data only, so this
- * layer stays free of discord.js message I/O.
+ * Three preview mechanisms, one discriminated union:
+ *   - `rewritten-url`: reply with a proxy-domain URL and let Discord unfurl it,
+ *     because a bot-authored embed cannot render playable video. Rewrite
+ *     providers probe their proxy hosts with the Discord crawler UA first and
+ *     return the first that yields media, so a dead proxy is never posted.
+ *   - `card`: OpenGraph data rendered with `EmbedBuilder`, optionally carrying
+ *     video metadata for separate attachment delivery (Facebook).
+ *   - `post`: a structured post from a JSON API (X), used for a video post only
+ *     when no proxy yields playable video, so the renderer uploads it.
  *
- * Three preview mechanisms, one uniform result (discriminated union):
- *   - `rewritten-url`: reply with a proxy-domain URL and let DISCORD
- *     unfurl it into a playable video embed. A bot-authored embed cannot
- *     render playable video; attachments are sent separately.
- *     Rewrite providers VALIDATE before returning: they probe a priority
- *     list of proxy hosts (fetching each candidate's OpenGraph with the
- *     Discord crawler UA) and return the first that yields media — so a
- *     dead/empty proxy is never posted as a bare link.
- *   - `card`: neutral OpenGraph data rendered with `EmbedBuilder`, optionally
- *     carrying video metadata for separate attachment delivery (Facebook).
- *   - `post`: a structured social post read from a JSON API (X), rendered as
- *     a custom card. A video post becomes `post` only when no proxy yields a
- *     playable video, so the renderer then uploads the video itself.
+ * Adding a provider: implement {@link LinkPreviewProvider} (or reuse
+ * `createRewriteProvider`) under `providers/`, append its name to
+ * {@link LinkPreviewProviderName}, and register it in
+ * `createDefaultLinkPreviewRegistry` with its proxy-host dependency, the
+ * plugin config's `<source>ProxyHosts` key, and a recommended list in each
+ * bot's `config.example.json` — proxy hosts are operator configuration.
  *
- * Adding a new provider:
- *   1. Implement {@link LinkPreviewProvider} (or reuse `createRewriteProvider`
- *      for a proxy-rewrite source — it needs an `OgClient` for validation)
- *      in `src/infra/link-preview/providers/`.
- *   2. Append the name to {@link LinkPreviewProviderName} below.
- *   3. Add one line to `createDefaultLinkPreviewRegistry`
- *      (`src/infra/link-preview/default-registry.ts`) plus its required
- *      proxy-host field on `LinkPreviewRegistryDeps`, the matching
- *      `<source>ProxyHosts` key on the plugin's config schema, and a
- *      recommended list in each bot's `config.example.json` — proxy hosts
- *      are operator configuration, so a rewrite source is not usable until
- *      an operator can supply them.
- * The plugin's orchestrator does not branch on provider names internally.
- *
- * Error contract: a fetching provider's `build()` MUST translate
- * transport / HTTP / parse failures into a {@link LinkPreviewError} on
- * the Result's Err rail before returning. It never throws a
- * `DomainError`: a preview failure is logged and swallowed so the user's
- * message is never broken by an unavailable upstream.
+ * Error contract: a fetching provider's `build()` returns transport / HTTP /
+ * parse failures as a {@link LinkPreviewError} and never throws, so an
+ * unavailable upstream never breaks the user's message.
  */
 import type { Logger } from '../../core/logger';
 import type { LinkPreviewError } from '../../core/errors';

@@ -1,22 +1,15 @@
 /**
  * Guild-onboarding port implementation.
  *
- * The `GuildOnboardingPort` contract is defined in
- * `core/plugin/guild-onboarding-port.ts`. This module supplies the
- * concrete, `BaseBot`-backed implementation and lives in `src/bot/`
- * because the composition root is the only layer permitted to depend
- * on `BaseBot` internals (`connectOneGuild`, `commandHandlers`,
+ * Supplies the concrete, `BaseBot`-backed implementation of the
+ * `GuildOnboardingPort` contract (`core/plugin/guild-onboarding-port.ts`).
+ * It lives in `src/bot/` because only the composition root may depend on
+ * `BaseBot` internals (`connectOneGuild`, `commandHandlers`,
  * `registerGuildSlotInternal`, `getRepos`).
  *
- * Onboarding a newly joined guild is funnelled through this single
- * typed seam: `BaseBot` registers an instance under
- * `TOKENS.GuildOnboardingPort`, and the `guild-events` plugin resolves
- * and invokes it from its `guildCreate` subscription. No plugin code
- * touches `BaseBot` directly.
- *
- * Pattern: Adapter — adapts the wide `BaseBot` surface to the narrow
- * `GuildOnboardingPort` interface so consumers depend only on the
- * port.
+ * `BaseBot` registers an instance under `TOKENS.GuildOnboardingPort`, and
+ * the `guild-events` plugin resolves and invokes it from its `guildCreate`
+ * subscription, so no plugin code touches `BaseBot` directly.
  */
 import type { Guild } from 'discord.js';
 

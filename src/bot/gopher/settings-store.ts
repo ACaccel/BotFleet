@@ -8,15 +8,13 @@
  * rewrites `config.json` so the change survives a restart, preserving every
  * other key with a 2-space indent.
  *
- * Layering: this lives in the composition-root layer (`src/bot/**`), the
- * only place permitted to touch the filesystem and know `config.json`'s
- * path. The settings-api plugin receives narrow `getEndpoint` / `setEndpoint`
- * callbacks and stays oblivious to the file, so the plugin contract is not
- * widened into a config-file registrar.
+ * Only this composition-root layer touches the filesystem and knows
+ * `config.json`'s path; the settings-api plugin receives narrow
+ * `getEndpoint` / `setEndpoint` callbacks and stays oblivious to the file.
  *
- * Validation note: input validation lives at the HTTP boundary (the
- * settings-api plugin's zod schema), so `setEndpoint` trusts it receives a
- * well-formed URL and focuses solely on persistence (single responsibility).
+ * Input validation lives at the HTTP boundary (the settings-api plugin's
+ * zod schema), so `setEndpoint` trusts it receives a well-formed URL and
+ * only persists.
  */
 import { readFile, realpath, rename, writeFile } from 'node:fs/promises';
 

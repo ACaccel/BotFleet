@@ -2,25 +2,16 @@
  * GuildRegistry — typed, read-only view of per-guild runtime state that
  * plugins query without holding a reference to BaseBot itself.
  *
- * Lives beside {@link TOKENS} in the composition root: the contract
- * names both a `discord.js` type and the persistence layer's `Repos`
- * bundle, so `core/` — which depends on nothing outside itself — is
- * not its home. Plugins import this contract and `TOKENS` from
+ * Lives beside {@link TOKENS} because the contract names a `discord.js`
+ * type and the persistence layer's `Repos` bundle. Plugins import it from
  * `src/bot/`; the `BaseBot` class itself stays off-limits to them
  * (enforced by `no-restricted-imports`).
  *
- * Why this exists:
- *   - Plugins must reach repos and configured channels by guild id,
- *     but the IoC container only exposes a typed resolver — not the
- *     BaseBot instance — to prevent service-locator anti-patterns.
- *   - A registry implementation backed by `BaseBot.guildInfo` keeps the
- *     plugin surface narrow (`getRepos`, `getChannel`, `getRole`,
- *     `listGuildIds`) and lets composition roots swap in a different
- *     backing store without touching plugins.
- *
- * The registry is intentionally read-only at the interface level; the
- * BaseBot mutates the underlying map and the registry just reads it.
- * Plugins MUST NOT cast to the concrete impl to mutate state.
+ * The IoC container exposes only a typed resolver, not the BaseBot
+ * instance, so plugins reach repos and configured channels by guild id
+ * through this narrow surface (`getRepos`, `getChannel`, `getRole`,
+ * `listGuildIds`). BaseBot mutates the underlying map; plugins MUST NOT
+ * cast to the concrete impl to mutate state.
  */
 import type { Channel, Role } from 'discord.js';
 

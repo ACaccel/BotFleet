@@ -2,18 +2,16 @@
  * Configuration schema and defaults for the social-link-preview plugin.
  *
  * Scalars (the master switch, the original-message strategy, timeouts and
- * caps) default here in code, so a bot may omit the `social_link_preview`
- * block entirely — or declare an empty one — and still boot with a
- * fully-formed, safe (disabled) configuration.
+ * caps) default in code, so a bot may omit the `social_link_preview`
+ * block entirely and still boot with a safe (disabled) configuration.
  *
  * The six embed-proxy host lists are deliberately not defaulted: they name
  * third-party services whose uptime and policies change far faster than a
- * release ships, so they are operator configuration rather than code. Once
- * `enabled` is true every list is mandatory, and a missing one fails
- * startup with an issue naming the key — better than silently probing a
- * built-in host that went dark months ago. While the feature is disabled
- * the lists stay optional, so an operator can park it without discarding
- * the configuration.
+ * release ships. Once `enabled` is true every list is mandatory, and a
+ * missing one fails startup with an issue naming the key — better than
+ * silently probing a built-in host that went dark. While the feature is
+ * disabled the lists stay optional, so an operator can park it without
+ * discarding the configuration.
  *
  * `.strict()` surfaces a mistyped key at startup rather than silently
  * ignoring it.
@@ -149,13 +147,10 @@ const ConfigSchema = z.discriminatedUnion('enabled', [DisabledSchema, EnabledSch
 export type SocialLinkPreviewPluginConfig = z.infer<typeof ConfigSchema>;
 
 /**
- * Parse a raw `social_link_preview` config block into a validated config.
- * Passing `undefined` (the block is absent) yields the all-defaults,
- * disabled configuration rather than throwing.
+ * An absent block yields the disabled defaults.
  *
- * @throws {z.ZodError} when a provided value is the wrong type, an unknown
- *   key is present, or the feature is enabled without a complete set of
- *   embed-proxy host lists (fail-fast at composition time).
+ * @throws {z.ZodError} on an invalid block, including an enabled feature
+ *   without a complete set of embed-proxy host lists.
  */
 export const parseSocialLinkPreviewConfig = (raw: unknown): SocialLinkPreviewPluginConfig =>
   ConfigSchema.parse(raw ?? {});

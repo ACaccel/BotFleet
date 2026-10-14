@@ -1,18 +1,16 @@
 /**
- * Observer / event-bus that fans Discord events out to plugin
- * subscriptions with per-subscription error isolation.
+ * Observer / event-bus that fans Discord events out to plugin subscriptions
+ * with per-subscription error isolation.
  *
  * Design contract:
- *   - One plugin's `events[MessageCreate]` throwing MUST NOT abort
- *     other plugins' subscriptions to the same event. Achieved via
- *     `Promise.allSettled` over the subscriber list.
- *   - Per-subscription errors are logged with `plugin`, `event`,
- *     `err` fields. Critical-plugin escalation is NOT done here —
- *     the host's `init`/`start` hooks own that decision; event-time
- *     failures are always non-fatal.
- *   - The dispatcher is constructible without a Discord `Client`.
- *     Tests drive it via `emit()` directly; BaseBot attaches it to
- *     the real `client.on(event, ...)` plumbing.
+ *   - One plugin's `events[MessageCreate]` throwing MUST NOT abort other
+ *     plugins' subscriptions to the same event (`Promise.allSettled` over
+ *     the subscriber list).
+ *   - Per-subscription errors are logged with `plugin`, `event`, `err`
+ *     fields. Critical-plugin escalation is NOT done here: the host's
+ *     `init`/`start` hooks own that decision; event-time failures are always
+ *     non-fatal.
+ *   - Constructible without a Discord `Client`; tests drive it via `emit()`.
  */
 import type { ClientEvents } from 'discord.js';
 import type { Logger } from '../logger';

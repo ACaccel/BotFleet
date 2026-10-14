@@ -1,19 +1,16 @@
 /**
- * `DefaultModelResolver` — keeps the per-provider default chat model
- * pointed at the cheapest model that is *still listed* by the provider.
+ * `DefaultModelResolver`: keeps the per-provider default chat model pointed
+ * at the cheapest model that is *still listed* by the provider.
  *
- * Motivation: {@link DEFAULT_MODELS} is a static seed chosen at commit
- * time. Providers retire cheap models (a "fast" tier becomes legacy /
- * enterprise-only) without notice, which would strand a new whitelist
- * entry on an id the API no longer accepts. This resolver re-derives the
- * default on a schedule (the LLM-chat plugin runs it weekly) by
- * intersecting each provider's live model list with the local pricing
- * table and picking the cheapest priced survivor.
+ * {@link DEFAULT_MODELS} is a static seed. Providers retire cheap models
+ * without notice, which would strand a new whitelist entry on an id the API
+ * no longer accepts. This resolver re-derives the default on a schedule (the
+ * LLM-chat plugin runs it weekly) by intersecting each provider's live model
+ * list with the local pricing table and picking the cheapest priced survivor.
  *
- * It is intentionally conservative: when a provider's live list cannot
- * be fetched (no API key, network error) or yields no priced model, the
- * existing default is kept rather than cleared — a stale-but-valid
- * default beats an empty one.
+ * It is conservative: when a provider's live list cannot be fetched (no API
+ * key, network error) or yields no priced model, the existing default is
+ * kept; a stale-but-valid default beats an empty one.
  */
 import type { Logger } from '../../core/logger';
 import type { ModelCatalog } from './models-catalog';

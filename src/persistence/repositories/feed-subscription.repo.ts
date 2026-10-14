@@ -8,12 +8,6 @@
  * The document also carries the polling cursor. The poller advances it
  * only after the matching posts have actually been delivered, so a
  * failed send is retried on the next pass rather than skipped.
- *
- * Error boundary: every method returns `Result<T, DatabaseError>`. A
- * mongoose failure is translated by the shared `databaseErrorFrom`
- * translator and returned as `err`; a missing lookup is a success
- * (`ok(undefined)` / `ok([])`) — an unsubscribed channel is not an
- * error.
  */
 import type { Types } from 'mongoose';
 import type { DatabaseError } from '../../core/errors/external-service-error';
@@ -40,7 +34,7 @@ export interface FeedSubscriptionFilterInput {
 
 /**
  * A subscription to create or re-filter. The first three fields are
- * its unique key (plan D8) and mirror the stored snake_case field
+ * its unique key and mirror the stored snake_case field
  * names, as the other repositories' document-shaped inputs do.
  */
 export interface FeedSubscriptionUpsertInput {

@@ -1,16 +1,13 @@
 /**
  * Injectable wall-clock abstraction.
  *
- * Pulled out so domain / use-case code can hold an injected `Clock`
- * instead of calling `Date.now()` / `new Date()` directly — tests
- * substitute a deterministic fake, production uses {@link systemClock}.
+ * Domain and use-case code holds an injected `Clock` instead of calling
+ * `Date.now()` / `new Date()` directly, so tests substitute a deterministic
+ * fake while production uses {@link systemClock}. The plugin lifecycle
+ * context (`PluginInitContext.clock`) carries it to every plugin.
  *
- * The plugin lifecycle context (`PluginInitContext.clock`) carries a
- * Clock through to every plugin so scheduled jobs / TTL checks stay
- * testable.
- *
- * Convention: business code receives `Clock` via constructor; modules
- * that legitimately need wall-clock time at module load (rare, mostly
+ * Convention: business code receives `Clock` via constructor; modules that
+ * legitimately need wall-clock time at module load (rare, mostly
  * `core/logger` for timestamps) keep calling `Date` directly.
  */
 export interface Clock {

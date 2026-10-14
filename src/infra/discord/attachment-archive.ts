@@ -1,18 +1,13 @@
 /**
  * Archive a deleted Discord attachment to disk for forensics.
  *
- * Lives in `infra/discord/` because it imports `discord.js`, `axios`,
- * and `fs` — third-party SDK dependencies that the `core/` layer
- * deliberately excludes.
- *
- * This is the fallback path. Discord purges the CDN object for an
- * attachment nearly synchronously with the message deletion, so a
- * download started from `messageDelete` frequently 404s even though the
- * signed URL is still valid. The reliable path is the pre-delete cache
- * in `attachment-cache.ts`; what remains here is a best-effort attempt
- * for messages the cache never saw, hardened with one retry against
- * `media.discordapp.net`, whose cache often still holds recently
- * displayed media.
+ * This is the fallback path. Discord purges the CDN object for an attachment
+ * nearly synchronously with the message deletion, so a download started from
+ * `messageDelete` frequently 404s even though the signed URL is still valid.
+ * The reliable path is the pre-delete cache in `attachment-cache.ts`; what
+ * remains here is a best-effort attempt for messages the cache never saw,
+ * hardened with one retry against `media.discordapp.net`, whose cache often
+ * still holds recently displayed media.
  */
 import type { Attachment } from 'discord.js';
 

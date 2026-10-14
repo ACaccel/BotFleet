@@ -9,14 +9,11 @@
  *     enables web search.
  *
  * Only three things vary between them: the provider name that stamps
- * error codes, the `baseURL` the client points at, and the `tools`
- * discriminator the Responses API expects. Subclasses supply those as an
- * {@link OpenAICompatibleSpec} and add nothing else.
+ * error codes, the `baseURL`, and the `tools` discriminator the Responses
+ * API expects. Subclasses supply those as an {@link OpenAICompatibleSpec}.
  *
- * Every SDK throw is funnelled through {@link translateProviderError} so
- * callers see a typed {@link LlmProviderError} sub-code rather than a
- * generic SDK exception. Contract tests in `test/contract/llm/` pin the
- * translation per provider.
+ * Every SDK throw is funnelled through {@link translateProviderError}, so
+ * callers see a typed {@link LlmProviderError} sub-code.
  */
 import OpenAI from 'openai';
 

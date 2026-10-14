@@ -1,29 +1,18 @@
 /**
  * Social-feed subscription: one document per `(platform, account,
- * channel_id)` triple, carrying the subscription itself, its per-
- * subscription filter, and its polling cursor.
+ * channel_id)` triple, carrying its filter and polling cursor. Each guild owns
+ * its database, so the triple alone is the unique key.
  *
- * The guild is implicit — each guild owns its own database — so the
- * triple alone is the key, and the compound unique index enforces it.
- * The same account may be subscribed from several channels; each such
- * subscription keeps its own cursor, which is what makes an unsubscribe
- * scoped to one channel a well-defined operation.
+ * Each subscription keeps its own cursor, so an unsubscribe scoped to one
+ * channel is well defined, a removed subscription leaves no orphaned cursor,
+ * and re-subscribing starts from the present rather than replaying a backlog.
  *
- * Holding the cursor in the subscription document means a removed
- * subscription takes its cursor with it: there is no orphaned cursor
- * state to reconcile at boot, and re-subscribing starts from the
- * present rather than replaying a backlog.
+ * `last_seen_id` is a String because X post ids are 64-bit and exceed
+ * `Number.MAX_SAFE_INTEGER`; ordering is delegated to the platform adapter.
  *
- * `last_seen_id` is a String because post ids on X are 64-bit and
- * exceed `Number.MAX_SAFE_INTEGER`; storing them as a Number would
- * collapse distinct ids. Ordering comparisons are delegated to the
- * platform adapter, which knows the id's shape.
- *
- * Two document types come out of this file. {@link StoredFeedSubscription}
- * is what a `lean` read really hands back; {@link FeedSubscriptionDoc}
- * is the tightened contract the repository produces from it. Keeping
- * them apart is what stops the tightening from being an unchecked
- * assertion — see the repository's `normalize`.
+ * {@link StoredFeedSubscription} is what a `lean` read hands back;
+ * {@link FeedSubscriptionDoc} is the tightened contract the repository's
+ * `normalize` produces from it, so the tightening is checked, not asserted.
  */
 import { Schema, type InferSchemaType, type Types } from 'mongoose';
 
@@ -89,7 +78,7 @@ export const feedSubscriptionSchema = new Schema({
   last_seen_timestamp: { type: Number, required: false },
 });
 
-// The subscription key (plan D8). The individual fields are
+// The subscription key. The individual fields are
 // deliberately not unique on their own: one account may feed several
 // channels, and one channel may carry several accounts.
 feedSubscriptionSchema.index({ platform: 1, account: 1, channel_id: 1 }, { unique: true });

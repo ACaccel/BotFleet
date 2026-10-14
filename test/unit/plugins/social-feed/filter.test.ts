@@ -8,9 +8,8 @@
  * would be a hole a user could open from a slash command. The
  * subscription filter itself gets one case per option value.
  *
- * The final block re-runs the historical `x-media-feed` fixtures
- * through the default filter: the rename is meant to be a refactor, and
- * any behavioural drift in what reaches a channel shows up there.
+ * The final block runs the `x-media-feed` fixtures through the default
+ * filter, so any drift in what reaches a channel shows up there.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -167,10 +166,8 @@ describe('selectPostsToForward — cursor and ordering', () => {
 });
 
 describe('selectPostsToForward — default filter reproduces the former x-media-feed behaviour', () => {
-  // These fixtures and expectations are carried over verbatim from the
-  // plugin this one replaces. The rename was meant to be a refactor, so
-  // a subscription that names no filter option must still forward
-  // exactly what the old media feed did.
+  // A subscription that names no filter option must forward exactly what
+  // the `x-media-feed` fixtures expect.
   it('forwards an original media post', () => {
     expect(select([post({ id: '10' })])).toEqual(['10']);
   });

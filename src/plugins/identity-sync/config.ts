@@ -58,12 +58,10 @@ const ConfigSchema = z
 export type IdentitySyncPluginConfig = z.infer<typeof ConfigSchema>;
 
 /**
- * Parse a raw `identity_sync` config block into a fully-defaulted,
- * validated config. Passing `undefined` yields the all-defaults, disabled
- * configuration rather than throwing.
+ * An absent block yields the disabled defaults.
  *
- * @throws {z.ZodError} on a wrong type, unknown key, or a source-mirroring
- *   config missing its `sourceUserId`.
+ * @throws {z.ZodError} on an invalid block, including a source-mirroring
+ *   config without its `sourceUserId`.
  */
 export const parseIdentitySyncConfig = (raw: unknown): IdentitySyncPluginConfig =>
   ConfigSchema.parse(raw ?? {});

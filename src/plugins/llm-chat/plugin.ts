@@ -5,16 +5,14 @@
  *   - whitelisted users only (via `UserApiSettingRepo`);
  *   - @-mention starts a new session;
  *   - a reply to an active session message continues it (owner-only);
- *   - placeholder reply edited with the LLM response;
- *   - 2000-char-safe paragraph-aware chunking;
- *   - usage-footer appended;
- *   - sessions tracked by `SessionManager`;
+ *   - placeholder reply edited with the LLM response, chunked
+ *     paragraph-aware under the 2000-char limit, with a usage footer;
  *   - all bot output sanitised with `allowedMentions: { parse: [] }`
  *     so prompt-induced @everyone/@role/@user pings cannot fire.
  *
- * Bot identity is injected via `clientId` — the plugin uses it to
- * strip its own mention from input, to drive the new-vs-continue
- * branching, and to tag error logs.
+ * Bot identity is injected via `clientId`: it strips the plugin's own
+ * mention from input, drives the new-vs-continue branching, and tags
+ * error logs.
  */
 import type { Message } from 'discord.js';
 

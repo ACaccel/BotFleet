@@ -1,37 +1,21 @@
 /**
- * Per-guild MongoDB connection lifecycle.
+ * Per-guild MongoDB connection lifecycle: opens, closes, and tracks one
+ * `Connection` per guild id. Repositories receive a `Connection` via
+ * {@link ConnectionManager.getConnection} and never call
+ * `mongoose.createConnection` themselves.
  *
- * Owns the SDK boundary to mongoose: opening, closing, and tracking
- * one `Connection` per guild id. Repositories receive a `Connection`
- * (via {@link ConnectionManager.getConnection}) and never touch
- * `mongoose.createConnection` themselves — that keeps `persistence/`
- * free of SDK lifecycle concerns and makes test substitution trivial.
+ * A failed open is classified by the `persistence/` error translator. A
+ * transient failure (`DATABASE_TIMEOUT` / `DATABASE_NETWORK`) is retried with
+ * bounded exponential backoff; a persistent failure, or exhausted retries,
+ * marks the guild disabled. Transiently disabled guilds get another bounded
+ * attempt after a configurable cooldown; persistent ones stay disabled until
+ * {@link close} / {@link closeAll}. Each marker carries a `traceId` so the
+ * user-facing `errors:db.guild_disabled` message correlates with the boot
+ * log.
  *
- * Why `infra/mongo/` and not `persistence/`:
- *   `persistence/` owns the mapping from domain to storage (schemas +
- *   repositories). Connection acquisition is the SDK boundary, the same
- *   category as a Discord client or LLM HTTP client, per the layer
- *   rules that keep SDK boundaries out of `persistence/`.
- *
- * Resilience:
- *   `getConnection` classifies a failed open via the `persistence/`
- *   error-translator. A *transient* failure (`DATABASE_TIMEOUT` /
- *   `DATABASE_NETWORK`) is retried with bounded exponential backoff; a
- *   *persistent* failure — or a transient one whose retries are
- *   exhausted — marks the guild **disabled**. Transiently disabled guilds
- *   become eligible for another bounded attempt after a configurable
- *   cooldown. Persistent failures remain disabled until {@link close} /
- *   {@link closeAll} clears the marker. Each disabled marker carries a
- *   generated `traceId` so the user-facing `errors:db.guild_disabled`
- *   message can be grep-correlated to the structured boot log.
- *
- *   Per-URI sharing: `MongoConnectionManager` instances are pooled by
- *   base URI in the composition root (`BaseBot.sharedConnectionManagers`).
- *   Because the disabled set is now manager-internal state, two bots
- *   that share one base URI also share one disabled set — a guild
- *   disabled for one is disabled for the other. This is intentional:
- *   they target the same physical database, so the failure is the
- *   same failure.
+ * Managers are pooled per base URI (`BaseBot.sharedConnectionManagers`), so
+ * bots sharing a URI share one disabled set. This is intentional: same
+ * database, same failure.
  */
 import mongoose, { type Connection } from 'mongoose';
 import { ARCHIVE_PROCESS_ID } from '../archive/owner';

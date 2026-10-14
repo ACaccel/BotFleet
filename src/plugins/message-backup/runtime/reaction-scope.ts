@@ -87,7 +87,7 @@ export const noReactions = (raw: Record<string, unknown>): boolean =>
   raw.reactions === undefined || (Array.isArray(raw.reactions) && raw.reactions.length === 0);
 const NO_REACTIONS: ReactionRefreshScope = { kind: 'none' };
 /**
- * The reaction lists a live event's reconciliation rereads (C5). Lists never
+ * The reaction lists a live event's reconciliation rereads. Lists never
  * completely refreshed, refreshed before the current lossless capture window, or
  * already marked stale by an earlier change still to be answered, are reread whole. Otherwise an edit or poll vote changes no list, and
  * a reaction event names the one it changed; an event that does not say rereads all.

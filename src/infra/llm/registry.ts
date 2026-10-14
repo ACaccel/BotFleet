@@ -1,31 +1,18 @@
 /**
- * LlmProviderRegistry — Strategy lookup keyed by provider name.
+ * Strategy lookup for LLM providers, keyed by provider name.
  *
- * The registry holds *factories* rather than instances so a deployment
- * that only configures one provider's API key does not crash at
- * startup when other providers' SDKs reject the missing credentials.
- * Construction is deferred to first use; the registry caches the
- * instance after that.
+ * Holds factories rather than instances so a deployment configuring only one
+ * provider's key does not crash at startup when other SDKs reject missing
+ * credentials. Instances are built on first use and cached.
  *
- * API keys arrive as a pre-resolved `apiKeys` map (populated by the
- * composition root from the typed `Env`) rather than being read from
- * `process.env`, so the strict env-access rule holds throughout
- * `infra/llm`.
+ * `tryResolve` returns a `Result` for the recoverable missing-key path so
+ * `LLMService` stays on the Result rail; `resolve` throws
+ * `MissingApiKeyError` for callers that handle it directly. Both throw a
+ * native `TypeError` for an unknown provider (a programmer error).
  *
- * Two-shape resolution: `tryResolve` returns
- * `Result<LLMProvider, LlmProviderError>` for the recoverable
- * missing-key path so `LLMService` can stay on the Result rail end-
- * to-end; `resolve` keeps the throwing shape for callers that handle
- * `MissingApiKeyError` directly (test fixtures).
- *
- * Both shapes throw a native `TypeError` for the unknown-provider
- * programmer error per the DomainError convention.
- *
- * Adding a new provider:
- *   1. Implement {@link LLMProvider}.
- *   2. Append the name to {@link LLMProviderName} in `./types`.
- *   3. Pass its API-key value in the `apiKeys` map at the call site.
- *   4. Add one line to {@link createDefaultRegistry} below.
+ * Adding a provider: implement {@link LLMProvider}, append its name to
+ * {@link LLMProviderName}, pass its key in `apiKeys`, and register it in
+ * {@link createDefaultRegistry}.
  */
 import { LlmProviderError } from '../../core/errors';
 import { err, ok, type Result } from '../../core/result';

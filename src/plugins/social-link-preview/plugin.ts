@@ -1,31 +1,18 @@
 /**
- * SocialLinkPreviewPlugin — a `messageCreate` subscriber that detects
- * social-media share links (Twitter/X, Instagram, Threads, Facebook,
- * Bahamut), posts a better preview, and suppresses the user's original
- * auto-preview.
- *
- * Hybrid mechanism (see `src/infra/link-preview/`): video-capable
- * sources are rewritten to an embed-proxy domain so Discord unfurls a
- * playable video; Facebook retains metadata for custom cards and bounded
- * video attachments; X posts read from a JSON API become custom cards,
- * keeping the proxy for videos it can play. Sources without a proxy
- * (Bahamut) use static cards. The provider framework is extensible —
- * adding a source is one provider file plus one registry line, with no
+ * `messageCreate` subscriber that detects social-media share links, posts a
+ * better preview, and suppresses the user's original auto-preview. Provider
+ * mechanics live in `src/infra/link-preview/`; adding a source needs no
  * change here.
  *
- * Factory pattern (mirrors `createLlmAutoReplyPlugin`): per-bot settings
- * are parsed once and the provider registry is captured in the closure,
- * so the returned object is pure data. The registry exists only when the
- * feature is enabled, because the embed-proxy host lists it is built from
- * are operator configuration that a disabled bot never supplies. Channel
- * suppression is decided per event by the {@link PermissionRankPolicy}
- * resolved once in `init` (the `social_preview`
- * feature; its default ceiling is unbounded, so previews fire everywhere
- * unless an operator sets a finite ceiling). `deps` exposes an injectable
- * `registry` seam for deterministic tests.
+ * Per-bot settings are parsed once in the factory. The provider registry is
+ * built only when the feature is enabled, because the embed-proxy host lists
+ * it needs are operator configuration a disabled bot never supplies. Channel
+ * suppression uses the {@link PermissionRankPolicy} resolved in `init` (the
+ * `social_preview` feature, unbounded by default). `deps.registry` is a
+ * test seam.
  *
- * The event handler swallows every error so a bad link cannot break
- * the channel.
+ * The event handler swallows every error so a bad link cannot break the
+ * channel.
  */
 import { logError } from '../../core/logger';
 import type { PermissionRankPolicy, Plugin } from '../../core/plugin';
