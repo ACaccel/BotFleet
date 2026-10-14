@@ -1,15 +1,26 @@
 {
   "admin": ["YOUR_ADMIN_USER_ID"],
   "language": "zh-TW",
+  "timeZone": "Asia/Taipei",
+  "thread_moderation": {
+    "enabled": true
+  },
   "guilds": {
     "YOUR_GUILD_ID": {
       "channels": {
         "debug": "YOUR_DEBUG_CHANNEL_ID",
-        "event": "YOUR_EVENT_CHANNEL_ID"
+        "event": "YOUR_EVENT_CHANNEL_ID",
+        "giveaway": "YOUR_GIVEAWAY_CHANNEL_ID"
+      },
+      "roles": {
+        "ban_user": "YOUR_BAN_USER_ROLE_ID"
       },
       "permission_rank": {
         "channels": {
           "YOUR_PRIVATE_CHANNEL_ID": 1
+        },
+        "roles": {
+          "YOUR_STAFF_ROLE_ID": 2
         },
         "features": {
           "guild_events": {
@@ -36,7 +47,25 @@
       "closed": "Closed"
     }
   },
-  "commands": ["help", "role", "random_restaurant"],
+  "commands": [
+    "help",
+    "activity",
+    "ban_user",
+    "bug_report",
+    "gay",
+    "give_score",
+    "giveaway",
+    "level_detail",
+    "menu_get_avatar",
+    "menu_get_sticker",
+    "random_restaurant",
+    "reply",
+    "role",
+    "roll_call",
+    "talk",
+    "thread",
+    "traffic"
+  ],
   "guild_events": {
     "attachment_cache": {
       "enabled": true,

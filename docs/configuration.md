@@ -60,6 +60,17 @@ The optional base fields are defined by [Config](../src/bot/index.ts).
 | `guilds.<id>.roles`           | Symbolic role names mapped to IDs                                                                                                                           |
 | `guilds.<id>.permission_rank` | Channel privacy and member clearance, below                                                                                                                 |
 
+Features look up these symbolic names:
+
+| Name         | Kind    | Used by                                                      |
+| ------------ | ------- | ------------------------------------------------------------ |
+| `debug`      | channel | Command logs, archive panels and operator notices            |
+| `event`      | channel | Guild-event mirror (message edits, deletions, member events) |
+| `giveaway`   | channel | `/giveaway create destination:configured`                    |
+| `earthquake` | channel | Earthquake alert broadcast (with the role below)             |
+| `ban_user`   | role    | Pinged by `/ban_user` vote calls; none when unset            |
+| `earthquake` | role    | Pinged by earthquake alerts                                  |
+
 Missing channel mappings skip channel-bound output. Message backups still run
 without a `debug` channel.
 

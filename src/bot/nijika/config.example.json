@@ -9,10 +9,13 @@
     "YOUR_GUILD_ID": {
       "channels": {
         "debug": "YOUR_DEBUG_CHANNEL_ID",
-        "giveaway": "YOUR_GIVEAWAY_CHANNEL_ID"
+        "event": "YOUR_EVENT_CHANNEL_ID",
+        "giveaway": "YOUR_GIVEAWAY_CHANNEL_ID",
+        "earthquake": "YOUR_EARTHQUAKE_CHANNEL_ID"
       },
       "roles": {
-        "ban_user": "YOUR_BAN_USER_ROLE_ID"
+        "ban_user": "YOUR_BAN_USER_ROLE_ID",
+        "earthquake": "YOUR_EARTHQUAKE_ROLE_ID"
       },
       "permission_rank": {
         "channels": {
@@ -46,9 +49,31 @@
       "closed": "Closed"
     }
   },
-  "commands": ["help", "random_restaurant", "role", "feed", "thread"],
+  "commands": [
+    "help",
+    "activity",
+    "ban_user",
+    "bug_report",
+    "change_avatar",
+    "feed",
+    "gay",
+    "give_score",
+    "giveaway",
+    "level_detail",
+    "menu_get_avatar",
+    "menu_get_sticker",
+    "random_restaurant",
+    "reply",
+    "role",
+    "roll_call",
+    "talk",
+    "thread",
+    "traffic"
+  ],
   "level_roles": {
-    "level_1": "YOUR_LEVEL_1_ROLE_ID"
+    "level_1": "YOUR_LEVEL_1_ROLE_ID",
+    "level_10": "YOUR_LEVEL_10_ROLE_ID",
+    "level_20": "YOUR_LEVEL_20_ROLE_ID"
   },
   "guild_events": {
     "attachment_cache": {

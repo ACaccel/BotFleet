@@ -3,7 +3,17 @@
   "language": "zh-TW",
   "guilds": {
     "YOUR_GUILD_ID": {
-      "channels": { "debug": "YOUR_DEBUG_CHANNEL_ID" }
+      "channels": { "debug": "YOUR_DEBUG_CHANNEL_ID" },
+      "permission_rank": {
+        "channels": {
+          "YOUR_PRIVATE_CHANNEL_ID": 1
+        },
+        "features": {
+          "channel_logging": {
+            "maxChannelRank": 0
+          }
+        }
+      }
     }
   },
   "commands": ["help"],
