@@ -32,10 +32,8 @@ import { ARCHIVE_RESCAN_SAFETY_MS } from '../../../src/core/archive/continuity';
 import { withFreshConnection } from '../helpers/mongo';
 import {
   buildArchiveWorker,
-  controlWallClock,
   stubArchiveInventory,
   type StoredMessage,
-  type WallClock,
 } from '../../helpers/archive-worker-fixture';
 import { collectChannels } from '../../../src/plugins/message-backup/internal/collect-channels';
 
@@ -1512,18 +1510,8 @@ describe('msg-archive worker integration', () => {
     Object.assign(new Error(`Discord API error ${code}`), { code, status });
 
   const inboxOf = (connection: Db) => connection.collection('archive_inbox');
-  /**
-   * Edits an event directly, then moves the clock past the inbox repository's 250 ms
-   * empty-claim cache, which the direct edit bypassed.
-   */
-  const edit = async (
-    connection: Db,
-    clock: WallClock,
-    eventId: string,
-    fields: Record<string, unknown>,
-  ) => {
+  const edit = async (connection: Db, eventId: string, fields: Record<string, unknown>) => {
     await inboxOf(connection).updateOne({ eventId }, { $set: fields });
-    clock.advance(250);
   };
   const seedChannel = (connection: Db) =>
     connection
@@ -1753,7 +1741,6 @@ describe('msg-archive worker integration', () => {
   it('retries transient failures uncounted and dead-letters them a day after the first', async () =>
     withFreshConnection(async (connection) => {
       const { worker, client } = fixture(new StaticConnectionManager(connection));
-      const clock = controlWallClock();
       failingReconcile(client, discordError(0, 503));
       try {
         const state = await worker.initialize('1');
@@ -1764,7 +1751,7 @@ describe('msg-archive worker integration', () => {
         expect(event).toMatchObject({ state: 'pending', attempts: 0 });
         expect(event?.['firstFailedAt']).toBeGreaterThanOrEqual(before);
         expect(event?.['nextAttemptAt']).toBeGreaterThanOrEqual(before + 60_000);
-        await edit(connection, clock, 'flaky', {
+        await edit(connection, 'flaky', {
           nextAttemptAt: 0,
           firstFailedAt: Date.now() - 86_400_000,
         });
@@ -1821,7 +1808,6 @@ describe('msg-archive worker integration', () => {
     withFreshConnection(async (connection) => {
       const { worker, client } = fixture(new StaticConnectionManager(connection));
       const control = await archiveControlFor(connection);
-      const clock = controlWallClock();
       try {
         const state = await worker.initialize('1');
         // A first full pass makes the following runs incremental.
@@ -1836,16 +1822,16 @@ describe('msg-archive worker integration', () => {
           expect(event?.['nextAttemptAt']).toBeGreaterThanOrEqual(
             before + 60_000 * 2 ** (attempts - 1),
           );
-          await edit(connection, clock, 'poison', { nextAttemptAt: 0 });
+          await edit(connection, 'poison', { nextAttemptAt: 0 });
         }
         // The tenth counted failure still retries, at the one-hour cap.
-        await edit(connection, clock, 'poison', { attempts: 9 });
+        await edit(connection, 'poison', { attempts: 9 });
         let before = Date.now();
         await worker.drainInbox('1');
         const tenth = await inboxOf(connection).findOne({ eventId: 'poison' });
         expect(tenth).toMatchObject({ state: 'pending', attempts: 10 });
         expect(tenth?.['nextAttemptAt']).toBeGreaterThanOrEqual(before + 3_600_000);
-        await edit(connection, clock, 'poison', { nextAttemptAt: 0 });
+        await edit(connection, 'poison', { nextAttemptAt: 0 });
         await worker.drainInbox('1');
         const dead = await inboxOf(connection).findOne({ eventId: 'poison' });
         expect(dead).toMatchObject({

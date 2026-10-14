@@ -14,9 +14,11 @@ import { ArchivePolicySchema } from '../../src/core/archive/policy';
 import type { Translator } from '../../src/core/i18n';
 import type { Logger } from '../../src/core/logger';
 import type { ConnectionManager } from '../../src/infra/mongo/connection-manager';
+import { MongoArchiveInboxRepo } from '../../src/persistence/repositories/archive-inbox.repo';
 import {
   buildArchiveRepos,
   buildArchiveWriterRepos,
+  type ArchiveWriterReposFactory,
 } from '../../src/persistence/repositories/archive-repos';
 import { archiveRuntimeSchema } from '../../src/plugins/message-backup/config';
 import { collectChannels } from '../../src/plugins/message-backup/internal/collect-channels';
@@ -24,6 +26,16 @@ import { archiveBackupNotifiers } from '../../src/plugins/message-backup/runtime
 import { ArchiveWorker } from '../../src/plugins/message-backup/runtime/worker';
 import type { ArchiveWorkerOptions } from '../../src/plugins/message-backup/runtime/worker-context';
 import { echoTranslator, silentLogger } from '../fixtures/runtime';
+
+/**
+ * Writer repositories whose inbox does not cache empty claims. Suites edit inbox
+ * documents directly, behind the repository's back, and expect the next drain to
+ * see the edit; the cache itself is covered in `archive-repo.int.test.ts`.
+ */
+const uncachedInboxWriterRepos: ArchiveWriterReposFactory = (guild) => ({
+  ...buildArchiveWriterRepos(guild),
+  inbox: new MongoArchiveInboxRepo(guild, 'msg-archive', { emptyClaimCacheMs: 0 }),
+});
 
 /** A raw `messages` document, keyed by the Discord message ID. */
 export type StoredMessage = { _id: string } & Record<string, any>;
@@ -145,7 +157,7 @@ export const buildArchiveWorker = (options: ArchiveWorkerFixtureOptions): Archiv
     translator,
     backupNotifiers: archiveBackupNotifiers(client, translator),
     archiveRepos: buildArchiveRepos,
-    writerRepos: buildArchiveWriterRepos,
+    writerRepos: uncachedInboxWriterRepos,
     inboxLoop: false,
     ...options.worker,
   });
@@ -161,35 +173,15 @@ export const keyWithParamsTranslator = (): Translator => ({
   t: (key, params) => (params === undefined ? key : `${key}${JSON.stringify(params)}`),
 });
 
-/** Wall clock a test controls; see `controlWallClock`. */
-export interface WallClock {
-  /** Moves the clock forward without waiting. */
-  advance(ms: number): void;
-  /** Stops the clock at its current reading; `advance` still moves it. Returns the reading. */
-  freeze(): number;
-}
-
 /**
- * Takes over `Date.now()` for the rest of the test. Production windows that read
- * the wall clock (the inbox repository's empty-claim cache, retry deadlines) are
- * then crossed with `advance` instead of a real sleep, and a frozen clock makes
- * time-derived fields exact. Timers and Mongo I/O stay real, unlike fake timers.
- * `new Date()` without arguments keeps reading the real clock.
+ * Stops `Date.now()` at its current reading for the rest of the test and returns
+ * that reading, so time-derived fields can be asserted exactly. Timers and Mongo
+ * I/O stay real, unlike fake timers; `new Date()` without arguments keeps reading
+ * the real clock.
  */
-export const controlWallClock = (): WallClock => {
-  const real = Date.now;
-  let offset = 0;
-  let frozenAt: number | undefined;
-  const spy = vi.spyOn(Date, 'now').mockImplementation(() => frozenAt ?? real() + offset);
+export const freezeWallClock = (): number => {
+  const frozenAt = Date.now();
+  const spy = vi.spyOn(Date, 'now').mockReturnValue(frozenAt);
   onTestFinished(() => spy.mockRestore());
-  return {
-    advance(ms) {
-      if (frozenAt === undefined) offset += ms;
-      else frozenAt += ms;
-    },
-    freeze() {
-      frozenAt ??= real() + offset;
-      return frozenAt;
-    },
-  };
+  return frozenAt;
 };

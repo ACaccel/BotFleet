@@ -7,7 +7,7 @@ import { ArchiveScheduler } from '../../../src/plugins/message-backup/flow/sched
 import { withFreshConnection } from '../helpers/mongo';
 import {
   buildArchiveWorker,
-  controlWallClock,
+  freezeWallClock,
   stubArchiveInventory,
   type StoredMessage,
 } from '../../helpers/archive-worker-fixture';
@@ -313,11 +313,10 @@ describe('msg-archive live reconciliation safeguards', () => {
     withFreshConnection(async (connection) => {
       const f = fixture(connection);
       const inbox = connection.collection('archive_inbox');
-      const clock = controlWallClock();
       try {
         await f.worker.initialize('1');
         await f.packet('MESSAGE_CREATE', f.message('101'));
-        const now = clock.freeze();
+        const now = freezeWallClock();
         // The creation failed once and waits for its retry.
         await inbox.updateOne({ kind: 'snapshot' }, { $set: { nextAttemptAt: now + 60_000 } });
         await f.packet('MESSAGE_REACTION_ADD', { message_id: '101', emoji: THUMBS, type: 0 });
@@ -328,8 +327,6 @@ describe('msg-archive live reconciliation safeguards', () => {
         expect(waiting?.['nextAttemptAt']).toBe(now + 60_000);
         expect(await f.stored()).toBeNull();
         await inbox.updateMany({}, { $unset: { nextAttemptAt: 1 } });
-        // The repository caches an empty claim for 250 ms; this edit bypassed it.
-        clock.advance(250);
         await f.worker.drainInbox('1');
         expect(await inbox.countDocuments()).toBe(0);
         // The creation does not claim an empty list; the lists are read whole.

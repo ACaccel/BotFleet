@@ -92,16 +92,30 @@ const counterFields = (counters: ArchiveInboxCounters | undefined) => ({
   ...(counters?.attempts === undefined ? {} : { attempts: counters.attempts }),
   ...(counters?.firstFailedAt === undefined ? {} : { firstFailedAt: counters.firstFailedAt }),
 });
+/**
+ * How long an empty claim is remembered, so an idle inbox loop does not query
+ * on every poll. Writes through this repository invalidate it at once.
+ */
+export const ARCHIVE_INBOX_EMPTY_CLAIM_CACHE_MS = 250;
+
+interface ArchiveInboxRepoOptions {
+  /** Defaults to {@link ARCHIVE_INBOX_EMPTY_CLAIM_CACHE_MS}; 0 disables the cache. */
+  readonly emptyClaimCacheMs?: number;
+}
+
 export class MongoArchiveInboxRepo implements ArchiveInboxRepo {
   private inboxVersion = 0;
   private emptyInboxAt = Number.NEGATIVE_INFINITY;
   private emptyInboxUntil = Number.NEGATIVE_INFINITY;
   private pendingEmptyProbe: Promise<number | undefined> | undefined;
+  private readonly emptyClaimCacheMs: number;
   public constructor(
     private readonly conn: GuildConnection,
     owner: ArchiveOwner,
+    options: ArchiveInboxRepoOptions = {},
   ) {
     assertArchiveWriter(conn, owner);
+    this.emptyClaimCacheMs = options.emptyClaimCacheMs ?? ARCHIVE_INBOX_EMPTY_CLAIM_CACHE_MS;
   }
   public async enqueue(entry: ArchiveInboxDraft): Promise<void> {
     this.invalidateInboxProbe();
@@ -196,7 +210,8 @@ export class MongoArchiveInboxRepo implements ArchiveInboxRepo {
       const nextAt = await this.pendingEmptyProbe;
       if (version === this.inboxVersion) {
         this.emptyInboxAt = now;
-        this.emptyInboxUntil = Math.min(now + 250, nextAt ?? now + 250);
+        const until = now + this.emptyClaimCacheMs;
+        this.emptyInboxUntil = Math.min(until, nextAt ?? until);
       }
       return [];
     }

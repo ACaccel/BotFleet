@@ -11,6 +11,7 @@ import {
   type ArchiveMutationInterceptor,
 } from '../../../src/persistence/repositories/archive.repo';
 import {
+  ARCHIVE_INBOX_EMPTY_CLAIM_CACHE_MS,
   ArchiveInboxInvalidError,
   ArchiveInboxOversizedError,
   isArchiveInboxUnclaimable,
@@ -701,6 +702,37 @@ describe('Mongo archive durability', () => {
       find.mockRestore();
       await inboxRepo.enqueue(reactionEvent('next', 3));
       expect((await inboxRepo.claimInbox('d', now + 2, 100))?.eventId).toBe('next');
+    });
+  });
+  it('queries an empty inbox again once the empty-claim cache window ends', async () => {
+    await withFreshConnection(async (connection) => {
+      const { conn, inboxRepo } = await openRepo(connection);
+      const find = vi.spyOn(conn.models.ArchiveInbox.collection, 'find');
+      expect(await inboxRepo.claimInbox('a', 1_000, 100)).toBeUndefined();
+      expect(
+        await inboxRepo.claimInbox('a', 1_000 + ARCHIVE_INBOX_EMPTY_CLAIM_CACHE_MS - 1, 100),
+      ).toBeUndefined();
+      expect(find).toHaveBeenCalledTimes(1);
+      expect(
+        await inboxRepo.claimInbox('a', 1_000 + ARCHIVE_INBOX_EMPTY_CLAIM_CACHE_MS, 100),
+      ).toBeUndefined();
+      expect(find).toHaveBeenCalledTimes(2);
+      find.mockRestore();
+    });
+  });
+  it('queries on every empty claim when the cache is disabled', async () => {
+    await withFreshConnection(async (connection) => {
+      const conn = await new StaticConnectionManager(connection).getConnection(guildId);
+      const inboxRepo = new MongoArchiveInboxRepo(conn, 'msg-archive', { emptyClaimCacheMs: 0 });
+      expect(await inboxRepo.claimInbox('a', 1_000, 100)).toBeUndefined();
+      // A write that bypasses the repository is visible to the next claim at the
+      // same instant; with the default cache that claim would still return nothing.
+      await conn.models.ArchiveInbox.collection.insertOne({
+        ...reactionEvent('direct', 1),
+        state: 'pending',
+        attempts: 0,
+      });
+      expect((await inboxRepo.claimInbox('a', 1_000, 100))?.eventId).toBe('direct');
     });
   });
   it('expires dead letters after 30 days through a TTL index', async () => {
