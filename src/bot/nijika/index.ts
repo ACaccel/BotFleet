@@ -1,7 +1,7 @@
 import { Nijika } from './nijika';
 import config from './config.json';
 
-import { bootstrapPersonality, GUILD_OBSERVER_INTENTS } from '../bootstrap';
+import { bootstrapPersonality, DM_PARTIALS, GUILD_OBSERVER_INTENTS } from '../bootstrap';
 
 // `requirePort` makes env validation fail fast when `PORT` is absent —
 // nijika cannot run without it because the earthquake webhook plugin
@@ -11,6 +11,8 @@ import { bootstrapPersonality, GUILD_OBSERVER_INTENTS } from '../bootstrap';
 bootstrapPersonality({
   name: 'nijika',
   intents: GUILD_OBSERVER_INTENTS,
+  // `/bug_report` replies reach the bot as DMs.
+  partials: DM_PARTIALS,
   env: { requirePort: true },
   // `requirePort` above guarantees `env.PORT` is defined; the assertion
   // documents that invariant for the type checker.

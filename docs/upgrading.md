@@ -56,6 +56,12 @@ Behaviour changes in the remaining commands:
   absentees when it closes. Roll calls from an activity show attendance on its
   post. The ✅-reaction tally is removed.
 
+- **`/bug_report`** opens a form and creates a ticket in a hub forum instead of
+  DMing admins. Before deploying, add a `bug_report.hub` block to Nijika's and
+  Tomori's `config.json` (see [configuration](configuration.md)), invite both bots
+  to the hub guild with the forum permissions listed there, and create the forum
+  tags named in `bug_report.tags`. Without the block the command is disabled.
+
 Register commands again after deploying so Discord shows the new options.
 
 ## Grouped slash commands

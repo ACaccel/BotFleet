@@ -4,6 +4,7 @@ import { BaseBot } from '@bot';
 import {
   createAutoReplyPlugin,
   createActivityPlugin,
+  createBugReportPlugin,
   createEarthquakePlugin,
   createGiveawayPlugin,
   createGuildEventsPlugin,
@@ -57,6 +58,8 @@ interface NijikaConfig extends Config {
    * here and may be omitted entirely.
    */
   guild_events?: unknown;
+  /** Raw `bug_report` block; validated by `/bug_report` and its plugin. */
+  bug_report?: unknown;
 }
 
 export class Nijika extends BaseBot<NijikaConfig> {
@@ -97,6 +100,14 @@ export class Nijika extends BaseBot<NijikaConfig> {
     // Temporary, permission-less notification roles with a self-claim
     // button and a hard 30-day expiry (see `createTempRolePlugin`).
     this.use(createTempRolePlugin());
+    // `/bug_report` tickets: relay between the hub forum and reporters' DMs.
+    this.use(
+      createBugReportPlugin({
+        config: this.config.bug_report,
+        isAdmin: (userId) => this.isAdmin(userId),
+        label: () => this.personaName || (this.client.user?.username ?? this.clientId),
+      }),
+    );
     if (RETIRED_FEED_CONFIG_KEY in config) {
       throw new Error(
         `nijika config.json still declares "${RETIRED_FEED_CONFIG_KEY}"; it is now "social_feed", ` +

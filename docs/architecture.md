@@ -104,6 +104,13 @@ Text that members author and the bot re-posts carries explicit `allowedMentions`
 - Activity announcements ping only their participants, and a roll call only the
   members it calls (at most 50).
 
+`/bug_report` tickets live in the hub guild's database, not the reporter's, because
+one forum serves every guild a bot is in. The bug-report plugin relays admin
+replies in a ticket's forum post to the reporter's DMs (messages starting with
+`//` stay internal) and the reporter's DMs back to the post, routed by the ticket
+number in the quoted DM, the only open ticket, or a menu. Both directions ping
+nobody. Nijika and Tomori receive DMs through `Partials.Channel`.
+
 Activities and roll calls are button-driven and persisted per guild. The activity
 plugin rebuilds both on startup and database recovery: an activity whose
 sign-up deadline passed while the bot was down closes immediately, a start

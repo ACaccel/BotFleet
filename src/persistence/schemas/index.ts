@@ -16,6 +16,7 @@ import type { ArchiveInboxDocument, ArchiveJob, ArchiveChannel } from '../../cor
  */
 import { activitySchema, type ActivityDoc } from './activity.schema';
 import { aiUsageSchema, type AiUsageDoc } from './ai-usage.schema';
+import { bugTicketSchema, type BugTicketDoc } from './bug-ticket.schema';
 import { feedSubscriptionSchema, type FeedSubscriptionDoc } from './feed-subscription.schema';
 import { fetchSchema, type FetchDoc } from './fetch.schema';
 import { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
@@ -33,6 +34,7 @@ export * from './archive.schema';
 
 export { activitySchema, type ActivityDoc } from './activity.schema';
 export { aiUsageSchema, type AiUsageDoc } from './ai-usage.schema';
+export { bugTicketSchema, type BugTicketDoc } from './bug-ticket.schema';
 export {
   feedSubscriptionSchema,
   type FeedSubscriptionDoc,
@@ -73,6 +75,7 @@ export const SCHEMAS = {
   FeedSubscription: feedSubscriptionSchema,
   AiUsage: aiUsageSchema,
   RollCall: rollCallSchema,
+  BugTicket: bugTicketSchema,
 } as const;
 
 export type SchemaName = keyof typeof SCHEMAS;
@@ -99,4 +102,5 @@ export interface DocByName {
   FeedSubscription: FeedSubscriptionDoc;
   AiUsage: AiUsageDoc;
   RollCall: RollCallDoc;
+  BugTicket: BugTicketDoc;
 }

@@ -11,12 +11,7 @@
     }
   },
   "bug_report": {
-    "description": "Report a bug",
-    "options": {
-      "content": {
-        "description": "Bug description"
-      }
-    }
+    "description": "Report a problem or suggestion to the bot admins"
   },
   "change_avatar": {
     "description": "Switch the bot's persona (avatar, nickname and colour)",

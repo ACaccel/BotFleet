@@ -9,7 +9,7 @@
  * so those are the parameters and everything else lives here; a startup
  * concern added here reaches all five personalities at once.
  */
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import dotenv from 'dotenv';
 
 import { loadEnv, type Env } from '../core/config';
@@ -63,6 +63,8 @@ interface BootstrapOptions {
    */
   readonly name: string;
   readonly intents: readonly GatewayIntentBits[];
+  /** Partial structures to receive, such as DM channels for DM message events. */
+  readonly partials?: readonly Partials[];
   /** Env requirements this personality cannot start without. */
   readonly env?: {
     /** Require a usable `MONGO_URI`. Defaults to true. */
@@ -80,13 +82,22 @@ interface BootstrapOptions {
  * teardown, exit 1) so a rejected login can never leave a zombie
  * process behind.
  */
+/**
+ * Partials for personalities that read DMs: discord.js emits a DM's
+ * `messageCreate` only when the uncached DM channel may be partial.
+ */
+export const DM_PARTIALS: readonly Partials[] = [Partials.Channel];
+
 export const bootstrapPersonality = (options: BootstrapOptions): void => {
   dotenv.config({ path: `./src/bot/${options.name}/.env` });
   const env = loadEnv({
     requireDb: options.env?.requireDb ?? true,
     requirePort: options.env?.requirePort ?? false,
   });
-  const client = new Client({ intents: [...options.intents] });
+  const client = new Client({
+    intents: [...options.intents],
+    ...(options.partials ? { partials: [...options.partials] } : {}),
+  });
   // `runOrExit` is written to always resolve, so the `catch` is the last
   // hole in the entry-point failure path rather than a routine branch:
   // it covers a throw on the failure path itself (a logger that is bound

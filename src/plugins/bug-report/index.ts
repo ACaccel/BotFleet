@@ -1,0 +1,1 @@
+export { createBugReportPlugin } from './plugin';

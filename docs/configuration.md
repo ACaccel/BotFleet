@@ -52,7 +52,7 @@ The optional base fields are defined by [Config](../src/bot/index.ts).
 
 | Field                         | Purpose                                                                                                                                                     |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                       | Bot-admin IDs for `/ai whitelist`, anonymous `/talk`, `/bug_report`, msg-archive's `/archive` and its notices; default `[]`                                 |
+| `admin`                       | Bot-admin IDs for `/ai whitelist`, anonymous `/talk`, closing `/bug_report` tickets, msg-archive's `/archive` and its notices; default `[]`                 |
 | `language`                    | `zh-TW` (default) or `en`; also controls registered command text                                                                                            |
 | `timeZone`                    | IANA zone for report calendars, such as `/traffic` days and heat maps; default `UTC`; an unknown zone stops startup                                         |
 | `commands`                    | Commands to expose; an unknown name stops startup and registration; [register again](contributing/local-setup.md#registering-slash-commands) after changing |
@@ -81,20 +81,30 @@ Use the matching example:
 [msg-archive](../src/bot/msg-archive/config.example.json).
 Plugin settings are validated at startup; strict schemas reject unknown keys.
 
-| Setting                         | Bot            | Purpose / default                                                                  |
-| ------------------------------- | -------------- | ---------------------------------------------------------------------------------- |
-| `llm_auto_reply`                | gopher         | Self-hosted endpoint, reply probability, context, cooldown and timeout             |
-| `settings_api`                  | gopher         | Disabled; binds `127.0.0.1` at `/settings`, using `PORT` and bearer authentication |
-| `identity_sync`                 | gopher         | Avatar/nickname sync; requires `sourceUserId` when sync is enabled                 |
-| `social_link_preview`           | nijika, tomori | Disabled; provider/proxy lists and request limits                                  |
-| `social_feed`                   | nijika         | Disabled; enabled feeds require a nonempty `platforms` map (`x` supported)         |
-| `guild_events.attachment_cache` | nijika, tomori | Enabled; see attachment storage below                                              |
-| `level_roles`                   | nijika         | `level_<n>` to role-ID map for `/role sync`; legacy role names remain supported    |
-| `temp_role.maxActivePerMember`  | nijika, tomori | Active temporary roles per creator in a guild; default `3`, integer `1`–`50`       |
-| `auto_reply`                    | nijika, tomori | Per-user `luckyReplies`; `globalLuckyProbability` defaults to `0.005`              |
-| `random_restaurant.apiUrl`      | nijika, tomori | Absolute HTTP(S) recommendation endpoint                                           |
+| Setting                         | Bot            | Purpose / default                                                                          |
+| ------------------------------- | -------------- | ------------------------------------------------------------------------------------------ |
+| `llm_auto_reply`                | gopher         | Self-hosted endpoint, reply probability, context, cooldown and timeout                     |
+| `settings_api`                  | gopher         | Disabled; binds `127.0.0.1` at `/settings`, using `PORT` and bearer authentication         |
+| `identity_sync`                 | gopher         | Avatar/nickname sync; requires `sourceUserId` when sync is enabled                         |
+| `social_link_preview`           | nijika, tomori | Disabled; provider/proxy lists and request limits                                          |
+| `social_feed`                   | nijika         | Disabled; enabled feeds require a nonempty `platforms` map (`x` supported)                 |
+| `guild_events.attachment_cache` | nijika, tomori | Enabled; see attachment storage below                                                      |
+| `level_roles`                   | nijika         | `level_<n>` to role-ID map for `/role sync`; legacy role names remain supported            |
+| `temp_role.maxActivePerMember`  | nijika, tomori | Active temporary roles per creator in a guild; default `3`, integer `1`–`50`               |
+| `bug_report.hub`                | nijika, tomori | Required for `/bug_report`: `guildId` and forum `channelId` receiving every ticket         |
+| `bug_report.tags`               | nijika, tomori | Optional forum tag names for `bug`, `suggestion`, `other`, `open`, `in_progress`, `closed` |
+| `auto_reply`                    | nijika, tomori | Per-user `luckyReplies`; `globalLuckyProbability` defaults to `0.005`                      |
+| `random_restaurant.apiUrl`      | nijika, tomori | Absolute HTTP(S) recommendation endpoint                                                   |
 
 Invalid role or restaurant settings disable the affected command.
+
+`/bug_report` posts each ticket in the `bug_report.hub` forum, which may sit in a
+guild the bot does not otherwise serve. The bot must be a member there with View
+Channel, Send Messages, Send Messages in Threads, Embed Links, Manage Threads, Add
+Reactions and Read Message History on the forum; the bug-report plugin checks this
+at startup and is disabled (failing readiness) when a permission is missing. Tags
+named in `bug_report.tags` must already exist on the forum; unknown names are
+logged and skipped.
 
 `/change_avatar` reads each persona's image from `data/avatars/<avatar_file>`, with
 names from [`identity.json`](../src/handlers/commands/change_avatar/identity.json).

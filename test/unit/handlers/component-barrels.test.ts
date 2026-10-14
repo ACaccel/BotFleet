@@ -54,6 +54,7 @@ describe('modal barrel', () => {
     expect([...bot.modalHandlers.keys()].sort()).toEqual([
       'activity_create',
       'ai_settings',
+      'bug_report',
       'giveaway_create',
     ]);
   });
@@ -83,6 +84,7 @@ describe('select-menu barrel', () => {
     await registerSSMs(bot);
 
     expect([...bot.ssmHandlers.keys()].sort()).toEqual([
+      'bug_ticket_pick',
       'delete_reply',
       'giveaway_delete',
       'help_category',

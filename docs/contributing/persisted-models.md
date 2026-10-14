@@ -46,6 +46,10 @@ clicks cannot exceed a capacity or count twice. Both expire seven days after
 closing through a TTL index on `purge_at`; earlier activity rows without the new
 fields read as open activities with no creator.
 
+`BugTicket` stores ticket metadata (number per bot, reporter, source, forum post,
+status) in the configured hub guild's database; the conversation stays in Discord.
+Handlers reach it through `hubTicketStore`, not `buildRepos`.
+
 `AiUsage` records only a member ID and request timestamp in each guild database;
 its compound lookup index serves rolling usage windows and its timestamp index
 expires records after 25 hours. Keep admission through `AiUsageRepo`, without

@@ -55,6 +55,7 @@ describe('Tomori composition', () => {
         'social-link-preview',
         'giveaway',
         'temp-role',
+        'bug-report',
         'activity',
       ]),
     );

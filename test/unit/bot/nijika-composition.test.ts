@@ -64,6 +64,7 @@ describe('Nijika composition', () => {
         'social-link-preview',
         'giveaway',
         'temp-role',
+        'bug-report',
         'activity',
         'social-feed',
         'earthquake',

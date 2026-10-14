@@ -11,12 +11,7 @@
     }
   },
   "bug_report": {
-    "description": "回報問題",
-    "options": {
-      "content": {
-        "description": "問題描述"
-      }
-    }
+    "description": "向 bot 管理員回報問題或建議"
   },
   "change_avatar": {
     "description": "切換 bot 的人格(頭像、暱稱與代表色)",
