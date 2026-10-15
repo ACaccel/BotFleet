@@ -104,7 +104,7 @@ describe('Tomori presence', () => {
     return { client, fireReady: () => readyHandler?.(), setPresence };
   };
 
-  it('sets a custom online presence from the translated key on ClientReady', () => {
+  it('sets a Playing online presence from the translated key on ClientReady', () => {
     const { client, fireReady, setPresence } = buildPresenceHarness();
     const bot = new Tomori(client, 'token', '', 'bot-client', { commands: [] } satisfies Config);
     bot.translator = fakeTranslator(PRESENCE_TEXT);
@@ -114,7 +114,7 @@ describe('Tomori presence', () => {
     expect(setPresence).toHaveBeenCalledTimes(1);
     expect(setPresence).toHaveBeenCalledWith({
       status: 'online',
-      activities: [{ name: PRESENCE_TEXT, type: ActivityType.Custom, state: PRESENCE_TEXT }],
+      activities: [{ name: PRESENCE_TEXT, type: ActivityType.Playing }],
     });
   });
 

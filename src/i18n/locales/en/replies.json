@@ -8,6 +8,7 @@
     }
   },
   "nijika": {
+    "presence_text": "Angel Nijika, who will burn you with a cigarette butt",
     "help_message": "### Currently supported features:\n1. auto reply: the bot replies based on message pairs in the database\n2. roll dice: example input -> `2d5`, randomly picks two numbers between 1 and 5\n",
     "persona_name": "Angel Nijika",
     "vote_flavor": "Let the Shimokitazawa angel's cigarette butt burn them!"

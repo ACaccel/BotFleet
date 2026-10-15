@@ -1,5 +1,5 @@
 import type { Client } from 'discord.js';
-import { Events } from 'discord.js';
+import { ActivityType, Events } from 'discord.js';
 import type { Config } from '@bot';
 import { BaseBot } from '@bot';
 import {
@@ -155,7 +155,25 @@ export class Nijika extends BaseBot<NijikaConfig> {
       // Read-only `/db` inspection on its own verified read-only account.
       this.use(createDbInspectPlugin({ uri: mongoInspectUri }));
     }
+    this.registerPresence();
     this.client.on(Events.GuildDelete, (guild) => this.invalidateGuildRuntime(guild.id));
+  }
+
+  /**
+   * Without an explicit presence, Discord clients tend to render an idle
+   * bot as offline even though its gateway session is still alive.
+   * Register a ready-time presence so nijika reliably appears online.
+   * A Playing activity renders as the profile card's "Playing" panel.
+   */
+  private registerPresence(): void {
+    this.client.once(Events.ClientReady, () => {
+      const text = this.translator?.t('replies:nijika.presence_text') ?? '';
+      if (text.length === 0) return;
+      this.client.user?.setPresence({
+        status: 'online',
+        activities: [{ name: text, type: ActivityType.Playing }],
+      });
+    });
   }
 
   protected override supportsGuildSettings(): boolean {

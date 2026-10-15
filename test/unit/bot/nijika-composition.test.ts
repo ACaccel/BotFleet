@@ -20,7 +20,7 @@
  */
 /* eslint-disable import/first */
 import { describe, expect, it, vi } from 'vitest';
-import { Events } from 'discord.js';
+import { ActivityType, Events } from 'discord.js';
 
 import { buildInertClient } from '../../fixtures/discord/client-builder';
 import type * as EarthquakePluginModule from '../../../src/plugins/earthquake/plugin';
@@ -60,6 +60,7 @@ import { createAutoReplyPlugin } from '../../../src/plugins/auto-reply/plugin';
 import { createGuildEventsPlugin } from '../../../src/plugins/guild-events/plugin';
 import { createSocialLinkPreviewPlugin } from '../../../src/plugins/social-link-preview/plugin';
 import { Tomori } from '../../../src/bot/tomori/tomori';
+import { echoTranslator } from '../../fixtures/runtime';
 
 /** Build nijika with the minimum config its constructor requires. */
 const buildNijika = (
@@ -93,6 +94,47 @@ const collectRegisteredPluginIds = (build: () => Nijika = () => buildNijika()): 
   }
   return ids;
 };
+
+describe('Nijika presence', () => {
+  const buildWithReadyHook = () => {
+    let readyHandler: (() => void) | undefined;
+    const setPresence = vi.fn();
+    const client = Object.assign(buildInertClient(), {
+      user: { setPresence },
+      once: (event: unknown, handler: () => void) => {
+        if (event === Events.ClientReady) readyHandler = handler;
+        return undefined;
+      },
+    });
+    const bot = new Nijika(client, 'token', '', 'bot-client', { level_roles: {} }, {}, undefined);
+    return { bot, setPresence, fireReady: () => readyHandler?.() };
+  };
+  const translatorFor = (text: string): NonNullable<Nijika['translator']> => ({
+    ...echoTranslator(),
+    t: (key) => (key === 'replies:nijika.presence_text' ? text : ''),
+  });
+
+  it('sets a Playing online presence from the translated key on ClientReady', () => {
+    const { bot, setPresence, fireReady } = buildWithReadyHook();
+    bot.translator = translatorFor('presence-status');
+
+    fireReady();
+
+    expect(setPresence).toHaveBeenCalledWith({
+      status: 'online',
+      activities: [{ name: 'presence-status', type: ActivityType.Playing }],
+    });
+  });
+
+  it('skips presence when the translated text is empty', () => {
+    const { bot, setPresence, fireReady } = buildWithReadyHook();
+    bot.translator = translatorFor('');
+
+    fireReady();
+
+    expect(setPresence).not.toHaveBeenCalled();
+  });
+});
 
 describe('Nijika composition', () => {
   it('includes settings once even when deployment commands omit or include it', () => {

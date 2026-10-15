@@ -103,8 +103,8 @@ export class Tomori extends BaseBot<TomoriConfig> {
   /**
    * Without an explicit presence, Discord clients tend to render an idle
    * bot as offline even though its gateway session is still alive.
-   * Register a ready-time presence so tomori reliably appears online
-   * with a custom status line.
+   * Register a ready-time presence so tomori reliably appears online.
+   * A Playing activity renders as the profile card's "Playing" panel.
    */
   private registerPresence(): void {
     this.client.once(Events.ClientReady, () => {
@@ -115,8 +115,7 @@ export class Tomori extends BaseBot<TomoriConfig> {
         activities: [
           {
             name: text,
-            type: ActivityType.Custom,
-            state: text,
+            type: ActivityType.Playing,
           },
         ],
       });

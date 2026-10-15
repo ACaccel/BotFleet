@@ -8,6 +8,7 @@
     }
   },
   "nijika": {
+    "presence_text": "會拿煙蒂燙你的虹夏大天使",
     "help_message": "### 目前支援的功能：\n1. auto reply: bot會根據資料庫的message pair回覆訊息\n2. roll dice: 輸入範例-> `2d5`, 在1~5隨機選擇兩個數字\n",
     "persona_name": "虹夏大天使",
     "vote_flavor": "被下北澤大天使的煙蒂燙吧!"
