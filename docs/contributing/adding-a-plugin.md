@@ -40,6 +40,8 @@ Do not cast the context to access the container.
 Keep provider metadata retrieval separate from Discord rendering and delivery.
 Facebook and Threads custom cards use existing OpenGraph retrieval rather than
 discarding validated metadata and relying on Discord to expand a proxy URL.
+Keep uploaded videos last in a single Components V2 card, after all post metadata;
+classic embeds with attachments let Discord place the video above the embed.
 Direct video attachments
 share its host validation and bounded DNS resolver with address checks, download sizes,
 deadlines and concurrency. Preserve the card and a clickable fallback link when

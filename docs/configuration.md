@@ -244,9 +244,13 @@ video thumbnail and a link. Posts the API marks possibly sensitive, and every
 post while no API answers, use a proxy link as before.
 
 When metadata includes a supported direct video URL, the bot downloads it and
-uploads a separate Discord attachment. Video downloads accept only HTTPS URLs
+uploads it as a Discord attachment. Video downloads accept only HTTPS URLs
 with `video/mp4` or `video/quicktime` content types, validate DNS and redirects
 against private-network access, and allow at most two concurrent downloads.
+Successfully uploaded videos appear last in a single Components V2 card, below
+the author, post text, engagement counts and source information. This ordering
+also applies to uploaded X videos and social-feed deliveries. Proxy-link previews
+are expanded by Discord, which controls their layout.
 
 | `social_link_preview` field | Default           | Allowed values                                | Purpose                                                                 |
 | --------------------------- | ----------------- | --------------------------------------------- | ----------------------------------------------------------------------- |

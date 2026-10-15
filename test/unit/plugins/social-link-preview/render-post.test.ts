@@ -118,10 +118,10 @@ describe('buildPostEmbeds', () => {
 });
 
 describe('buildPostContainer', () => {
-  it('puts the text beside the avatar, then the video, then the counts', () => {
+  it('puts the text beside the avatar, then the counts, then the video last', () => {
     const json = buildPostContainer(post(), translator, 'attachment://x-video.mp4').toJSON();
     expect(json.accent_color).toBe(0x1d9bf0);
-    const [section, gallery, footer] = json.components;
+    const [section, footer, gallery] = json.components;
     expect(section?.type).toBe(ComponentType.Section);
     if (section?.type === ComponentType.Section) {
       expect(section.components[0]?.content).toBe(

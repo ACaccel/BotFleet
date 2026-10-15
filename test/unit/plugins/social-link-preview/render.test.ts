@@ -5,10 +5,12 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
+  ComponentType,
   DiscordAPIError,
   HTTPError,
   MessageFlags,
   type AttachmentBuilder,
+  type ContainerBuilder,
   type Message,
 } from 'discord.js';
 
@@ -69,24 +71,53 @@ describe('renderPreview', () => {
     sourceUrl: 'https://www.facebook.com/reel/1',
   };
 
-  it('sends the Facebook card and downloaded video together without the poster', async () => {
-    const { message, replies } = makeMessage();
-    const data = Buffer.from('video');
-    const downloadVideo = vi.fn().mockResolvedValue({ data, name: 'preview.mp4' });
-    await renderPreview(message, facebookResult, makeTranslator(), { downloadVideo });
+  it.each(['Facebook', 'Threads', 'Instagram', 'Example'])(
+    'places the uploaded %s video after all card metadata in one message',
+    async (siteName) => {
+      const { message, replies } = makeMessage();
+      const data = Buffer.from('video');
+      const downloadVideo = vi.fn().mockResolvedValue({ data, name: 'preview.mp4' });
+      if (facebookResult.kind !== 'card') throw new Error('expected a card');
+      await renderPreview(
+        message,
+        {
+          ...facebookResult,
+          card: { ...facebookResult.card, siteName, engagement: { likes: 12 } },
+        },
+        makeTranslator(),
+        { downloadVideo },
+      );
 
-    expect(downloadVideo).toHaveBeenCalledWith(
-      'https://cdn.example/video.mp4',
-      8 * 1024 * 1024,
-      15_000,
-    );
-    expect(replies).toHaveLength(1);
-    expect(replies[0]?.files?.[0]?.attachment).toEqual(data);
-    expect(replies[0]?.files?.[0]?.name).toBe('preview.mp4');
-    expect((replies[0]?.embeds?.[0] as { data: { image?: unknown } }).data.image).toBeUndefined();
-    expect(replies[0]?.allowedMentions).toEqual({ parse: [] });
-    expect(replies[0]?.content).toBeUndefined();
-  });
+      expect(downloadVideo).toHaveBeenCalledWith(
+        'https://cdn.example/video.mp4',
+        8 * 1024 * 1024,
+        15_000,
+      );
+      expect(replies).toHaveLength(1);
+      expect(replies[0]?.files?.[0]?.attachment).toEqual(data);
+      expect(replies[0]?.files?.[0]?.name).toBe('preview.mp4');
+      const payload = replies[0]!;
+      expect(payload.flags).toBe(MessageFlags.IsComponentsV2);
+      expect(payload.embeds).toBeUndefined();
+      const container = (payload.components?.[0] as ContainerBuilder).toJSON();
+      expect(container.accent_color).toBe(siteName === 'Facebook' ? 0x1877f2 : 0x5865f2);
+      const metadata = container.components.slice(0, -1);
+      expect(metadata.every((component) => component.type === ComponentType.TextDisplay)).toBe(
+        true,
+      );
+      expect(JSON.stringify(metadata)).toContain(siteName === 'Facebook' ? 'Author' : 'Reel title');
+      expect(JSON.stringify(metadata)).toContain('https://www.facebook.com/reel/1');
+      expect(JSON.stringify(metadata)).toContain('Post text');
+      expect(JSON.stringify(metadata)).toContain(siteName === 'Facebook' ? '👍 12' : siteName);
+      expect(JSON.stringify(container)).not.toContain('poster.jpg');
+      expect(container.components.at(-1)).toEqual({
+        type: ComponentType.MediaGallery,
+        items: [{ media: { url: 'attachment://preview.mp4' } }],
+      });
+      expect(replies[0]?.allowedMentions).toEqual({ parse: [] });
+      expect(replies[0]?.content).toBeUndefined();
+    },
+  );
 
   it.each(['uploaded', 'unavailable', 'rejected', 'disabled'] as const)(
     'renders a Threads video card when attachment delivery is %s',
@@ -132,16 +163,20 @@ describe('renderPreview', () => {
 
       expect(replies).toHaveLength(1);
       expect(replies[0]?.allowedMentions).toEqual({ parse: [] });
-      const embed = replies[0]?.embeds?.[0] as {
-        data: { url: string; title: string; image?: { url: string } };
-      };
-      expect(embed.data.url).toBe(sourceUrl);
-      expect(embed.data.title).toBe('Author on Threads');
       if (delivery === 'uploaded') {
+        expect(replies[0]?.flags).toBe(MessageFlags.IsComponentsV2);
+        const container = (replies[0]?.components?.[0] as ContainerBuilder).toJSON();
+        expect(JSON.stringify(container)).toContain(`**[Author on Threads](${sourceUrl})**`);
+        expect(container.components.at(-1)?.type).toBe(ComponentType.MediaGallery);
         expect(replies[0]?.files?.[0]?.attachment).toEqual(data);
-        expect(embed.data.image).toBeUndefined();
+        expect(replies[0]?.embeds).toBeUndefined();
         expect(replies[0]?.content).toBeUndefined();
       } else {
+        const embed = replies[0]?.embeds?.[0] as {
+          data: { url: string; title: string; image?: { url: string } };
+        };
+        expect(embed.data.url).toBe(sourceUrl);
+        expect(embed.data.title).toBe('Author on Threads');
         expect(replies[0]?.files).toBeUndefined();
         expect(embed.data.image?.url).toBe('https://cdn.example/poster.jpg');
         expect(replies[0]?.content).toBe(delivery === 'disabled' ? undefined : `<${fallbackUrl}>`);
@@ -150,6 +185,49 @@ describe('renderPreview', () => {
       else expect(downloadVideo).toHaveBeenCalledWith('https://cdn.example/video.mp4', 1234, 500);
     },
   );
+
+  it('keeps the source link above the video when card text is missing', async () => {
+    const { message, replies } = makeMessage();
+    if (facebookResult.kind !== 'card') throw new Error('expected a card');
+    await renderPreview(
+      message,
+      { ...facebookResult, card: { url: facebookResult.card.url } },
+      makeTranslator(),
+      { downloadVideo: vi.fn().mockResolvedValue({ data: Buffer.from('video'), name: 'v.mov' }) },
+    );
+    const container = (replies[0]?.components?.[0] as ContainerBuilder).toJSON();
+    expect(container.components).toEqual([
+      { type: ComponentType.TextDisplay, content: '<https://www.facebook.com/reel/1>' },
+      { type: ComponentType.MediaGallery, items: [{ media: { url: 'attachment://v.mov' } }] },
+    ]);
+  });
+
+  it('escapes upstream markdown in video card titles and descriptions', async () => {
+    const { message, replies } = makeMessage();
+    if (facebookResult.kind !== 'card') throw new Error('expected a card');
+    await renderPreview(
+      message,
+      {
+        ...facebookResult,
+        card: {
+          url: facebookResult.card.url,
+          title: '**Title**',
+          description: '# Heading\n[masked](https://example.test)',
+        },
+      },
+      makeTranslator(),
+      { downloadVideo: vi.fn().mockResolvedValue({ data: Buffer.from('video'), name: 'v.mp4' }) },
+    );
+    const container = (replies[0]?.components?.[0] as ContainerBuilder).toJSON();
+    expect(container.components[0]).toEqual({
+      type: ComponentType.TextDisplay,
+      content: '**[\\*\\*Title\\*\\*](https://www.facebook.com/reel/1)**',
+    });
+    expect(container.components[1]).toEqual({
+      type: ComponentType.TextDisplay,
+      content: '\\# Heading\n\\[masked](https://example.test)',
+    });
+  });
 
   it.each([true, false])(
     'retains an optional announcement with Facebook video delivery (%s)',
@@ -163,9 +241,18 @@ describe('renderPreview', () => {
             uploadable ? { data: Buffer.from('video'), name: 'preview.mp4' } : null,
           ),
       });
-      expect(replies[0]?.content).toBe(
-        uploadable ? 'Source announcement' : 'Source announcement\n<https://proxy.example/reel/1>',
-      );
+      expect(replies).toHaveLength(1);
+      if (uploadable) {
+        expect(replies[0]?.content).toBeUndefined();
+        const container = (replies[0]?.components?.[0] as ContainerBuilder).toJSON();
+        expect(container.components[0]).toEqual({
+          type: ComponentType.TextDisplay,
+          content: 'Source announcement',
+        });
+        expect(container.components.at(-1)?.type).toBe(ComponentType.MediaGallery);
+      } else {
+        expect(replies[0]?.content).toBe('Source announcement\n<https://proxy.example/reel/1>');
+      }
     },
   );
 

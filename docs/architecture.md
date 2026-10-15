@@ -248,8 +248,8 @@ The X provider reads posts from a JSON API into a neutral post model and keeps
 the proxy rewrite only for videos a proxy can play. Link previews and X feed
 subscriptions share this provider and the Discord renderer in
 [`infra/discord/social-preview.ts`](../src/infra/discord/social-preview.ts): classic
-embeds, or a Components V2 card around an uploaded video. Feed platforms return
-neutral single-message previews; each account pass shares post preparation
+embeds, or a Components V2 card with all post metadata above an uploaded video.
+Feed platforms return neutral single-message previews; each account pass shares post preparation
 across its destinations. Feed announcements and media use one send, and preview
 failure falls back to the existing proxy announcement. Feed configuration remains
 independent of the message-preview plugin.
@@ -260,7 +260,8 @@ sends all distinct HTTPS images in four-image gallery replies; only the first
 reply carries the post text. Facebook-specific parsing maps the proxy's source
 summary to optional engagement counts. Direct videos use a dedicated downloader with the shared host validation and
 bounded DNS resolver, plus address checks, deadlines and a concurrency limit;
-the plugin sends a separate attachment for either source and falls back if Discord rejects it.
+the renderer places all card metadata above the video in one Components V2 message
+for either source and falls back if Discord rejects the upload.
 Missing or failed media delivery keeps the card and adds a fallback link. See
 [preview configuration](configuration.md#social-previews-and-feeds) for supported
 media, limits and metadata availability.

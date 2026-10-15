@@ -125,8 +125,8 @@ export const buildPostEmbeds = (post: SocialPost, translator: Translator): Embed
 };
 
 /**
- * A Components V2 card holding the post text, the uploaded video and the
- * counts. `videoUrl` is the `attachment://` reference of the upload.
+ * A Components V2 card holding the post text and counts above the uploaded
+ * video. `videoUrl` is the `attachment://` reference of the upload.
  * Exported for tests.
  */
 export const buildPostContainer = (
@@ -163,8 +163,8 @@ export const buildPostContainer = (
     container.addTextDisplayComponents(header);
   }
   return container
-    .addMediaGalleryComponents(new MediaGalleryBuilder().addItems((item) => item.setURL(videoUrl)))
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${footer}`));
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${footer}`))
+    .addMediaGalleryComponents(new MediaGalleryBuilder().addItems((item) => item.setURL(videoUrl)));
 };
 
 /**

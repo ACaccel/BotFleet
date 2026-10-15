@@ -8,8 +8,8 @@
  *     because a bot-authored embed cannot render playable video. Rewrite
  *     providers probe their proxy hosts with the Discord crawler UA first and
  *     return the first that yields media, so a dead proxy is never posted.
- *   - `card`: OpenGraph data rendered with `EmbedBuilder`, optionally carrying
- *     video metadata for separate attachment delivery (Facebook and Threads).
+ *   - `card`: OpenGraph data rendered with `EmbedBuilder`, or a Components V2
+ *     card with an uploaded video below the metadata (Facebook and Threads).
  *   - `post`: a structured post from a JSON API (X), used for a video post only
  *     when no proxy yields playable video, so the renderer uploads it.
  *   - `gallery`: a multi-page work (nhentai, wnacg) the consumer turns into

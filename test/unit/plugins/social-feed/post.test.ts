@@ -164,6 +164,10 @@ describe('sendFeedPost', () => {
       type: ComponentType.TextDisplay,
       content: announcement,
     });
+    expect(container.components.at(-1)).toMatchObject({
+      type: ComponentType.MediaGallery,
+      items: [{ media: { url: 'attachment://x-video.mp4' } }],
+    });
     expect(payload.allowedMentions).toEqual({ parse: [] });
   });
 

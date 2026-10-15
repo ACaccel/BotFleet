@@ -6,7 +6,8 @@
  *   - `rewritten-url`: reply with the proxy URL as plain content so
  *     Discord unfurls it into a (playable) embed;
  *   - `card`: build an {@link EmbedBuilder} from the neutral OpenGraph
- *     card and attach video when a bounded download succeeds;
+ *     card, or a Components V2 card with video below its metadata when a
+ *     bounded download succeeds;
  *   - `post`: a custom X card (see `social-post.ts`). A video post uploads
  *     the largest encoding that fits in a Components V2 card, and falls back
  *     to a thumbnail embed linking the video when none can be uploaded.
@@ -17,10 +18,14 @@
 import { EMBED_COLORS, SOCIAL_COLORS } from './presentation-colors';
 import {
   AttachmentBuilder,
+  ContainerBuilder,
   DiscordAPIError,
   EmbedBuilder,
   HTTPError,
+  MediaGalleryBuilder,
   MessageFlags,
+  TextDisplayBuilder,
+  escapeMarkdown,
   type MessageCreateOptions,
 } from 'discord.js';
 
@@ -95,6 +100,33 @@ export const buildCardEmbed = (card: PreviewCard, translator: Translator): Embed
     });
   }
   return embed;
+};
+
+/** Keep uploaded media after all card metadata in a single ordered message. */
+const buildVideoCardContainer = (
+  card: PreviewCard,
+  translator: Translator,
+  videoUrl: string,
+  announcement?: string,
+): ContainerBuilder => {
+  const embed = buildCardEmbed({ ...card, imageUrl: undefined }, translator).toJSON();
+  const escapeText = (text: string): string =>
+    escapeMarkdown(text, { heading: true, maskedLink: true });
+  const container = new ContainerBuilder().setAccentColor(embed.color ?? EMBED_COLORS.info);
+  const text = [
+    announcement,
+    embed.author === undefined ? undefined : `**${escapeText(embed.author.name)}**`,
+    embed.title === undefined ? undefined : `**[${escapeText(embed.title)}](${card.url})**`,
+    embed.description === undefined ? undefined : escapeText(embed.description),
+    embed.footer === undefined ? undefined : `-# ${escapeText(embed.footer.text)}`,
+  ].filter((part): part is string => part !== undefined && part.length > 0);
+  if (embed.title === undefined) text.push(`<${card.url}>`);
+  for (const content of text) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(content));
+  }
+  return container.addMediaGalleryComponents(
+    new MediaGalleryBuilder().addItems((item) => item.setURL(videoUrl)),
+  );
 };
 
 export interface PreviewRenderOptions {
@@ -218,8 +250,15 @@ export const renderPreviewTo = async (
     if (video !== null) {
       try {
         await send({
-          ...(options.announcement === undefined ? {} : { content: options.announcement }),
-          embeds: [buildCardEmbed({ ...result.card, imageUrl: undefined }, translator)],
+          flags: MessageFlags.IsComponentsV2,
+          components: [
+            buildVideoCardContainer(
+              result.card,
+              translator,
+              `attachment://${video.name}`,
+              options.announcement,
+            ),
+          ],
           files: [new AttachmentBuilder(video.data, { name: video.name })],
           allowedMentions: NO_MENTIONS,
         });
