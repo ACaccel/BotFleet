@@ -45,6 +45,16 @@ their existing controls; feed and earthquake background posts still use the
 deployment language. See [server settings](tomori-settings.md) for migration,
 permissions and recovery details.
 
+## Server settings schema version 3
+
+Deploying Tomori or Nijika upgrades every stored server settings record to
+version 3 at startup, adding the nhentai and wnacg preview providers once while
+keeping the revision and history. Managers can remove them in `/settings`
+afterwards. Each runtime `config.json` with a `social_link_preview.providers`
+list must include `nhentai` and `wnacg`, or the deployment capability withholds
+them. An earlier release refuses version-3 records, so rolling back after this
+upgrade stops server settings from loading until this release is restored.
+
 ## Tomori settings schema version 2
 
 Deploy and restart Tomori, then open a new `/settings` panel. Existing version-1

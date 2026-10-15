@@ -1,6 +1,19 @@
 import { z } from 'zod';
 
-export const GUILD_SETTINGS_SCHEMA_VERSION = 2;
+export const GUILD_SETTINGS_SCHEMA_VERSION = 3;
+
+/**
+ * Older stored versions the repository upgrades on read. Version 2 added
+ * defaulted sections; version 3 opens the gallery previews.
+ */
+export const UPGRADABLE_GUILD_SETTINGS_VERSIONS: readonly number[] = [1, 2];
+
+/**
+ * Preview providers version 3 adds to every stored server once, so the
+ * nhentai and wnacg readers start enabled everywhere; a manager who removes
+ * them afterwards keeps them removed. Deployment capabilities still apply.
+ */
+const PROVIDERS_OPENED_IN_V3 = ['nhentai', 'wnacg'] as const;
 
 export const FEATURES = [
   'auto_reply',
@@ -148,6 +161,23 @@ export const guildSettingsSchema = guildSettingsDraftSchema.extend({
 export type GuildSettings = z.infer<typeof guildSettingsSchema>;
 export const normalizeGuildSettings = (value: unknown): GuildSettings =>
   guildSettingsSchema.parse(value);
+
+/** Bring settings stored under `fromVersion` to the current schema version. */
+export const upgradeGuildSettings = (fromVersion: number, value: unknown): GuildSettings => {
+  const settings = normalizeGuildSettings(value);
+  if (fromVersion >= 3) return settings;
+  const providers = settings.socialPreview.providers;
+  return normalizeGuildSettings({
+    ...settings,
+    socialPreview: {
+      ...settings.socialPreview,
+      providers: [
+        ...providers,
+        ...PROVIDERS_OPENED_IN_V3.filter((provider) => !providers.includes(provider)),
+      ],
+    },
+  });
+};
 export interface GuildSettingsAudit {
   readonly operationId: string;
   readonly revision: number;

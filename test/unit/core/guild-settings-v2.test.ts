@@ -5,6 +5,7 @@ import {
   defaultGuildSettings,
   guildSettingsSchema,
   normalizeGuildSettings,
+  upgradeGuildSettings,
   type OperatorCapabilities,
 } from '../../../src/core/guild-settings';
 const capabilities: OperatorCapabilities = {
@@ -79,5 +80,28 @@ describe('guild settings v2 model', () => {
       { ...settings.moderationVote, voterRoleIds: ['foreign'] },
     ])
       expect(guildSettingsSchema.safeParse({ ...settings, moderationVote }).success).toBe(false);
+  });
+});
+
+describe('guild settings v3 upgrade', () => {
+  it('adds the gallery providers to records stored before version 3, once', () => {
+    const stored = defaultGuildSettings(capabilities);
+    stored.socialPreview.providers = ['x', 'wnacg'];
+    expect(upgradeGuildSettings(2, stored).socialPreview.providers).toEqual([
+      'x',
+      'wnacg',
+      'nhentai',
+    ]);
+    expect(upgradeGuildSettings(1, legacySettings()).socialPreview.providers).toEqual([
+      'x',
+      'nhentai',
+      'wnacg',
+    ]);
+  });
+
+  it('leaves current records as saved, including an opt-out', () => {
+    const stored = defaultGuildSettings(capabilities);
+    stored.socialPreview.providers = [];
+    expect(upgradeGuildSettings(3, stored).socialPreview.providers).toEqual([]);
   });
 });

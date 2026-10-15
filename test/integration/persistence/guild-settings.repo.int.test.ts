@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   FEATURES,
+  GUILD_SETTINGS_SCHEMA_VERSION,
   defaultGuildSettings,
   type GuildSettingsSnapshot,
   type OperatorCapabilities,
@@ -70,7 +71,7 @@ describe('MongoGuildSettingsRepo', () => {
       const repo = await installLegacyDocument(guild);
       const upgraded = unwrap(await repo.find(botId, guildId));
       expect(upgraded).toMatchObject({
-        schemaVersion: 2,
+        schemaVersion: GUILD_SETTINGS_SCHEMA_VERSION,
         revision: 4,
         updatedAt: 123,
         updatedBy: '500000000000000001',
@@ -90,7 +91,39 @@ describe('MongoGuildSettingsRepo', () => {
       expect(unwrap(await restarted.find(botId, guildId))).toEqual(upgraded);
       expect(
         (await guild.models.GuildSettings.findOne({ botId, guildId }).lean().exec())?.schemaVersion,
-      ).toBe(2);
+      ).toBe(GUILD_SETTINGS_SCHEMA_VERSION);
+    });
+  });
+  it('opens the gallery previews once on a v2 record and keeps a later opt-out', async () => {
+    await withFreshConnection(async (connection) => {
+      const guild = await new StaticConnectionManager(connection).getConnection(asGuildId(guildId));
+      const repo = new MongoGuildSettingsRepo(guild);
+      unwrap(await repo.seed(seed()));
+      await guild.models.GuildSettings.collection.updateOne(
+        { botId, guildId },
+        { $set: { schemaVersion: 2, revision: 3, 'settings.socialPreview.providers': ['x'] } },
+      );
+
+      const upgraded = unwrap(await repo.find(botId, guildId));
+      expect(upgraded?.schemaVersion).toBe(GUILD_SETTINGS_SCHEMA_VERSION);
+      expect(upgraded?.revision).toBe(3);
+      expect(upgraded?.settings.socialPreview.providers).toEqual(['x', 'nhentai', 'wnacg']);
+
+      const optedOut = defaultGuildSettings(caps);
+      optedOut.socialPreview.providers = ['x'];
+      unwrap(
+        await repo.compareAndSwap(botId, guildId, 3, optedOut, {
+          operationId: 'opt-out',
+          revision: 4,
+          userId: '500000000000000001',
+          at: 1,
+          paths: ['socialPreview.providers'],
+        }),
+      );
+      const restarted = new MongoGuildSettingsRepo(guild);
+      expect(
+        unwrap(await restarted.find(botId, guildId))?.settings.socialPreview.providers,
+      ).toEqual(['x']);
     });
   });
   it('does not overwrite a new user edit when concurrent readers upgrade the same legacy revision', async () => {
@@ -138,7 +171,7 @@ describe('MongoGuildSettingsRepo', () => {
         },
       );
       const upgraded = unwrap(await repo.find(botId, guildId));
-      expect(upgraded?.schemaVersion).toBe(2);
+      expect(upgraded?.schemaVersion).toBe(GUILD_SETTINGS_SCHEMA_VERSION);
       expect(upgraded?.revision).toBe(5);
       expect(upgraded?.lastOperationId).toBe('legacy-editor');
       expect(upgraded?.settings.autoReply.random).toBe(false);
@@ -159,7 +192,7 @@ describe('MongoGuildSettingsRepo', () => {
         },
       );
       const upgraded = unwrap(await repo.find(botId, guildId));
-      expect(upgraded?.schemaVersion).toBe(2);
+      expect(upgraded?.schemaVersion).toBe(GUILD_SETTINGS_SCHEMA_VERSION);
       expect(upgraded?.revision).toBe(4);
       expect(upgraded?.lastOperationId).toBe('previous');
       expect(upgraded?.settings.general).toEqual({ language: 'inherit', timeZone: null });
@@ -180,7 +213,7 @@ describe('MongoGuildSettingsRepo', () => {
           paths: [],
         }),
       );
-      expect(fenced?.schemaVersion).toBe(2);
+      expect(fenced?.schemaVersion).toBe(GUILD_SETTINGS_SCHEMA_VERSION);
       expect(fenced?.lastOperationId).toBe('cancelled');
       expect(fenced?.settings.autoReply.dice).toBe(false);
       expect(fenced?.audit.at(-1)?.paths).toEqual([]);
@@ -204,7 +237,7 @@ describe('MongoGuildSettingsRepo', () => {
       expect(result.ok).toBe(false);
       const after = unwrap(await repo.find(botId, guildId));
       expect(after?.revision).toBe(0);
-      expect(after?.schemaVersion).toBe(2);
+      expect(after?.schemaVersion).toBe(GUILD_SETTINGS_SCHEMA_VERSION);
       expect(after?.updatedAt).toBe(initial.updatedAt);
       expect(after?.updatedBy).toBeNull();
     });
@@ -217,7 +250,7 @@ describe('MongoGuildSettingsRepo', () => {
       unwrap(await repo.seed(seed()));
       await guild.models.GuildSettings.collection.updateOne(
         { botId, guildId },
-        { $set: { schemaVersion: 3 } },
+        { $set: { schemaVersion: GUILD_SETTINGS_SCHEMA_VERSION + 1 } },
       );
       const result = await repo.find(botId, guildId);
       expect(result.ok).toBe(false);

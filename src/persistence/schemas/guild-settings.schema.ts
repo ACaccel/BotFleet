@@ -2,6 +2,7 @@ import { Schema } from 'mongoose';
 import {
   CATEGORIES,
   GUILD_SETTINGS_SCHEMA_VERSION,
+  UPGRADABLE_GUILD_SETTINGS_VERSIONS,
   ENTERTAINMENT_COMMANDS,
   FEATURES,
   type GuildSettingsSnapshot,
@@ -157,7 +158,7 @@ export const guildSettingsSchema = new Schema<GuildSettingsDoc>(
     schemaVersion: {
       type: Number,
       required: true,
-      enum: [1, GUILD_SETTINGS_SCHEMA_VERSION],
+      enum: [...UPGRADABLE_GUILD_SETTINGS_VERSIONS, GUILD_SETTINGS_SCHEMA_VERSION],
       default: GUILD_SETTINGS_SCHEMA_VERSION,
     },
     updatedAt: { type: Number, required: true, default: Date.now },

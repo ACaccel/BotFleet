@@ -1,7 +1,9 @@
 import type { DatabaseError } from '../../core/errors/external-service-error';
 import {
   normalizeGuildSettings,
+  upgradeGuildSettings,
   GUILD_SETTINGS_SCHEMA_VERSION,
+  UPGRADABLE_GUILD_SETTINGS_VERSIONS,
   type GuildSettings,
   type GuildSettingsAudit,
   type GuildSettingsSnapshot,
@@ -183,15 +185,15 @@ export class MongoGuildSettingsRepo implements GuildSettingsRepo {
         .exec();
       if (!document) return undefined;
       if (document.schemaVersion === GUILD_SETTINGS_SCHEMA_VERSION) return snapshotFrom(document);
-      if (document.schemaVersion !== 1)
+      if (!UPGRADABLE_GUILD_SETTINGS_VERSIONS.includes(document.schemaVersion ?? 0))
         throw new Error('Unsupported guild settings schema version');
-      const settings = normalizeGuildSettings(document.settings);
+      const settings = upgradeGuildSettings(document.schemaVersion ?? 0, document.settings);
       try {
         const upgraded = await this.conn.models.GuildSettings.findOneAndUpdate(
           {
             botId,
             guildId,
-            schemaVersion: 1,
+            schemaVersion: document.schemaVersion,
             revision: document.revision,
             lastOperationId: document.lastOperationId,
           },

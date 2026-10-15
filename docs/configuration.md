@@ -290,8 +290,10 @@ URL expires; any button restores it. Server administrators can see the
 channel, since Discord cannot hide a channel from them.
 
 Both sources are provider names, so `providers` and the `/settings` provider
-subset control them. Servers whose saved settings predate them start with both
-off until a manager enables them; a `providers` list in `config.json` must name
+subset control them. They start enabled on every server: new servers get them
+by default, and settings schema version 3 adds them once to servers saved
+earlier. A manager who removes them keeps them removed. The social-preview
+feature switch still applies, and a `providers` list in `config.json` must name
 them explicitly.
 
 | `social_link_preview.gallery` field | Default             | Allowed values                                       | Purpose                                                   |

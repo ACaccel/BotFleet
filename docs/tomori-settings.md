@@ -58,7 +58,7 @@ Open **Edit parameters** on the Automatic replies or Social previews page to
 change its values, submit the form, then choose **Save** on the panel. Reply
 behaviors and providers allow an empty selection to disable all entries.
 The nhentai and wnacg providers act only in age-restricted channels and start
-off on servers saved before they existed; see
+selected on every server, including those saved before they existed; see
 [nhentai and wnacg readers](configuration.md#nhentai-and-wnacg-readers).
 The preview-count field shows the actual deployment-constrained range: integer
 `1` through `min(5, social_link_preview.maxUrlsPerMessage)`. This counts successful
@@ -179,6 +179,9 @@ seed, including after a restart:
 | Secrets, provider endpoints, installed commands and operator ceilings        | Still deployment-controlled; the panel cannot override them                   |
 
 Configuration changes after seeding do not overwrite saved server preferences.
+The one exception is a schema upgrade: version 3 adds the nhentai and wnacg
+providers once to every record saved under an earlier version, keeping its
+revision and history; later removals stay.
 Operator capability changes still restrict effective behavior. A missing
 database/settings snapshot stops policy-dependent outputs rather than reverting
 to permissive defaults. Failed loads and pending writes retry using

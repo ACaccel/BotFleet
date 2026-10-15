@@ -5,9 +5,10 @@ Part of the [contributing guide](../../CONTRIBUTING.md).
 Tomori and Nijika's `GuildSettings` and `GuildSettingsMigration` models use application keys,
 versioned CAS writes and fixed migration inventory. Follow the
 [settings persistence contract](../tomori-settings.md#defaults-migration-and-recovery)
-when changing their schemas or operator capabilities. Schema version 2 upgrades
-version-1 records with defaulted new sections while preserving revision/history;
-exercise concurrent upgrade-versus-save races before altering that contract.
+when changing their schemas or operator capabilities. Older records upgrade on
+read, preserving revision/history: version 2 adds defaulted sections and version
+3 adds the gallery preview providers once (`upgradeGuildSettings`). Exercise
+concurrent upgrade-versus-save races before altering that contract.
 
 `GuildModels` ([`GuildConnection`](../../src/persistence/connection.ts)) derives from
 `SchemaName`. Update these together when adding or removing a model:
