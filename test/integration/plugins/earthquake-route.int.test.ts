@@ -16,7 +16,20 @@ import { buildPluginContext, silentLogger } from '../../fixtures/runtime';
 const KEY = 'e'.repeat(32);
 const NOW_SECONDS = 1_800_000_000;
 
+// A live alert; deliberately not the warning app's test-button values.
 const BODY = {
+  epicenterLat: 23.77,
+  epicenterLon: 121.67,
+  depthKm: 15.5,
+  magnitude: 7.2,
+  maxIntensity: '6+',
+  localIntensity: '5-',
+  arrivalTime: NOW_SECONDS + 18,
+  remainingSeconds: 18,
+};
+
+/** What the app's test button sends: fixed values stamped with the current clock. */
+const APP_TEST_BODY = {
   epicenterLat: 23.85,
   epicenterLon: 120.82,
   depthKm: 10,
@@ -111,10 +124,30 @@ describe('earthquake alert HTTP API', () => {
     expect(h.logLines()).toContain('"result":"updated"');
   });
 
-  it('acknowledges an alert that arrived over 10 minutes ago as a test without posting', async () => {
+  it("acknowledges the app's test-button values as a test without posting", async () => {
     const h = await start();
 
-    // The warning app's test button sends its fixed 2024 example.
+    const res = await post(h, APP_TEST_BODY);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ result: 'test' });
+    expect(h.send).not.toHaveBeenCalled();
+    expect(h.logLines()).toContain('"result":"test"');
+  });
+
+  it('posts an alert that differs from the test-button values in any field', async () => {
+    const h = await start();
+
+    const res = await post(h, { ...APP_TEST_BODY, remainingSeconds: 19 });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ result: 'created' });
+    expect(h.send).toHaveBeenCalledOnce();
+  });
+
+  it('acknowledges an alert that arrived over 10 minutes ago as a replay without posting', async () => {
+    const h = await start();
+
     const res = await post(h, { ...BODY, arrivalTime: 1_717_142_400 });
 
     expect(res.status).toBe(200);

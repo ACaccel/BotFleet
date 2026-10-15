@@ -12,8 +12,10 @@ import { describe, expect, it } from 'vitest';
 
 import { ARRIVAL_WINDOW_SECONDS } from '../../src/plugins/earthquake/internal/alert-server';
 import {
+  APP_TEST_ALERT,
   EarthquakeAlertSchema,
   INTENSITIES,
+  isAppTestAlert,
 } from '../../src/plugins/earthquake/internal/alert-request';
 
 const DIR = path.resolve(__dirname, 'windows');
@@ -87,6 +89,27 @@ describe('earthquake alert caller contract', () => {
 
   it('agrees with the server on what counts as a test', () => {
     expect(script).toContain(`$TestAgeSeconds = ${ARRIVAL_WINDOW_SECONDS}`);
+    const table = /\$AppTestAlert = @\{([^}]*)\}/.exec(script)?.[1] ?? '';
+    const entries = Object.fromEntries(
+      table
+        .split(/[;\n]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => entry.split('=').map((part) => part.trim().replace(/'/g, ''))),
+    );
+    expect(entries).toEqual(
+      Object.fromEntries(
+        Object.entries(APP_TEST_ALERT).map(([key, value]) => [key, String(value)]),
+      ),
+    );
+  });
+
+  it('recognises the documented test-button example at any arrival time', () => {
+    const body = EarthquakeAlertSchema.parse(toBody(documentedExample()));
+
+    expect(isAppTestAlert(body)).toBe(true);
+    expect(isAppTestAlert({ ...body, arrivalTime: Math.floor(Date.now() / 1000) + 20 })).toBe(true);
+    expect(isAppTestAlert({ ...body, magnitude: 7.2 })).toBe(false);
   });
 
   it('reads the URL only from its config file, never from a built-in host', () => {

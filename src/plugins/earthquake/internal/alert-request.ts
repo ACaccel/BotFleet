@@ -40,3 +40,24 @@ export const EarthquakeAlertSchema = z
   .strict();
 
 export type EarthquakeAlert = z.infer<typeof EarthquakeAlertSchema>;
+
+/**
+ * The fixed values the warning app sends from its test button. The app stamps
+ * the arrival time with the current clock, so only these values identify a
+ * test; a real alert matching every one of them is not plausible.
+ */
+export const APP_TEST_ALERT = {
+  epicenterLat: 23.85,
+  epicenterLon: 120.82,
+  depthKm: 10,
+  magnitude: 7.3,
+  maxIntensity: '7',
+  localIntensity: '5+',
+  remainingSeconds: 20,
+} as const satisfies Partial<EarthquakeAlert>;
+
+/** Whether `alert` carries exactly the warning app's test-button values. */
+export const isAppTestAlert = (alert: EarthquakeAlert): boolean =>
+  (Object.keys(APP_TEST_ALERT) as (keyof typeof APP_TEST_ALERT)[]).every(
+    (field) => alert[field] === APP_TEST_ALERT[field],
+  );

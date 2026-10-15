@@ -342,11 +342,13 @@ most 4 KB. Unknown fields are rejected.
 the S-wave arrived, the countdown has already run out. It is only logged; the message
 counts down from `arrivalTime`.
 
-- **Test and replay.** An `arrivalTime` more than 10 minutes before the server clock
-  posts nothing and answers `200 {"result": "test"}`. The app's test button sends a
-  fixed 2024 example, so it checks the whole path without posting, and a captured
-  request cannot be replayed into a post once it is 10 minutes old. An `arrivalTime`
-  more than 10 minutes ahead answers `400`.
+- **Test and replay.** The app's test button sends fixed example values with the
+  arrival time stamped from the current clock. A body matching all of those values
+  (`APP_TEST_ALERT` in [`alert-request.ts`](../src/plugins/earthquake/internal/alert-request.ts))
+  posts nothing and answers `200 {"result": "test"}`, so the button checks the whole
+  path without posting. An `arrivalTime` more than 10 minutes before the server clock
+  is treated the same way, so a captured request cannot be replayed into a post. An
+  `arrivalTime` more than 10 minutes ahead answers `400`.
 - **Posting.** Every live alert is posted; the app's own threshold decides what is
   sent. The guild's `earthquake` role is pinged only when `localIntensity` is at or
   above the ping threshold (below). Guilds with the channel but no role get the alert

@@ -2,10 +2,10 @@
  * The Express app behind the earthquake alert API.
  *
  * The bearer token is checked before anything else, including the route, so
- * an unauthenticated caller learns nothing. An alert whose arrival time is
- * well in the past is a test or a replay: it is acknowledged without posting,
- * which turns the warning app's test button into an end-to-end check. Request
- * headers are never logged and responses never echo the token.
+ * an unauthenticated caller learns nothing. The warning app's test-button
+ * values, or an arrival time well in the past (a replay), are acknowledged as
+ * a test without posting, which turns the test button into an end-to-end
+ * check. Request headers are never logged and responses never echo the token.
  */
 import express, {
   type Express,
@@ -18,7 +18,7 @@ import express, {
 import type { Logger } from '../../../core/logger';
 import type { Clock } from '../../../core/time';
 import type { AlertDispatcher } from './alert-dispatcher';
-import { EarthquakeAlertSchema } from './alert-request';
+import { EarthquakeAlertSchema, isAppTestAlert } from './alert-request';
 
 const BODY_LIMIT = '4kb';
 /** Field paths reported for an invalid body; enough to locate the mistake. */
@@ -72,8 +72,9 @@ export const buildAlertApp = (deps: AlertAppDeps): Express => {
       maxIntensity: alert.maxIntensity,
       localIntensity: alert.localIntensity,
       remainingSeconds: alert.remainingSeconds,
+      arrivalInSeconds: alert.arrivalTime - nowSeconds,
     };
-    if (alert.arrivalTime < nowSeconds - ARRIVAL_WINDOW_SECONDS) {
+    if (isAppTestAlert(alert) || alert.arrivalTime < nowSeconds - ARRIVAL_WINDOW_SECONDS) {
       deps.logger.info({ result: 'test', ...summary }, 'earthquake alert: test or replay');
       res.status(200).json({ result: 'test' });
       return;

@@ -13,7 +13,7 @@ Tailscale 以 HTTPS 送到 nijika，nijika 再發到各伺服器的 `earthquake`
 
 - 每則即時警報都會發文；本地震度達到伺服器設定的門檻（預設 4 級）才標記伺服器的 `earthquake` 身分組。
 - 同一個地震的更新警報會編輯原本的訊息；更新後第一次達到門檻時，另外回覆一則標記身分組的訊息。
-- 抵達時間早於 10 分鐘前的請求視為測試，只回報連線成功，不會發到 Discord。
+- App「測試」按鈕的固定範例值（下方「測試」一節）視為測試，只回報連線成功，不會發到 Discord；抵達時間早於 10 分鐘前的請求也一樣，用來擋下重送的舊請求。
 
 ## 需求
 
@@ -73,7 +73,7 @@ Tailscale 以 HTTPS 送到 nijika，nijika 再發到各伺服器的 `earthquake`
 
 ## 測試
 
-在 App 按「測試」。App 會用下面這組固定的範例參數執行程式（抵達時間在 2024 年）：
+在 App 按「測試」。App 會用下面這組固定的範例值執行程式，抵達時間則是按下當下再加 20 秒（下例的時間戳記只是示意）：
 
 ```text
 --epicenter-lat=23.85 --epicenter-lon=120.82 --depth=10 --magnitude=7.3 --max-intensity=7 --local-intensity=5+ --arrival-time=1717142400 --remaining-time=20

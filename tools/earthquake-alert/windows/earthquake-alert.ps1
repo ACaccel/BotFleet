@@ -15,8 +15,13 @@ $ProgressPreference = 'SilentlyContinue'
 $ScriptArguments = @($args)
 
 $TimeoutSeconds = 5
-# Matches the server: an arrival time this far in the past marks a test.
+# Matches the server: the app's fixed test-button values, or an arrival time
+# this far in the past, mark a test.
 $TestAgeSeconds = 600
+$AppTestAlert = @{
+    epicenterLat = 23.85; epicenterLon = 120.82; depthKm = 10; magnitude = 7.3
+    maxIntensity = '7'; localIntensity = '5+'; remainingSeconds = 20
+}
 $DataDir = Join-Path $env:LOCALAPPDATA 'BotFleet'
 $KeyFile = Join-Path $DataDir 'earthquake-alert.key'
 $LogFile = Join-Path $DataDir 'earthquake-alert.log'
@@ -176,7 +181,11 @@ function Invoke-Main {
     }
     $summary = "local=$($body.localIntensity) max=$($body.maxIntensity) magnitude=$($body.magnitude) arrival=$($body.arrivalTime) remaining=$($body.remainingSeconds)"
     $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    $isTest = $body.arrivalTime -lt ($now - $TestAgeSeconds)
+    $isAppTest = $true
+    foreach ($field in $AppTestAlert.Keys) {
+        if ($body[$field] -ne $AppTestAlert[$field]) { $isAppTest = $false }
+    }
+    $isTest = $isAppTest -or ($body.arrivalTime -lt ($now - $TestAgeSeconds))
 
     try {
         $url = Get-AlertUrl
