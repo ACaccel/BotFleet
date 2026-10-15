@@ -31,6 +31,12 @@ deployment and command registration.
 
 Follow the [migration runbook](../../tools/migration/README.md) for host transfer and cutover.
 
+## Database backups
+
+`botfleet-mongo-backup.timer` dumps every application database daily into
+`/var/backups/botfleet` and keeps 3 snapshots. Install, check and restore steps are in
+the [backup guide](../../tools/mongo-backup/README.md).
+
 ## Recording removal rollout
 
 Follow the [recording removal checklist](../upgrading.md#recording-removal-rollout)
@@ -140,7 +146,8 @@ Transient failures retry in the background using
 [`MONGO_RECOVERY_INTERVAL_MS`](../configuration.md); recovered guilds regain their
 repositories and jobs. Match giveaway error IDs to connection logs. Restore MongoDB
 or its network route for refused connections; fix authentication/authorization or
-other persistent failures, then restart the bot.
+other persistent failures, then restart the bot. To recover lost or corrupted data,
+restore a [daily backup](../../tools/mongo-backup/README.md#restore).
 
 ## Message archive maintenance
 

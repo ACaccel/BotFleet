@@ -165,7 +165,7 @@ src/
   bot/          composition roots (one directory per bot) and lifecycle
   i18n/         en and zh-TW translation catalogs
 scripts/        runtime launcher, environment setup, deployment, codegen
-tools/          operator CLIs: db maintenance, host migration, archive benchmarks
+tools/          operator CLIs: db maintenance, backups, host migration, archive benchmarks
 test/           unit, integration, contract and i18n suites
 ```
 
@@ -188,6 +188,7 @@ The [documentation index](docs/README.md) lists the guides under `docs/`.
 | Deploy or update systemd services          | [Deployment](docs/contributing/deployment.md)           |
 | Diagnose database or connectivity problems | [Operations](docs/contributing/operations.md)           |
 | Upgrade an existing installation           | [Upgrade notes](docs/upgrading.md)                      |
+| Back up or restore the database            | [Database backups](tools/mongo-backup/README.md)        |
 | Move to another host                       | [Migration runbook](tools/migration/README.md)          |
 | Measure archive performance                | [Archive benchmarks](tools/archive-benchmark/README.md) |
 | Add a command, plugin or persisted model   | [Contributing](CONTRIBUTING.md)                         |

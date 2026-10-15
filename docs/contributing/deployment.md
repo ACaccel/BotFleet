@@ -56,6 +56,7 @@ npm run deploy         # Prepare and deploy selected bots
 npm run undeploy       # Remove managed bot units
 npm run mongo:undeploy # Remove database unit after bots are undeployed
 npm run deploy:recover # Recover an interrupted transaction
+npm run backup:install # Install the daily database backup timer
 ```
 
 For code updates, run `npm run deploy` without undeploying. Register
@@ -67,7 +68,9 @@ systemctl status botfleet@nijika.service
 journalctl -u botfleet@nijika.service -f
 ```
 
-The database unit is `mongodb-botfleet.service`.
+The database unit is `mongodb-botfleet.service`. Its daily backup runs as
+`botfleet-mongo-backup.service`, outside the deployment transaction; see the
+[backup guide](../../tools/mongo-backup/README.md).
 
 For gopher endpoint changes, follow
 [manual configuration and restart](../configuration.md#gopher-llm-endpoint).

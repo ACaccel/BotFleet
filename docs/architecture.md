@@ -359,8 +359,10 @@ only, privately.
 
 The launcher selects the project Conda runtime. Independent systemd units use release
 snapshots with shared configuration, logs and data. A transaction journal supports
-rollback; MongoDB has a separate lifecycle. See [deployment](contributing/deployment.md)
-and the [migration runbook](../tools/migration/README.md).
+rollback; MongoDB has a separate lifecycle. A separate systemd timer takes daily online
+database dumps. See [deployment](contributing/deployment.md), the
+[backup guide](../tools/mongo-backup/README.md) and the
+[migration runbook](../tools/migration/README.md).
 
 ## Message archive ownership
 

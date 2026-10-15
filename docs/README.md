@@ -12,6 +12,7 @@
 | Moderate a thread on Nijika      | [Thread moderation](thread-moderation.md)                                                 |
 | Deploy or recover services       | [Deployment](contributing/deployment.md)                                                  |
 | Operate bots and migrate hosts   | [Operations](contributing/operations.md)                                                  |
+| Back up or restore the database  | [Database backups](../tools/mongo-backup/README.md)                                       |
 | Upgrade an existing installation | [Upgrade notes](upgrading.md)                                                             |
 | Add a command or plugin          | [Commands](contributing/adding-a-command.md) · [Plugins](contributing/adding-a-plugin.md) |
 | Change database models           | [Persistence](contributing/persisted-models.md)                                           |
