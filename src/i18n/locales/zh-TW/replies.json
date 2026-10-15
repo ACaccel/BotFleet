@@ -1164,7 +1164,7 @@
       "features": "功能開關",
       "channels": "頻道設定",
       "auto_reply": "自動回覆",
-      "social": "社群預覽",
+      "social": "連結預覽",
       "status": "狀態",
       "history": "變更歷史",
       "general": "一般設定",
@@ -1210,7 +1210,7 @@
     "grant": {
       "general": "一般設定",
       "auto_reply": "自動回覆",
-      "social_preview": "社群預覽",
+      "social_preview": "連結預覽",
       "activities": "活動",
       "giveaways": "抽獎",
       "temp_roles": "臨時身分組",
@@ -1240,7 +1240,7 @@
       "dice": "骰子",
       "reactions": "特殊反應"
     },
-    "modal_social": "社群預覽參數",
+    "modal_social": "連結預覽參數",
     "providers": "啟用的平台",
     "strategy": "原始嵌入處理方式",
     "strategies": {
@@ -1254,7 +1254,7 @@
     "preview_title": "尚未儲存的變更",
     "feature": {
       "auto_reply": "自動回覆",
-      "social_preview": "社群預覽",
+      "social_preview": "連結預覽",
       "guild_events": "事件通知",
       "channel_logging": "指令紀錄",
       "activities": "活動",
@@ -1289,11 +1289,11 @@
       "features": "功能",
       "channels": "輸出頻道",
       "autoReply": "自動回覆",
-      "social": "社群預覽"
+      "social": "連結預覽"
     },
     "features": {
       "auto_reply": "自動回覆",
-      "social_preview": "社群預覽",
+      "social_preview": "連結預覽",
       "guild_events": "事件通知",
       "channel_logging": "指令紀錄",
       "activities": "活動",
