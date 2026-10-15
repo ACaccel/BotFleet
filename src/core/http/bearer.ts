@@ -1,4 +1,4 @@
-/** Bearer-token check for the notification relay API. */
+/** Bearer-token check shared by the bots' loopback HTTP APIs. */
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 const BEARER = /^Bearer[ \t]+(\S+)[ \t]*$/i;

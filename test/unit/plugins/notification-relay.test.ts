@@ -16,7 +16,6 @@ import type {
   NotificationThreadMessage,
   NotificationThreadRepo,
 } from '../../../src/persistence/repositories/notification-thread.repo';
-import { createBearerCheck } from '../../../src/plugins/notification-relay/internal/auth';
 import { parseNotificationRoutes } from '../../../src/plugins/notification-relay/internal/config';
 import {
   createNotificationRelay,
@@ -333,20 +332,6 @@ describe('notification relay delivery', () => {
 
     // `k0` was evicted and is read back from the store; `k256` is still cached.
     expect(repo.find).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('notification relay bearer check', () => {
-  const check = createBearerCheck('s'.repeat(32));
-
-  it('accepts only the configured token', () => {
-    expect(check(`Bearer ${'s'.repeat(32)}`)).toBe(true);
-    expect(check(`bearer ${'s'.repeat(32)} `)).toBe(true);
-    expect(check(undefined)).toBe(false);
-    expect(check('')).toBe(false);
-    expect(check(`Bearer ${'s'.repeat(31)}`)).toBe(false);
-    expect(check(`Basic ${'s'.repeat(32)}`)).toBe(false);
-    expect(check('s'.repeat(32))).toBe(false);
   });
 });
 

@@ -19,7 +19,7 @@ import type { AddressInfo } from 'node:net';
 
 import { TOKENS } from '../../bot/tokens';
 import { NOTIFY_API_KEY_MIN_LENGTH } from '../../core/config';
-import { closeServerBounded } from '../../core/http';
+import { closeServerBounded, createBearerCheck } from '../../core/http';
 import { asGuildId } from '../../core/ids';
 import { logError, logSystem } from '../../core/logger';
 import type { Plugin } from '../../core/plugin';
@@ -27,12 +27,7 @@ import {
   MongoNotificationThreadRepo,
   type NotificationThreadRepo,
 } from '../../persistence/repositories/notification-thread.repo';
-import {
-  buildNotificationApp,
-  createBearerCheck,
-  createNotificationRelay,
-  parseNotificationRoutes,
-} from './internal';
+import { buildNotificationApp, createNotificationRelay, parseNotificationRoutes } from './internal';
 
 const PLUGIN_ID = 'notification-relay';
 const PLUGIN_VERSION = '1.0.0';
