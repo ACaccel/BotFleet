@@ -39,6 +39,8 @@ interface RunSocialLinkPreviewDeps {
   >;
   readonly translator: Translator;
   readonly logger: Logger;
+  readonly providers?: ReadonlySet<string>;
+  readonly videoEnabled?: boolean;
 }
 
 export const runSocialLinkPreview = async (
@@ -54,6 +56,7 @@ export const runSocialLinkPreview = async (
 
     const provider = deps.registry.findProvider(url);
     if (provider === undefined) continue;
+    if (deps.providers !== undefined && !deps.providers.has(provider.name)) continue;
 
     const result = await provider.build(url, {
       timeoutMs: deps.config.timeoutMs,
@@ -69,6 +72,7 @@ export const runSocialLinkPreview = async (
       await renderPreview(message, result.value, deps.translator, {
         maxVideoBytes: deps.config.maxVideoBytes,
         videoTimeoutMs: deps.config.videoTimeoutMs,
+        videoEnabled: deps.videoEnabled,
       });
       await applyOriginalMessageStrategy(message, deps.config.originalMessageStrategy, deps.logger);
       previewed += 1;

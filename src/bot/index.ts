@@ -28,14 +28,20 @@ import { getSlashCommandClass, registerCommands } from '@cmd';
 import { assertTimeZone } from '../core/archive/stats';
 import type { ModalHandler } from '@modal';
 import { registerModals } from '@modal';
-import type { SSMHandler } from '@select-menu';
+import type { SSMHandler, SelectMenuInteraction } from '@select-menu';
 import { registerSSMs } from '@select-menu';
 
 import { createBootstrapLogger, loadEnv, type Env } from '../core/config';
 import { ConfigurationError } from '../core/errors';
 import type { GuildRegistry } from './guild-registry';
 import type { Translator } from '../core/i18n';
-import { createDefaultTranslator, isLocale } from '../core/i18n';
+import {
+  createDefaultTranslator,
+  isLocale,
+  DEFAULT_LOCALE,
+  GuildLocaleContext,
+  type Locale,
+} from '../core/i18n';
 import type { asGuildId } from '../core/ids';
 import { createContainer, type ServiceContainer } from '../core/ioc';
 import { installProcessHandlers, logError, logSystem, ops, type Logger } from '../core/logger';
@@ -56,6 +62,7 @@ import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { FeedPlatformRegistry } from '../infra/social-feed';
 import type { ArchiveControlFactory } from '../application/archive/control';
 import type { DbInspectService } from '../application/db-inspect/service';
+import type { GuildSettingsService } from '../application/guild-settings/service';
 
 import { ClientEventBridge, type ClientEventBridgeSuppression } from './client-event-bridge';
 import { installClientSafetyListeners } from './client-safety-listeners';
@@ -63,7 +70,11 @@ import { GuildDbConnector } from './guild-db-connector';
 import { BaseBotGuildOnboardingPort } from './guild-onboarding';
 import { GuildRegistrar } from './guild-registrar';
 import { resolveLocalesDir } from './locales-dir';
-import { createChannelLoggingMiddleware, createDispatchMiddleware } from './middlewares';
+import {
+  createChannelLoggingMiddleware,
+  createDispatchMiddleware,
+  createGuildLocaleMiddleware,
+} from './middlewares';
 import { TOKENS, type ReposFactory } from './tokens';
 import { ServiceReadiness } from './service-readiness';
 import { parseThreadModerationConfig, ThreadModeration } from './thread-moderation';
@@ -178,7 +189,28 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   public adminIds: string[] = [];
   public readonly threadModerationEnabled: boolean;
   /** Validated IANA zone from `config.timeZone`; `UTC` when unset. */
-  public readonly timeZone: string;
+  private readonly operatorTimeZone: string;
+  private readonly guildLocaleContext = new GuildLocaleContext((guildId) => {
+    const general = guildId ? this.guildSettings?.get(guildId)?.settings.general : undefined;
+    return {
+      language:
+        general?.language && general.language !== 'inherit'
+          ? general.language
+          : isLocale(this.config.language)
+            ? this.config.language
+            : DEFAULT_LOCALE,
+      timeZone: general?.timeZone ?? this.operatorTimeZone,
+    };
+  });
+  public get timeZone(): string {
+    return this.guildLocaleContext.current.timeZone;
+  }
+  public get language(): Locale {
+    return this.guildLocaleContext.current.language;
+  }
+  public withGuildContext<T>(guildId: string | undefined, callback: () => T): T {
+    return this.guildLocaleContext.run(guildId, callback);
+  }
   public config: TConfig;
 
   /**
@@ -192,12 +224,86 @@ export abstract class BaseBot<TConfig extends Config = Config> {
 
   /** Look up one guild's info. Returns undefined when unregistered. */
   public getGuildInfo(guildId: string): Readonly<GuildInfo> | undefined {
-    return this.#guildInfo.get(guildId);
+    const info = this.#guildInfo.get(guildId);
+    if (!info || !this.guildSettings) return info;
+    const snapshot = this.guildSettings.get(guildId);
+    const channels = { ...info.channels };
+    for (const slot of ['debug', 'event', 'giveaway'] as const) {
+      delete channels[slot];
+      const id = snapshot?.settings.channels[slot];
+      const channel = id ? info.guild.channels.cache.get(id) : undefined;
+      if (channel && channel.guildId === guildId) channels[slot] = channel;
+    }
+    return { ...info, channels };
+  }
+
+  public get guildSettings(): GuildSettingsService | undefined {
+    return this.container.tryResolve(TOKENS.GuildSettings);
+  }
+
+  private settingsInitialGuildIds: readonly string[] | undefined;
+  private settingsRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  private startGuildSettingsRecovery(): void {
+    if (!this.guildSettings || this.settingsRecoveryTimer) return;
+    const schedule = (): void => {
+      if (this.shuttingDown) return;
+      this.settingsRecoveryTimer = setTimeout(() => {
+        this.settingsRecoveryTimer = undefined;
+        void (async (): Promise<void> => {
+          try {
+            const settings = this.guildSettings;
+            if (!settings) return;
+            if (!settings.initialized) await this.hydrateGuildSettings();
+            else
+              await Promise.all(
+                [...this.#guildInfo].map(async ([id, info]) => {
+                  if (!info.repos || settings.get(id)) return;
+                  try {
+                    await settings.refreshGuild(id);
+                  } catch (error: unknown) {
+                    logError(this.logger, id, error);
+                  }
+                }),
+              );
+            this.publishServiceReadiness();
+          } finally {
+            schedule();
+          }
+        })().catch((error: unknown) => logError(this.logger, null, error));
+      }, this.env?.MONGO_RECOVERY_INTERVAL_MS ?? 60000);
+      this.settingsRecoveryTimer.unref();
+    };
+    schedule();
+  }
+
+  private async hydrateGuildSettings(guildId?: string): Promise<void> {
+    const settings = this.guildSettings;
+    if (!settings) return;
+    this.settingsInitialGuildIds ??= [...this.#guildInfo.keys()];
+    try {
+      if (!settings.initialized) await settings.initialize(this.settingsInitialGuildIds);
+      if (guildId !== undefined) await settings.ensureGuild(guildId);
+      else {
+        await Promise.all(
+          [...this.#guildInfo.keys()].map(async (id) => {
+            try {
+              await settings.ensureGuild(id);
+            } catch (error: unknown) {
+              logError(this.logger, id, error);
+            }
+          }),
+        );
+      }
+    } catch (error: unknown) {
+      logError(this.logger, guildId ?? null, error);
+    }
   }
 
   /** Readonly view over every registered guild. */
   public getAllGuildInfo(): ReadonlyMap<string, Readonly<GuildInfo>> {
-    return this.#guildInfo;
+    if (!this.guildSettings) return this.#guildInfo;
+    return new Map([...this.#guildInfo.keys()].map((id) => [id, this.getGuildInfo(id)!]));
   }
 
   /** Convenience accessor for the common case of just needing repos. */
@@ -253,8 +359,16 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   public commandHandlers: Map<string, Command> = new Map();
   public buttonHandlers: Map<string, ButtonHandler> = new Map();
   public modalHandlers: Map<string, ModalHandler> = new Map();
-  public ssmHandlers: Map<string, SSMHandler> = new Map();
-  public helpMessage: string = '';
+  public ssmHandlers: Map<string, SSMHandler<SelectMenuInteraction>> = new Map();
+  private defaultHelpMessage = '';
+  public get helpMessage(): string {
+    return this.guildLocaleContext.active && this.helpMessageKey && this.translator
+      ? this.translator.t(this.helpMessageKey)
+      : this.defaultHelpMessage;
+  }
+  public set helpMessage(value: string) {
+    this.defaultHelpMessage = value;
+  }
 
   /**
    * Backing store for the bot's scheduled jobs. Private so the container
@@ -358,9 +472,25 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   protected personaSection?: string;
   /** How shared command text refers to this bot, such as "虹夏大天使". */
-  public personaName = '';
+  private defaultPersonaName = '';
+  public get personaName(): string {
+    return this.guildLocaleContext.active && this.translator
+      ? this.translator.t(`${this.personaSection ?? 'replies:persona'}.persona_name`)
+      : this.defaultPersonaName;
+  }
+  public set personaName(value: string) {
+    this.defaultPersonaName = value;
+  }
   /** The bot's closing line on a `/ban_user` vote call; may be empty. */
-  public voteFlavor = '';
+  private defaultVoteFlavor = '';
+  public get voteFlavor(): string {
+    return this.guildLocaleContext.active && this.translator
+      ? this.translator.t(`${this.personaSection ?? 'replies:persona'}.vote_flavor`)
+      : this.defaultVoteFlavor;
+  }
+  public set voteFlavor(value: string) {
+    this.defaultVoteFlavor = value;
+  }
 
   /**
    * Whether this personality hosts the read-only `/db` inspection. Read
@@ -421,7 +551,10 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     if ((config.commands ?? []).includes(DB_INSPECT_COMMAND) && !this.supportsDbInspect()) {
       throw new Error(`config.commands: ${DB_INSPECT_COMMAND} is available only on nijika`);
     }
-    this.timeZone = config.timeZone ?? 'UTC';
+    if ((config.commands ?? []).includes('settings') && !this.supportsGuildSettings()) {
+      throw new Error('config.commands: settings is available only on tomori');
+    }
+    this.operatorTimeZone = config.timeZone ?? 'UTC';
     try {
       assertTimeZone(this.timeZone);
     } catch (err) {
@@ -475,7 +608,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     // plugins reach guild lookup without holding a BaseBot reference.
     const guildRegistry: GuildRegistry = {
       getRepos: (guildId) => this.#guildInfo.get(guildId)?.repos,
-      getChannel: (guildId, name) => this.#guildInfo.get(guildId)?.channels?.[name],
+      getChannel: (guildId, name) => this.getGuildInfo(guildId)?.channels?.[name],
       getRole: (guildId, name) => this.#guildInfo.get(guildId)?.roles?.[name],
       listGuildIds: () => Array.from(this.#guildInfo.keys()),
     };
@@ -611,7 +744,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
         container: this.container,
         host,
         router: this.interactionRouter,
-        guildInfo: () => this.#guildInfo,
+        guildInfo: () => this.getAllGuildInfo(),
         suppression: this.eventBridgeSuppression(),
         ...(this.threadModerationEnabled && this.translator
           ? {
@@ -649,6 +782,8 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   public shutdown = async (): Promise<void> => {
     this.shuttingDown = true;
+    if (this.settingsRecoveryTimer) clearTimeout(this.settingsRecoveryTimer);
+    this.settingsRecoveryTimer = undefined;
     this.guildDbConnector.stopRecovery();
     this.detachServiceReadinessListeners();
     try {
@@ -709,6 +844,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     const repos = await this.guildDbConnector.connectOne(guildId);
     if (repos !== undefined) {
       this.attachRepos(guildId, repos);
+      await this.hydrateGuildSettings(guildId);
     }
   };
 
@@ -720,9 +856,20 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     await this.guildDbConnector.connectAll(this.#guildInfo, (guildId, repos) =>
       this.attachRepos(guildId, repos),
     );
+    await this.hydrateGuildSettings();
   };
 
   // ---- subclass hooks ----
+
+  protected supportsGuildSettings(): boolean {
+    return false;
+  }
+
+  /** Invalidate in-memory drafts/cache only; persistent settings survive rejoin. */
+  protected invalidateGuildRuntime(guildId: string): void {
+    this.guildSettings?.forgetGuild(guildId);
+    this.#guildInfo.delete(guildId);
+  }
 
   /**
    * Subclass hook controlling which {@link ClientEventBridge}
@@ -793,10 +940,12 @@ export abstract class BaseBot<TConfig extends Config = Config> {
         'BaseBot.buildHost: config.language is not a supported locale; falling back to DEFAULT_LOCALE.',
       );
     }
-    const translator = await createDefaultTranslator({
-      localesDir: this.localesDir,
-      fallbackLocale: configuredLocale,
-    });
+    const translator = this.guildLocaleContext.translator(
+      await createDefaultTranslator({
+        localesDir: this.localesDir,
+        fallbackLocale: configuredLocale,
+      }),
+    );
     this.container.registerSingleton(TOKENS.Translator, () => translator);
     this.translator = translator;
     if (this.helpMessageKey !== undefined) {
@@ -808,6 +957,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     // Assemble the Chain-of-Responsibility interaction router: the
     // terminal dispatch stage followed by the observability stage.
     this.interactionRouter = new InteractionRouter();
+    this.interactionRouter.use(createGuildLocaleMiddleware(this));
     this.interactionRouter.use(createDispatchMiddleware(this));
     this.interactionRouter.use(
       createChannelLoggingMiddleware(this, {
@@ -864,9 +1014,11 @@ export abstract class BaseBot<TConfig extends Config = Config> {
       for (const [guildId, info] of Object.entries(registered)) {
         this.setGuildInfo(guildId, info);
       }
+      this.settingsInitialGuildIds ??= [...this.#guildInfo.keys()];
       await this.guildDbConnector.connectAll(this.#guildInfo, (guildId, repos) =>
         this.attachRepos(guildId, repos),
       );
+      await this.hydrateGuildSettings();
       if (this.shuttingDown) return;
       await registerCommands(this);
       await registerButtons(this);
@@ -892,11 +1044,13 @@ export abstract class BaseBot<TConfig extends Config = Config> {
       }
       if (this.shuttingDown) return;
       this.readyLifecycleSucceeded = pluginsReady;
+      this.startGuildSettingsRecovery();
       this.publishServiceReadiness();
       this.guildDbConnector.startRecovery(
         this.#guildInfo,
         (guildId, repos) => this.attachRepos(guildId, repos),
         async (guildId) => {
+          await this.hydrateGuildSettings(guildId);
           await this.pluginHost?.guildDatabaseReady(guildId);
           this.publishServiceReadiness();
         },
@@ -916,6 +1070,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
       const info = this.#guildInfo.get(guildId);
       if (info === undefined || (this.mongoURI && info.repos === undefined)) return;
       if (this.mongoURI && this.guildDbConnector.isDisabled(guildId) !== undefined) return;
+      if (this.guildSettings && !this.guildSettings.get(guildId)) return;
     }
     try {
       this.serviceReadiness.publish();

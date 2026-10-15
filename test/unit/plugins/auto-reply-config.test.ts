@@ -54,6 +54,17 @@ describe('parseAutoReplyConfig', () => {
     ).toThrow();
   });
 
+  it('accepts an explicit lucky-reply guild binding and rejects malformed IDs', () => {
+    const entry = { userId: LUCKY_USER_ID, probability: 0.5, reply: 'hi' };
+    expect(
+      parseAutoReplyConfig({ luckyReplies: [{ ...entry, guildId: LUCKY_USER_ID }] }).luckyReplies[0]
+        ?.guildId,
+    ).toBe(LUCKY_USER_ID);
+    expect(() =>
+      parseAutoReplyConfig({ luckyReplies: [{ ...entry, guildId: 'invalid' }] }),
+    ).toThrow();
+  });
+
   it('rejects an empty reply and an unknown key', () => {
     expect(() =>
       parseAutoReplyConfig({

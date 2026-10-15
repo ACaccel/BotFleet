@@ -114,6 +114,24 @@ afterEach(() => {
 });
 
 describe('handleGiveawayCreate (modal redesign)', () => {
+  it('checks the configured destination scope before publishing', async () => {
+    const source = makeChannel(true);
+    const destination = makeChannel(true, 'configured-destination');
+    const repos = makeRepos();
+    const { bot } = makeBot(repos, new Map(), { configuredChannel: destination.channel });
+    const isEnabled = vi.fn(() => false);
+    Object.assign(bot, { guildSettings: { isEnabled } });
+    const { interaction, sink } = makeInteraction(
+      source.channel,
+      DEFAULT_FIELDS,
+      'giveaway_create|configured',
+    );
+    await handleGiveawayCreate(interaction, bot);
+    expect(isEnabled).toHaveBeenCalledWith(GUILD_ID, 'giveaways', 'configured-destination', []);
+    expect(destination.send).not.toHaveBeenCalled();
+    expect(repos.giveaway.create).not.toHaveBeenCalled();
+    expect(sink.editReplies[0]?.content).toContain('replies:settings.feature_disabled');
+  });
   it('reads modal fields, publishes in interaction.channel, and stores that channel id', async () => {
     const repos = makeRepos();
     const channel = makeChannel(true);

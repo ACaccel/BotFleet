@@ -19,7 +19,7 @@ import {
 } from 'discord.js';
 
 import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
-import { bindTranslator, type BoundTranslate } from '../../core/i18n';
+import { bindTranslator, withGuildContext, type BoundTranslate } from '../../core/i18n';
 import { logError } from '../../core/logger';
 import { JobManager, retryWithBackoff } from '@core/scheduling';
 import type { RollCallDoc } from '../../persistence/schemas/roll-call.schema';
@@ -233,19 +233,21 @@ export const rebootRollCalls = async (
   const guildIds =
     recoveredGuildId === undefined ? deps.registry.listGuildIds() : [recoveredGuildId];
   await Promise.all(
-    guildIds.map(async (guildId) => {
-      const repos = deps.registry.getRepos(guildId);
-      if (!repos) return;
-      try {
-        const open = await retryWithBackoff(async () => {
-          const result = await repos.rollCall.listOpen();
-          if (!result.ok) throw result.error;
-          return result.value;
-        });
-        for (const doc of open) scheduleClose(deps, guildId, doc);
-      } catch (error) {
-        logError(deps.logger, guildId, error);
-      }
-    }),
+    guildIds.map((guildId) =>
+      withGuildContext(deps.translator, guildId, async () => {
+        const repos = deps.registry.getRepos(guildId);
+        if (!repos) return;
+        try {
+          const open = await retryWithBackoff(async () => {
+            const result = await repos.rollCall.listOpen();
+            if (!result.ok) throw result.error;
+            return result.value;
+          });
+          for (const doc of open) scheduleClose(deps, guildId, doc);
+        } catch (error) {
+          logError(deps.logger, guildId, error);
+        }
+      }),
+    ),
   );
 };

@@ -17,7 +17,7 @@ import { MessageFlags } from 'discord.js';
 import type { Client, ClientEvents, Guild, Interaction } from 'discord.js';
 import { Events } from 'discord.js';
 
-import type { Translator } from '../core/i18n';
+import { withGuildContext, type Translator } from '../core/i18n';
 import { type ServiceContainer, type ServiceToken } from '../core/ioc';
 import { logError, logGuildEvent, logSystem, ops, type Logger } from '../core/logger';
 // Audit-log coverage:
@@ -38,6 +38,7 @@ import type { Clock } from '../core/time';
 import type { GuildInfo } from './index';
 import { TOKENS } from './tokens';
 import type { ThreadModeration } from './thread-moderation';
+import { guildIdForInteraction } from '../core/plugin/event-guild';
 
 /**
  * Per-bot suppression flags. A subclass that does not want one of the
@@ -130,20 +131,22 @@ export class ClientEventBridge {
   public async sendRebootMessages(translator: Translator | undefined): Promise<void> {
     const guildInfo = this.config?.guildInfo() ?? new Map<string, GuildInfo>();
     await Promise.all(
-      Array.from(guildInfo.values()).map(async (slot) => {
-        try {
-          const debugChannel = slot.channels?.debug;
-          if (debugChannel === undefined || !debugChannel.isSendable()) return;
-          const message =
-            translator?.t('replies:base_bot.reboot_notice', {
-              botName: slot.bot_name,
-            }) ?? '';
-          if (message.length === 0) return;
-          await debugChannel.send(message);
-        } catch (err) {
-          logError(this.logger, slot.guild.id, err);
-        }
-      }),
+      Array.from(guildInfo.values()).map((slot) =>
+        withGuildContext(translator, slot.guild.id, async () => {
+          try {
+            const debugChannel = slot.channels?.debug;
+            if (debugChannel === undefined || !debugChannel.isSendable()) return;
+            const message =
+              translator?.t('replies:base_bot.reboot_notice', {
+                botName: slot.bot_name,
+              }) ?? '';
+            if (message.length === 0) return;
+            await debugChannel.send(message);
+          } catch (err) {
+            logError(this.logger, slot.guild.id, err);
+          }
+        }),
+      ),
     );
   }
 
@@ -244,6 +247,12 @@ export class ClientEventBridge {
   }
 
   private async onInteraction(interaction: Interaction): Promise<void> {
+    const translator = this.config?.container.tryResolve<Translator>(TOKENS.Translator);
+    const sourceGuildId = guildIdForInteraction(interaction);
+    await withGuildContext(translator, sourceGuildId, () => this.onScopedInteraction(interaction));
+  }
+
+  private async onScopedInteraction(interaction: Interaction): Promise<void> {
     const config = this.config;
     if (config === undefined) return;
     if (config.moderation && !(await config.moderation.allowInteraction(interaction))) return;

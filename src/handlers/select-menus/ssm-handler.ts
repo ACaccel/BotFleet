@@ -5,9 +5,20 @@
  * the generated handler registry. See `buttons/button-handler.ts` for
  * the rationale behind the split.
  */
-import type { StringSelectMenuInteraction } from 'discord.js';
+import {
+  ComponentType,
+  type ChannelSelectMenuInteraction,
+  type RoleSelectMenuInteraction,
+  type StringSelectMenuInteraction,
+} from 'discord.js';
 import type { BaseBot } from '@bot';
 
-export abstract class SSMHandler {
-  public abstract execute(interaction: StringSelectMenuInteraction, bot: BaseBot): Promise<void>;
+export type SelectMenuInteraction =
+  | StringSelectMenuInteraction
+  | RoleSelectMenuInteraction
+  | ChannelSelectMenuInteraction;
+
+export abstract class SSMHandler<T extends SelectMenuInteraction = StringSelectMenuInteraction> {
+  public readonly componentTypes: readonly ComponentType[] = [ComponentType.StringSelect];
+  public abstract execute(interaction: T, bot: BaseBot): Promise<void>;
 }

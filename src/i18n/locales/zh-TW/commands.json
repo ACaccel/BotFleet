@@ -1,12 +1,12 @@
 {
   "ban_user": {
-    "description": "發起投票,1 分鐘內滿 5 票即禁言對方 1-5 分鐘",
+    "description": "依照伺服器設定發起禁言投票，禁言時間為 1–5 分鐘",
     "options": {
       "user": {
         "description": "要投票禁言的成員"
       },
       "duration": {
-        "description": "禁言分鐘數(1-5,預設 1)"
+        "description": "覆寫預設禁言時間，單位為分鐘（1–5）"
       }
     }
   },
@@ -709,5 +709,8 @@
         }
       }
     }
+  },
+  "settings": {
+    "description": "設定此伺服器的 Tomori 功能與偏好"
   }
 }

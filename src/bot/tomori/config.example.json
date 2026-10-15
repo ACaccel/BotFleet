@@ -2,6 +2,10 @@
   "admin": ["YOUR_ADMIN_USER_ID"],
   "language": "zh-TW",
   "timeZone": "Asia/Taipei",
+  "guild_settings": {
+    "maxRandomProbability": 0.05,
+    "minCooldownSeconds": 1
+  },
   "thread_moderation": {
     "enabled": true
   },
@@ -11,9 +15,6 @@
         "debug": "YOUR_DEBUG_CHANNEL_ID",
         "event": "YOUR_EVENT_CHANNEL_ID",
         "giveaway": "YOUR_GIVEAWAY_CHANNEL_ID"
-      },
-      "roles": {
-        "ban_user": "YOUR_BAN_USER_ROLE_ID"
       },
       "permission_rank": {
         "channels": {
@@ -37,7 +38,10 @@
     }
   },
   "bug_report": {
-    "hub": { "guildId": "YOUR_HUB_GUILD_ID", "channelId": "YOUR_HUB_FORUM_CHANNEL_ID" },
+    "hub": {
+      "guildId": "YOUR_HUB_GUILD_ID",
+      "channelId": "YOUR_HUB_FORUM_CHANNEL_ID"
+    },
     "tags": {
       "bug": "Bug",
       "suggestion": "Suggestion",
@@ -48,6 +52,7 @@
     }
   },
   "commands": [
+    "settings",
     "help",
     "activity",
     "ban_user",
@@ -102,7 +107,8 @@
       {
         "userId": "YOUR_LUCKY_REPLY_USER_ID",
         "probability": 0.01,
-        "reply": "YOUR_LUCKY_REPLY_TEXT"
+        "reply": "YOUR_LUCKY_REPLY_TEXT",
+        "guildId": "YOUR_GUILD_ID"
       }
     ],
     "globalLuckyProbability": 0.005

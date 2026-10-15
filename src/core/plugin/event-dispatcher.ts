@@ -14,6 +14,8 @@
  */
 import type { ClientEvents } from 'discord.js';
 import type { Logger } from '../logger';
+import { withGuildContext } from '../i18n';
+import { guildIdForEvent } from './event-guild';
 import type {
   PluginEventContext,
   PluginEventSubscriptions,
@@ -91,7 +93,11 @@ export class EventDispatcher {
           c: PluginEventContext,
           ...a: ClientEvents[K]
         ) => Promise<void> | void;
-        return Promise.resolve().then(() => handler(ctx, ...args));
+        return Promise.resolve().then(() =>
+          withGuildContext(ctx.translator, guildIdForEvent(event, args), () =>
+            handler(ctx, ...args),
+          ),
+        );
       }),
     );
 

@@ -71,6 +71,8 @@ const SUMMARY_FIELDS: Readonly<Record<string, readonly string[]>> = {
   fetches: ['channel', 'lastMessageID'],
   gay_readings: ['percent', 'commentKey', 'expiresAt'],
   giveaways: ['prize', 'end_time', 'winner_num'],
+  guildsettings: ['botId', 'guildId', 'revision'],
+  guildsettingsmigrations: ['botId', 'createdAt'],
   messages: ['author.username', 'content', 'createdTimestamp'],
   replies: ['input', 'reply', 'created_by'],
   rollcalls: ['persona', 'closed', 'deadline'],

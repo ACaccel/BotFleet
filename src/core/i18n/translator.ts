@@ -61,6 +61,8 @@ export class MissingTranslationError extends Error {
 }
 
 export interface Translator {
+  /** Run a guild operation without changing shared translator defaults. */
+  withGuildContext?<T>(guildId: string | undefined, callback: () => T): T;
   /**
    * Translate a key for the given (or default) locale.
    * Returns the key string itself when missing — never throws — so a

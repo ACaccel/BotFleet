@@ -25,9 +25,10 @@ import { default as Handler_17 } from './random_restaurant';
 import { default as Handler_18 } from './reply';
 import { default as Handler_19 } from './role';
 import { default as Handler_20 } from './roll_call';
-import { default as Handler_21 } from './talk';
-import { default as Handler_22 } from './thread';
-import { default as Handler_23 } from './traffic';
+import { default as Handler_21 } from './settings';
+import { default as Handler_22 } from './talk';
+import { default as Handler_23 } from './thread';
+import { default as Handler_24 } from './traffic';
 export const COMMAND_REGISTRY = {
   activity: Handler_0,
   ai: Handler_1,
@@ -50,7 +51,8 @@ export const COMMAND_REGISTRY = {
   reply: Handler_18,
   role: Handler_19,
   roll_call: Handler_20,
-  talk: Handler_21,
-  thread: Handler_22,
-  traffic: Handler_23,
+  settings: Handler_21,
+  talk: Handler_22,
+  thread: Handler_23,
+  traffic: Handler_24,
 } as const satisfies Readonly<Record<string, new () => Command>>;

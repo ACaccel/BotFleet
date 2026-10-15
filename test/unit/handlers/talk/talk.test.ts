@@ -68,6 +68,15 @@ const build = (options: Options, { isAdmin = false, canPostElsewhere = true } = 
 };
 
 describe('/talk', () => {
+  it('honors feature scope at the chosen destination before sending', async () => {
+    const f = build({ content: 'hi', channel: ELSEWHERE });
+    const isEnabled = vi.fn(() => false);
+    Object.assign(f.bot, { guildSettings: { isEnabled } });
+    await new Talk().execute(f.interaction, f.bot);
+    expect(isEnabled).toHaveBeenCalledWith('g1', 'talk', ELSEWHERE, []);
+    expect(f.elsewhere.sent).toEqual([]);
+    expect(f.sink.editReplies[0]?.content).toContain('replies:settings.feature_disabled');
+  });
   it('signs the message in the current channel and allows member and role pings', async () => {
     const { interaction, bot, here, sink } = build({ content: '<@&2> hi' });
 

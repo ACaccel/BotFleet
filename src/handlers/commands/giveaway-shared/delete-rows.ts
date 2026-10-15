@@ -43,7 +43,7 @@ export const buildGiveawayDeleteRows = (
   bot: BaseBot,
 ): ActionRowBuilder<StringSelectMenuBuilder>[] => {
   // Select labels cannot render Discord timestamps, so format in the bot's zone.
-  const formatEnd = new Intl.DateTimeFormat(bot.config.language ?? 'zh-TW', {
+  const formatEnd = new Intl.DateTimeFormat(bot.language ?? bot.config.language ?? 'zh-TW', {
     timeZone: bot.timeZone,
     dateStyle: 'short',
     timeStyle: 'short',

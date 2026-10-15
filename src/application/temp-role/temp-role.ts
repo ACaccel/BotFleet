@@ -19,7 +19,7 @@ import type { Channel, Client, Guild, Message, Role } from 'discord.js';
 import type { Job } from 'node-schedule';
 
 import type { GuildLookup } from '../guild-lookup';
-import { bindTranslator, type Translator } from '../../core/i18n';
+import { bindTranslator, withGuildContext, type Translator } from '../../core/i18n';
 import { logError, type Logger } from '../../core/logger';
 import { JobManager, retryWithBackoff } from '@core/scheduling';
 import type { Clock } from '../../core/time';
@@ -386,37 +386,39 @@ export const rebootTempRoleJobs = async (
   const guildIds =
     recoveredGuildId === undefined ? deps.registry.listGuildIds() : [recoveredGuildId];
   await Promise.all(
-    guildIds.map(async (guildId) => {
-      try {
-        const repos = deps.registry.getRepos(guildId);
-        if (!repos) return;
-        const tempRoles = await rebootRetry(async () => {
-          const result = await repos.tempRole.listAll();
-          if (!result.ok) throw result.error;
-          return result.value;
-        });
-        for (const tr of tempRoles) {
-          try {
-            if (tr.expires_at > deps.clock.now()) {
-              scheduleExpiryJob(deps, guildId, tr.role_id, new Date(tr.expires_at));
-            } else {
-              await rebootRetry(() => expireTempRole(deps, guildId, tr.role_id));
+    guildIds.map((guildId) =>
+      withGuildContext(deps.translator, guildId, async () => {
+        try {
+          const repos = deps.registry.getRepos(guildId);
+          if (!repos) return;
+          const tempRoles = await rebootRetry(async () => {
+            const result = await repos.tempRole.listAll();
+            if (!result.ok) throw result.error;
+            return result.value;
+          });
+          for (const tr of tempRoles) {
+            try {
+              if (tr.expires_at > deps.clock.now()) {
+                scheduleExpiryJob(deps, guildId, tr.role_id, new Date(tr.expires_at));
+              } else {
+                await rebootRetry(() => expireTempRole(deps, guildId, tr.role_id));
+              }
+            } catch (rowErr) {
+              logError(deps.logger, guildId, rowErr);
             }
-          } catch (rowErr) {
-            logError(deps.logger, guildId, rowErr);
+          }
+        } catch (err) {
+          logError(deps.logger, guildId, err);
+          const debugCh = deps.registry.getChannel(guildId, 'debug');
+          if (debugCh?.isSendable()) {
+            await debugCh
+              .send(
+                `[ ops ] temp-role reboot listAll failed for guild ${guildId} after ${REBOOT_MAX_ATTEMPTS} attempts; expiry jobs may be missing until next restart.`,
+              )
+              .catch((sendErr) => logError(deps.logger, guildId, sendErr));
           }
         }
-      } catch (err) {
-        logError(deps.logger, guildId, err);
-        const debugCh = deps.registry.getChannel(guildId, 'debug');
-        if (debugCh?.isSendable()) {
-          await debugCh
-            .send(
-              `[ ops ] temp-role reboot listAll failed for guild ${guildId} after ${REBOOT_MAX_ATTEMPTS} attempts; expiry jobs may be missing until next restart.`,
-            )
-            .catch((sendErr) => logError(deps.logger, guildId, sendErr));
-        }
-      }
-    }),
+      }),
+    ),
   );
 };

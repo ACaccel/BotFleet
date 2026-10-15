@@ -39,6 +39,12 @@ Every bot shares the framework capabilities:
 
 ## Features
 
+- **Tomori server settings.** A private [`/settings` panel](docs/tomori-settings.md)
+  with manager/role/everyone editing, form-based scope/destination controls,
+  server language/time zone, individual entertainment switches/cooldowns,
+  moderation-vote parameters, automatic replies and social previews. Changes
+  use drafts, explicit saves and bounded configuration history.
+
 - **Slash commands and components.** Commands, context menus, buttons, modals and
   select menus, with shared [state-based embed colors](docs/architecture.md#discord-presentation-colors).
 - **LLM integration.** Chat through OpenAI, Anthropic, Gemini and xAI, with the

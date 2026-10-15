@@ -19,7 +19,12 @@ import {
 
 import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
 import { asGuildId } from '../../core/ids';
-import { bindTranslator, type BoundTranslate, type Translator } from '../../core/i18n';
+import {
+  bindTranslator,
+  withGuildContext,
+  type BoundTranslate,
+  type Translator,
+} from '../../core/i18n';
 import { logError, type Logger } from '../../core/logger';
 import type { ConnectionManager } from '../../infra/mongo/connection-manager';
 import {
@@ -174,60 +179,63 @@ const starterMessage = (args: CreateTicketArgs, number: number, t: BoundTranslat
 export const createTicket = async (
   deps: BugReportDeps,
   args: CreateTicketArgs,
-): Promise<CreateTicketOutcome> => {
-  const repo = await ticketRepo(deps);
-  const forum = await fetchHub(deps);
-  if (repo === undefined || forum === null) return { status: 'unavailable' };
-  const open = await repo.listOpenByReporter(deps.botId, args.reporter.id);
-  if (!open.ok) throw open.error;
-  if (open.value.length >= MAX_OPEN_TICKETS) return { status: 'too_many', max: MAX_OPEN_TICKETS };
-  const last = await repo.lastCreatedAt(deps.botId, args.reporter.id);
-  if (!last.ok) throw last.error;
-  if (last.value !== undefined && args.now - last.value < CREATE_COOLDOWN_MS) {
-    return { status: 'cooldown', retryAt: last.value + CREATE_COOLDOWN_MS };
-  }
+): Promise<CreateTicketOutcome> =>
+  withGuildContext(deps.translator, args.source?.guildId, async () => {
+    const repo = await ticketRepo(deps);
+    const forum = await fetchHub(deps);
+    if (repo === undefined || forum === null) return { status: 'unavailable' };
+    const open = await repo.listOpenByReporter(deps.botId, args.reporter.id);
+    if (!open.ok) throw open.error;
+    if (open.value.length >= MAX_OPEN_TICKETS) return { status: 'too_many', max: MAX_OPEN_TICKETS };
+    const last = await repo.lastCreatedAt(deps.botId, args.reporter.id);
+    if (!last.ok) throw last.error;
+    if (last.value !== undefined && args.now - last.value < CREATE_COOLDOWN_MS) {
+      return { status: 'cooldown', retryAt: last.value + CREATE_COOLDOWN_MS };
+    }
 
-  const created = await repo.createNumbered({
-    bot_id: deps.botId,
-    reporter_id: args.reporter.id,
-    ...(args.source
-      ? { source_guild_id: args.source.guildId, source_channel_id: args.source.channelId }
-      : {}),
-    type: args.type,
-    title: args.title,
-    created_at: args.now,
-  });
-  if (!created.ok) throw created.error;
-  const number = created.value.number;
-  const t = bindTranslator(deps.translator);
-  let thread: ThreadChannel;
-  try {
-    thread = await forum.threads.create({
-      name: `[${deps.botLabel}] #${String(number)} ${args.title}`.slice(0, THREAD_NAME_MAX),
-      message: starterMessage(args, number, t),
-      appliedTags: tagIds(forum, deps, [args.type, 'open']),
+    const created = await repo.createNumbered({
+      bot_id: deps.botId,
+      reporter_id: args.reporter.id,
+      ...(args.source
+        ? { source_guild_id: args.source.guildId, source_channel_id: args.source.channelId }
+        : {}),
+      type: args.type,
+      title: args.title,
+      created_at: args.now,
     });
-  } catch (error) {
-    await repo.deleteByNumber(deps.botId, number);
-    throw error;
-  }
-  const linked = await repo.setThread(deps.botId, number, thread.id);
-  if (!linked.ok) throw linked.error;
+    if (!created.ok) throw created.error;
+    const number = created.value.number;
+    const t = bindTranslator(deps.translator);
+    let thread: ThreadChannel;
+    try {
+      thread = await forum.threads.create({
+        name: `[${deps.botLabel}] #${String(number)} ${args.title}`.slice(0, THREAD_NAME_MAX),
+        message: starterMessage(args, number, t),
+        appliedTags: tagIds(forum, deps, [args.type, 'open']),
+      });
+    } catch (error) {
+      await repo.deleteByNumber(deps.botId, number);
+      throw error;
+    }
+    const linked = await repo.setThread(deps.botId, number, thread.id);
+    if (!linked.ok) throw linked.error;
 
-  const dmDelivered = await dmReporter(
-    deps,
-    args.reporter.id,
-    new EmbedBuilder()
-      .setColor(EMBED_COLORS.info)
-      .setTitle(t('replies:bug_report.dm_created_title', { number, title: args.title }))
-      .setDescription(t('replies:bug_report.dm_created_body')),
-  );
-  if (!dmDelivered) {
-    await repo.markDmFailed(deps.botId, number);
-    await thread.send({ content: t('replies:bug_report.thread_dm_failed') }).catch(() => undefined);
-  }
-  return { status: 'created', number, dmDelivered };
-};
+    const dmDelivered = await dmReporter(
+      deps,
+      args.reporter.id,
+      new EmbedBuilder()
+        .setColor(EMBED_COLORS.info)
+        .setTitle(t('replies:bug_report.dm_created_title', { number, title: args.title }))
+        .setDescription(t('replies:bug_report.dm_created_body')),
+    );
+    if (!dmDelivered) {
+      await repo.markDmFailed(deps.botId, number);
+      await thread
+        .send({ content: t('replies:bug_report.thread_dm_failed') })
+        .catch(() => undefined);
+    }
+    return { status: 'created', number, dmDelivered };
+  });
 
 /** Swap the status tag, keeping the type tag. */
 const applyStatusTag = async (
@@ -267,39 +275,40 @@ export const setTicketClosed = async (
   close: boolean,
   actorId: string,
   now: number,
-): Promise<boolean> => {
-  if ((ticket.status === 'closed') === close) return false;
-  const repo = await ticketRepo(deps);
-  if (repo === undefined) return false;
-  const status: BugTicketStatus = close ? 'closed' : 'in_progress';
-  const updated = await repo.setStatus(
-    deps.botId,
-    ticket.number,
-    status,
-    close ? { at: now, by: actorId } : undefined,
-  );
-  if (!updated.ok) throw updated.error;
-  await applyStatusTag(deps, thread, ticket, status);
-  const t = bindTranslator(deps.translator);
-  await dmReporter(
-    deps,
-    ticket.reporter_id,
-    new EmbedBuilder().setColor(close ? EMBED_COLORS.neutral : EMBED_COLORS.info).setTitle(
-      t(close ? 'replies:bug_report.dm_closed' : 'replies:bug_report.dm_reopened', {
-        number: ticket.number,
-        title: ticket.title,
-      }),
-    ),
-  );
-  if (close) {
-    await thread.setLocked(true).catch(() => undefined);
-    await thread.setArchived(true).catch(() => undefined);
-  } else {
-    await thread.setArchived(false).catch(() => undefined);
-    await thread.setLocked(false).catch(() => undefined);
-  }
-  return true;
-};
+): Promise<boolean> =>
+  withGuildContext(deps.translator, ticket.source_guild_id ?? undefined, async () => {
+    if ((ticket.status === 'closed') === close) return false;
+    const repo = await ticketRepo(deps);
+    if (repo === undefined) return false;
+    const status: BugTicketStatus = close ? 'closed' : 'in_progress';
+    const updated = await repo.setStatus(
+      deps.botId,
+      ticket.number,
+      status,
+      close ? { at: now, by: actorId } : undefined,
+    );
+    if (!updated.ok) throw updated.error;
+    await applyStatusTag(deps, thread, ticket, status);
+    const t = bindTranslator(deps.translator);
+    await dmReporter(
+      deps,
+      ticket.reporter_id,
+      new EmbedBuilder().setColor(close ? EMBED_COLORS.neutral : EMBED_COLORS.info).setTitle(
+        t(close ? 'replies:bug_report.dm_closed' : 'replies:bug_report.dm_reopened', {
+          number: ticket.number,
+          title: ticket.title,
+        }),
+      ),
+    );
+    if (close) {
+      await thread.setLocked(true).catch(() => undefined);
+      await thread.setArchived(true).catch(() => undefined);
+    } else {
+      await thread.setArchived(false).catch(() => undefined);
+      await thread.setLocked(false).catch(() => undefined);
+    }
+    return true;
+  });
 
 const REQUIRED_HUB_PERMISSIONS = {
   ViewChannel: PermissionFlagsBits.ViewChannel,

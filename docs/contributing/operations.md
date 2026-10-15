@@ -8,6 +8,14 @@ basic reading; score snapshots expire automatically.
 
 ## Command logs
 
+For Tomori's per-server destinations, feature scopes, permission recovery and
+settings database failures, see [server settings](../tomori-settings.md). Reboot
+notices use the saved debug destination; the command-log feature switch controls
+command embeds, while a configured debug destination also receives system notices.
+Public language/time-zone edits apply to subsequent guild work, including
+scheduled execution. A process restart clears entertainment cooldowns and
+in-memory moderation polls; their settings remain persisted.
+
 For debug-channel embed contents, language, permissions and suppression behavior,
 see [the configuration reference](../configuration.md#common-bot-settings).
 

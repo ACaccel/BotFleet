@@ -102,6 +102,10 @@ function loadBotConfig(botName: string): {
   const raw = fs.readFileSync(configPath, 'utf8');
   const cfg = JSON.parse(raw) as BotConfig;
 
+  if (botName === 'tomori' && (cfg.commands === undefined || Array.isArray(cfg.commands))) {
+    cfg.commands = [...new Set([...(cfg.commands ?? []), 'settings'])];
+  }
+
   if (!cfg.commands || !Array.isArray(cfg.commands) || cfg.commands.length === 0) {
     throw new Error(`No commands defined in ${configPath}`);
   }

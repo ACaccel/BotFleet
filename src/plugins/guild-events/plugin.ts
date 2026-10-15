@@ -33,6 +33,7 @@ import {
 
 import { TOKENS } from '../../bot/tokens';
 import type { GuildRegistry } from '../../bot/guild-registry';
+import type { GuildSettingsRuntime } from '../../core/guild-settings';
 import type { Plugin } from '../../core/plugin';
 import type { GuildOnboardingPort, PermissionRankPolicy } from '../../core/plugin';
 import { logError, logGuildEvent, logSystem, type Logger } from '../../core/logger';
@@ -98,6 +99,7 @@ const safeSendEmbed = async (
 
 /** Everything the event handlers read, resolved once in `init`. */
 interface GuildEventsDeps {
+  readonly settings?: GuildSettingsRuntime;
   readonly registry: GuildRegistry;
   readonly policy: PermissionRankPolicy;
   readonly onboardingPort: GuildOnboardingPort;
@@ -109,6 +111,7 @@ interface GuildEventsDeps {
 
 /** Optional collaborators wired by the composition root / tests. */
 interface CreateGuildEventsDeps {
+  readonly settings?: GuildSettingsRuntime;
   /**
    * Pre-delete attachment cache. Injectable (mirroring
    * `createSocialFeedPlugin`'s `platforms` seam) so tests drive the real
@@ -167,6 +170,7 @@ export const createGuildEventsPlugin = (
     async init(ctx): Promise<void> {
       const logger = ctx.resolve(TOKENS.Logger);
       resolved = {
+        settings: deps.settings,
         registry: ctx.resolve(TOKENS.GuildRegistry),
         policy: ctx.resolve(TOKENS.PermissionRankPolicy),
         onboardingPort: ctx.resolve(TOKENS.GuildOnboardingPort),
@@ -236,8 +240,8 @@ export const createGuildEventsPlugin = (
         void cacheMessageAttachments(cache, logger, message);
       },
       messageUpdate: async (_ctx, oldMessage, newMessage) => {
-        const { registry, policy, logger } = resolvedDeps();
-        await handleMessageUpdate(registry, policy, logger, oldMessage, newMessage);
+        const { registry, policy, logger, settings } = resolvedDeps();
+        await handleMessageUpdate(registry, policy, logger, oldMessage, newMessage, settings);
       },
       messageDelete: async (_ctx, message) => {
         await handleMessageDelete(resolvedDeps(), message);
@@ -253,7 +257,11 @@ export const createGuildEventsPlugin = (
       guildMemberUpdate: async (_ctx, oldMember, newMember) => {
         const { registry, logger } = resolvedDeps();
         const guildId = newMember.guild.id;
-        const eventChannel = resolveEventChannel(registry, guildId);
+        const settings = resolvedDeps().settings;
+        const eventChannel =
+          settings && !settings.get(guildId)?.settings.features.guild_events.enabled
+            ? undefined
+            : resolveEventChannel(registry, guildId);
         const oldRoles = oldMember.roles.cache;
         const newRoles = newMember.roles.cache;
         const addedRoles = newRoles.filter((role) => !oldRoles.has(role.id));
@@ -335,6 +343,7 @@ const handleMessageUpdate = async (
   logger: Logger | undefined,
   oldMessage: Message | PartialMessage,
   newMessage: Message | PartialMessage,
+  settings?: GuildSettingsRuntime,
 ): Promise<void> => {
   // Relevance guards: skip when either content side is missing, identical, or
   // the author / guild is unresolvable. These also filter the partial-message
@@ -355,12 +364,20 @@ const handleMessageUpdate = async (
 
   // Rank gates DISCLOSURE only: a channel above the `guild_events` ceiling is
   // withheld from the Discord `event` channel but still recorded locally below.
-  const suppressed = policy.isSuppressed(
-    newMessage.guildId,
-    'guild_events',
-    oldMessage.channel.id,
-    ancestorChannelIdsOf(oldMessage.channel, oldMessage.guild?.channels.cache),
-  );
+  const suppressed =
+    (settings !== undefined &&
+      !settings.isEnabled(
+        newMessage.guildId,
+        'guild_events',
+        oldMessage.channel.id,
+        ancestorChannelIdsOf(oldMessage.channel, oldMessage.guild?.channels.cache),
+      )) ||
+    policy.isSuppressed(
+      newMessage.guildId,
+      'guild_events',
+      oldMessage.channel.id,
+      ancestorChannelIdsOf(oldMessage.channel, oldMessage.guild?.channels.cache),
+    );
 
   if (!suppressed) {
     const eventChannel = resolveEventChannel(registry, newMessage.guildId);
@@ -475,7 +492,7 @@ const handleMessageDeleteBulk = async (
 };
 
 const handleMessageDelete = async (
-  { registry, policy, logger, cache }: GuildEventsDeps,
+  { registry, policy, logger, cache, settings }: GuildEventsDeps,
   message: Message | PartialMessage,
 ): Promise<void> => {
   if (message.guild === null || message.guildId === null) return;
@@ -489,12 +506,20 @@ const handleMessageDelete = async (
 
   // Rank gates DISCLOSURE only — see handleMessageUpdate. The local record
   // (attachment archival + audit line) runs regardless of this flag.
-  const suppressed = policy.isSuppressed(
-    message.guildId,
-    'guild_events',
-    message.channel.id,
-    ancestorChannelIdsOf(message.channel, message.guild?.channels.cache),
-  );
+  const suppressed =
+    (settings !== undefined &&
+      !settings.isEnabled(
+        message.guildId,
+        'guild_events',
+        message.channel.id,
+        ancestorChannelIdsOf(message.channel, message.guild?.channels.cache),
+      )) ||
+    policy.isSuppressed(
+      message.guildId,
+      'guild_events',
+      message.channel.id,
+      ancestorChannelIdsOf(message.channel, message.guild?.channels.cache),
+    );
 
   const content =
     message.content === null || message.content === undefined || message.content.length === 0

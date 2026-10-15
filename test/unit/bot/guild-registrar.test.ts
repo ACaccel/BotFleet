@@ -38,7 +38,9 @@ describe('GuildRegistrar.register', () => {
       members: [{ id: 'bot-1', displayName: 'Botty' }],
       roles: buildGuildRoles({ roles: [{ id: 'r-mod', name: 'mod' }] }),
     });
-    const channel = buildTextChannel({ id: 'c-logs', name: 'logs' });
+    const channel = Object.assign(buildTextChannel({ id: 'c-logs', name: 'logs' }), {
+      guildId: guild.id,
+    });
     const client = buildClient([guild], [channel]);
     const config: Config = {
       guilds: {
@@ -68,6 +70,16 @@ describe('GuildRegistrar.register', () => {
     expect(() => registrar.register(guild, config)).not.toThrow();
     const info = registrar.register(guild, config);
     expect(info.channels?.['logs']).toBeUndefined();
+  });
+
+  it('rejects configured channels belonging to another guild', () => {
+    const guild = buildGuildWithBot('g-1');
+    const foreign = Object.assign(buildTextChannel({ id: 'foreign' }), { guildId: 'g-2' });
+    const registrar = new GuildRegistrar(buildClient([guild], [foreign]), 'bot-1', silent);
+    expect(
+      registrar.register(guild, { guilds: { 'g-1': { channels: { event: foreign.id } } } })
+        .channels,
+    ).toEqual({});
   });
 
   it('returns empty channel / role maps when the guild has no config entry', () => {

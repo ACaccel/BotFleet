@@ -12,7 +12,7 @@ import {
 } from 'discord.js';
 
 import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
-import { bindTranslator, type BoundTranslate } from '../../core/i18n';
+import { bindTranslator, withGuildContext, type BoundTranslate } from '../../core/i18n';
 import type { BugTicketDoc } from '../../persistence/schemas/bug-ticket.schema';
 import {
   dmReporter,
@@ -52,20 +52,22 @@ export const relayAdminMessage = async (deps: BugReportDeps, message: Message): 
   const ticket = found.value;
   if (!ticket || ticket.bot_id !== deps.botId || ticket.status === 'closed') return;
 
-  const t = bindTranslator(deps.translator);
-  const name = message.member?.displayName ?? message.author.displayName;
-  const delivered = await dmReporter(
-    deps,
-    ticket.reporter_id,
-    relayEmbed(
-      message,
-      t('replies:bug_report.from_admin', { name, number: ticket.number }),
-      EMBED_COLORS.info,
-    ),
-  );
-  // Only a failure is marked; an unmarked reply reached the reporter.
-  if (!delivered) await message.react('⚠️').catch(() => undefined);
-  else await markInProgress(deps, thread, ticket);
+  await withGuildContext(deps.translator, ticket.source_guild_id ?? undefined, async () => {
+    const t = bindTranslator(deps.translator);
+    const name = message.member?.displayName ?? message.author.displayName;
+    const delivered = await dmReporter(
+      deps,
+      ticket.reporter_id,
+      relayEmbed(
+        message,
+        t('replies:bug_report.from_admin', { name, number: ticket.number }),
+        EMBED_COLORS.info,
+      ),
+    );
+    // Only a failure is marked; an unmarked reply reached the reporter.
+    if (!delivered) await message.react('⚠️').catch(() => undefined);
+    else await markInProgress(deps, thread, ticket);
+  });
 };
 
 /** Forward a reporter's DM into `ticket`'s post. */
@@ -74,22 +76,23 @@ export const relayDmToTicket = async (
   dm: Message,
   ticket: BugTicketDoc,
   t: BoundTranslate,
-): Promise<'relayed' | 'closed' | 'failed'> => {
-  if (ticket.status === 'closed') return 'closed';
-  const thread = await deps.client.channels.fetch(ticket.thread_id ?? '').catch(() => null);
-  if (!thread?.isThread()) return 'failed';
-  await thread.send({
-    embeds: [
-      relayEmbed(
-        dm,
-        t('replies:bug_report.from_reporter', { name: dm.author.displayName }),
-        EMBED_COLORS.warning,
-      ),
-    ],
-    allowedMentions: { parse: [] },
+): Promise<'relayed' | 'closed' | 'failed'> =>
+  withGuildContext(deps.translator, ticket.source_guild_id ?? undefined, async () => {
+    if (ticket.status === 'closed') return 'closed';
+    const thread = await deps.client.channels.fetch(ticket.thread_id ?? '').catch(() => null);
+    if (!thread?.isThread()) return 'failed';
+    await thread.send({
+      embeds: [
+        relayEmbed(
+          dm,
+          t('replies:bug_report.from_reporter', { name: dm.author.displayName }),
+          EMBED_COLORS.warning,
+        ),
+      ],
+      allowedMentions: { parse: [] },
+    });
+    return 'relayed';
   });
-  return 'relayed';
-};
 
 /** The ticket a DM replies to, by the footer of the bot's DM it quotes. */
 const quotedTicketNumber = async (
@@ -123,9 +126,11 @@ export const relayReporterDm = async (deps: BugReportDeps, dm: Message): Promise
     const ticket = found.value;
     if (!ticket || ticket.reporter_id !== dm.author.id)
       return void (await answer('dm_unknown_ticket'));
-    const outcome = await relayDmToTicket(deps, dm, ticket, t);
-    if (outcome !== 'relayed')
-      await answer(outcome === 'closed' ? 'dm_ticket_closed' : 'dm_relay_failed');
+    await withGuildContext(deps.translator, ticket.source_guild_id ?? undefined, async () => {
+      const outcome = await relayDmToTicket(deps, dm, ticket, t);
+      if (outcome !== 'relayed')
+        await answer(outcome === 'closed' ? 'dm_ticket_closed' : 'dm_relay_failed');
+    });
     return;
   }
 
@@ -134,9 +139,11 @@ export const relayReporterDm = async (deps: BugReportDeps, dm: Message): Promise
   const [only, ...others] = open.value;
   if (only === undefined) return void (await answer('dm_no_ticket'));
   if (others.length === 0) {
-    const outcome = await relayDmToTicket(deps, dm, only, t);
-    if (outcome !== 'relayed')
-      await answer(outcome === 'closed' ? 'dm_ticket_closed' : 'dm_relay_failed');
+    await withGuildContext(deps.translator, only.source_guild_id ?? undefined, async () => {
+      const outcome = await relayDmToTicket(deps, dm, only, t);
+      if (outcome !== 'relayed')
+        await answer(outcome === 'closed' ? 'dm_ticket_closed' : 'dm_relay_failed');
+    });
     return;
   }
   const menu = new StringSelectMenuBuilder()

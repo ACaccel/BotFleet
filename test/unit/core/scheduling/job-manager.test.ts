@@ -3,6 +3,7 @@ import type { Job } from 'node-schedule';
 
 import { JobManager } from '../../../../src/core/scheduling';
 import { silentLogger } from '../../../fixtures/runtime';
+import { GuildLocaleContext } from '../../../../src/core/i18n';
 
 // `JobManager` is a keyed wrapper around `node-schedule`. The scheduler
 // itself is mocked so the tests stay deterministic and never register a
@@ -22,6 +23,32 @@ afterEach(() => {
 });
 
 describe('JobManager', () => {
+  it('preserves guild identity when shared scheduler callbacks run in another guild and reschedule', () => {
+    let zone = 'Asia/Taipei';
+    const scope = new GuildLocaleContext((guildId) => ({
+      language: 'en',
+      timeZone: guildId === 'a' ? zone : 'UTC',
+    }));
+    scheduleJobMock.mockImplementation(() => fakeJob());
+    const manager = new JobManager(new Map());
+    const observed: string[] = [];
+    scope.run('a', () =>
+      manager.schedule('a', new Date(), () => {
+        observed.push(scope.current.timeZone);
+        manager.schedule('again', new Date(), () => {
+          observed.push(scope.current.timeZone);
+        });
+      }),
+    );
+    zone = 'Europe/London';
+    const first = scheduleJobMock.mock.calls[0]?.[1] as () => void;
+    scope.run('b', first);
+    zone = 'America/New_York';
+    const second = scheduleJobMock.mock.calls[1]?.[1] as () => void;
+    scope.run('b', second);
+    expect(observed).toEqual(['Europe/London', 'America/New_York']);
+    expect(scope.current.timeZone).toBe('UTC');
+  });
   it('schedules a job, stores it under the key and returns it', () => {
     const job = fakeJob();
     scheduleJobMock.mockReturnValue(job);

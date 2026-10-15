@@ -2,6 +2,7 @@ import type { Job } from 'node-schedule';
 import schedule from 'node-schedule';
 
 import type { Logger } from '../logger';
+import { bindGuildContext } from '../i18n';
 
 /**
  * Keyed wrapper around `node-schedule` that owns the lifecycle of a set
@@ -57,9 +58,10 @@ export class JobManager {
    * promise escapes into the scheduler.
    */
   private guard(key: string, callback: () => void | Promise<unknown>): () => void {
+    const execute = bindGuildContext(callback);
     return () => {
       try {
-        const result = callback();
+        const result = execute();
         if (result instanceof Promise) {
           void result.catch((err: unknown) => {
             this.report(key, err);

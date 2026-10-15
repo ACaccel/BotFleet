@@ -8,6 +8,13 @@
  */
 /* eslint-disable import/first */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Collection } from 'discord.js';
+import {
+  defaultGuildSettings,
+  FEATURES,
+  type GuildSettings,
+  type OperatorCapabilities,
+} from '../../../../src/core/guild-settings';
 
 const scheduledCallbacks: Array<() => void> = [];
 vi.mock('node-schedule', () => ({
@@ -40,12 +47,23 @@ interface Fixture {
   readonly targetIsBot?: boolean;
   /** The guild's configured voter role; `null` leaves it unset. */
   readonly voterRoleId?: string | null;
+  readonly settings?: GuildSettings;
+  readonly moderatable?: boolean;
 }
 
 const build = (fixture: Fixture) => {
   const reply = vi.fn(async () => undefined);
   const judgeMessage = {
-    reactions: { resolve: () => ({ count: fixture.votes + 1 }) },
+    reactions: {
+      resolve: () => ({
+        count: fixture.votes + 1,
+        users: {
+          fetch: vi.fn(
+            async () => new Collection([['eligible-voter', { id: 'eligible-voter', bot: false }]]),
+          ),
+        },
+      }),
+    },
     reply,
     react: vi.fn(async () => undefined),
     id: 'judge-1',
@@ -59,7 +77,7 @@ const build = (fixture: Fixture) => {
   const timeout = vi.fn(async () => {
     if (!fixture.timeoutSucceeds) throw new Error('Missing Permissions');
   });
-  Object.assign(member, { timeout });
+  Object.assign(member, { timeout, moderatable: fixture.moderatable ?? true });
   Object.assign(member.user, { tag: 'target#1' });
   const clientListeners = new Map<string, unknown>();
   const send = vi.fn(async (_options: unknown) => judgeMessage);
@@ -68,6 +86,14 @@ const build = (fixture: Fixture) => {
       prependListener: (event: string, fn: unknown) => clientListeners.set(event, fn),
       off: (event: string) => clientListeners.delete(event),
     },
+    ...(fixture.settings
+      ? {
+          guildSettings: {
+            get: () => ({ settings: fixture.settings }),
+            isEnabled: vi.fn(() => true),
+          },
+        }
+      : {}),
     getGuildInfo: () =>
       fixture.voterRoleId === null
         ? { roles: {} }
@@ -85,6 +111,13 @@ const build = (fixture: Fixture) => {
     options: { user: TARGET_ID },
     sink,
   });
+  if (fixture.settings) {
+    interaction.guild!.members.fetch = vi
+      .fn()
+      .mockImplementation(async ({ user }: { user: string }) =>
+        user === TARGET_ID ? member : buildGuildMember({ id: user, roleIds: ['voter-role'] }),
+      );
+  }
   return {
     bot,
     interaction,
@@ -95,6 +128,7 @@ const build = (fixture: Fixture) => {
     send,
     error: logger.error,
     clientListeners,
+    judgeMessage,
   };
 };
 
@@ -205,5 +239,136 @@ describe('ban_user vote call', () => {
       content: 'replies:ban_user.vote_call',
       allowedMentions: { parse: [] },
     });
+  });
+});
+
+const guildSettings = (): GuildSettings => {
+  const capabilities: OperatorCapabilities = {
+    features: Object.fromEntries(
+      FEATURES.map((name) => [name, true]),
+    ) as OperatorCapabilities['features'],
+    socialProviders: [],
+    maxRandomProbability: 1,
+    minCooldownSeconds: 0,
+    maxPreviewUrls: 5,
+  };
+  const settings = defaultGuildSettings(capabilities);
+  settings.moderationVote = {
+    threshold: 2,
+    voteWindowSeconds: 120,
+    durationMinutes: 3,
+    voterRoleIds: ['voter-role'],
+  };
+  return settings;
+};
+describe('guild-configured moderation votes', () => {
+  it('uses server parameters and only pings allowed voter roles', async () => {
+    const { bot, interaction, send, timeout, reply } = build({
+      votes: 100,
+      timeoutSucceeds: true,
+      settings: guildSettings(),
+    });
+    const translate = vi.fn((key: string) => key);
+    bot.translator = { ...echoTranslator(), t: translate };
+    await new BanUser().execute(interaction, bot);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedMentions: { roles: ['voter-role'] } }),
+    );
+    expect(translate).toHaveBeenCalledWith(
+      'replies:ban_user.vote_call_seconds',
+      expect.objectContaining({ threshold: 2, judgeSeconds: 120, duration: 3 }),
+    );
+    scheduledCallbacks[0]?.();
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith('replies:ban_user.vote_failed'));
+    expect(timeout).not.toHaveBeenCalled();
+  });
+  it('cancels outstanding votes when moderation is switched off', async () => {
+    const { bot, interaction, timeout, reply } = build({
+      votes: 100,
+      timeoutSucceeds: true,
+      settings: guildSettings(),
+    });
+    const enabled = vi.fn(() => true);
+    Object.assign(bot.guildSettings!, { isEnabled: enabled });
+    await new BanUser().execute(interaction, bot);
+    enabled.mockReturnValue(false);
+    scheduledCallbacks[0]?.();
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith('replies:ban_user.vote_cancelled'));
+    expect(timeout).not.toHaveBeenCalled();
+  });
+  it('cancels a poll when the saved voter-role policy changes', async () => {
+    const settings = guildSettings();
+    const { bot, interaction, timeout, reply } = build({
+      votes: 100,
+      timeoutSucceeds: true,
+      settings,
+    });
+    await new BanUser().execute(interaction, bot);
+    settings.moderationVote.voterRoleIds = ['replacement-role'];
+    scheduledCallbacks[0]?.();
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith('replies:ban_user.vote_cancelled'));
+    expect(timeout).not.toHaveBeenCalled();
+  });
+  it('does not start a poll against a protected or unmoderatable member', async () => {
+    const { bot, interaction, send, sink } = build({
+      votes: 100,
+      timeoutSucceeds: true,
+      settings: guildSettings(),
+      moderatable: false,
+    });
+    await new BanUser().execute(interaction, bot);
+    expect(sink.editReplies).toEqual([{ content: 'replies:ban_user.target_ineligible' }]);
+    expect(send).not.toHaveBeenCalled();
+    expect(scheduledCallbacks).toHaveLength(0);
+  });
+  it('does not fall back to deletion when Discord refuses a configured timeout', async () => {
+    const { bot, interaction, reply, judgeMessage, clientListeners } = build({
+      votes: 100,
+      timeoutSucceeds: false,
+      settings: guildSettings(),
+    });
+    judgeMessage.reactions.resolve = () => ({
+      count: 100,
+      users: {
+        fetch: vi.fn(
+          async () =>
+            new Collection([
+              ['voter-a', { id: 'voter-a', bot: false }],
+              ['voter-b', { id: 'voter-b', bot: false }],
+            ]),
+        ),
+      },
+    });
+    await new BanUser().execute(interaction, bot);
+    scheduledCallbacks[0]?.();
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith('replies:ban_user.timeout_refused'));
+    expect(clientListeners.size).toBe(0);
+  });
+  it('applies the configured default duration after enough eligible votes', async () => {
+    const settings = guildSettings();
+    settings.moderationVote.threshold = 2;
+    const { bot, interaction, timeout, judgeMessage } = build({
+      votes: 0,
+      timeoutSucceeds: true,
+      settings,
+    });
+    const reaction = {
+      count: 0,
+      users: {
+        fetch: vi.fn(
+          async () =>
+            new Collection([
+              ['voter-a', { id: 'voter-a', bot: false }],
+              ['voter-b', { id: 'voter-b', bot: false }],
+            ]),
+        ),
+      },
+    };
+    judgeMessage.reactions.resolve = () => reaction;
+    await new BanUser().execute(interaction, bot);
+    scheduledCallbacks[0]?.();
+    await vi.waitFor(() =>
+      expect(timeout).toHaveBeenCalledWith(180000, 'replies:ban_user.timeout_reason'),
+    );
   });
 });

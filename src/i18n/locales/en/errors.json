@@ -68,5 +68,15 @@
   "unexpected": "An unexpected error occurred while running the command. An administrator has been notified (error ID: {{traceId}}).",
   "graphics": {
     "font_missing": "Charts are unavailable on this host right now. Please tell an administrator."
+  },
+  "settings": {
+    "forbidden": "You no longer have permission to edit these settings.",
+    "expired": "This panel expired. Open /settings again.",
+    "invalid": "Invalid settings or resources. Check the values and channel/role permissions.",
+    "conflict": "Another editor saved first. Your draft is preserved; preview it or reload the latest settings.",
+    "unavailable": "Settings are temporarily unavailable. Please try again later.",
+    "pending": "The previous save outcome is being reconciled. Further saves are blocked.",
+    "guild_only": "Open /settings in a server.",
+    "failed": "Settings could not be updated. Please try again later."
   }
 }

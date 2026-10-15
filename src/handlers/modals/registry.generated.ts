@@ -8,9 +8,11 @@ import { default as Handler_0 } from './activity_create';
 import { default as Handler_1 } from './ai_settings';
 import { default as Handler_2 } from './bug_report';
 import { default as Handler_3 } from './giveaway_create';
+import { default as Handler_4 } from './settings';
 export const MODAL_REGISTRY = {
   activity_create: Handler_0,
   ai_settings: Handler_1,
   bug_report: Handler_2,
   giveaway_create: Handler_3,
+  settings: Handler_4,
 } as const satisfies Readonly<Record<string, new () => ModalHandler>>;

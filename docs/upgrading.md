@@ -1,5 +1,21 @@
 # Upgrade notes
 
+## Tomori settings schema version 2
+
+Deploy and restart Tomori, then open a new `/settings` panel. Existing version-1
+settings upgrade automatically without replacing saved preferences or history.
+The added general settings inherit deployment language/time zone; individual
+entertainment commands remain enabled with no cooldown. No command re-registration
+is needed for these panel changes if `/settings` is already registered.
+
+Tomori moderation votes now use the panel's voter-role policy rather than
+`guilds.<id>.roles.ban_user`, which previously only selected a ping role. The new
+role list defaults to empty (all current human members, no ping); managers can
+restrict it in the moderation form. Other defaults preserve five votes in sixty
+seconds and a one-minute timeout. Tomori requires a moderatable target and does
+not replace a refused timeout with message deletion. Other personalities retain
+their existing behavior. See [server preferences](tomori-settings.md) for limits.
+
 ## Gopher settings API removal
 
 Gopher no longer exposes the settings HTTP API. Remove `settings_api` from its

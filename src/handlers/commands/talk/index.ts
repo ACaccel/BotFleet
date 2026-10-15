@@ -5,6 +5,7 @@ import { Command } from '@cmd';
 
 import { replyForError } from '../../../infra/discord/reply-for-error';
 import { getRequiredString } from '../../../infra/discord/options';
+import { ancestorChannelIdsOf } from '../../../infra/discord';
 
 /** Leaves room for the `displayName(username): ` signature under Discord's 2000 limit. */
 const MAX_CONTENT_LENGTH = 1900;
@@ -45,6 +46,23 @@ export default class talk extends Command {
         : (interaction.channel ?? undefined);
       if (!channel?.isSendable() || !mayPost(channel as GuildBasedChannel, interaction)) {
         await interaction.editReply({ content: t('replies:talk.channel_not_allowed') });
+        return;
+      }
+      if (
+        bot.guildSettings &&
+        interaction.guildId &&
+        !bot.guildSettings.isEnabled(
+          interaction.guildId,
+          'talk',
+          channel.id,
+          ancestorChannelIdsOf(channel, interaction.guild?.channels.cache),
+        )
+      ) {
+        await interaction.editReply({
+          content: t('replies:settings.feature_disabled', {
+            feature: t('replies:settings.feature.talk'),
+          }),
+        });
         return;
       }
 

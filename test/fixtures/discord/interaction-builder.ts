@@ -394,7 +394,23 @@ const replySurface = (sink: InteractionMockSink) => ({
  * getters at their build-time values.
  */
 const withReplies = <T extends object>(sink: InteractionMockSink, fields: T): T =>
-  Object.defineProperties(fields, Object.getOwnPropertyDescriptors(replySurface(sink)));
+  Object.defineProperties(
+    Object.assign(
+      {
+        isAutocomplete: () => false,
+        isChatInputCommand: () => false,
+        isContextMenuCommand: () => false,
+        isModalSubmit: () => false,
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        isChannelSelectMenu: () => false,
+        isRoleSelectMenu: () => false,
+        isRepliable: () => true,
+      },
+      fields,
+    ),
+    Object.getOwnPropertyDescriptors(replySurface(sink)),
+  );
 
 /** discord.js throws when a modal field is absent; a fixture returning '' would hide that. */
 const missingField = (id: string): never => {

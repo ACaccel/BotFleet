@@ -16,7 +16,7 @@ import { EmbedBuilder, time, TimestampStyles } from 'discord.js';
 import type { Job } from 'node-schedule';
 
 import type { GuildLookup } from '../guild-lookup';
-import { bindTranslator } from '../../core/i18n';
+import { bindTranslator, withGuildContext } from '../../core/i18n';
 import type { Translator } from '../../core/i18n';
 import { logError, type Logger } from '../../core/logger';
 import type { Message } from 'discord.js';
@@ -328,46 +328,48 @@ export const rebootGiveawayJobs = async (
   const guildIds =
     recoveredGuildId === undefined ? deps.registry.listGuildIds() : [recoveredGuildId];
   await Promise.all(
-    guildIds.map(async (guildId) => {
-      try {
-        const repos = deps.registry.getRepos(guildId);
-        if (!repos) return;
-        // listAll returns Result<T, DatabaseError>. Throw the `err`
-        // inside the retried op so `rebootRetry`'s backoff treats a
-        // transient DB failure as retryable.
-        const giveaways = await rebootRetry(async () => {
-          const result = await repos.giveaway.listAll();
-          if (!result.ok) throw result.error;
-          return result.value;
-        });
-        for (const g of giveaways) {
-          try {
-            const end_time = new Date(g.end_time);
-            if (end_time > new Date()) {
-              jobManager.schedule(giveawayJobKey(g.message_id), end_time, async () => {
-                if (await findGiveaway(deps, guildId, g.message_id)) {
-                  await runGiveawayDraw(deps, guildId, g.message_id);
-                }
-              });
-            } else {
-              // Ended while the bot was down: draw now rather than drop it.
-              await runGiveawayDraw(deps, guildId, g.message_id);
+    guildIds.map((guildId) =>
+      withGuildContext(deps.translator, guildId, async () => {
+        try {
+          const repos = deps.registry.getRepos(guildId);
+          if (!repos) return;
+          // listAll returns Result<T, DatabaseError>. Throw the `err`
+          // inside the retried op so `rebootRetry`'s backoff treats a
+          // transient DB failure as retryable.
+          const giveaways = await rebootRetry(async () => {
+            const result = await repos.giveaway.listAll();
+            if (!result.ok) throw result.error;
+            return result.value;
+          });
+          for (const g of giveaways) {
+            try {
+              const end_time = new Date(g.end_time);
+              if (end_time > new Date()) {
+                jobManager.schedule(giveawayJobKey(g.message_id), end_time, async () => {
+                  if (await findGiveaway(deps, guildId, g.message_id)) {
+                    await runGiveawayDraw(deps, guildId, g.message_id);
+                  }
+                });
+              } else {
+                // Ended while the bot was down: draw now rather than drop it.
+                await runGiveawayDraw(deps, guildId, g.message_id);
+              }
+            } catch (rowErr) {
+              logError(deps.logger, guildId, rowErr);
             }
-          } catch (rowErr) {
-            logError(deps.logger, guildId, rowErr);
+          }
+        } catch (err) {
+          logError(deps.logger, guildId, err);
+          const debugCh = deps.registry.getChannel(guildId, 'debug');
+          if (debugCh?.isSendable()) {
+            await debugCh
+              .send(
+                `[ ops ] giveaway reboot listAll failed for guild ${guildId} after ${REBOOT_MAX_ATTEMPTS} attempts; scheduled jobs may be missing until next restart.`,
+              )
+              .catch((sendErr) => logError(deps.logger, guildId, sendErr));
           }
         }
-      } catch (err) {
-        logError(deps.logger, guildId, err);
-        const debugCh = deps.registry.getChannel(guildId, 'debug');
-        if (debugCh?.isSendable()) {
-          await debugCh
-            .send(
-              `[ ops ] giveaway reboot listAll failed for guild ${guildId} after ${REBOOT_MAX_ATTEMPTS} attempts; scheduled jobs may be missing until next restart.`,
-            )
-            .catch((sendErr) => logError(deps.logger, guildId, sendErr));
-        }
-      }
-    }),
+      }),
+    ),
   );
 };

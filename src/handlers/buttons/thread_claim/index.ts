@@ -3,6 +3,7 @@ import type { ButtonInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { unwrap } from '@core/result';
 import { logError } from '@core/logger';
+import { ancestorChannelIdsOf } from '../../../infra/discord';
 import type { ThreadClaim } from '../../../persistence/repositories/thread-moderation.repo';
 import { ButtonHandler } from '../button-handler';
 import { buildThreadClaimCard } from '../../thread-claim-view';
@@ -53,6 +54,31 @@ export default class thread_claim extends ButtonHandler {
       if (approved) {
         const guild = await bot.client.guilds.fetch(guildId);
         const thread = await resolveManagedThread(guild, threadId);
+        if (
+          bot.guildSettings &&
+          !bot.guildSettings.isEnabled(
+            guildId,
+            'thread_management',
+            thread.id,
+            thread.parentId
+              ? [
+                  thread.parentId,
+                  ...ancestorChannelIdsOf(
+                    guild.channels.cache.get(thread.parentId),
+                    guild.channels.cache,
+                  ),
+                ]
+              : [],
+          )
+        ) {
+          await interaction.editReply({
+            content:
+              bot.translator?.t('replies:settings.feature_disabled', {
+                feature: bot.translator?.t('replies:settings.feature.thread_management') ?? '',
+              }) ?? '',
+          });
+          return;
+        }
         if (thread.ownerId !== claim.owner_id)
           throw new ThreadManagementError('claim_owner_changed');
         await assertThreadApplicant(thread, claim.applicant_id);

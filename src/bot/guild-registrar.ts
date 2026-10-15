@@ -38,7 +38,7 @@ export class GuildRegistrar {
    */
   public register(guild: Guild, config: Config): GuildInfo {
     const guildConfig = config.guilds?.[guild.id];
-    const channels = this.resolveChannels(guildConfig?.channels);
+    const channels = this.resolveChannels(guild, guildConfig?.channels);
     const roles = this.resolveRoles(guild, guildConfig?.roles);
     return {
       bot_name: guild.members.cache.get(this.clientId)?.displayName ?? '',
@@ -76,12 +76,15 @@ export class GuildRegistrar {
    * map by reading the client's channel cache. Missing ids drop out
    * of the result.
    */
-  private resolveChannels(channelMap: Record<string, string> | undefined): Record<string, Channel> {
+  private resolveChannels(
+    guild: Guild,
+    channelMap: Record<string, string> | undefined,
+  ): Record<string, Channel> {
     const out: Record<string, Channel> = {};
     if (channelMap === undefined) return out;
     for (const [name, id] of Object.entries(channelMap)) {
       const channel = this.client.channels.cache.get(id);
-      if (channel !== undefined) {
+      if (channel !== undefined && 'guildId' in channel && channel.guildId === guild.id) {
         out[name] = channel;
       }
     }

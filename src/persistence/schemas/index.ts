@@ -1,4 +1,10 @@
 import {
+  guildSettingsSchema,
+  guildSettingsMigrationSchema,
+  type GuildSettingsDoc,
+  type GuildSettingsMigrationDoc,
+} from './guild-settings.schema';
+import {
   archiveInboxSchema,
   archiveJobSchema,
   archiveReactionSchema,
@@ -32,6 +38,12 @@ import {
 import { threadModerationSchema, type ThreadModerationDoc } from './thread-moderation.schema';
 import { userApiSettingSchema, type UserApiSettingDoc } from './user-api-setting.schema';
 export * from './archive.schema';
+export {
+  guildSettingsSchema,
+  guildSettingsMigrationSchema,
+  type GuildSettingsDoc,
+  type GuildSettingsMigrationDoc,
+} from './guild-settings.schema';
 
 export { activitySchema, type ActivityDoc } from './activity.schema';
 export { aiUsageSchema, type AiUsageDoc } from './ai-usage.schema';
@@ -60,6 +72,8 @@ export { threadModerationSchema, type ThreadModerationDoc } from './thread-moder
 export { userApiSettingSchema, type UserApiSettingDoc } from './user-api-setting.schema';
 
 export const SCHEMAS = {
+  GuildSettings: guildSettingsSchema,
+  GuildSettingsMigration: guildSettingsMigrationSchema,
   ArchiveInbox: archiveInboxSchema,
   ArchiveJob: archiveJobSchema,
   ArchiveReaction: archiveReactionSchema,
@@ -88,6 +102,8 @@ export type SchemaName = keyof typeof SCHEMAS;
  * `infra/mongo/connection-manager` to derive the typed Models map.
  */
 export interface DocByName {
+  GuildSettings: GuildSettingsDoc;
+  GuildSettingsMigration: GuildSettingsMigrationDoc;
   ArchiveInbox: ArchiveInboxDocument;
   ArchiveJob: ArchiveJob;
   ArchiveReaction: ArchiveReactionDoc;

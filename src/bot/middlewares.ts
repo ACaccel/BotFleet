@@ -14,6 +14,11 @@
  *     declares one instead of overriding the command dispatcher.
  */
 import { EMBED_COLORS } from '../infra/discord/presentation-colors';
+import { featureForInteraction } from '../application/guild-settings/feature-gate';
+import {
+  EntertainmentGate,
+  entertainmentCommandFor,
+} from '../application/guild-settings/entertainment';
 import { EmbedBuilder, MessageFlags, channelMention, userMention } from 'discord.js';
 import type { BaseBot } from './index';
 import { executeAutocomplete, executeCommand } from '@cmd';
@@ -21,13 +26,21 @@ import { executeButton } from '@button';
 import { executeModal } from '@modal';
 import { executeSSM } from '@select-menu';
 import { logGuildEvent } from '@core/logger';
-import { bindTranslator } from '@core/i18n';
+import { bindTranslator, withGuildContext } from '@core/i18n';
 import { ancestorChannelIdsOf, sendChannelLog } from '../infra/discord';
+import { guildIdForInteraction } from '../core/plugin/event-guild';
 import type {
   InteractionContext,
   InteractionMiddleware,
   PermissionRankPolicy,
 } from '../core/plugin';
+
+/** Keep shared translator/time-zone readers scoped across the entire dispatch chain. */
+export const createGuildLocaleMiddleware = (bot: BaseBot): InteractionMiddleware => ({
+  name: 'guild-locale',
+  run: (ctx, next) =>
+    withGuildContext(bot.translator, guildIdForInteraction(ctx.interaction), next),
+});
 
 /**
  * Routes the inbound interaction to the matching dispatcher. Calls
@@ -35,33 +48,100 @@ import type {
  * future tracing hooks) still runs even when the dispatcher returned a
  * user-facing reply.
  */
-export const createDispatchMiddleware = (bot: BaseBot): InteractionMiddleware => ({
-  name: 'dispatch',
-  async run(ctx: InteractionContext, next): Promise<void> {
-    const interaction = ctx.interaction;
-    // Autocomplete first: it is the one branch that must never reply,
-    // and answering it is a different verb (`respond`) with a
-    // three-second budget. `executeAutocomplete` swallows its own
-    // failures, so the chain below still runs either way.
-    if (interaction.isAutocomplete()) {
-      await executeAutocomplete(interaction, bot);
-    } else if (interaction.isChatInputCommand() || interaction.isContextMenuCommand()) {
-      await executeCommand(interaction, bot);
-    } else if (interaction.isModalSubmit()) {
-      await executeModal(interaction, bot);
-    } else if (interaction.isButton()) {
-      await executeButton(interaction, bot);
-    } else if (interaction.isStringSelectMenu()) {
-      await executeSSM(interaction, bot);
-    } else if (interaction.isRepliable()) {
-      await interaction.reply({
-        content: bot.translator?.t('errors:command.unsupported_interaction_type') ?? '',
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-    await next();
-  },
-});
+export const createDispatchMiddleware = (bot: BaseBot): InteractionMiddleware => {
+  // One gate per middleware keeps cooldowns isolated per application.
+  const entertainment = new EntertainmentGate();
+  return {
+    name: 'dispatch',
+    async run(ctx: InteractionContext, next): Promise<void> {
+      const interaction = ctx.interaction;
+      const settings = bot.guildSettings;
+      if (settings && interaction.guildId) {
+        const commandId =
+          interaction.isChatInputCommand() ||
+          interaction.isContextMenuCommand() ||
+          interaction.isAutocomplete()
+            ? bot.commandHandlers.get(interaction.commandName)?.config.name
+            : undefined;
+        const feature = featureForInteraction(interaction, commandId);
+        if (
+          feature &&
+          !settings.isEnabled(
+            interaction.guildId,
+            feature,
+            interaction.channelId ?? undefined,
+            ancestorChannelIdsOf(interaction.channel, interaction.guild?.channels.cache),
+          )
+        ) {
+          if (interaction.isAutocomplete()) await interaction.respond([]);
+          else if (interaction.isRepliable()) {
+            await interaction.reply({
+              content:
+                bot.translator?.t(
+                  settings.get(interaction.guildId)
+                    ? 'replies:settings.feature_disabled'
+                    : 'replies:settings.unavailable',
+                  { feature: bot.translator?.t(`replies:settings.feature.${feature}`) ?? feature },
+                ) ?? '',
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+          await next();
+          return;
+        }
+        const command = entertainmentCommandFor(interaction, commandId);
+        if (command) {
+          const access = entertainment.check(
+            settings,
+            interaction.guildId,
+            interaction.user.id,
+            command,
+          );
+          if (!access.allowed) {
+            if (interaction.isRepliable())
+              await interaction.reply({
+                content:
+                  bot.translator?.t(
+                    access.reason === 'cooldown'
+                      ? 'replies:settings.entertainment_cooldown'
+                      : 'replies:settings.entertainment_disabled',
+                    access.reason === 'cooldown' ? { seconds: access.seconds } : undefined,
+                  ) ?? '',
+                flags: MessageFlags.Ephemeral,
+              });
+            await next();
+            return;
+          }
+        }
+      }
+      // Autocomplete first: it is the one branch that must never reply,
+      // and answering it is a different verb (`respond`) with a
+      // three-second budget. `executeAutocomplete` swallows its own
+      // failures, so the chain below still runs either way.
+      if (interaction.isAutocomplete()) {
+        await executeAutocomplete(interaction, bot);
+      } else if (interaction.isChatInputCommand() || interaction.isContextMenuCommand()) {
+        await executeCommand(interaction, bot);
+      } else if (interaction.isModalSubmit()) {
+        await executeModal(interaction, bot);
+      } else if (interaction.isButton()) {
+        await executeButton(interaction, bot);
+      } else if (
+        interaction.isStringSelectMenu() ||
+        interaction.isChannelSelectMenu() ||
+        interaction.isRoleSelectMenu()
+      ) {
+        await executeSSM(interaction, bot);
+      } else if (interaction.isRepliable()) {
+        await interaction.reply({
+          content: bot.translator?.t('errors:command.unsupported_interaction_type') ?? '',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+      await next();
+    },
+  };
+};
 
 interface ChannelLoggingMiddlewareConfig {
   /**
@@ -95,12 +175,20 @@ export const createChannelLoggingMiddleware = (
       const interaction = ctx.interaction;
       if (interaction.isChatInputCommand() || interaction.isContextMenuCommand()) {
         if (interaction.guildId !== null) {
-          const suppressed = config.policy.isSuppressed(
-            interaction.guildId,
-            'channel_logging',
-            interaction.channelId,
-            ancestorChannelIdsOf(interaction.channel, interaction.guild?.channels.cache),
-          );
+          const suppressed =
+            (bot.guildSettings !== undefined &&
+              !bot.guildSettings.isEnabled(
+                interaction.guildId,
+                'channel_logging',
+                interaction.channelId,
+                ancestorChannelIdsOf(interaction.channel, interaction.guild?.channels.cache),
+              )) ||
+            config.policy.isSuppressed(
+              interaction.guildId,
+              'channel_logging',
+              interaction.channelId,
+              ancestorChannelIdsOf(interaction.channel, interaction.guild?.channels.cache),
+            );
           if (!suppressed) {
             const t = bindTranslator(bot.translator);
             const commandName = interaction.isChatInputCommand()

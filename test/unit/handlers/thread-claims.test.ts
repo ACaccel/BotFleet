@@ -357,6 +357,23 @@ describe('thread_claim submission', () => {
 });
 
 describe('thread_claim DM review', () => {
+  it('blocks a pending approval when thread management is disabled', async () => {
+    const f = build();
+    Object.assign(f.bot, { guildSettings: { isEnabled: () => false } });
+    await new ClaimButton().execute(f.button, f.bot);
+    expect(f.repo.decideClaim).not.toHaveBeenCalled();
+    expect(f.claim.status).toBe('pending');
+    expect(f.buttonSink.editReplies[0]?.content).toContain('replies:settings.feature_disabled');
+  });
+
+  it('keeps rejection available when thread management is disabled', async () => {
+    const f = build();
+    Object.assign(f.bot, { guildSettings: { isEnabled: () => false } });
+    Object.assign(f.button, { customId: f.button.customId.replace('approve', 'reject') });
+    await new ClaimButton().execute(f.button, f.bot);
+    expect(f.claim.status).toBe('rejected');
+    expect(f.repo.decideClaim).toHaveBeenCalledOnce();
+  });
   it('does not decide a bound request before delivery has durably completed', async () => {
     const f = build();
     delete f.claim.delivery_completed_at;

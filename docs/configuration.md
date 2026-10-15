@@ -83,6 +83,24 @@ bot's `language`; argument values are omitted. The bot needs **Embed Links**
 permission in the debug channel. The `channel_logging` permission-rank ceiling
 still suppresses these embeds; durable guild audit logs remain unchanged.
 
+## Tomori server panel
+
+Tomori automatically exposes [`/settings`](tomori-settings.md). Guild preferences
+are persisted separately from deployment configuration. `guild_settings` accepts
+operator-only `maxRandomProbability` (0-1, default `1`) and
+`minCooldownSeconds` (integer 0-86400, default `0`); unknown keys fail startup.
+The former caps the saved random-reply probability; the latter is a minimum
+cooldown, so increasing it restricts message frequency. Social capability,
+providers and URL-count ceilings come from `social_link_preview`.
+Per-server public language/time zone inherit `language`/`timeZone` until changed
+in the panel. Entertainment cooldowns and moderation-vote parameters live only in
+the per-guild database; see [editable preferences](tomori-settings.md).
+
+Optional `auto_reply.luckyReplies[].guildId` binds an entry to one guild. Tomori
+withholds unbound entries; other personalities preserve unbound legacy behavior
+and honor an explicit binding. See the panel guide for seeding, permission policy,
+safe new-guild defaults, storage boundaries and the application control database.
+
 ## Feature settings
 
 Use the matching example:

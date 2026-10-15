@@ -3,6 +3,8 @@ import { ActivityType, Events } from 'discord.js';
 
 import type { Config } from '@bot';
 import { BaseBot } from '@bot';
+import { TOKENS } from '../tokens';
+import { createTomoriGuildSettings } from './guild-settings';
 import {
   createAutoReplyPlugin,
   createActivityPlugin,
@@ -13,15 +15,11 @@ import {
   createTempRolePlugin,
 } from '@plugins';
 
-// Tomori is the public-facing personality: nijika's interactive feature
-// set minus the self-guild-only surfaces (earthquake webhook, level-role
-// sync). It adds no fields beyond the base `Config` except the optional
-// `social_link_preview` and `auto_reply` blocks, which the owning
-// plugins parse and default in code. Channel suppression for guild-events / social-link-preview /
-// channel-logging comes from the per-guild `permission_rank` block (see
-// `GuildConfig.permission_rank`), resolved via `TOKENS.PermissionRankPolicy`,
-// rather than a personality-level list.
+// Public guild preferences supplement the operator's capabilities and static
+// permission ranks. Other personalities keep their deployment-only settings.
 interface TomoriConfig extends Config {
+  /** Operator-only resource ceilings for the per-guild panel. */
+  guild_settings?: unknown;
   /**
    * Raw `social_link_preview` block. Parsed and defaulted by the plugin
    * (see `createSocialLinkPreviewPlugin`), so it is intentionally
@@ -52,7 +50,13 @@ export class Tomori extends BaseBot<TomoriConfig> {
     clientId: string,
     config: TomoriConfig,
   ) {
-    super(client, token, mongoURI, clientId, config);
+    super(client, token, mongoURI, clientId, {
+      ...config,
+      commands: [...new Set([...(config.commands ?? []), 'settings'])],
+    });
+    this.container.registerSingleton(TOKENS.GuildSettings, () =>
+      createTomoriGuildSettings(this, config),
+    );
     // Intro paragraph rendered at the top of the `/help` embed; the
     // key is resolved once the translator is loaded (see BaseBot.run).
     this.helpMessageKey = 'replies:tomori.help_message';
@@ -67,11 +71,15 @@ export class Tomori extends BaseBot<TomoriConfig> {
     // `messageDelete` / `guildMemberUpdate` / `guildCreate`; without
     // it the ClientEventBridge never wires those Discord events and
     // no audit log / channel mirror is produced.
-    this.use(createAutoReplyPlugin(this.config.auto_reply));
-    this.use(createGuildEventsPlugin(this.config.guild_events));
+    this.use(createAutoReplyPlugin(this.config.auto_reply, this.guildSettings));
+    this.use(createGuildEventsPlugin(this.config.guild_events, { settings: this.guildSettings }));
     // Social-link preview: detect share links, post a richer preview,
     // and suppress the user's original auto-embed (mirrors nijika).
-    this.use(createSocialLinkPreviewPlugin(this.config.social_link_preview));
+    this.use(
+      createSocialLinkPreviewPlugin(this.config.social_link_preview, {
+        settings: this.guildSettings,
+      }),
+    );
     this.use(createGiveawayPlugin());
     this.use(createActivityPlugin());
     // Temporary, permission-less notification roles with a self-claim
@@ -86,6 +94,11 @@ export class Tomori extends BaseBot<TomoriConfig> {
       }),
     );
     this.registerPresence();
+    this.client.on(Events.GuildDelete, (guild) => this.invalidateGuildRuntime(guild.id));
+  }
+
+  protected override supportsGuildSettings(): boolean {
+    return true;
   }
 
   /**

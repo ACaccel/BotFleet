@@ -24,6 +24,7 @@ import {
 } from '../../infra/link-preview';
 import { parseSocialLinkPreviewConfig } from './config';
 import { runSocialLinkPreview } from './internal/orchestrator';
+import type { GuildSettingsRuntime } from '../../core/guild-settings';
 
 const PLUGIN_ID = 'social-link-preview';
 const PLUGIN_VERSION = '1.0.0';
@@ -32,6 +33,7 @@ const PLUGIN_VERSION = '1.0.0';
 interface CreateSocialLinkPreviewDeps {
   /** Provider registry; injectable so tests can supply fakes without the network. */
   readonly registry?: LinkPreviewProviderRegistry;
+  readonly settings?: GuildSettingsRuntime;
 }
 
 export const createSocialLinkPreviewPlugin = (
@@ -88,16 +90,25 @@ export const createSocialLinkPreviewPlugin = (
         if (message.author.id === message.client.user.id) return;
         if (message.author.bot && !allowedBotIds.has(message.author.id)) return;
         if (message.guildId === null) return; // guild-only
+        const ancestors = ancestorChannelIdsOf(message.channel, message.guild?.channels.cache);
+        const snapshot = deps.settings?.get(message.guildId);
+        if (
+          deps.settings !== undefined &&
+          (snapshot === undefined ||
+            !deps.settings.isEnabled(
+              message.guildId,
+              'social_preview',
+              message.channelId,
+              ancestors,
+            ))
+        )
+          return;
+        const preferences = snapshot?.settings.socialPreview;
         // Channels above the social_preview rank ceiling are suppressed.
         // Default ceiling is unbounded, so this is a no-op unless an operator
         // sets a finite `social_preview.maxChannelRank`.
         if (
-          policy().isSuppressed(
-            message.guildId,
-            'social_preview',
-            message.channelId,
-            ancestorChannelIdsOf(message.channel, message.guild?.channels.cache),
-          )
+          policy().isSuppressed(message.guildId, 'social_preview', message.channelId, ancestors)
         ) {
           return;
         }
@@ -105,7 +116,34 @@ export const createSocialLinkPreviewPlugin = (
 
         try {
           await runSocialLinkPreview(
-            { registry, config, translator: ctx.translator, logger: ctx.logger },
+            {
+              registry,
+              config:
+                preferences === undefined
+                  ? config
+                  : {
+                      ...config,
+                      originalMessageStrategy: preferences.originalMessageStrategy,
+                      maxUrlsPerMessage: Math.min(
+                        config.maxUrlsPerMessage,
+                        preferences.maxUrlsPerMessage,
+                      ),
+                    },
+              ...(preferences === undefined
+                ? {}
+                : {
+                    providers: new Set(
+                      preferences.providers.filter(
+                        (name) =>
+                          config.providers === undefined ||
+                          config.providers.some((allowed) => allowed === name),
+                      ),
+                    ),
+                    videoEnabled: preferences.videoEnabled,
+                  }),
+              translator: ctx.translator,
+              logger: ctx.logger,
+            },
             message,
           );
         } catch (err: unknown) {

@@ -11,7 +11,7 @@ import type { Channel, Client, Guild, Message, SendableChannels } from 'discord.
 import type { Job } from 'node-schedule';
 
 import type { GuildLookup } from '../guild-lookup';
-import { bindTranslator, type Translator } from '../../core/i18n';
+import { bindTranslator, withGuildContext, type Translator } from '../../core/i18n';
 import { logError, type Logger } from '../../core/logger';
 import { JobManager, retryWithBackoff } from '@core/scheduling';
 import type { ActivityInput } from '../../persistence/repositories/activity.repo';
@@ -254,19 +254,21 @@ export const rebootActivityJobs = async (
   const guildIds =
     recoveredGuildId === undefined ? deps.registry.listGuildIds() : [recoveredGuildId];
   await Promise.all(
-    guildIds.map(async (guildId) => {
-      const repos = deps.registry.getRepos(guildId);
-      if (!repos) return;
-      try {
-        const activities = await retryWithBackoff(async () => {
-          const result = await repos.activity.listAll();
-          if (!result.ok) throw result.error;
-          return result.value;
-        });
-        for (const doc of activities) scheduleJobs(deps, guildId, doc, now);
-      } catch (error) {
-        logError(deps.logger, guildId, error);
-      }
-    }),
+    guildIds.map((guildId) =>
+      withGuildContext(deps.translator, guildId, async () => {
+        const repos = deps.registry.getRepos(guildId);
+        if (!repos) return;
+        try {
+          const activities = await retryWithBackoff(async () => {
+            const result = await repos.activity.listAll();
+            if (!result.ok) throw result.error;
+            return result.value;
+          });
+          for (const doc of activities) scheduleJobs(deps, guildId, doc, now);
+        } catch (error) {
+          logError(deps.logger, guildId, error);
+        }
+      }),
+    ),
   );
 };

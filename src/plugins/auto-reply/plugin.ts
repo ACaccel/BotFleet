@@ -24,6 +24,9 @@ import type { Logger } from '../../core/logger';
 import type { Plugin } from '../../core/plugin';
 import { requireCapture } from '../../core/regex-capture';
 import { parseAutoReplyConfig } from './config';
+import type { GuildSettingsRuntime } from '../../core/guild-settings';
+import { ancestorChannelIdsOf } from '../../infra/discord';
+import { ReplyCooldown } from './cooldown';
 
 const PLUGIN_ID = 'auto-reply';
 const PLUGIN_VERSION = '1.0.0';
@@ -92,8 +95,12 @@ const safeLookup = async (
   }
 };
 
-export const createAutoReplyPlugin = (rawConfig?: unknown): Plugin => {
+export const createAutoReplyPlugin = (
+  rawConfig?: unknown,
+  settings?: GuildSettingsRuntime,
+): Plugin => {
   const config = parseAutoReplyConfig(rawConfig);
+  const cooldown = new ReplyCooldown();
   let resolvedRegistry: GuildRegistry | undefined;
   /** See the `init` contract in `core/plugin/types.ts`: unreachable. */
   const registryOf = (): GuildRegistry => {
@@ -111,6 +118,10 @@ export const createAutoReplyPlugin = (rawConfig?: unknown): Plugin => {
       resolvedRegistry = ctx.resolve(TOKENS.GuildRegistry);
     },
 
+    async onShutdown(): Promise<void> {
+      cooldown.clear();
+    },
+
     events: {
       messageCreate: async (ctx, message): Promise<void> => {
         if (areAutoRepliesSuppressed(message)) return;
@@ -122,47 +133,97 @@ export const createAutoReplyPlugin = (rawConfig?: unknown): Plugin => {
         if (!message.channel.isSendable()) return;
         if (message.guildId === null) return;
         const guildId = message.guildId;
-
-        if (message.content.includes(GOODNIGHT_LINE)) {
-          await message.reply(t.t('replies:auto_reply.goodnight_reply'));
-        }
-
-        // The remaining behaviours all skip bot authors so two bots
-        // running this plugin do not feedback-loop each other.
-        if (!message.author.bot) {
-          // Stored replies are member-authored, so they never ping anyone.
-          const reply = await safeLookup(registry, guildId, message.content, logger, 'direct');
-          if (reply !== null) {
-            await message.channel.send({ content: reply, allowedMentions: { parse: [] } });
-          }
-
-          for (const lucky of config.luckyReplies) {
-            if (message.author.id === lucky.userId && Math.random() < lucky.probability) {
-              // Operator-supplied text goes out verbatim, so mentions are
-              // disabled: a stray `@everyone` in config.json would
-              // otherwise become a ping.
-              await message.channel.send({
-                content: lucky.reply,
-                allowedMentions: { parse: [] },
-              });
+        const snapshot = settings?.get(guildId);
+        if (
+          settings !== undefined &&
+          (snapshot === undefined ||
+            !settings.isEnabled(
+              guildId,
+              'auto_reply',
+              message.channelId,
+              ancestorChannelIdsOf(message.channel, message.guild?.channels.cache),
+            ))
+        )
+          return;
+        const preferences = snapshot?.settings.autoReply;
+        let release: (() => void) | undefined;
+        let denied = false;
+        const send = async (deliver: () => Promise<unknown>): Promise<void> => {
+          if (denied) return;
+          if (settings !== undefined && release === undefined) {
+            release = cooldown.reserve(
+              `${guildId}:${message.channelId}`,
+              (preferences?.cooldownSeconds ?? 0) * 1000,
+            );
+            if (release === undefined) {
+              denied = true;
+              return;
             }
           }
+          await deliver();
+        };
 
-          if (Math.random() < config.globalLuckyProbability) {
-            const lucky = await safeLookup(registry, guildId, '[*]', logger, 'lucky');
-            if (lucky !== null) {
-              await message.channel.send({ content: lucky, allowedMentions: { parse: [] } });
+        try {
+          if ((preferences?.reactions ?? true) && message.content.includes(GOODNIGHT_LINE)) {
+            await send(() => message.reply(t.t('replies:auto_reply.goodnight_reply')));
+          }
+
+          // The remaining behaviours all skip bot authors so two bots
+          // running this plugin do not feedback-loop each other.
+          if (!message.author.bot) {
+            // Stored replies are member-authored, so they never ping anyone.
+            const reply =
+              preferences?.keywords === false
+                ? null
+                : await safeLookup(registry, guildId, message.content, logger, 'direct');
+            if (reply !== null) {
+              await send(() =>
+                message.channel.send({ content: reply, allowedMentions: { parse: [] } }),
+              );
+            }
+
+            for (const lucky of config.luckyReplies) {
+              if (settings !== undefined && lucky.guildId !== guildId) continue;
+              if (
+                (preferences?.lucky ?? true) &&
+                message.author.id === lucky.userId &&
+                Math.random() < lucky.probability
+              ) {
+                // Operator-supplied text goes out verbatim, so mentions are
+                // disabled: a stray `@everyone` in config.json would
+                // otherwise become a ping.
+                await send(() =>
+                  message.channel.send({
+                    content: lucky.reply,
+                    allowedMentions: { parse: [] },
+                  }),
+                );
+              }
+            }
+
+            if (
+              (preferences?.random ?? true) &&
+              Math.random() < (preferences?.probability ?? config.globalLuckyProbability)
+            ) {
+              const lucky = await safeLookup(registry, guildId, '[*]', logger, 'lucky');
+              if (lucky !== null) {
+                await send(() =>
+                  message.channel.send({ content: lucky, allowedMentions: { parse: [] } }),
+                );
+              }
+            }
+
+            if ((preferences?.reactions ?? true) && LONG_HAIR_REGEX.test(message.content)) {
+              await send(() => message.channel.send(t.t('replies:auto_reply.long_hair_line')));
+            }
+
+            const diceResult = preferences?.dice === false ? null : rollDice(message.content);
+            if (diceResult !== null) {
+              await send(() => message.channel.send(diceResult));
             }
           }
-
-          if (LONG_HAIR_REGEX.test(message.content)) {
-            await message.channel.send(t.t('replies:auto_reply.long_hair_line'));
-          }
-
-          const diceResult = rollDice(message.content);
-          if (diceResult !== null) {
-            await message.channel.send(diceResult);
-          }
+        } finally {
+          release?.();
         }
       },
     },

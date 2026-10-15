@@ -1,3 +1,4 @@
+import { MongoGuildSettingsRepo, type GuildSettingsRepo } from './guild-settings.repo';
 /**
  * Repository barrel.
  *
@@ -79,7 +80,10 @@ export {
  * guild from the guild's {@link GuildConnection} and stash it where
  * handlers can read it.
  */
+export { MongoGuildSettingsRepo, type GuildSettingsRepo } from './guild-settings.repo';
+
 export interface Repos {
+  readonly guildSettings: GuildSettingsRepo;
   readonly activity: ActivityRepo;
   readonly aiUsage: AiUsageRepo;
   /** Read-only archive statistics; every bot may read through its reader connection. */
@@ -102,6 +106,7 @@ export interface Repos {
  * the implementation of every `*RepoFactory` token.
  */
 export const buildRepos = (conn: GuildConnection): Repos => ({
+  guildSettings: new MongoGuildSettingsRepo(conn),
   activity: new MongoActivityRepo(conn),
   aiUsage: new MongoAiUsageRepo(conn),
   archiveStats: new MongoArchiveStatsRepo(conn),

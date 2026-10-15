@@ -22,6 +22,7 @@ import type { GuildOnboardingPort, PermissionRankPolicy } from '../core/plugin';
 import type { Clock } from '../core/time';
 import type { ArchiveControlFactory } from '../application/archive/control';
 import type { DbInspectService } from '../application/db-inspect/service';
+import type { GuildSettingsService } from '../application/guild-settings/service';
 import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { ModelCatalog } from '../infra/llm/models-catalog';
 import type { ConnectionManager } from '../infra/mongo/connection-manager';
@@ -34,6 +35,7 @@ import type { GuildRegistry } from './guild-registry';
 export type ReposFactory = (guildId: GuildId) => Promise<Repos>;
 
 interface Tokens {
+  readonly GuildSettings: ServiceToken<GuildSettingsService>;
   readonly ConnectionManager: ServiceToken<ConnectionManager>;
   readonly ReposFactory: ServiceToken<ReposFactory>;
   /**
@@ -123,6 +125,7 @@ interface Tokens {
 }
 
 export const TOKENS: Tokens = {
+  GuildSettings: token<GuildSettingsService>('GuildSettings'),
   ConnectionManager: token<ConnectionManager>('ConnectionManager'),
   ReposFactory: token<ReposFactory>('ReposFactory'),
   Logger: token<Logger>('Logger'),

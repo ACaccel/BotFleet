@@ -12,6 +12,7 @@ import {
 } from '../../../application/giveaway/giveaway';
 import { databaseUnavailableMessage } from './common';
 import { buildGiveawayDepsFromBot } from './deps-from-bot';
+import { ancestorChannelIdsOf } from '../../../infra/discord';
 
 const MIN_DURATION_MS = 60_000;
 const MAX_DURATION_MS = 30 * 24 * 60 * 60_000;
@@ -61,6 +62,22 @@ export const handleGiveawayCreate = async (
       : interaction.channel;
     if (!channel?.isSendable()) {
       await interaction.editReply({ content: t('errors:command.channel_not_found') });
+      return;
+    }
+    if (
+      bot.guildSettings &&
+      !bot.guildSettings.isEnabled(
+        guild.id,
+        'giveaways',
+        channel.id,
+        ancestorChannelIdsOf(channel, guild.channels.cache),
+      )
+    ) {
+      await interaction.editReply({
+        content: t('replies:settings.feature_disabled', {
+          feature: t('replies:settings.feature.giveaways'),
+        }),
+      });
       return;
     }
 

@@ -6,10 +6,26 @@ import { renderPreviewTo, type PreviewRenderOptions } from '../../../infra/disco
 
 export { buildCardEmbed } from '../../../infra/discord/social-preview';
 
+/** Keep thumbnails and source links while withholding downloadable video variants. */
+const withoutDownloads = (result: LinkPreviewResult): LinkPreviewResult => {
+  if (result.kind === 'card') {
+    return { kind: 'card', card: result.card, sourceUrl: result.sourceUrl };
+  }
+  if (result.kind === 'post' && result.post.video !== undefined) {
+    return { ...result, post: { ...result.post, video: { ...result.post.video, variants: [] } } };
+  }
+  return result;
+};
+
 export const renderPreview = (
   message: Message,
   result: LinkPreviewResult,
   translator: Translator,
-  options: PreviewRenderOptions = {},
+  options: PreviewRenderOptions & { readonly videoEnabled?: boolean } = {},
 ): Promise<void> =>
-  renderPreviewTo((payload) => message.reply(payload), result, translator, options);
+  renderPreviewTo(
+    (payload) => message.reply(payload),
+    options.videoEnabled === false ? withoutDownloads(result) : result,
+    translator,
+    options,
+  );

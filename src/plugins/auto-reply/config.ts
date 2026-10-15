@@ -17,6 +17,11 @@ import { z } from 'zod';
 /** One user-targeted lucky reply. */
 const LuckyReplySchema = z
   .object({
+    /** Required for public guild-settings mode; legacy personalities retain unbound entries. */
+    guildId: z
+      .string()
+      .regex(/^\d{17,20}$/)
+      .optional(),
     /**
      * Discord user id the reply is scoped to. Shape-checked: a typo'd
      * snowflake would otherwise parse and then simply never match,

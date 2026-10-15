@@ -184,6 +184,20 @@ client and guild. See [temporary moderation](contributing/operations.md#temporar
 
 ## Persistence and external services
 
+Tomori's [guild settings service](tomori-settings.md) uses an application-scoped
+singleton in each guild database, an atomic revision/operation-ID update with
+bounded audit history, owner-bound temporary drafts and per-field authority.
+Saved preferences are distinct from immutable effective snapshots constrained by
+operator capabilities. A fixed application control-database inventory separates
+legacy seeds from later guild defaults. Commands/components and plugins share
+feature scopes; destination resolution checks guild ownership at use time.
+Missing settings fail closed and retry without blocking other guilds.
+Versioned reads upgrade old settings with a guarded CAS while preserving history.
+Guild locale/time-zone resolution uses asynchronous context around interactions,
+events and scheduled work; explicit UI locales remain authoritative. Individual
+entertainment switches/cooldowns and fresh-member moderation voter checks use the
+same committed guild snapshot. See the panel guide for bounds and defaults.
+
 [Repositories](../src/persistence/repositories/) form a per-guild bundle and can be
 replaced with test fakes. Operational failures return `Result<T, DatabaseError>`;
 missing records succeed with an empty result; invalid programmer arguments throw.

@@ -1,5 +1,15 @@
 # Contributing
 
+Tomori feature changes must honor the [guild settings contract](docs/tomori-settings.md)
+in every relevant command, component, message event and destination path. Preserve
+completion/cleanup for active items and enforce field authority in the application
+service; hiding a panel control is not authorization. Native channel/role select
+handlers declare supported component types in the shared select-menu contract.
+Modal submissions bind their context to the owner-bound one-use nonce. Preserve
+per-guild asynchronous locale/time-zone context across delayed work; never mutate
+shared translator defaults. Changes to voting must retain fresh human-member and
+role eligibility checks and Discord timeout authority.
+
 Start with [local setup](docs/contributing/local-setup.md) and the
 [architecture overview](docs/architecture.md).
 

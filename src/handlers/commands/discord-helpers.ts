@@ -4,6 +4,7 @@ import { ActionRowBuilder, ButtonBuilder } from '@discordjs/builders';
 import schedule from 'node-schedule';
 import type { Job } from 'node-schedule';
 import type { Logger } from '@core/logger';
+import { bindGuildContext } from '@core/i18n';
 
 /**
  * Shared Discord-side helpers for command handlers.
@@ -80,4 +81,4 @@ export const msgReact = async (
  * the keyed lifecycle of `core/scheduling`'s `JobManager`.
  */
 export const scheduleJob = (date: Date, callback: () => void): Job =>
-  schedule.scheduleJob(date, callback);
+  schedule.scheduleJob(date, bindGuildContext(callback));

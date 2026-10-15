@@ -77,6 +77,89 @@ describe('dispatch middleware', () => {
     expect(nextCalls).toBe(1);
   });
 
+  it('blocks disabled creation while preserving the rest of the chain', async () => {
+    const interaction = buildChatInputInteraction({
+      commandName: 'giveaway',
+      subcommand: 'create',
+      guildId: 'guild-1',
+    });
+    const reply = vi.spyOn(interaction, 'reply');
+    const { bot: configured } = buildFakeBot({
+      commandHandlers: new Map(),
+      guildSettings: { isEnabled: () => false, get: () => ({}) },
+    });
+    const next = vi.fn();
+    await createDispatchMiddleware(configured).run(
+      { interaction } as unknown as InteractionContext,
+      next,
+    );
+    expect(dispatchers.executeCommand).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'replies:settings.feature_disabled' }),
+    );
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('allows cleanup after the feature is disabled', async () => {
+    const interaction = buildChatInputInteraction({
+      commandName: 'giveaway',
+      subcommand: 'delete',
+      guildId: 'guild-1',
+    });
+    const { bot: configured } = buildFakeBot({
+      commandHandlers: new Map(),
+      guildSettings: { isEnabled: () => false, get: () => ({}) },
+    });
+    await createDispatchMiddleware(configured).run(
+      { interaction } as unknown as InteractionContext,
+      async () => {},
+    );
+    expect(dispatchers.executeCommand).toHaveBeenCalledWith(interaction, configured);
+  });
+
+  const entertainmentBot = (enabled: boolean, cooldownSeconds: number) =>
+    buildFakeBot({
+      commandHandlers: new Map(),
+      guildSettings: {
+        isEnabled: () => true,
+        get: () => ({ settings: { entertainment: { gay: { enabled, cooldownSeconds } } } }),
+      },
+    }).bot;
+  const runGay = async (
+    middleware: ReturnType<typeof createDispatchMiddleware>,
+    userId = 'u-1',
+  ) => {
+    const interaction = buildChatInputInteraction({
+      commandName: 'gay',
+      guildId: 'guild-1',
+      userId,
+    });
+    const reply = vi.spyOn(interaction, 'reply');
+    await middleware.run({ interaction } as unknown as InteractionContext, async () => {});
+    return reply;
+  };
+
+  it('blocks an individually disabled entertainment command', async () => {
+    const reply = await runGay(createDispatchMiddleware(entertainmentBot(false, 0)));
+    expect(dispatchers.executeCommand).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'replies:settings.entertainment_disabled' }),
+    );
+  });
+
+  it('reserves entertainment cooldowns per member and application', async () => {
+    const configured = entertainmentBot(true, 30);
+    const middleware = createDispatchMiddleware(configured);
+    await runGay(middleware);
+    const blocked = await runGay(middleware);
+    expect(blocked).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'replies:settings.entertainment_cooldown' }),
+    );
+    await runGay(middleware, 'u-2');
+    await runGay(createDispatchMiddleware(configured));
+    expect(dispatchers.executeCommand).toHaveBeenCalledTimes(3);
+  });
+
   it('runs the rest of the chain even when the autocomplete arm did nothing useful', async () => {
     // `executeAutocomplete` never rejects by contract; this pins the
     // other half — that dispatch does not short-circuit the chain.
@@ -118,6 +201,8 @@ describe('dispatch middleware', () => {
       isModalSubmit: () => false,
       isButton: () => false,
       isStringSelectMenu: () => false,
+      isChannelSelectMenu: () => false,
+      isRoleSelectMenu: () => false,
       isRepliable: () => true,
       reply,
     };

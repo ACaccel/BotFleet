@@ -1,12 +1,12 @@
 {
   "ban_user": {
-    "description": "Start a vote; 5 votes within 1 minute time the member out for 1-5 minutes",
+    "description": "Start a server-configured moderation vote for a 1–5 minute timeout",
     "options": {
       "user": {
         "description": "Member to vote on"
       },
       "duration": {
-        "description": "Timeout length in minutes (1-5, default 1)"
+        "description": "Override the default timeout in minutes (1–5)"
       }
     }
   },
@@ -709,5 +709,8 @@
         }
       }
     }
+  },
+  "settings": {
+    "description": "Configure Tomori preferences for this server"
   }
 }

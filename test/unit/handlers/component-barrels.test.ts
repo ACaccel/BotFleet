@@ -60,6 +60,7 @@ describe('modal barrel', () => {
       'ai_settings',
       'bug_report',
       'giveaway_create',
+      'settings',
     ]);
   });
 
@@ -85,6 +86,18 @@ describe('modal barrel', () => {
 });
 
 describe('select-menu barrel', () => {
+  it('rejects a role selector targeting a string-only handler', async () => {
+    const bot = buildHostBot();
+    await registerSSMs(bot);
+    const interaction = selectInteraction('giveaway_delete|msg-1');
+    const reply = vi.spyOn(interaction, 'reply');
+    Object.assign(interaction, { componentType: 6 });
+    await executeSSM(interaction, bot);
+    expect(vi.mocked(handleGiveawayDeleteSelection)).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'errors:command.unsupported_interaction_type' }),
+    );
+  });
   it('publishes one handler per generated registry entry', async () => {
     const bot = buildHostBot();
 
@@ -96,6 +109,7 @@ describe('select-menu barrel', () => {
       'delete_reply',
       'giveaway_delete',
       'help_category',
+      'settings',
     ]);
   });
 

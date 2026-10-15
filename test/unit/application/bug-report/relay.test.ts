@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ok } from '../../../../src/core/result';
 import { relayAdminMessage, relayReporterDm } from '../../../../src/application/bug-report/relay';
 import { buildDeps, buildRepo, HUB, ticket } from './fakes';
+import { GuildLocaleContext, type Translator } from '../../../../src/core/i18n';
 
 const adminMessage = (content: string) => ({
   content,
@@ -27,6 +28,30 @@ const dm = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe('admin replies', () => {
+  it('localizes reporter DMs using the ticket source guild instead of the hub guild', async () => {
+    const repo = buildRepo();
+    repo.findByThread.mockResolvedValueOnce(ok(ticket({ source_guild_id: 'source' }) as never));
+    const { deps, send } = buildDeps(repo);
+    const scope = new GuildLocaleContext((guildId) => ({
+      language: guildId === 'source' ? 'en' : 'zh-TW',
+      timeZone: 'UTC',
+    }));
+    const base: Translator = {
+      t: (key, _params, locale) => `${locale}:${key}`,
+      tStrict: (key) => key,
+      listMissingKeys: () => ({ en: [], 'zh-TW': [] }),
+    };
+    await scope.run(HUB.guildId, () =>
+      relayAdminMessage(
+        { ...deps, translator: scope.translator(base) },
+        adminMessage('Fixed') as never,
+      ),
+    );
+    const payload = send.mock.calls[0]?.[0] as {
+      embeds: { data: { author?: { name: string } } }[];
+    };
+    expect(payload.embeds[0]?.data.author?.name).toBe('en:replies:bug_report.from_admin');
+  });
   it('forwards to the reporter, marks delivery and moves the ticket on', async () => {
     const repo = buildRepo();
     const { deps, send } = buildDeps(repo);

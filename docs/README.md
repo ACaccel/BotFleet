@@ -1,5 +1,8 @@
 # Documentation
 
+- [Tomori server settings](tomori-settings.md): editing authority, panel controls,
+  migration, persistence, storage boundaries and planned extensions.
+
 | Need                             | Guide                                                                                     |
 | -------------------------------- | ----------------------------------------------------------------------------------------- |
 | Install and run locally          | [Local setup](contributing/local-setup.md)                                                |

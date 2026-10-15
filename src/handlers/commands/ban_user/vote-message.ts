@@ -7,9 +7,12 @@ interface VoteMessageInput {
   readonly target: string;
   readonly duration: number;
   readonly judgeTime: number;
+  readonly judgeSeconds?: number;
   readonly threshold: number;
   /** The guild's configured voter role; omitted means nobody is pinged. */
   readonly voterRoleId?: string;
+  /** Per-guild voter restrictions; empty means all members and no role ping. */
+  readonly voterRoleIds?: readonly string[];
   /** The bot's closing line; empty adds nothing. */
   readonly flavor: string;
 }
@@ -20,9 +23,24 @@ interface VoteMessageInput {
  */
 export const buildVoteMessage = (
   translator: Translator | undefined,
-  { voterRoleId, flavor, ...params }: VoteMessageInput,
+  { voterRoleId, voterRoleIds, flavor, ...params }: VoteMessageInput,
 ): Pick<MessageCreateOptions, 'content' | 'allowedMentions'> => {
-  const call = translator?.t('replies:ban_user.vote_call', params) ?? '';
+  const call =
+    translator?.t(
+      params.judgeSeconds === undefined
+        ? 'replies:ban_user.vote_call'
+        : 'replies:ban_user.vote_call_seconds',
+      params,
+    ) ?? '';
+  if (voterRoleIds && voterRoleIds.length > 0) {
+    const roles = [...new Set(voterRoleIds)];
+    const ping =
+      translator?.t('replies:ban_user.vote_ping_roles', {
+        roles: roles.map((id) => `<@&${id}>`).join(' '),
+        flavor,
+      }) ?? '';
+    return { content: `${call}\n${ping.trimEnd()}`, allowedMentions: { roles } };
+  }
   if (!voterRoleId) {
     return { content: flavor ? `${call}\n${flavor}` : call, allowedMentions: { parse: [] } };
   }
