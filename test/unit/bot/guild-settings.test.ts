@@ -8,7 +8,7 @@ vi.mock('../../../src/application/guild-settings/service', () => ({
     hooks.options(options);
   }),
 }));
-import { createTomoriGuildSettings } from '../../../src/bot/tomori/guild-settings';
+import { createGuildSettings } from '../../../src/bot/guild-settings';
 import {
   defaultGuildSettings,
   cloneSettings,
@@ -22,7 +22,7 @@ const identity = {
   userId: '300000000000000001',
 };
 const actor: GuildSettingsActor = { ...identity, manager: true, roleIds: [] };
-const build = () => {
+const build = (config: Parameters<typeof createGuildSettings>[1] = {}) => {
   const permissions = { has: vi.fn(() => true) };
   const member = { roles: { cache: new Collection() }, permissions };
   const fetch = vi.fn(async () => member);
@@ -38,15 +38,34 @@ const build = () => {
     clientId: identity.botId,
     client: { guilds: { cache: new Map([[guild.id, guild]]) } },
   });
-  createTomoriGuildSettings(bot, {
+  createGuildSettings(bot, {
     commands: ['giveaway', 'talk'],
     guild_settings: { maxRandomProbability: 0.05, minCooldownSeconds: 2 },
+    ...config,
   });
   const options = hooks.options.mock.lastCall?.[0] as GuildSettingsServiceOptions;
   return { options, permissions, fetch, fetchChannel, guild };
 };
 
-describe('Tomori settings composition', () => {
+describe('Shared guild settings composition', () => {
+  it('seeds only supported destinations and leaves deployment-only settings intact', async () => {
+    const channels = {
+      debug: '500000000000000001',
+      event: '500000000000000002',
+      giveaway: '500000000000000003',
+      earthquake: '500000000000000004',
+    };
+    const { options } = build({ guilds: { [identity.guildId]: { channels } } });
+    const seed = await options.legacySeed(identity.guildId);
+    expect(seed.channels).toEqual({
+      debug: channels.debug,
+      event: channels.event,
+      giveaway: channels.giveaway,
+    });
+    expect(seed.autoReply.cooldownSeconds).toBe(2);
+    expect(seed.features.giveaways.enabled).toBe(true);
+  });
+
   it('forces a current member read rather than authorizing a cached role', async () => {
     const { options, fetch, permissions } = build();
     permissions.has.mockReturnValue(false);

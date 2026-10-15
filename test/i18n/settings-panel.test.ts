@@ -69,6 +69,7 @@ describe.each(['en', 'zh-TW'] as const)('settings panel in %s', (locale) => {
     expect(page.embeds?.[0]).toBeDefined();
     const serialized = JSON.stringify(page);
     expect(serialized).not.toContain('replies:settings.');
+    expect(serialized).not.toContain('Tomori');
   });
   it.each([
     'access',
@@ -114,6 +115,9 @@ describe.each(['en', 'zh-TW'] as const)('settings panel in %s', (locale) => {
     ])
       expect(translator.tStrict(`errors:settings.${key}`, undefined, locale)).toBeTruthy();
     expect(translator.tStrict('commands:settings.description', undefined, locale)).toBeTruthy();
+    expect(translator.tStrict('commands:settings.description', undefined, locale)).not.toContain(
+      'Tomori',
+    );
     expect(translator.tStrict('replies:help.details.settings', undefined, locale)).toBeTruthy();
   });
 });

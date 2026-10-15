@@ -4,7 +4,8 @@ import { ActivityType, Events } from 'discord.js';
 import type { Config } from '@bot';
 import { BaseBot } from '@bot';
 import { TOKENS } from '../tokens';
-import { createTomoriGuildSettings } from './guild-settings';
+import { createGuildSettings } from '../guild-settings';
+import { commandsForBot } from '../default-commands';
 import {
   createAutoReplyPlugin,
   createActivityPlugin,
@@ -16,7 +17,7 @@ import {
 } from '@plugins';
 
 // Public guild preferences supplement the operator's capabilities and static
-// permission ranks. Other personalities keep their deployment-only settings.
+// permission ranks.
 interface TomoriConfig extends Config {
   /** Operator-only resource ceilings for the per-guild panel. */
   guild_settings?: unknown;
@@ -52,11 +53,9 @@ export class Tomori extends BaseBot<TomoriConfig> {
   ) {
     super(client, token, mongoURI, clientId, {
       ...config,
-      commands: [...new Set([...(config.commands ?? []), 'settings'])],
+      commands: commandsForBot('tomori', config.commands),
     });
-    this.container.registerSingleton(TOKENS.GuildSettings, () =>
-      createTomoriGuildSettings(this, config),
-    );
+    this.container.registerSingleton(TOKENS.GuildSettings, () => createGuildSettings(this, config));
     // Intro paragraph rendered at the top of the `/help` embed; the
     // key is resolved once the translator is loaded (see BaseBot.run).
     this.helpMessageKey = 'replies:tomori.help_message';

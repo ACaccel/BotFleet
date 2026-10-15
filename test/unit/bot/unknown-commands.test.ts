@@ -10,7 +10,8 @@ import { barrelStubs } from '../../fixtures/handler-barrel-stubs';
 
 vi.mock('@cmd', () => ({
   ...barrelStubs.cmd,
-  getSlashCommandClass: (name: string): unknown => (name === 'help' ? class {} : undefined),
+  getSlashCommandClass: (name: string): unknown =>
+    ['help', 'settings'].includes(name) ? class {} : undefined,
 }));
 vi.mock('@button', () => barrelStubs.button);
 vi.mock('@modal', () => barrelStubs.modal);
@@ -24,6 +25,12 @@ class MinimalBot extends BaseBot<Config> {}
 const client = buildInertClient();
 
 describe('BaseBot config.commands validation', () => {
+  it('rejects settings on personalities without a settings service', () => {
+    expect(() => new MinimalBot(client, 't', '', 'bot-1', { commands: ['settings'] })).toThrow(
+      'settings is available only on tomori and nijika',
+    );
+  });
+
   it('accepts known command names', () => {
     expect(() => new MinimalBot(client, 't', '', 'bot-1', { commands: ['help'] })).not.toThrow();
   });

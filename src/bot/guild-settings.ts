@@ -1,8 +1,8 @@
 import { PermissionFlagsBits, ChannelType, type Guild, type GuildMember } from 'discord.js';
 import { z } from 'zod';
-import type { BaseBot, Config } from '../index';
-import { TOKENS } from '../tokens';
-import { asGuildId } from '../../core/ids';
+import type { BaseBot, Config } from './index';
+import { TOKENS } from './tokens';
+import { asGuildId } from '../core/ids';
 import {
   changedSettingsPaths,
   defaultGuildSettings,
@@ -12,12 +12,12 @@ import {
   type GuildSettings,
   type GuildSettingsActor,
   type OperatorCapabilities,
-} from '../../core/guild-settings';
-import { GuildSettingsService } from '../../application/guild-settings/service';
-import { assertSettingsAuthority } from '../../application/guild-settings/authority';
-import { parseAutoReplyConfig } from '../../plugins/auto-reply/config';
-import { parseSocialLinkPreviewConfig } from '../../plugins/social-link-preview/config';
-import { LINK_PREVIEW_PROVIDER_NAMES } from '../../infra/link-preview';
+} from '../core/guild-settings';
+import { GuildSettingsService } from '../application/guild-settings/service';
+import { assertSettingsAuthority } from '../application/guild-settings/authority';
+import { parseAutoReplyConfig } from '../plugins/auto-reply/config';
+import { parseSocialLinkPreviewConfig } from '../plugins/social-link-preview/config';
+import { LINK_PREVIEW_PROVIDER_NAMES } from '../infra/link-preview';
 
 interface SettingsConfig extends Config {
   auto_reply?: unknown;
@@ -145,10 +145,7 @@ const validateResources = async (
   }
 };
 
-export const createTomoriGuildSettings = (
-  bot: BaseBot,
-  config: SettingsConfig,
-): GuildSettingsService => {
+export const createGuildSettings = (bot: BaseBot, config: SettingsConfig): GuildSettingsService => {
   const capabilities = capabilitiesOf(config);
   const auto = parseAutoReplyConfig(config.auto_reply);
   const social = parseSocialLinkPreviewConfig(config.social_link_preview);

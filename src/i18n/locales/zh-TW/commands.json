@@ -711,6 +711,6 @@
     }
   },
   "settings": {
-    "description": "設定此伺服器的 Tomori 功能與偏好"
+    "description": "設定此伺服器的機器人功能與偏好"
   }
 }

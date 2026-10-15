@@ -1,4 +1,5 @@
 import type { Client } from 'discord.js';
+import { Events } from 'discord.js';
 import type { Config } from '@bot';
 import { BaseBot } from '@bot';
 import {
@@ -19,8 +20,12 @@ import {
   parseFeedPlatformsConfig,
 } from '../../infra/social-feed';
 import { TOKENS } from '../tokens';
+import { createGuildSettings } from '../guild-settings';
+import { commandsForBot } from '../default-commands';
 
 interface NijikaConfig extends Config {
+  /** Operator-only resource ceilings for the per-guild panel. */
+  guild_settings?: unknown;
   level_roles: Record<string, string>;
   /**
    * Raw `auto_reply` block. Parsed and defaulted by the plugin
@@ -85,7 +90,11 @@ export class Nijika extends BaseBot<NijikaConfig> {
     earthquake: EarthquakeSettings,
     mongoInspectUri: string | undefined,
   ) {
-    super(client, token, mongoURI, clientId, config);
+    super(client, token, mongoURI, clientId, {
+      ...config,
+      commands: commandsForBot('nijika', config.commands),
+    });
+    this.container.registerSingleton(TOKENS.GuildSettings, () => createGuildSettings(this, config));
     // `helpMessage` is resolved from this key inside BaseBot.run()
     // once the translator is loaded.
     this.helpMessageKey = 'replies:nijika.help_message';
@@ -97,11 +106,15 @@ export class Nijika extends BaseBot<NijikaConfig> {
     // longer threads a channel list in. Plugins resolve their
     // dependencies through `ctx`, so the composition root does not
     // deep-import `plugins/*/internal`.
-    this.use(createAutoReplyPlugin(this.config.auto_reply));
-    this.use(createGuildEventsPlugin(this.config.guild_events));
+    this.use(createAutoReplyPlugin(this.config.auto_reply, this.guildSettings));
+    this.use(createGuildEventsPlugin(this.config.guild_events, { settings: this.guildSettings }));
     // Social-link preview: detect share links, post a richer preview,
     // and suppress the user's original auto-embed.
-    this.use(createSocialLinkPreviewPlugin(this.config.social_link_preview));
+    this.use(
+      createSocialLinkPreviewPlugin(this.config.social_link_preview, {
+        settings: this.guildSettings,
+      }),
+    );
     this.use(createGiveawayPlugin());
     this.use(createActivityPlugin());
     // Temporary, permission-less notification roles with a self-claim
@@ -142,6 +155,11 @@ export class Nijika extends BaseBot<NijikaConfig> {
       // Read-only `/db` inspection on its own verified read-only account.
       this.use(createDbInspectPlugin({ uri: mongoInspectUri }));
     }
+    this.client.on(Events.GuildDelete, (guild) => this.invalidateGuildRuntime(guild.id));
+  }
+
+  protected override supportsGuildSettings(): boolean {
+    return true;
   }
 
   protected override supportsDbInspect(): boolean {

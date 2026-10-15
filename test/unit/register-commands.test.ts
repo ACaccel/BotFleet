@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { buildCommandsFromConfig } from '../../src/register-commands';
+import { commandsForBot } from '../../src/bot/default-commands';
 import { echoTranslator } from '../fixtures/runtime';
 
 const translator = echoTranslator();
@@ -14,6 +15,25 @@ const namesOf = (body: readonly unknown[]): string[] =>
   body.map((entry) => (entry as { name: string }).name);
 
 describe('buildCommandsFromConfig', () => {
+  it.each(['tomori', 'nijika'])('publishes settings automatically for %s', (botName) => {
+    for (const configured of [undefined, [], ['help'], ['help', 'settings']]) {
+      const body = buildCommandsFromConfig(
+        commandsForBot(botName, configured),
+        translator,
+        {},
+        { warn: vi.fn() },
+      );
+      const names = namesOf(body);
+      expect(names.filter((name) => name === 'settings')).toHaveLength(1);
+      expect(names).toEqual(configured?.includes('help') ? ['help', 'settings'] : ['settings']);
+    }
+  });
+
+  it.each(['gopher', 'konata', 'msg-archive'])('keeps %s command defaults unchanged', (botName) => {
+    expect(commandsForBot(botName)).toEqual([]);
+    expect(commandsForBot(botName, ['help'])).toEqual(['help']);
+  });
+
   it('builds one body per configured command, in order', () => {
     const logger = { warn: vi.fn() };
 

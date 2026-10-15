@@ -122,7 +122,7 @@
     "vote_cancelled": "This vote was cancelled because moderation votes were disabled or settings became unavailable.",
     "vote_ping_roles": "{{roles}} {{flavor}}",
     "vote_call_seconds": "**{{initiator}}** has called a trial!\nTime out **{{target}}** for {{duration}} minutes?\nIf **{{threshold}}** votes accumulate within **{{judgeSeconds}}** seconds they will be timed out.",
-    "target_ineligible": "This member cannot be safely timed out. Check Tomori’s permissions and role hierarchy.",
+    "target_ineligible": "This member cannot be safely timed out. Check the bot’s permissions and role hierarchy.",
     "timeout_refused": "Discord refused the timeout. No punishment was applied."
   },
   "bug_report": {
@@ -211,7 +211,7 @@
       "activity": "`create` opens a form (title, description, start time, sign-up deadline, capacity) and posts the activity here; the optional `role` limits who can join. Members join or withdraw with buttons; participants are pinged when sign-ups close and when it starts. The organizer or a moderator can close sign-ups, start a roll call from the post, or `cancel` it.",
       "ai": "Chatting needs a whitelist entry from an admin; `settings` picks the model, temperature and system prompt, and `status` shows them.",
       "archive": "Bot admins only, in the debug channel: manage full and periodic backups.",
-      "ban_user": "Tomori uses this server’s configured vote threshold, voting window, eligible roles and default timeout, counting current human voters. Timeouts stay within 1–5 minutes and require Discord moderation permission. Other personalities retain their existing defaults.",
+      "ban_user": "Tomori and Nijika use this server’s configured vote threshold, voting window, eligible roles and default timeout, counting current human voters. Timeouts stay within 1–5 minutes and require Discord moderation permission. Other personalities retain their existing defaults.",
       "bug_report": "Each report opens a ticket in the bot admins' forum; their replies reach you by DM, and replying to that DM adds details. At most three open reports each, and one new report per ten minutes.",
       "change_avatar": "Switch the bot's avatar, nickname and colour; Discord limits how often the avatar can change.",
       "feed": "Forward new posts from a social account to a channel; subscribing again replaces the account's filters.",
@@ -1133,7 +1133,7 @@
     }
   },
   "settings": {
-    "title": "Tomori · Server settings",
+    "title": "Server settings",
     "summary": "Revision {{revision}} · Unsaved fields: {{count}}",
     "shared": "These preferences apply to everyone in this server.",
     "category_placeholder": "Choose a settings category",
@@ -1306,7 +1306,7 @@
       "durationMinutes": "Default timeout (minutes)",
       "voterRoleIds": "Eligible voter roles"
     },
-    "destination_unavailable": "{{destination}}: destination missing or Tomori lacks permission.",
+    "destination_unavailable": "{{destination}}: destination missing or the bot lacks permission.",
     "hidden_resource": "Hidden or unavailable resource",
     "more_items": "and {{count}} more",
     "preview_truncated": "{{count}} more changes are not shown. Review the other categories before saving.",

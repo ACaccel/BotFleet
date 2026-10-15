@@ -552,7 +552,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
       throw new Error(`config.commands: ${DB_INSPECT_COMMAND} is available only on nijika`);
     }
     if ((config.commands ?? []).includes('settings') && !this.supportsGuildSettings()) {
-      throw new Error('config.commands: settings is available only on tomori');
+      throw new Error('config.commands: settings is available only on tomori and nijika');
     }
     this.operatorTimeZone = config.timeZone ?? 'UTC';
     try {

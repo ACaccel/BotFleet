@@ -1,10 +1,10 @@
-# Tomori server settings
+# Tomori and Nijika server settings
 
-Tomori's `/settings` opens a private Discord panel for the current server. Saved
+Tomori and Nijika's `/settings` opens a private Discord panel for the current server. Saved
 changes take effect without restarting and do not affect another server or bot.
-The command is automatically included in Tomori's runtime and registration CLI;
+The command is automatically included in both bots' runtime and registration CLI;
 it cannot be disabled through the panel and is unavailable on other personalities.
-Register commands with `npm run register -t tomori` before using the new entry.
+Register commands with `npm run register -t <bot>` before using the new entry.
 
 ## Access
 
@@ -59,7 +59,7 @@ change its values, submit the form, then choose **Save** on the panel. Reply
 behaviors and providers allow an empty selection to disable all entries.
 The preview-count field shows the actual deployment-constrained range: integer
 `1` through `min(5, social_link_preview.maxUrlsPerMessage)`. This counts successful
-Tomori URL previews from one message, rather than restricting posted links. Optional
+URL previews from one message, rather than restricting posted links. Optional
 modal multi-selects explicitly use `required: false` with `min_values: 0`, as required
 by the [Discord component contract](https://docs.discord.com/developers/components/reference#string-select-string-select-structure).
 
@@ -94,7 +94,7 @@ scope as well as the invoking channel scope.
 Automatic-reply cooldowns are per server/channel, reserved before the first
 matching send, and protect concurrent events. Unmatched messages consume no
 cooldown; attempted sends that fail still consume one. State resets on restart.
-Targeted operator lucky replies require an explicit `guildId` on Tomori; unbound
+Targeted operator lucky replies require an explicit `guildId` on Tomori and Nijika; unbound
 entries are withheld. Other personalities retain their existing behavior.
 
 Social providers and preview counts cannot exceed deployment capabilities.
@@ -141,7 +141,7 @@ Only managers may configure:
 
 An explicit `/ban_user duration` overrides the default within the existing
 1-5 minute command bounds. Configured roles are the only allowed role mentions;
-empty eligibility pings nobody. Tomori does not use the legacy `roles.ban_user`
+empty eligibility pings nobody. Neither bot uses the legacy `roles.ban_user`
 ping mapping for these new controls.
 
 The poll displays its chosen threshold, window and duration. Reaction users are
@@ -150,7 +150,7 @@ departed members and users without a required role do not count. Failed reads do
 not authorize punishment. Existing polls retain their starting parameters;
 disabling the feature or changing its voter-role policy cancels pending punishment. Targets must remain moderatable
 by the bot at creation and judgement. Discord refusal applies no alternative
-punishment in Tomori; other personalities retain their prior fallback behavior.
+punishment in Tomori or Nijika; other personalities retain their prior fallback behavior.
 Votes and their scheduled judgements remain in memory and do not survive restart.
 
 ## Defaults, migration and recovery
@@ -194,7 +194,7 @@ No custom reply text, interaction tokens or message content enters this history.
 
 Leaving a server clears runtime snapshots and drafts but retains persisted
 settings for rejoin. Rejoining reloads settings and revalidates resources before
-use. One process per Tomori application is supported; concurrent replicas need
+use. One process per application is supported; concurrent replicas need
 separate cache-invalidation work.
 
 ## Output versus storage
@@ -203,8 +203,12 @@ Disabling event mirroring or command-log output does **not** stop host audit log
 attachment caching/archiving or message-archive collection. The panel reports
 this distinction and never deletes historical data. Operator-only settings
 remain in deployment configuration: secrets, external endpoints/proxies, global
-identity, bug-report hub, storage retention and hard resource limits. Tomori does
-not compose AI chat; this panel cannot enable it.
+identity, bug-report hub, storage retention and hard resource limits. Neither bot
+composes AI chat; this panel cannot enable it. Nijika's social-feed subscriptions
+remain managed by `/feed`; earthquake destinations/roles and level-role sync
+remain deployment-controlled. These features have no switches in this panel.
+Social-feed and earthquake background posts use deployment language rather than
+the panel's per-server language preference.
 
 ## Planned extensions
 

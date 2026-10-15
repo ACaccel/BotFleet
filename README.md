@@ -39,7 +39,7 @@ Every bot shares the framework capabilities:
 
 ## Features
 
-- **Tomori server settings.** A private [`/settings` panel](docs/tomori-settings.md)
+- **Tomori and Nijika server settings.** A private [`/settings` panel](docs/tomori-settings.md)
   with manager/role/everyone editing, form-based scope/destination controls,
   server language/time zone, individual entertainment switches/cooldowns,
   moderation-vote parameters, automatic replies and social previews. Changes

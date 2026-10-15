@@ -1,6 +1,6 @@
 # Documentation
 
-- [Tomori server settings](tomori-settings.md): editing authority, panel controls,
+- [Tomori and Nijika server settings](tomori-settings.md): editing authority, panel controls,
   migration, persistence, storage boundaries and planned extensions.
 
 | Need                             | Guide                                                                                     |

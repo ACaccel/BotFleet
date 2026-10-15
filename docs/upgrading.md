@@ -22,6 +22,29 @@ Alerts now post to every guild with an `earthquake` channel, also without an
 [`earthquake_alert.ping_min_local_intensity`](configuration.md#early-warning-api) in
 nijika's `config.json` to change that.
 
+## Nijika server settings
+
+Deploy and restart Nijika, then run `npm run register -t nijika` to publish
+`/settings`. The command is included automatically even if `commands` omits it.
+The first startup seeds existing servers' supported preferences and destinations
+once; later joins receive safe defaults. After seeding, edit those preferences in
+the panel rather than `config.json`. Tomori's saved settings are unaffected:
+records and migration inventories are keyed by application ID.
+
+Before deploying, bind each `auto_reply.luckyReplies[]` entry to its intended
+`guildId`; unbound entries no longer send on Nijika. Optional `guild_settings`
+operator limits use the same contract as Tomori. Nijika moderation votes now
+follow the [panel voter-role policy](tomori-settings.md#moderation-vote-preferences),
+including no role ping by default and no message-deletion fallback when a timeout
+is refused. Remove the unused `guilds.<id>.roles.ban_user` mapping and use the
+moderation form to restrict voters.
+
+Include Nijika's application-ID control database in backups and MongoDB grants.
+Social-feed subscriptions, earthquake configuration and level-role sync keep
+their existing controls; feed and earthquake background posts still use the
+deployment language. See [server settings](tomori-settings.md) for migration,
+permissions and recovery details.
+
 ## Tomori settings schema version 2
 
 Deploy and restart Tomori, then open a new `/settings` panel. Existing version-1
@@ -36,7 +59,8 @@ role list defaults to empty (all current human members, no ping); managers can
 restrict it in the moderation form. Other defaults preserve five votes in sixty
 seconds and a one-minute timeout. Tomori requires a moderatable target and does
 not replace a refused timeout with message deletion. Other personalities retain
-their existing behavior. See [server preferences](tomori-settings.md) for limits.
+their existing behavior except Nijika, which now shares this panel policy.
+See [server preferences](tomori-settings.md) for limits.
 
 ## Gopher settings API removal
 

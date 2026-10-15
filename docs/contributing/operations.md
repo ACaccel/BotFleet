@@ -8,7 +8,7 @@ basic reading; score snapshots expire automatically.
 
 ## Command logs
 
-For Tomori's per-server destinations, feature scopes, permission recovery and
+For Tomori and Nijika per-server destinations, feature scopes, permission recovery and
 settings database failures, see [server settings](../tomori-settings.md). Reboot
 notices use the saved debug destination; the command-log feature switch controls
 command embeds, while a configured debug destination also receives system notices.

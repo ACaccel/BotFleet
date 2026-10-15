@@ -122,7 +122,7 @@
     "vote_cancelled": "投票禁言已停用或設定暫時無法使用，此次投票已取消。",
     "vote_ping_roles": "{{roles}} {{flavor}}",
     "vote_call_seconds": "**{{initiator}}** 發起了審判！\n是否禁言 **{{target}}** {{duration}} 分鐘？\n**{{judgeSeconds}}** 秒內累積 **{{threshold}}** 票則禁言。",
-    "target_ineligible": "目前無法安全地禁言此成員，請檢查 Tomori 的權限與身分組順序。",
+    "target_ineligible": "目前無法安全地禁言此成員，請檢查機器人的權限與身分組順序。",
     "timeout_refused": "Discord 拒絕執行禁言，本次沒有套用任何處置。"
   },
   "bug_report": {
@@ -211,7 +211,7 @@
       "activity": "`create` 在目前頻道發起活動並開啟表單(標題、說明、開始時間、報名截止、人數上限),選填 `role` 限定只有該身分組能報名。成員按按鈕報名或取消;截止時會通知參加者,有開始時間的話開始時也會提醒。發起人或管理員可以在活動訊息上結束報名、發起點名,或用 `cancel` 取消活動。",
       "ai": "與 AI 對話需要先被管理員加入白名單;`settings` 設定模型、溫度與系統提示,`status` 查看目前設定。",
       "archive": "僅限 bot 管理員在除錯頻道使用,管理完整備份與日常備份。",
-      "ban_user": "Tomori 依照此伺服器設定的通過票數、投票時間、可投票身分組與預設時間發起投票，只計算目前符合資格的真人成員。禁言時間為 1–5 分鐘，並遵守 Discord 管理權限。其他人格維持既有預設值。",
+      "ban_user": "Tomori 與 Nijika 依照此伺服器設定的通過票數、投票時間、可投票身分組與預設時間發起投票，只計算目前符合資格的真人成員。禁言時間為 1–5 分鐘，並遵守 Discord 管理權限。其他人格維持既有預設值。",
       "bug_report": "回報會在 bot 管理員的論壇建立一則 ticket,管理員的回覆會私訊給你;直接回覆那則私訊即可補充。每人同時最多 3 則進行中的回報,10 分鐘內只能開一則。",
       "change_avatar": "切換 bot 的頭像、暱稱與代表色;Discord 限制頭像更換頻率,太頻繁時請稍後再試。",
       "feed": "把社群平台帳號的新貼文轉發到頻道;重新訂閱同一帳號會取代原本的條件。",
@@ -1133,7 +1133,7 @@
     }
   },
   "settings": {
-    "title": "Tomori｜伺服器設定",
+    "title": "伺服器設定",
     "summary": "版本 {{revision}} · 尚未儲存欄位：{{count}}",
     "shared": "這些偏好會套用到此伺服器的所有成員。",
     "category_placeholder": "選擇設定分類",
@@ -1306,7 +1306,7 @@
       "durationMinutes": "預設禁言時間（分鐘）",
       "voterRoleIds": "可投票的身分組"
     },
-    "destination_unavailable": "{{destination}}：頻道不存在或 Tomori 權限不足。",
+    "destination_unavailable": "{{destination}}：頻道不存在或機器人權限不足。",
     "hidden_resource": "隱藏或無法使用的資源",
     "more_items": "另有 {{count}} 項",
     "preview_truncated": "另有 {{count}} 項變更未顯示，請在儲存前查看其他分類。",

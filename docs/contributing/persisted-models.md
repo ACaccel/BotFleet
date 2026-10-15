@@ -2,7 +2,7 @@
 
 Part of the [contributing guide](../../CONTRIBUTING.md).
 
-Tomori's `GuildSettings` and `GuildSettingsMigration` models use application keys,
+Tomori and Nijika's `GuildSettings` and `GuildSettingsMigration` models use application keys,
 versioned CAS writes and fixed migration inventory. Follow the
 [settings persistence contract](../tomori-settings.md#defaults-migration-and-recovery)
 when changing their schemas or operator capabilities. Schema version 2 upgrades

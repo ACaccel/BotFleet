@@ -711,6 +711,6 @@
     }
   },
   "settings": {
-    "description": "Configure Tomori preferences for this server"
+    "description": "Configure bot preferences for this server"
   }
 }

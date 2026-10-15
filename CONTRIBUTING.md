@@ -1,6 +1,6 @@
 # Contributing
 
-Tomori feature changes must honor the [guild settings contract](docs/tomori-settings.md)
+Tomori and Nijika feature changes must honor the [guild settings contract](docs/tomori-settings.md)
 in every relevant command, component, message event and destination path. Preserve
 completion/cleanup for active items and enforce field authority in the application
 service; hiding a panel control is not authorization. Native channel/role select

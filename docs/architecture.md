@@ -203,7 +203,8 @@ client and guild. See [temporary moderation](contributing/operations.md#temporar
 
 ## Persistence and external services
 
-Tomori's [guild settings service](tomori-settings.md) uses an application-scoped
+Tomori and Nijika share a [guild settings service](tomori-settings.md) factory in
+`src/bot/guild-settings.ts`. It uses an application-scoped
 singleton in each guild database, an atomic revision/operation-ID update with
 bounded audit history, owner-bound temporary drafts and per-field authority.
 Saved preferences are distinct from immutable effective snapshots constrained by
@@ -216,6 +217,8 @@ Guild locale/time-zone resolution uses asynchronous context around interactions,
 events and scheduled work; explicit UI locales remain authoritative. Individual
 entertainment switches/cooldowns and fresh-member moderation voter checks use the
 same committed guild snapshot. See the panel guide for bounds and defaults.
+Nijika's social-feed subscriptions, earthquake notifications and level-role sync
+retain their existing controls outside the panel.
 
 [Repositories](../src/persistence/repositories/) form a per-guild bundle and can be
 replaced with test fakes. Operational failures return `Result<T, DatabaseError>`;

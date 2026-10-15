@@ -81,8 +81,8 @@ npm run nijika # or konata / tomori / gopher / msg-archive
 
 ## Registering slash commands
 
-Tomori's registration automatically includes [`/settings`](../tomori-settings.md)
-even when its command list omits the entry. Use `npm run register -t tomori`
+Tomori and Nijika registration automatically includes [`/settings`](../tomori-settings.md)
+even when the command list omits the entry. Use `npm run register -t <bot>`
 after installing this feature; other personalities cannot expose the command.
 
 Register separately from deployment. No `--` separator is needed (the older

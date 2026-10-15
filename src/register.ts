@@ -26,6 +26,7 @@ import { createBootstrapLogger, loadEnv, readNpmConfigFlags } from '@core/config
 import { createDefaultTranslator, isLocale, type Locale, type Translator } from '@core/i18n';
 
 import { resolveLocalesDir } from './bot/locales-dir';
+import { commandsForBot } from './bot/default-commands';
 import {
   parseRegisterArgs,
   REGISTER_NPM_FLAGS,
@@ -102,8 +103,8 @@ function loadBotConfig(botName: string): {
   const raw = fs.readFileSync(configPath, 'utf8');
   const cfg = JSON.parse(raw) as BotConfig;
 
-  if (botName === 'tomori' && (cfg.commands === undefined || Array.isArray(cfg.commands))) {
-    cfg.commands = [...new Set([...(cfg.commands ?? []), 'settings'])];
+  if (cfg.commands === undefined || Array.isArray(cfg.commands)) {
+    cfg.commands = commandsForBot(botName, cfg.commands);
   }
 
   if (!cfg.commands || !Array.isArray(cfg.commands) || cfg.commands.length === 0) {
