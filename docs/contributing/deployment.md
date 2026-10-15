@@ -53,6 +53,7 @@ npm run mongo:prepare  # Preview database unit
 npm run deploy:prepare # Type-check, snapshot, and preview bot units
 npm run mongo:deploy   # Install/start/enable database unit
 npm run deploy         # Prepare and deploy selected bots
+npm run deploy -t <bot> # Prepare and deploy one bot; others keep running
 npm run undeploy       # Remove managed bot units
 npm run mongo:undeploy # Remove database unit after bots are undeployed
 npm run deploy:recover # Recover an interrupted transaction
@@ -60,7 +61,13 @@ npm run backup:install # Install the daily database backup timer
 ```
 
 For code updates, run `npm run deploy` without undeploying. Register
-[Discord commands](local-setup.md#registering-slash-commands) separately. Inspect bots with:
+[Discord commands](local-setup.md#registering-slash-commands) separately.
+
+`-t <bot>` (also `deploy:prepare -t <bot>`) validates and snapshots that bot only, then
+replaces and restarts its unit alone; it must be listed in `deployment.json`. Other bots
+keep their units, so they keep running their previous release until the next full
+`npm run deploy`, which also applies `deployment.json` changes such as `readinessTimeoutSeconds`
+or the MongoDB settings to every unit. Inspect bots with:
 
 ```bash
 sudo systemctl restart botfleet@nijika.service
@@ -90,7 +97,8 @@ referenced by units or recovery journals, including after undeploy.
 After `npm run deploy` or `npm run mongo:deploy` commits, the deployer prunes
 `.deploy/releases/`. It keeps the newest 3 directories named `<timestamp>-<uuid>` (numeric
 timestamp order; `RETAINED_RELEASES` in `scripts/deployment/retention.ts`) plus every
-release named by `.deploy/current.json` or `.deploy/mongodb.json`; referenced releases do
+release named by `.deploy/current.json` or `.deploy/mongodb.json` (including older releases
+still used by bots a `-t` deployment left untouched); referenced releases do
 not count toward the 3. Other entries and symlinks are never touched, and symlinks inside
 a removed release are unlinked without following them. Pruning is skipped when a recovery
 journal exists or another process holds the lock, and never runs after failure, rollback,

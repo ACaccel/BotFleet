@@ -46,6 +46,7 @@ Lint:       npm run lint               (format check: npm run format:check)
 Type-check: npm run typecheck          (tsc -p tsconfig.strict.json)
 Build:      npm run typecheck:emit     (declaration build; runtime is ts-node, no bundling step)
 Services:   npm run deploy:prepare | npm run deploy | npm run undeploy
+            (deploy one bot: npm run deploy -t <bot>)
             (daily database backup timer: npm run backup:install | npm run backup:uninstall)
 Codegen:    npm run handlers:gen       (after adding or deleting a handler)
 ```

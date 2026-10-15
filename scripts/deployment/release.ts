@@ -19,6 +19,7 @@ import {
   deploymentSchema,
   botService,
   mongoService,
+  type BotName,
   type DeploymentConfig,
   type Release,
 } from './config';
@@ -75,7 +76,14 @@ function localFiles(root: string, release: string): void {
     symlinkSync(source, join(release, name));
   }
 }
-export function makeRelease(root: string, config: DeploymentConfig, mongodbOnly: boolean): Release {
+/** `only` limits validation and generated services to one configured bot. */
+export function makeRelease(
+  root: string,
+  config: DeploymentConfig,
+  mongodbOnly: boolean,
+  only?: BotName,
+): Release {
+  const bots = only ? [only] : config.bots;
   const prefix = realpathSync(
     config.runtimePrefix ?? resolve(process.env.BOTFLEET_CONDA_PREFIX ?? join(root, '.conda')),
   );
@@ -120,7 +128,7 @@ export function makeRelease(root: string, config: DeploymentConfig, mongodbOnly:
       );
       release.units[mongoService] = mongoUnit(release, configPath);
     } else {
-      for (const bot of config.bots) {
+      for (const bot of bots) {
         const file = join(root, 'src/bot', bot, '.env');
         if (!existsSync(file)) throw new Error(`Missing local env for ${bot}`);
         loadEnv({
@@ -159,7 +167,7 @@ export function makeRelease(root: string, config: DeploymentConfig, mongodbOnly:
         ],
         { cwd: directory },
       );
-      for (const bot of config.bots) {
+      for (const bot of bots) {
         const values = parse(readFileSync(join(directory, 'src/bot', bot, '.env')));
         release.units[botService(bot)] = botUnit(release, bot, Boolean(values.MONGO_URI));
       }

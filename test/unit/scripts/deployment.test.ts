@@ -3,6 +3,7 @@ import * as childProcess from 'node:child_process';
 import * as fs from 'node:fs';
 import {
   deploymentSchema,
+  mergeTargetRelease,
   parseAction,
   ownerMarker,
   validateRelease,
@@ -98,7 +99,6 @@ describe('deployment configuration and command boundaries', () => {
   });
   it('rejects legacy registration arguments before service work starts', () => {
     for (const flag of [
-      '-t',
       '--dev-guild',
       '--dry-run',
       '--keep-guild-commands',
@@ -106,8 +106,52 @@ describe('deployment configuration and command boundaries', () => {
     ]) {
       expect(() => parseAction(['deploy', flag])).toThrow('npm run register -t <bot>');
     }
-    expect(parseAction(['recover'])).toBe('recover');
+    expect(parseAction(['recover'])).toEqual({ action: 'recover' });
     expect(() => parseAction(['unknown'])).toThrow('Usage');
+  });
+  it('selects one bot from argv or from flags npm consumed', () => {
+    const tomori = { action: 'deploy', bot: 'tomori' };
+    expect(parseAction(['deploy', '-t', 'tomori'])).toEqual(tomori);
+    expect(parseAction(['deploy', '--target=tomori'])).toEqual(tomori);
+    expect(parseAction(['deploy', 'tomori'], { t: 'true' })).toEqual(tomori);
+    expect(parseAction(['deploy'], { target: 'tomori' })).toEqual(tomori);
+    expect(parseAction(['prepare', 'tomori'], { t: 'true' })).toEqual({
+      action: 'prepare',
+      bot: 'tomori',
+    });
+    expect(parseAction(['deploy'])).toEqual({ action: 'deploy' });
+  });
+  it('rejects ambiguous, unknown or misplaced bot selections', () => {
+    expect(() => parseAction(['deploy', '-t'])).toThrow('requires a bot name');
+    expect(() => parseAction(['deploy'], { t: 'true' })).toThrow('single bot');
+    expect(() => parseAction(['deploy', 'tomori'])).toThrow('single bot');
+    expect(() => parseAction(['deploy', 'tomori', 'nijika'], { t: 'true' })).toThrow('single bot');
+    expect(() => parseAction(['deploy', '-t', 'tomori'], { target: 'nijika' })).toThrow(
+      'Conflicting',
+    );
+    expect(() => parseAction(['deploy', '-t', 'unregistered'])).toThrow('Unknown bot');
+    for (const action of ['undeploy', 'recover', 'mongo-deploy'])
+      expect(() => parseAction([action, '-t', 'tomori'])).toThrow('only to prepare and deploy');
+  });
+  it('replaces only the targeted service in the recorded deployment', () => {
+    const previous = {
+      ...release(),
+      units: {
+        'botfleet@tomori.service': 'old tomori',
+        'botfleet@nijika.service': 'old nijika',
+      },
+    };
+    const next = {
+      ...release(),
+      directory: '/srv/BotFleet/.deploy/releases/next',
+      units: { 'botfleet@tomori.service': 'new tomori' },
+    };
+    expect(mergeTargetRelease(previous, next, 'tomori')).toEqual({
+      ...next,
+      units: { 'botfleet@tomori.service': 'new tomori', 'botfleet@nijika.service': 'old nijika' },
+    });
+    expect(mergeTargetRelease(undefined, next, 'tomori').units).toEqual(next.units);
+    expect(() => mergeTargetRelease(previous, next, 'nijika')).toThrow('no service for nijika');
   });
   it('rejects release manifests outside this project release directory', () => {
     expect(() =>

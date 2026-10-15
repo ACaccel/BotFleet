@@ -10,7 +10,11 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { userInfo } from 'node:os';
+import { readNpmConfigFlags } from '../src/core/config/env';
 import {
+  DEPLOY_NPM_FLAGS,
+  botService,
+  mergeTargetRelease,
   parseAction,
   validateRelease,
   ownerMarker,
@@ -114,7 +118,10 @@ async function recover(): Promise<void> {
   console.log('Restored the previous managed services.');
 }
 async function main(): Promise<void> {
-  const action = parseAction(process.argv.slice(2));
+  const { action, bot: target } = parseAction(
+    process.argv.slice(2),
+    readNpmConfigFlags(DEPLOY_NPM_FLAGS),
+  );
   if (process.getuid?.() === 0)
     throw new Error('Run as your ordinary user; system changes request sudo');
   if (/[\r\n\0]/.test(root)) throw new Error('Unsupported project path');
@@ -139,6 +146,8 @@ async function main(): Promise<void> {
     const config = removing && previous ? previous.config : readConfig(root);
     if (config.user !== userInfo().username)
       throw new Error('Run as the configured deployment owner');
+    if (target && !config.bots.includes(target))
+      throw new Error(`Add ${target} to the bots in deployment.json before deploying it`);
     let release: Release;
     if (removing && previous) release = previous;
     else {
@@ -148,13 +157,17 @@ async function main(): Promise<void> {
           [join(root, 'scripts/runtime.mjs'), 'exec', 'tsc', '-p', 'tsconfig.strict.json'],
           { cwd: root, quiet: false },
         );
-      release = makeRelease(root, config, mongodbOnly);
+      release = makeRelease(root, config, mongodbOnly, target);
       console.log(
         `Prepared ${relativeRelease(root, release)}. Review the manifest and service files.`,
       );
     }
     if (action.endsWith('prepare')) return;
-    const names = new Set([...Object.keys(previous?.units ?? {}), ...Object.keys(release.units)]);
+    // A targeted deployment touches one service; the others keep running their current release.
+    const names = target
+      ? new Set([botService(target)])
+      : new Set([...Object.keys(previous?.units ?? {}), ...Object.keys(release.units)]);
+    const recorded = target ? mergeTargetRelease(previous, release, target) : release;
     for (const name of names) inspectUnit(root, name);
     const managedPids = [...names]
       .map((name) =>
@@ -164,7 +177,7 @@ async function main(): Promise<void> {
     if (!removing)
       assertNoUnmanagedProcesses(
         root,
-        config.bots,
+        target ? [target] : config.bots,
         managedPids,
         mongodbOnly ? config.mongodb?.prefix : undefined,
       );
@@ -174,7 +187,7 @@ async function main(): Promise<void> {
       throw new Error('Deploy and verify the local MongoDB service before deploying bots');
     run('sudo', ['-v'], { quiet: false });
     const previousState = existsSync(statePath) ? readFileSync(statePath, 'utf8') : null;
-    const desired = removing ? null : JSON.stringify(release, null, 2) + '\n';
+    const desired = removing ? null : JSON.stringify(recorded, null, 2) + '\n';
     const after = Object.fromEntries(
       [...names].map((name) => [name, removing ? null : (release.units[name] ?? null)]),
     );
@@ -187,7 +200,7 @@ async function main(): Promise<void> {
             journalPath,
             JSON.stringify(
               {
-                release,
+                release: recorded,
                 transaction,
                 stateName,
                 previous: previousState,
@@ -204,7 +217,9 @@ async function main(): Promise<void> {
     console.log(
       removing
         ? 'Managed services removed; data, environments and releases retained.'
-        : 'Deployment is ready and enabled for boot.',
+        : target
+          ? `${target} is ready and enabled for boot; other bots keep their current release.`
+          : 'Deployment is ready and enabled for boot.',
     );
     if (!removing) pruneAfterDeploy(root, process.pid);
   } finally {

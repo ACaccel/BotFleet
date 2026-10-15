@@ -68,7 +68,7 @@ To enable konata's [notification relay API](../configuration.md#notification-rel
    never through Git.
 3. Add the route to `notificationRoutes` in `src/bot/konata/config.json` and make
    sure konata can view, post and embed links in that channel.
-4. Deploy konata with `npm run deploy` (see [deployment](deployment.md#commands)).
+4. Deploy konata with `npm run deploy -t konata` (see [deployment](deployment.md#commands)).
    Preparation rejects a port without a key of at least 32 characters and a
    malformed route block.
 5. Check the startup line `notification relay API is listening on 127.0.0.1:<port>`
@@ -99,7 +99,7 @@ To enable nijika's [early-warning API](../configuration.md#early-warning-api) fo
    sudo tailscale serve --bg --set-path /earthquake/ http://127.0.0.1:4000
    ```
 
-5. Deploy nijika with `npm run deploy` (see [deployment](deployment.md#commands)).
+5. Deploy nijika with `npm run deploy -t nijika` (see [deployment](deployment.md#commands)).
    Preparation rejects a port without a key of at least 32 characters and a malformed
    `earthquake_alert` block. Check the startup line `earthquake alert API is listening on 127.0.0.1:4000` in
    `journalctl -u botfleet@nijika.service`.

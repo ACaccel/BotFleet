@@ -75,6 +75,17 @@ describe('release preparation', () => {
     expect(release.units['botfleet@gopher.service']).not.toContain('mongo-ready');
   });
 
+  it('validates and generates only the targeted bot', () => {
+    // nijika's invalid settings must not block a tomori-only release.
+    config.bots = ['tomori', 'nijika'];
+    file('src/bot/nijika/config.json', 'not json');
+
+    const release = makeRelease(root, config, false, 'tomori');
+
+    expect(Object.keys(release.units)).toEqual(['botfleet@tomori.service']);
+    expect(() => makeRelease(root, config, false)).toThrow('Missing local env for nijika');
+  });
+
   it('rejects nijika with an earthquake alert port but no key', () => {
     config.bots = ['nijika'];
     file(
