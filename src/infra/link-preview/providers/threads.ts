@@ -1,6 +1,6 @@
 /**
- * Threads provider. Rewrites a post URL onto one of the operator-configured
- * embed-proxy domains so Discord renders an embed. Matches both the
+ * Threads provider. Retains validated proxy metadata for custom preview
+ * cards and optional video attachments. Matches both the
  * `threads.net` and `threads.com` hosts.
  *
  * It also expands the `/share/<token>` short links the app's share button
@@ -10,13 +10,12 @@
  * hop, not the chain's destination (see {@link resolveShareLink}).
  *
  * Proxies differ per post type, so the probe loop's quality tiers pick one per
- * post rather than a fixed host. `fzthreads.com` serves `og:video` and the real
- * post image and resolves login-restricted posts; for a post without media it
- * answers with the author's avatar, which the weak-image tier ranks below real
+ * post rather than a fixed host. Some proxies serve `og:video` or the real
+ * post image; others fall back to the author's avatar for a post without media,
+ * which the weak-image tier ranks below real
  * post assets but above a text-only embed (see {@link LOW_VALUE_IMAGE_PATTERNS}).
- * `viewthreads.com` currently answers with a generic title that
- * {@link isPlaceholder} rejects; it stays listed as a fallback that recovers on
- * its own. A login wall's generic Instagram `og:image` is rejected by the
+ * Empty account placeholders are rejected by {@link isPlaceholder}.
+ * A login wall's generic Instagram `og:image` is rejected by the
  * shared junk-marker filter. While every proxy is degraded, Threads previews
  * are skipped silently with no bare link posted.
  */
@@ -24,7 +23,7 @@ import { ok } from '../../../core/result';
 
 import { createRewriteProvider } from './rewrite-provider';
 import type { OgClient, OpenGraphMeta } from '../og-client';
-import type { LinkPreviewBuildContext, LinkPreviewProvider } from '../types';
+import type { LinkPreviewBuildContext, LinkPreviewProvider, LinkPreviewResult } from '../types';
 
 const PROVIDER_NAME = 'threads';
 
@@ -84,6 +83,21 @@ const isPlaceholder = (meta: OpenGraphMeta): boolean =>
   (meta.description?.trim() ?? '') === '' &&
   meta.images.length === 0 &&
   (meta.video?.trim() ?? '') === '';
+
+/** Reuse the validated content instead of requiring Discord to scrape the proxy again. */
+const threadsPreview = (url: URL, fallbackUrl: string, meta: OpenGraphMeta): LinkPreviewResult => ({
+  kind: 'card',
+  card: {
+    url: url.href,
+    title: meta.title || 'Threads',
+    description: meta.description,
+    imageUrl: meta.images[0],
+    ...(meta.images.length > 1 ? { imageUrls: meta.images } : {}),
+    siteName: 'Threads',
+  },
+  sourceUrl: url.href,
+  ...(meta.video ? { media: { url: meta.video, fallbackUrl } } : {}),
+});
 
 /**
  * Expand a Threads share short link to its canonical post permalink so the
@@ -148,6 +162,7 @@ export const createThreadsProvider = (opts: {
     toProxyUrl,
     lowValueImagePatterns: LOW_VALUE_IMAGE_PATTERNS,
     isPlaceholder,
+    toResult: threadsPreview,
   });
 
   return {

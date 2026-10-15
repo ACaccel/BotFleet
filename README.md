@@ -65,7 +65,9 @@ Every bot shares the framework capabilities:
   proxies for playable videos, and bounded video uploads as a fallback.
   Facebook uses custom cards with truncated text, complete image galleries and separate video
   attachments and engagement counts when available; the title links to the post,
-  and failed video delivery falls back to a link. nhentai and wnacg links in
+  and failed video delivery falls back to a link. Threads also renders custom
+  cards and video attachments from validated proxy metadata, without relying on
+  Discord to expand a proxy URL. nhentai and wnacg links in
   age-restricted channels open a paged reader with prefetched pages. See
   [preview configuration](docs/configuration.md#social-previews-and-feeds).
 - **Message archive.** msg-archive captures messages, edits (up to 50 previous

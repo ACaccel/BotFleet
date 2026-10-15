@@ -6,7 +6,7 @@
  *   - `rewritten-url`: reply with the proxy URL as plain content so
  *     Discord unfurls it into a (playable) embed;
  *   - `card`: build an {@link EmbedBuilder} from the neutral OpenGraph
- *     card and attach Facebook video when a bounded download succeeds;
+ *     card and attach video when a bounded download succeeds;
  *   - `post`: a custom X card (see `social-post.ts`). A video post uploads
  *     the largest encoding that fits in a Components V2 card, and falls back
  *     to a thumbnail embed linking the video when none can be uploaded.
@@ -207,7 +207,7 @@ export const renderPreviewTo = async (
     await renderPost(send, result.post, translator, options);
     return;
   }
-  if (result.card.siteName === 'Facebook' && result.media !== undefined) {
+  if (result.media !== undefined) {
     const maxBytes = options.maxVideoBytes ?? DEFAULT_MAX_VIDEO_BYTES;
     const download = options.downloadVideo ?? downloadPreviewVideo;
     const video = await download(

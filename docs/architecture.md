@@ -248,13 +248,14 @@ neutral single-message previews; each account pass shares post preparation
 across its destinations. Feed announcements and media use one send, and preview
 failure falls back to the existing proxy announcement. Feed configuration remains
 independent of the message-preview plugin.
-Facebook preview providers retain OpenGraph metadata from proxies or the source
-site for custom card rendering, retaining the complete image list. The renderer
+Threads retains validated proxy OpenGraph metadata for custom cards instead of
+depending on a second fetch by Discord's URL crawler. Facebook retains metadata
+from proxies or the source site. Both preserve the complete image list. The renderer
 sends all distinct HTTPS images in four-image gallery replies; only the first
 reply carries the post text. Facebook-specific parsing maps the proxy's source
 summary to optional engagement counts. Direct videos use a dedicated downloader with the shared host validation and
 bounded DNS resolver, plus address checks, deadlines and a concurrency limit;
-the plugin sends a separate attachment and falls back if Discord rejects it.
+the plugin sends a separate attachment for either source and falls back if Discord rejects it.
 Missing or failed media delivery keeps the card and adds a fallback link. See
 [preview configuration](configuration.md#social-previews-and-feeds) for supported
 media, limits and metadata availability.

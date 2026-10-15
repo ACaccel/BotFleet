@@ -93,6 +93,16 @@ const buildUrl = async (
   return result.value.url;
 };
 
+/** Build neutral preview data for providers that render custom cards. */
+const buildPreview = async (
+  provider: LinkPreviewProvider,
+  href: string,
+): Promise<LinkPreviewResult | null> => {
+  const result = await provider.build(u(href), { timeoutMs: 1000 });
+  if (!isOk(result)) throw new Error(`expected ok for ${href}`);
+  return result.value;
+};
+
 // ---------------------------------------------------------------------------
 // canHandle matrices (pure — no network)
 // ---------------------------------------------------------------------------
@@ -575,7 +585,9 @@ describe('probe-loop precedence around the weak-image tier', () => {
       [at('fzthreads.com')]: ok(meta({ title: 'a post', images: [AVATAR_IMAGE] })),
       [at('viewthreads.com')]: ok(meta({ title: 'a post', images: [POST_IMAGE] })),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('viewthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: POST_IMAGE },
+    });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -584,7 +596,9 @@ describe('probe-loop precedence around the weak-image tier', () => {
       [at('viewthreads.com')]: ok(meta({ title: 'a post' })),
       [at('fzthreads.com')]: ok(meta({ title: 'a post', images: [AVATAR_THUMB] })),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: AVATAR_THUMB },
+    });
   });
 
   it('posts a weak image rather than nothing', async () => {
@@ -592,7 +606,9 @@ describe('probe-loop precedence around the weak-image tier', () => {
       [at('viewthreads.com')]: ok(meta()),
       [at('fzthreads.com')]: ok(meta({ images: [AVATAR_IMAGE] })),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: AVATAR_IMAGE },
+    });
   });
 
   it('does not short-circuit on a weak image — a later video host still wins', async () => {
@@ -600,7 +616,9 @@ describe('probe-loop precedence around the weak-image tier', () => {
       [at('fzthreads.com')]: ok(meta({ images: [AVATAR_IMAGE] })),
       [at('fixthreads.seria.moe')]: ok(meta({ video: 'https://v.example/clip.mp4' })),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fixthreads.seria.moe'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      media: { url: 'https://v.example/clip.mp4', fallbackUrl: at('fixthreads.seria.moe') },
+    });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
@@ -644,7 +662,12 @@ describe('threads host selection per post type', () => {
         }),
       ),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      media: {
+        url: 'https://scontent-tpe1-1.cdninstagram.com/o1/v/t2/f2/m86/clip.mp4',
+        fallbackUrl: at('fzthreads.com'),
+      },
+    });
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([at('viewthreads.com'), at('fzthreads.com')]);
   });
 
@@ -668,7 +691,9 @@ describe('threads host selection per post type', () => {
         meta({ title: 'ajit86403 on Threads', images: [AVATAR_THUMB] }),
       ),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('viewthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: POST_IMAGE },
+    });
     // No video anywhere, so every host is probed before the choice is made.
     expect(fetch).toHaveBeenCalledTimes(3);
   });
@@ -680,14 +705,16 @@ describe('threads host selection per post type', () => {
         meta({ title: '@ajit86403 (@ajit86403)', description: 'Post text', images: [POST_IMAGE] }),
       ),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: POST_IMAGE, description: 'Post text' },
+    });
   });
 
   it('skips an empty Threads account card when no host resolves the post', async () => {
     const { provider, fetch } = providerWith({
       [at('viewthreads.com')]: ok(meta({ title: '@ajit86403 on Threads', description: '' })),
     });
-    expect(await buildUrl(provider, permalink)).toBeNull();
+    expect(await buildPreview(provider, permalink)).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
@@ -697,7 +724,9 @@ describe('threads host selection per post type', () => {
         meta({ title: '@ajit86403 on Threads', description: 'Post text' }),
       ),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('viewthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { description: 'Post text' },
+    });
   });
 
   it('skips a login wall in the image slot and picks the host that resolved the post', async () => {
@@ -722,7 +751,9 @@ describe('threads host selection per post type', () => {
         }),
       ),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: POST_IMAGE },
+    });
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 });
@@ -836,12 +867,45 @@ describe('rewrite URL construction', () => {
       proxyHosts: ['vxthreads.net', 'viewthreads.com', 'threadsez.com'],
       ogClient: client,
     });
-    expect(await buildUrl(provider, 'https://www.threads.net/@user/post/Cabc')).toBe(third);
+    expect(await buildPreview(provider, 'https://www.threads.net/@user/post/Cabc')).toMatchObject({
+      kind: 'card',
+      media: { url: 'v.mp4', fallbackUrl: third },
+    });
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([
       'https://vxthreads.net/@user/post/Cabc',
       'https://viewthreads.com/@user/post/Cabc',
       third,
     ]);
+  });
+
+  it('threads retains post metadata and every image without trusting the proxy card URL', async () => {
+    const source = 'https://www.threads.com/@user/post/Cabc?hl=zh-tw';
+    const images = ['https://cdn.example/first.jpg', 'https://cdn.example/second.jpg'];
+    const { client, fetch } = makeOgClient({
+      'https://viewthreads.com/@user/post/Cabc': ok(
+        meta({
+          title: 'Author on Threads',
+          description: 'Post text',
+          images,
+          url: 'https://unrelated.example/post',
+        }),
+      ),
+    });
+    const provider = createThreadsProvider({ proxyHosts: ['viewthreads.com'], ogClient: client });
+
+    expect(await buildPreview(provider, source)).toEqual({
+      kind: 'card',
+      card: {
+        url: source,
+        title: 'Author on Threads',
+        description: 'Post text',
+        imageUrl: images[0],
+        imageUrls: images,
+        siteName: 'Threads',
+      },
+      sourceUrl: source,
+    });
+    expect(fetch).toHaveBeenCalledWith('https://viewthreads.com/@user/post/Cabc', 'threads', 1000);
   });
 });
 
@@ -900,8 +964,15 @@ describe('threads share-link resolution', () => {
       fetchByUrl: { [proxyPermalink]: ok(meta({ video: 'v.mp4' })) },
     });
     expect(await build(providerWith(client), share)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPermalink,
+      kind: 'card',
+      card: {
+        url: permalink,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Threads',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyPermalink },
       sourceUrl: share, // original share link is carried, not the resolved permalink
     });
     expect(resolveRedirectChain).toHaveBeenCalledWith(share, 1000, 'threads', MINIMAL_UA);
@@ -920,8 +991,15 @@ describe('threads share-link resolution', () => {
       fetchByUrl: { [proxyPermalink]: ok(meta({ video: 'v.mp4' })) },
     });
     expect(await build(providerWith(client), share)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPermalink, // the single-use xmt/slof share attribution is dropped
+      kind: 'card',
+      card: {
+        url: permalink,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Threads',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyPermalink },
       sourceUrl: share,
     });
     // A landing-URL resolution would have probed the error page instead.
@@ -935,8 +1013,14 @@ describe('threads share-link resolution', () => {
       fetchByUrl: { [proxyPermalink]: ok(meta({ images: ['i.jpg'] })) },
     });
     expect(await build(providerWith(client), legacyShare)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPermalink,
+      kind: 'card',
+      card: {
+        url: permalink,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: 'i.jpg',
+        siteName: 'Threads',
+      },
       sourceUrl: legacyShare,
     });
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([proxyPermalink]);
@@ -974,8 +1058,15 @@ describe('threads share-link resolution', () => {
       fetchByUrl: { [proxyPermalink]: ok(meta({ video: 'v.mp4' })) },
     });
     expect(await build(providerWith(client), permalink)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPermalink,
+      kind: 'card',
+      card: {
+        url: permalink,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Threads',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyPermalink },
       sourceUrl: permalink,
     });
     expect(resolveRedirectChain).not.toHaveBeenCalled();

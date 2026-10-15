@@ -211,6 +211,12 @@ Previews cover post permalinks plus these short and share forms: Instagram
 Links inside `<...>`, a code span or block, or a spoiler (`||...||`) are not
 previewed, and full-width punctuation directly after a link ends it.
 
+Threads previews render custom cards from the selected proxy's validated
+OpenGraph text and images, linking to the original post. They do not require
+Discord to expand the proxy URL again. Image cards use the gallery delivery
+described below. A successfully uploaded direct video replaces the preview
+images; failed downloads or uploads retain the image card with a fallback link.
+
 Facebook previews use a custom card with a Facebook header, a title linking to
 the source post, and available OpenGraph text and images. All distinct HTTPS
 images are shown in source order, in galleries of up to four images per reply;
@@ -251,7 +257,7 @@ against private-network access, and allow at most two concurrent downloads.
 Missing direct video metadata, unsupported media, oversized files, download
 failures and rejected attachments fall back to the custom card and a clickable
 link with automatic embedding suppressed. Static cards retain their preview
-image. No Facebook login or additional scraper service is required; previews
+image. No Facebook or Threads login or additional scraper service is required; previews
 depend on publicly available metadata and media URLs.
 
 #### nhentai and wnacg readers

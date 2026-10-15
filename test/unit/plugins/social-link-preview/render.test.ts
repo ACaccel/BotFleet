@@ -88,6 +88,69 @@ describe('renderPreview', () => {
     expect(replies[0]?.content).toBeUndefined();
   });
 
+  it.each(['uploaded', 'unavailable', 'rejected', 'disabled'] as const)(
+    'renders a Threads video card when attachment delivery is %s',
+    async (delivery) => {
+      const { message, replies } = makeMessage();
+      const data = Buffer.from('video');
+      const downloadVideo = vi
+        .fn()
+        .mockResolvedValue(delivery === 'unavailable' ? null : { data, name: 'preview.mp4' });
+      if (delivery === 'rejected') {
+        vi.mocked(message.reply).mockRejectedValueOnce(
+          new DiscordAPIError(
+            { code: 40005, message: 'Upload rejected' },
+            40005,
+            400,
+            'POST',
+            'https://discord.test/channels/1/messages',
+            {},
+          ),
+        );
+      }
+      const sourceUrl = 'https://www.threads.com/@user/post/Cabc';
+      const fallbackUrl = 'https://viewthreads.com/@user/post/Cabc';
+      const result: RenderablePreviewResult = {
+        kind: 'card',
+        card: {
+          url: sourceUrl,
+          title: 'Author on Threads',
+          description: 'Post text',
+          imageUrl: 'https://cdn.example/poster.jpg',
+          siteName: 'Threads',
+        },
+        media: { url: 'https://cdn.example/video.mp4', fallbackUrl },
+        sourceUrl,
+      };
+
+      await renderPreview(message, result, makeTranslator(), {
+        downloadVideo,
+        videoEnabled: delivery !== 'disabled',
+        maxVideoBytes: 1234,
+        videoTimeoutMs: 500,
+      });
+
+      expect(replies).toHaveLength(1);
+      expect(replies[0]?.allowedMentions).toEqual({ parse: [] });
+      const embed = replies[0]?.embeds?.[0] as {
+        data: { url: string; title: string; image?: { url: string } };
+      };
+      expect(embed.data.url).toBe(sourceUrl);
+      expect(embed.data.title).toBe('Author on Threads');
+      if (delivery === 'uploaded') {
+        expect(replies[0]?.files?.[0]?.attachment).toEqual(data);
+        expect(embed.data.image).toBeUndefined();
+        expect(replies[0]?.content).toBeUndefined();
+      } else {
+        expect(replies[0]?.files).toBeUndefined();
+        expect(embed.data.image?.url).toBe('https://cdn.example/poster.jpg');
+        expect(replies[0]?.content).toBe(delivery === 'disabled' ? undefined : `<${fallbackUrl}>`);
+      }
+      if (delivery === 'disabled') expect(downloadVideo).not.toHaveBeenCalled();
+      else expect(downloadVideo).toHaveBeenCalledWith('https://cdn.example/video.mp4', 1234, 500);
+    },
+  );
+
   it.each([true, false])(
     'retains an optional announcement with Facebook video delivery (%s)',
     async (uploadable) => {

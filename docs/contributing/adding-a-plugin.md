@@ -38,9 +38,11 @@ Do not cast the context to access the container.
 ## Social preview media
 
 Keep provider metadata retrieval separate from Discord rendering and delivery.
-Facebook custom cards use existing OpenGraph retrieval; direct video attachments
+Facebook and Threads custom cards use existing OpenGraph retrieval rather than
+discarding validated metadata and relying on Discord to expand a proxy URL.
+Direct video attachments
 share its host validation and bounded DNS resolver with address checks, download sizes,
 deadlines and concurrency. Preserve the card and a clickable fallback link when
 media cannot be delivered. Test download rejection and attachment-send failures
-without live Facebook requests. See [preview configuration](../configuration.md#social-previews-and-feeds)
+without live upstream requests. See [preview configuration](../configuration.md#social-previews-and-feeds)
 for the supported metadata and operator limits.
