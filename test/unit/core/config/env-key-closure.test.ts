@@ -35,6 +35,8 @@ const FULL_SOURCE: NodeJS.ProcessEnv = {
   GEMINI_API_KEY: 'sk-gemini',
   XAI_API_KEY: 'sk-xai',
   CWA_API_KEY: 'cwa-key',
+  NOTIFY_API_PORT: '8787',
+  NOTIFY_API_KEY: 'notify-relay-key-0123456789abcdef',
 };
 
 describe('Env key closure', () => {

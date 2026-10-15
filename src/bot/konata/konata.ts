@@ -4,26 +4,39 @@ import { ActivityType, Events } from 'discord.js';
 import type { Config } from '@bot';
 import { BaseBot } from '@bot';
 import type { ClientEventBridgeSuppression } from '../client-event-bridge';
-import { createLlmChatPlugin } from '@plugins';
+import { createLlmChatPlugin, createNotificationRelayPlugin } from '@plugins';
 import { parseAiPolicy } from '../../application/ai/policy';
+
+interface KonataConfig extends Config {
+  /** Raw `notificationRoutes` block; validated by the notification relay plugin. */
+  notificationRoutes?: unknown;
+}
+
+/** `NOTIFY_API_PORT` / `NOTIFY_API_KEY` from the validated env. */
+interface NotifyApiSettings {
+  readonly port?: number | undefined;
+  readonly apiKey?: string | undefined;
+}
 
 /**
  * Konata composition root. The entire LLM chat lifecycle (session
  * management, provider dispatch, chunked reply, pre-warm) lives in
- * {@link createLlmChatPlugin}; this class registers that plugin and a
- * Discord presence.
+ * {@link createLlmChatPlugin}; this class registers that plugin, the
+ * loopback notification relay API ({@link createNotificationRelayPlugin},
+ * off without a port) and a Discord presence.
  *
  * Listener policy: Konata is a pure LLM-chat bot. It opts out of the
  * guildCreate raw listener through the `eventBridgeSuppression` hook so
  * the bridge does not install it.
  */
-export class Konata extends BaseBot<Config> {
+export class Konata extends BaseBot<KonataConfig> {
   public constructor(
     client: Client,
     token: string,
     mongoURI: string,
     clientId: string,
-    config: Config,
+    config: KonataConfig,
+    notifyApi: NotifyApiSettings = {},
   ) {
     super(client, token, mongoURI, clientId, config);
     this.use(
@@ -32,6 +45,14 @@ export class Konata extends BaseBot<Config> {
         // Parsed here so a malformed `ai` block stops startup.
         policy: parseAiPolicy(config),
         isAdmin: (userId) => this.isAdmin(userId),
+      }),
+    );
+    this.use(
+      createNotificationRelayPlugin({
+        botId: this.clientId,
+        port: notifyApi.port,
+        apiKey: notifyApi.apiKey,
+        routes: config.notificationRoutes,
       }),
     );
     this.registerPresence();

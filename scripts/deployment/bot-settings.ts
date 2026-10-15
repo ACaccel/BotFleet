@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseArchiveSettings } from '../../src/plugins/message-backup/config';
+import { NotificationRoutesSchema } from '../../src/plugins/notification-relay/internal/config';
 
 const settings = z
   .object({
@@ -19,6 +20,10 @@ const settings = z
   })
   .passthrough();
 
+const konataSettings = settings.extend({
+  notificationRoutes: NotificationRoutesSchema.optional(),
+});
+
 const archiveSettings = settings.extend({
   backup_server: z.array(z.string().regex(/^\d+$/)),
   backup_interval_minutes: z.number().positive().optional(),
@@ -31,6 +36,10 @@ const archiveSettings = settings.extend({
 export function validateBotSettings(bot: string, text: string): void {
   try {
     const input: unknown = JSON.parse(text);
+    if (bot === 'konata') {
+      konataSettings.parse(input);
+      return;
+    }
     if (bot !== 'msg-archive') {
       settings.parse(input);
       return;

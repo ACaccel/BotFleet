@@ -34,5 +34,11 @@
       "perUserPerDay": 200,
       "concurrent": 1
     }
+  },
+  "notificationRoutes": {
+    "card-together-deploy": {
+      "guildId": "YOUR_GUILD_ID",
+      "channelId": "YOUR_NOTIFICATION_CHANNEL_ID"
+    }
   }
 }

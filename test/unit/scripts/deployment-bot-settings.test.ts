@@ -50,4 +50,21 @@ describe('deployment bot configuration preflight', () => {
       ).toThrow('Invalid config.json');
     }
   });
+
+  it('checks konata notification routes before cutover', () => {
+    const route = { guildId: '123456789012345678', channelId: '223456789012345678' };
+    expect(() =>
+      validateBotSettings('konata', JSON.stringify({ notificationRoutes: { deploy: route } })),
+    ).not.toThrow();
+    expect(() => validateBotSettings('konata', '{}')).not.toThrow();
+    for (const routes of [
+      { Deploy: route },
+      { deploy: { ...route, channelId: 'YOUR_CHANNEL_ID' } },
+      { deploy: { ...route, extra: true } },
+    ]) {
+      expect(() =>
+        validateBotSettings('konata', JSON.stringify({ notificationRoutes: routes })),
+      ).toThrow('check notificationRoutes.');
+    }
+  });
 });

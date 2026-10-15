@@ -13,13 +13,13 @@ system, with English and Traditional Chinese replies throughout.
 Each bot is a composition root under [`src/bot/<bot>/`](src/bot/) that extends the
 shared `BaseBot` and registers its own plugins and services.
 
-| Bot           | Run                   | Required environment                      | What the implementation wires                                                                                                                                                                                                       |
-| ------------- | --------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `nijika`      | `npm run nijika`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`, `PORT` | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles, plus social-feed polling with its platform registry, an earthquake webhook and CWA earthquake reports (optional `CWA_API_KEY`) |
-| `tomori`      | `npm run tomori`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles                                                                                                                                 |
-| `konata`      | `npm run konata`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | LLM chat for whitelisted users (a mention starts a session, a reply continues it) and an online presence; the guild-join listener is off                                                                                            |
-| `gopher`      | `npm run gopher`      | `TOKEN`, `CLIENT_ID`                      | Self-hosted LLM auto-replies and daily avatar/nickname sync; no database. [Endpoint changes](docs/configuration.md#gopher-llm-endpoint) take effect after a restart                                                                 |
-| `msg-archive` | `npm run msg-archive` | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | The only [message archive](docs/message-archive.md) writer: live capture, periodic and full backups, and archive control; it exposes exactly `/archive`                                                                             |
+| Bot           | Run                   | Required environment                      | What the implementation wires                                                                                                                                                                                                         |
+| ------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nijika`      | `npm run nijika`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`, `PORT` | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles, plus social-feed polling with its platform registry, an earthquake webhook and CWA earthquake reports (optional `CWA_API_KEY`)   |
+| `tomori`      | `npm run tomori`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles                                                                                                                                   |
+| `konata`      | `npm run konata`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | LLM chat for whitelisted users (a mention starts a session, a reply continues it), an online presence and an optional loopback [notification relay API](docs/configuration.md#notification-relay-api); the guild-join listener is off |
+| `gopher`      | `npm run gopher`      | `TOKEN`, `CLIENT_ID`                      | Self-hosted LLM auto-replies and daily avatar/nickname sync; no database. [Endpoint changes](docs/configuration.md#gopher-llm-endpoint) take effect after a restart                                                                   |
+| `msg-archive` | `npm run msg-archive` | `TOKEN`, `CLIENT_ID`, `MONGO_URI`         | The only [message archive](docs/message-archive.md) writer: live capture, periodic and full backups, and archive control; it exposes exactly `/archive`                                                                               |
 
 Event mirroring posts message edits, deletions and role changes to a guild's event
 channel and keeps deleted attachments through an attachment cache. LLM providers
@@ -80,6 +80,9 @@ Every bot shares the framework capabilities:
 - **Database inspection.** Nijika's admins browse any guild database read-only
   with [`/db`](docs/configuration.md#database-inspection): statistics, fields,
   filtered pages and single documents, with every option offered as a list.
+- **Notification relay.** Konata's optional loopback
+  [HTTP API](docs/configuration.md#notification-relay-api) lets a local service,
+  such as a deployment controller, post a progress embed and keep editing it.
 - **Command logs.** Compact debug-channel embeds show the full command name,
   user and channel mentions, and execution time. See
   [configuration](docs/configuration.md#common-bot-settings).

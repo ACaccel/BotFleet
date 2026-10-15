@@ -28,6 +28,7 @@ import { fetchSchema, type FetchDoc } from './fetch.schema';
 import { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
 import { gayReadingSchema, type GayReadingDoc } from './gay-reading.schema';
 import { messageSchema, type MessageDoc } from './message.schema';
+import { notificationThreadSchema, type NotificationThreadDoc } from './notification-thread.schema';
 import { replySchema, type ReplyDoc } from './reply.schema';
 import { rollCallSchema, type RollCallDoc } from './roll-call.schema';
 import { tempRoleSchema, type TempRoleDoc } from './temp-role.schema';
@@ -61,6 +62,7 @@ export { fetchSchema, type FetchDoc } from './fetch.schema';
 export { giveawaySchema, type GiveawayDoc } from './giveaway.schema';
 export { gayReadingSchema, type GayReadingDoc } from './gay-reading.schema';
 export { messageSchema, type MessageDoc } from './message.schema';
+export { notificationThreadSchema, type NotificationThreadDoc } from './notification-thread.schema';
 export { replySchema, type ReplyDoc } from './reply.schema';
 export { rollCallSchema, type RollCallDoc } from './roll-call.schema';
 export { tempRoleSchema, type TempRoleDoc } from './temp-role.schema';
@@ -93,6 +95,7 @@ export const SCHEMAS = {
   AiUsage: aiUsageSchema,
   RollCall: rollCallSchema,
   BugTicket: bugTicketSchema,
+  NotificationThread: notificationThreadSchema,
 } as const;
 
 export type SchemaName = keyof typeof SCHEMAS;
@@ -123,4 +126,5 @@ export interface DocByName {
   AiUsage: AiUsageDoc;
   RollCall: RollCallDoc;
   BugTicket: BugTicketDoc;
+  NotificationThread: NotificationThreadDoc;
 }

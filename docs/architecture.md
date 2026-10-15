@@ -114,6 +114,13 @@ replies in a ticket's forum post to the reporter's DMs (messages starting with
 number in the quoted DM, the only open ticket, or a menu. Both directions ping
 nobody. Nijika and Tomori receive DMs through `Partials.Channel`.
 
+Konata's notification relay accepts updates only on `127.0.0.1`, with a bearer key
+compared in constant time before route lookup or body parsing. Callers name a
+configured route, never a channel, and their text pings nobody. Updates for one
+thread are serialized in process; the thread's message ID lives in the route guild's
+database, so a restart keeps editing the same message. See the
+[API contract](configuration.md#notification-relay-api).
+
 Activities and roll calls are button-driven and persisted per guild. The activity
 plugin rebuilds both on startup and database recovery: an activity whose
 sign-up deadline passed while the bot was down closes immediately, a start
@@ -161,6 +168,8 @@ an error, while a periodic pass's `partial` result is a warning.
 Social cards retain source identity through `SOCIAL_COLORS` (X `#1D9BF0`, Facebook
 `#1877F2`), including Components V2 accents; generic previews use `info` and
 auxiliary gallery embeds omit color.
+Relayed notifications show a running thread as `info`, success as `success`, failure
+as `error` and cancellation as `neutral`.
 CWA earthquake report embeds use `EARTHQUAKE_REPORT_COLORS` to mirror the agency's
 own report color (green, yellow, orange, red) as a severity cue; an unknown color
 falls back to `info`. Shared `replyForError` replies remain localized

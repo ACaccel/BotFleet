@@ -74,6 +74,7 @@ const SUMMARY_FIELDS: Readonly<Record<string, readonly string[]>> = {
   guildsettings: ['botId', 'guildId', 'revision'],
   guildsettingsmigrations: ['botId', 'createdAt'],
   messages: ['author.username', 'content', 'createdTimestamp'],
+  notificationthreads: ['route', 'thread_key', 'updated_at'],
   replies: ['input', 'reply', 'created_by'],
   rollcalls: ['persona', 'closed', 'deadline'],
   temproles: ['role_name', 'expires_at'],

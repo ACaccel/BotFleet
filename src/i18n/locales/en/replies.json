@@ -557,6 +557,16 @@
     "unavailable": "Could not read the MEE6 leaderboard; it may be private, or MEE6 may have changed its interface.",
     "summary": "Level roles synced: {{granted}} members gained a role, {{removed}} old roles removed, {{failed}} members failed."
   },
+  "notification_relay": {
+    "status_field": "Status",
+    "summary_field": "Summary",
+    "status": {
+      "running": "In progress",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    }
+  },
   "earthquake": {
     "alert": "# <@&{{role}}> Taipei strong earthquake alert!!! (intensity 4 or above)\n> Why must there be an earthquake!?",
     "report": {
@@ -1086,6 +1096,7 @@
       "gay_readings": "Daily /gay readings",
       "giveaways": "Giveaways",
       "messages": "Archived messages",
+      "notificationthreads": "Relayed notification messages",
       "replies": "Auto-replies",
       "rollcalls": "Roll calls",
       "temproles": "Temporary roles",

@@ -254,6 +254,51 @@ describe('loadEnv', () => {
     });
   });
 
+  describe('notification relay API', () => {
+    const longKey = 'k'.repeat(32);
+
+    it('accepts a port with a key of at least 32 characters', () => {
+      const env = loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, NOTIFY_API_PORT: '8787', NOTIFY_API_KEY: longKey },
+      });
+      expect(env.NOTIFY_API_PORT).toBe(8787);
+      expect(env.NOTIFY_API_KEY).toBe(longKey);
+    });
+
+    it('treats a blank port as absent and needs no key without one', () => {
+      const env = loadEnv({ exitOnFailure: false, source: { ...validBase, NOTIFY_API_PORT: ' ' } });
+      expect('NOTIFY_API_PORT' in env).toBe(false);
+      expect('NOTIFY_API_KEY' in env).toBe(false);
+    });
+
+    it.each([
+      ['a port without a key', { NOTIFY_API_PORT: '8787' }],
+      ['a port with a short key', { NOTIFY_API_PORT: '8787', NOTIFY_API_KEY: 'k'.repeat(31) }],
+    ])('rejects %s without echoing the key', (_label, extra: NodeJS.ProcessEnv) => {
+      let error: unknown;
+      try {
+        loadEnv({ exitOnFailure: false, source: { ...validBase, ...extra } });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(EnvLoadError);
+      expect((error as EnvLoadError).issues.map((i) => i.path.join('.'))).toEqual([
+        'NOTIFY_API_KEY',
+      ]);
+      expect(String((error as Error).message)).not.toContain('k'.repeat(31));
+    });
+
+    it.each(['0', '65536', '80.5', 'http'])('rejects port %s', (port) => {
+      expect(() =>
+        loadEnv({
+          exitOnFailure: false,
+          source: { ...validBase, NOTIFY_API_PORT: port, NOTIFY_API_KEY: longKey },
+        }),
+      ).toThrow(EnvLoadError);
+    });
+  });
+
   describe('LOG_RETENTION_DAYS', () => {
     const days = (value: string | undefined): number =>
       loadEnv({

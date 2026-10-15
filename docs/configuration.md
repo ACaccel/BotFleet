@@ -31,6 +31,8 @@ placeholders fail startup; there is no root `.env.example`.
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                                                   |
 | `CWA_API_KEY`                                                          | Optional nijika key for [earthquake reports](#earthquake-alerts-and-reports); blank means absent |
 | `MONGO_INSPECT_URI`                                                    | Read-only account for nijika's [`/db`](#database-inspection); required once `db` is enabled      |
+| `NOTIFY_API_PORT`                                                      | Optional konata [notification relay](#notification-relay-api) port (1–65535); blank means absent |
+| `NOTIFY_API_KEY`                                                       | Relay bearer secret, at least 32 characters; required when `NOTIFY_API_PORT` is set              |
 | `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup                                       |
 
 ### Log retention
@@ -124,6 +126,7 @@ Plugin settings are validated at startup; strict schemas reject unknown keys.
 | `bug_report.tags`               | nijika, tomori | Optional forum tag names for `bug`, `suggestion`, `other`, `open`, `in_progress`, `closed` |
 | `auto_reply`                    | nijika, tomori | Per-user `luckyReplies`; `globalLuckyProbability` defaults to `0.005`                      |
 | `random_restaurant.apiUrl`      | nijika, tomori | Absolute HTTP(S) recommendation endpoint                                                   |
+| `notificationRoutes`            | konata         | Named [notification relay](#notification-relay-api) destinations; default none             |
 
 Invalid role or restaurant settings disable the affected command.
 
@@ -306,6 +309,51 @@ Nijika posts two kinds of earthquake message to each guild's `earthquake` channe
 - The embed shows the report text, origin time, magnitude, depth, epicenter and
   each county's maximum intensity, links the CWA report page, shows the report
   image and credits the CWA. Its color follows the CWA report color.
+
+### Notification relay API
+
+Konata can relay progress notifications from services on the same host, such as
+a deployment controller: the first update posts an embed, later updates edit it.
+The API is off unless `NOTIFY_API_PORT` is set, binds `127.0.0.1` only, and needs
+konata's MongoDB. Enable it with the [operator steps](contributing/operations.md#notification-relay).
+
+Routes map a name to a channel; callers name a route, never a channel:
+
+```json
+"notificationRoutes": {
+  "card-together-deploy": { "guildId": "123456789012345678", "channelId": "223456789012345678" }
+}
+```
+
+Route names match `^[a-z0-9][a-z0-9-]{0,63}$`; IDs are snowflake strings. A malformed
+block stops startup. Konata needs View Channel, Send Messages and Embed Links in the
+channel; a channel outside its route's guild is rejected when used.
+
+`PUT /notifications/<route>/<key>` with `Authorization: Bearer <NOTIFY_API_KEY>` and a
+JSON body of at most 16 KB:
+
+| Field         | Type                                                                                                 | Limit      |
+| ------------- | ---------------------------------------------------------------------------------------------------- | ---------- |
+| `title`       | string                                                                                               | 1–256      |
+| `description` | optional string, shown above the stages                                                              | 3000       |
+| `url`         | optional `http(s)` URL linked from the title                                                         | 500        |
+| `stages`      | list of `label` (1–100 characters) and `state` (`pending`, `running`, `done`, `failed` or `skipped`) | 0–10 items |
+| `status`      | `running`, `succeeded`, `failed` or `cancelled`                                                      | —          |
+| `summary`     | optional outcome line                                                                                | 500        |
+
+- `<key>` (`^[A-Za-z0-9._-]{1,100}$`) names one notification thread. The first PUT
+  for a route and key posts a message; later PUTs edit it, also after a restart. A
+  deleted message is posted anew. Concurrent PUTs for one thread run in order.
+- Unknown body fields are rejected. Caller text is shown verbatim and pings nobody.
+  Stages are marked ○ pending, ● running, ✓ done, ✗ failed, – skipped; the status
+  sets the embed color and a localized label.
+- Responses: `200 {"messageId", "created"}`; `400` invalid key or body; `401` missing
+  or wrong token, checked before anything but the route name's syntax; `404` unknown
+  route; `413` body too large; `503` Discord not ready or database unavailable;
+  `502` Discord rejected the request; `500` misconfigured route. Error bodies are
+  `{"error": "<reason>"}`; an invalid body also lists up to five `fields` paths.
+- Each thread's message ID is kept in the route guild's database for 30 days after
+  its last update.
 
 ### Gopher LLM endpoint
 

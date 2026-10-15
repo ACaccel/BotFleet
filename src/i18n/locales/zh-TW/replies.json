@@ -557,6 +557,16 @@
     "unavailable": "無法讀取 MEE6 排行榜,可能是排行榜未公開或 MEE6 介面變動。",
     "summary": "等級身分組同步完成:{{granted}} 人獲得新身分組、移除 {{removed}} 個舊身分組、{{failed}} 人失敗。"
   },
+  "notification_relay": {
+    "status_field": "狀態",
+    "summary_field": "摘要",
+    "status": {
+      "running": "進行中",
+      "succeeded": "成功",
+      "failed": "失敗",
+      "cancelled": "已取消"
+    }
+  },
   "earthquake": {
     "alert": "# <@&{{role}}> 台北強震警報!!! (4級以上)\n> 為什麼要地震!?",
     "report": {
@@ -1086,6 +1096,7 @@
       "gay_readings": "每日 /gay 結果",
       "giveaways": "抽獎",
       "messages": "備份的訊息",
+      "notificationthreads": "轉發通知訊息",
       "replies": "自動回覆",
       "rollcalls": "點名",
       "temproles": "臨時身分組",

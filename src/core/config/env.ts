@@ -141,7 +141,20 @@ const envShape = {
    * the webhook alert runs.
    */
   CWA_API_KEY: optionalApiKeySchema,
+  /**
+   * Loopback port for konata's notification relay API. Optional: without it
+   * the relay stays off. Requires {@link NOTIFY_API_KEY}.
+   */
+  NOTIFY_API_PORT: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
+    z.coerce.number().int().min(1).max(65_535).optional(),
+  ),
+  /** Bearer secret for the notification relay API; required with its port. */
+  NOTIFY_API_KEY: optionalApiKeySchema,
 } as const;
+
+/** Shortest accepted notification relay key, so a guessable secret fails startup. */
+export const NOTIFY_API_KEY_MIN_LENGTH = 32;
 
 const envSchema = z
   .object(envShape)
@@ -230,6 +243,17 @@ export const loadEnv = (options: LoadEnvOptions = {}): Env => {
         code: z.ZodIssueCode.custom,
         path: ['MONGO_URI'],
         message: 'MONGO_URI is required for this bot',
+      });
+    }
+    if (
+      value.NOTIFY_API_PORT !== undefined &&
+      (value.NOTIFY_API_KEY === undefined ||
+        value.NOTIFY_API_KEY.length < NOTIFY_API_KEY_MIN_LENGTH)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['NOTIFY_API_KEY'],
+        message: `NOTIFY_API_KEY of at least ${NOTIFY_API_KEY_MIN_LENGTH} characters is required when NOTIFY_API_PORT is set`,
       });
     }
     if (requirePort && value.PORT === undefined) {

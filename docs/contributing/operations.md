@@ -51,6 +51,25 @@ configured), and Discord login against `CLIENT_ID`. Steps time out after 30 seco
 failure reports the step and exits with status `1`. It runs separately from CI and
 does not exercise commands, plugins, or HTTP routes.
 
+## Notification relay
+
+To enable konata's [notification relay API](../configuration.md#notification-relay-api):
+
+1. Generate a key with `openssl rand -hex 32`.
+2. Add `NOTIFY_API_PORT=<port>` and `NOTIFY_API_KEY=<key>` to `src/bot/konata/.env`.
+   Pick a free local port; nijika's `PORT` is already taken. Give the same key to
+   the calling service through its own secret store, never through Git.
+3. Add the route to `notificationRoutes` in `src/bot/konata/config.json` and make
+   sure konata can view, post and embed links in that channel.
+4. Deploy konata with `npm run deploy` (see [deployment](deployment.md#commands)).
+   Preparation rejects a port without a key of at least 32 characters and a
+   malformed route block.
+5. Check the startup line `notification relay API is listening on 127.0.0.1:<port>`
+   in `journalctl -u botfleet@konata.service`.
+
+The API listens on `127.0.0.1` only. To rotate the key, change both sides and
+redeploy konata; to disable it, remove `NOTIFY_API_PORT` and redeploy.
+
 ## Temporary moderation
 
 For persistent thread-owner controls on Nijika, use
