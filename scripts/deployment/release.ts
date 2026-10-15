@@ -126,7 +126,6 @@ export function makeRelease(root: string, config: DeploymentConfig, mongodbOnly:
         loadEnv({
           source: parse(readFileSync(file)),
           requireDb: bot !== 'gopher',
-          requirePort: bot === 'nijika',
           exitOnFailure: false,
         });
         if (!existsSync(join(root, 'src/bot', bot, 'config.json')))

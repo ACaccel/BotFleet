@@ -1,5 +1,27 @@
 # Upgrade notes
 
+## Earthquake early-warning API
+
+Nijika's unauthenticated webhook is retired: `GET /discord/` and
+`POST /discord/earthquake` no longer exist, and nijika no longer reads `PORT` or
+requires it at startup or deployment preparation. Early warnings now arrive on the
+bearer-protected, loopback-only [`POST /alerts`](configuration.md#early-warning-api)
+with the alert's values, which nijika renders as an embed.
+
+1. Replace the old caller: whatever called `/discord/earthquake` must be switched to
+   the [Windows caller script](../tools/earthquake-alert/windows/README.md); a request
+   without the new body and key is rejected.
+2. In `src/bot/nijika/.env`, remove `PORT` and add `EARTHQUAKE_ALERT_PORT` and
+   `EARTHQUAKE_ALERT_KEY`. A leftover `PORT` is ignored. Without
+   `EARTHQUAKE_ALERT_PORT` the API stays off; CWA reports are unaffected.
+3. Follow the [operator steps](contributing/operations.md#earthquake-alerts) to expose
+   the port through `tailscale serve`, deploy, and test from the warning app.
+
+Alerts now post to every guild with an `earthquake` channel, also without an
+`earthquake` role, and ping the role only from local intensity 4; set
+[`earthquake_alert.ping_min_local_intensity`](configuration.md#early-warning-api) in
+nijika's `config.json` to change that.
+
 ## Tomori settings schema version 2
 
 Deploy and restart Tomori, then open a new `/settings` panel. Existing version-1
@@ -20,8 +42,7 @@ their existing behavior. See [server preferences](tomori-settings.md) for limits
 
 Gopher no longer exposes the settings HTTP API. Remove `settings_api` from its
 `config.json` and `GOPHER_SETTINGS_API_KEY` and `PORT` from its `.env`; these fields
-are no longer needed by gopher. Nijika still requires `PORT` for its earthquake
-webhook. Deploy the updated code, then follow
+are no longer needed by gopher. Deploy the updated code, then follow
 [manual configuration and restart](configuration.md#gopher-llm-endpoint)
 for subsequent endpoint changes.
 

@@ -30,7 +30,7 @@ describe('Gopher startup', () => {
       source: { TOKEN: 'valid-bot-token', CLIENT_ID: '123456789012345678' },
     });
 
-    expect(env.PORT).toBeUndefined();
+    expect(env.EARTHQUAKE_ALERT_PORT).toBeUndefined();
     expect(env.MONGO_URI).toBeUndefined();
     expect(options.build(buildInertClient(), env)).toBeInstanceOf(Gopher);
   });

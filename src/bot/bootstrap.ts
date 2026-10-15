@@ -68,8 +68,6 @@ interface BootstrapOptions {
   readonly env?: {
     /** Require a usable `MONGO_URI`. Defaults to true. */
     readonly requireDb?: boolean;
-    /** Require a `PORT`; set by personalities that bind an HTTP server. */
-    readonly requirePort?: boolean;
   };
   /** Construct the personality from its validated env and client. */
   readonly build: (client: Client, env: Env) => StartablePersonality;
@@ -91,7 +89,6 @@ export const bootstrapPersonality = (options: BootstrapOptions): void => {
   dotenv.config({ path: `./src/bot/${options.name}/.env` });
   const env = loadEnv({
     requireDb: options.env?.requireDb ?? true,
-    requirePort: options.env?.requirePort ?? false,
   });
   const client = new Client({
     intents: [...options.intents],

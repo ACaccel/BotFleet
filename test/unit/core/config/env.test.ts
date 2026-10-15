@@ -78,15 +78,6 @@ describe('loadEnv', () => {
       expect(Object.isFrozen(env)).toBe(true);
     });
 
-    it('coerces PORT from a string', () => {
-      const env = loadEnv({
-        exitOnFailure: false,
-        requireDb: false,
-        source: { ...validBase, MONGO_URI: undefined, PORT: '8080' },
-      });
-      expect(env.PORT).toBe(8080);
-    });
-
     it('accepts mongodb+srv:// scheme', () => {
       const env = loadEnv({
         exitOnFailure: false,
@@ -221,16 +212,6 @@ describe('loadEnv', () => {
       );
     });
 
-    it('rejects when requirePort=true but PORT is missing', () => {
-      expect(() =>
-        loadEnv({
-          exitOnFailure: false,
-          requirePort: true,
-          source: { ...validBase },
-        }),
-      ).toThrow(EnvLoadError);
-    });
-
     it('emits an NDJSON failure record to stderr before throwing', () => {
       expect(() => loadEnv({ exitOnFailure: false, source: {} })).toThrow(EnvLoadError);
       const lines = stderrCapture.lines();
@@ -296,6 +277,62 @@ describe('loadEnv', () => {
           source: { ...validBase, NOTIFY_API_PORT: port, NOTIFY_API_KEY: longKey },
         }),
       ).toThrow(EnvLoadError);
+    });
+  });
+
+  describe('earthquake alert API', () => {
+    const longKey = 'e'.repeat(32);
+
+    it('accepts a port with a key of at least 32 characters', () => {
+      const env = loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, EARTHQUAKE_ALERT_PORT: '4000', EARTHQUAKE_ALERT_KEY: longKey },
+      });
+      expect(env.EARTHQUAKE_ALERT_PORT).toBe(4000);
+      expect(env.EARTHQUAKE_ALERT_KEY).toBe(longKey);
+    });
+
+    it('is optional: a blank port reads as absent and needs no key', () => {
+      const env = loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, EARTHQUAKE_ALERT_PORT: '' },
+      });
+      expect('EARTHQUAKE_ALERT_PORT' in env).toBe(false);
+      expect('EARTHQUAKE_ALERT_KEY' in env).toBe(false);
+    });
+
+    it.each([
+      ['a port without a key', { EARTHQUAKE_ALERT_PORT: '4000' }],
+      [
+        'a port with a short key',
+        { EARTHQUAKE_ALERT_PORT: '4000', EARTHQUAKE_ALERT_KEY: 'e'.repeat(31) },
+      ],
+    ])('rejects %s without echoing the key', (_label, extra: NodeJS.ProcessEnv) => {
+      let error: unknown;
+      try {
+        loadEnv({ exitOnFailure: false, source: { ...validBase, ...extra } });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(EnvLoadError);
+      expect((error as EnvLoadError).issues.map((i) => i.path.join('.'))).toEqual([
+        'EARTHQUAKE_ALERT_KEY',
+      ]);
+      expect(String((error as Error).message)).not.toContain('e'.repeat(31));
+    });
+
+    it.each(['0', '65536', '80.5', 'http'])('rejects port %s', (port) => {
+      expect(() =>
+        loadEnv({
+          exitOnFailure: false,
+          source: { ...validBase, EARTHQUAKE_ALERT_PORT: port, EARTHQUAKE_ALERT_KEY: longKey },
+        }),
+      ).toThrow(EnvLoadError);
+    });
+
+    it('ignores a leftover PORT from the retired webhook', () => {
+      const env = loadEnv({ exitOnFailure: false, source: { ...validBase, PORT: '3000' } });
+      expect('PORT' in env).toBe(false);
     });
   });
 

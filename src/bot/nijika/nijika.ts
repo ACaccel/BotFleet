@@ -49,18 +49,30 @@ interface NijikaConfig extends Config {
   guild_events?: unknown;
   /** Raw `bug_report` block; validated by `/bug_report` and its plugin. */
   bug_report?: unknown;
+  /**
+   * Raw `earthquake_alert` block. Parsed and defaulted by the earthquake
+   * plugin (see `createEarthquakePlugin`), so it may be omitted entirely.
+   */
+  earthquake_alert?: unknown;
+}
+
+/** The earthquake plugin's settings from the validated env. */
+interface EarthquakeSettings {
+  /** `EARTHQUAKE_ALERT_PORT`; the early-warning API is off without it. */
+  readonly alertPort?: number | undefined;
+  /** `EARTHQUAKE_ALERT_KEY`; required with a port. */
+  readonly alertKey?: string | undefined;
+  /** `CWA_API_KEY`; report polling is off without it. */
+  readonly cwaApiKey?: string | undefined;
 }
 
 export class Nijika extends BaseBot<NijikaConfig> {
   /**
-   * @param webhookPort - TCP port for the earthquake-alert webhook
-   *   server. Sourced from the validated `Env.PORT` in `index.ts`;
-   *   passed through the constructor (rather than read from
-   *   `process.env` here) so the composition root stays the single
-   *   place that touches the environment.
-   * @param cwaApiKey - Central Weather Administration open-data key
-   *   (`Env.CWA_API_KEY`), threaded the same way. When absent the
-   *   earthquake plugin skips report polling and keeps only the webhook.
+   * @param earthquake - Early-warning API port and key plus the CWA
+   *   open-data key, sourced from the validated env in `index.ts` and
+   *   passed through the constructor (rather than read from `process.env`
+   *   here) so the composition root stays the single place that touches
+   *   the environment.
    * @param mongoInspectUri - Read-only account for `/db`
    *   (`Env.MONGO_INSPECT_URI`); required when `config.commands` lists `db`.
    */
@@ -70,8 +82,7 @@ export class Nijika extends BaseBot<NijikaConfig> {
     mongoURI: string,
     clientId: string,
     config: NijikaConfig,
-    webhookPort: number,
-    cwaApiKey: string | undefined,
+    earthquake: EarthquakeSettings,
     mongoInspectUri: string | undefined,
   ) {
     super(client, token, mongoURI, clientId, config);
@@ -114,9 +125,16 @@ export class Nijika extends BaseBot<NijikaConfig> {
     // Polls each guild's stored feed subscriptions and forwards the new
     // posts that match every subscription's own filter.
     this.use(createSocialFeedPlugin(this.config.social_feed, { platforms: feedPlatforms }));
-    // Earthquake early-warning webhook (its `start` hook owns the Express
-    // route) plus the CWA report poller, which runs only with a key.
-    this.use(createEarthquakePlugin({ port: webhookPort, cwaApiKey }));
+    // Earthquake early-warning API (its `start` hook owns the loopback
+    // server) plus the CWA report poller; each runs only when configured.
+    this.use(
+      createEarthquakePlugin({
+        alertPort: earthquake.alertPort,
+        alertKey: earthquake.alertKey,
+        cwaApiKey: earthquake.cwaApiKey,
+        alertConfig: this.config.earthquake_alert,
+      }),
+    );
     if ((this.config.commands ?? []).includes('db')) {
       if (mongoInspectUri === undefined) {
         throw new Error('config.commands lists db, which requires MONGO_INSPECT_URI');

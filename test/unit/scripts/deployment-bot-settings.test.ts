@@ -67,4 +67,22 @@ describe('deployment bot configuration preflight', () => {
       ).toThrow('check notificationRoutes.');
     }
   });
+
+  it('checks the nijika earthquake_alert block before cutover', () => {
+    for (const block of [undefined, {}, { ping_min_local_intensity: '5-' }]) {
+      expect(() =>
+        validateBotSettings('nijika', JSON.stringify({ earthquake_alert: block })),
+      ).not.toThrow();
+    }
+    for (const block of [
+      { ping_min_local_intensity: '8' },
+      { ping_min_local_intensity: 4 },
+      { ping_min_local_intensity: '5' },
+      { ping_min_local_intensity: '4', ping_role: 'x' },
+    ]) {
+      expect(() =>
+        validateBotSettings('nijika', JSON.stringify({ earthquake_alert: block })),
+      ).toThrow('check earthquake_alert');
+    }
+  });
 });

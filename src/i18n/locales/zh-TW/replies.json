@@ -568,7 +568,32 @@
     }
   },
   "earthquake": {
-    "alert": "# <@&{{role}}> 台北強震警報!!! (4級以上)\n> 為什麼要地震!?",
+    "alert": {
+      "title": "強震即時警報",
+      "headline": "**強震即時警報**:本地震度 {{intensity}}",
+      "upgraded": "本地震度上修為 {{intensity}}",
+      "magnitude": "規模",
+      "depth": "深度",
+      "depth_value": "{{depth}} 公里",
+      "max_intensity": "最大震度",
+      "local_intensity": "本地震度",
+      "arrival": "本地主震波抵達",
+      "epicenter": "震央",
+      "footer": "資料來源:地牛Wake Up!(中央氣象署強震即時警報)",
+      "footer_updated": "資料來源:地牛Wake Up!(中央氣象署強震即時警報)· 已更新",
+      "intensity": {
+        "0": "0級",
+        "1": "1級",
+        "2": "2級",
+        "3": "3級",
+        "4": "4級",
+        "5_lower": "5弱",
+        "5_upper": "5強",
+        "6_lower": "6弱",
+        "6_upper": "6強",
+        "7": "7級"
+      }
+    },
     "report": {
       "title": "地震報告 第 {{number}} 號",
       "origin_time": "發震時間",

@@ -1,52 +1,60 @@
 /**
  * EarthquakePlugin — owns the two earthquake feeds for a guild's
  * `earthquake` channel:
- *   - the early warning: a `/discord/earthquake` HTTP webhook that the
- *     owner's warning app calls, which pings the guild's earthquake role;
+ *   - early warnings: `POST /alerts` on a loopback HTTP API that the
+ *     owner's warning app reaches through a caller script, posting an embed
+ *     that pings the guild's `earthquake` role from the configured local
+ *     intensity (`earthquake_alert.ping_min_local_intensity`, default 4);
  *   - the CWA significant earthquake report, polled from the open-data
  *     API once a minute and posted as an embed that pings nobody.
  *
- * Assembled only by `nijika`. `start` stands up the Express server;
- * `onReady` starts the report poller (guild channels resolve only once
- * the client is ready); `onShutdown` stops the poller and closes the
- * server so a fast restart leaks neither a timer nor the listening
- * socket. Fetching, parsing, rendering and fan-out live in `internal/`,
- * so this file is lifecycle wiring only.
- *
- * Why a factory: the listen `port` and the CWA key are per-bot
- * configuration captured into the closure, mirroring the
- * `createMessageBackupPlugin` pattern. Without a key the poller stays
- * off and the webhook works alone.
+ * Assembled only by `nijika`. Each feed is optional: without an alert port
+ * the API stays off, and without a CWA key the poller does. `start` binds
+ * the server, so a taken port fails startup; requests that arrive before
+ * the Discord client is ready are answered with 503. `onReady` starts the
+ * report poller (guild channels resolve only once the client is ready);
+ * `onShutdown` stops the poller and closes the server so a fast restart
+ * leaks neither a timer nor the listening socket. Validation, delivery and
+ * rendering live in `internal/`, so this file is lifecycle wiring only.
  */
-import express, { type Express } from 'express';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { TOKENS } from '../../bot/tokens';
-import { closeServerBounded } from '../../core/http';
+import { EARTHQUAKE_ALERT_KEY_MIN_LENGTH } from '../../core/config';
+import { closeServerBounded, createBearerCheck } from '../../core/http';
 import { logError, logSystem } from '../../core/logger';
 import type { Plugin } from '../../core/plugin';
 import {
-  broadcastEarthquakeAlert,
   broadcastEarthquakeReport,
+  buildAlertApp,
+  createAlertDispatcher,
   createReportPoller,
   fetchSignificantReports,
+  parseEarthquakeAlertConfig,
   startReportPolling,
   type ParsedReports,
 } from './internal';
 
 const PLUGIN_ID = 'earthquake';
-const PLUGIN_VERSION = '1.1.0';
+const PLUGIN_VERSION = '2.0.0';
+
+/** The alert API is reached through a local reverse proxy only. */
+const LISTEN_HOST = '127.0.0.1';
 
 /** Delay between report polls; CWA reports appear minutes after a quake. */
 const REPORT_POLL_INTERVAL_MS = 60_000;
 
 /** Configuration for {@link createEarthquakePlugin}. */
 interface EarthquakePluginConfig {
-  /** TCP port the earthquake webhook server listens on. */
-  readonly port: number;
+  /** Loopback port (`EARTHQUAKE_ALERT_PORT`); the alert API is disabled without it. */
+  readonly alertPort?: number | undefined;
+  /** Bearer secret (`EARTHQUAKE_ALERT_KEY`); required with a port. */
+  readonly alertKey?: string | undefined;
   /** CWA open-data API key; the report poller is disabled without it. */
   readonly cwaApiKey?: string | undefined;
+  /** The bot's raw `earthquake_alert` block; absent means the defaults. */
+  readonly alertConfig?: unknown;
 }
 
 /** Optional collaborators for tests. */
@@ -56,15 +64,24 @@ interface EarthquakePluginDeps {
 }
 
 /**
- * Build the earthquake plugin. The returned object is pure data; all
- * mutable state (the HTTP server and poll-loop handles) is captured in
- * the closure.
+ * Build the earthquake plugin. The port/key pair and the `earthquake_alert`
+ * block are validated here, so a malformed configuration stops startup; all mutable state (the HTTP server
+ * and poll-loop handles) is captured in the closure.
  */
 export const createEarthquakePlugin = (
-  rawConfig: EarthquakePluginConfig,
+  config: EarthquakePluginConfig,
   deps: EarthquakePluginDeps = {},
 ): Plugin => {
-  const config: EarthquakePluginConfig = { port: rawConfig.port, cwaApiKey: rawConfig.cwaApiKey };
+  const { alertPort, alertKey, cwaApiKey } = config;
+  const alertSettings = parseEarthquakeAlertConfig(config.alertConfig);
+  if (
+    alertPort !== undefined &&
+    (alertKey === undefined || alertKey.length < EARTHQUAKE_ALERT_KEY_MIN_LENGTH)
+  ) {
+    throw new Error(
+      `earthquake alert API needs a key of at least ${EARTHQUAKE_ALERT_KEY_MIN_LENGTH} characters`,
+    );
+  }
   const fetchReports = deps.fetchReports ?? fetchSignificantReports;
   let server: Server | undefined;
   let reportPolling: { stop(): void } | undefined;
@@ -74,43 +91,31 @@ export const createEarthquakePlugin = (
     version: PLUGIN_VERSION,
 
     async start(ctx): Promise<void> {
-      const client = ctx.resolve(TOKENS.DiscordClient);
-      const registry = ctx.resolve(TOKENS.GuildRegistry);
-
-      const app: Express = express();
-      app.use(express.json());
-      const router = express.Router();
-      app.use('/discord', router);
-
-      router.get('/', (_req, res) => {
-        res.status(200).send('Hello World!');
+      if (alertPort === undefined || alertKey === undefined) {
+        logSystem(ctx.logger, 'EARTHQUAKE_ALERT_PORT is not set; earthquake alert API is disabled');
+        return;
+      }
+      const dispatcher = createAlertDispatcher({
+        client: ctx.resolve(TOKENS.DiscordClient),
+        registry: ctx.resolve(TOKENS.GuildRegistry),
+        translator: ctx.translator,
+        clock: ctx.clock,
+        logger: ctx.logger,
+        pingThreshold: alertSettings.pingMinLocalIntensity,
       });
-
-      router.post('/earthquake', (_req, res) => {
-        logSystem(ctx.logger, 'Earthquake alert webhook received; broadcasting.');
-        // Respond 200 immediately; the per-guild broadcast runs
-        // detached. `broadcastEarthquakeAlert` isolates each guild's
-        // failure internally, so a single async IIFE with a defensive
-        // catch is enough to keep this off the unhandledRejection path.
-        void (async () => {
-          try {
-            await broadcastEarthquakeAlert(client, registry, ctx.translator, ctx.logger);
-          } catch (err: unknown) {
-            logError(ctx.logger, null, err);
-          }
-        })();
-        res.status(200).send('OK');
+      const app = buildAlertApp({
+        isAuthorized: createBearerCheck(alertKey),
+        dispatcher,
+        clock: ctx.clock,
+        logger: ctx.logger,
       });
 
       await new Promise<void>((resolve, reject) => {
-        const listening = app.listen(config.port, () => {
-          // Report the bound port, not the configured one: they differ when
-          // the configured port is 0 (OS-assigned).
-          const { port } = listening.address() as AddressInfo;
-          logSystem(ctx.logger, `earthquake webhook server is running on port ${port}`);
-          // Startup is settled. A socket error from here on is a runtime
-          // event, and `reject` would silently discard it against an
-          // already-settled promise — swap in a logging handler.
+        const listening = app.listen(alertPort, LISTEN_HOST, () => {
+          // Report the bound port: it differs from the configured one when that is 0.
+          const bound = (listening.address() as AddressInfo).port;
+          logSystem(ctx.logger, `earthquake alert API is listening on ${LISTEN_HOST}:${bound}`);
+          // Startup is settled; later socket errors are runtime events to log.
           listening.removeListener('error', reject);
           listening.on('error', (err: Error) => logError(ctx.logger, null, err));
           resolve();
@@ -121,15 +126,14 @@ export const createEarthquakePlugin = (
     },
 
     async onReady(ctx): Promise<void> {
-      const apiKey = config.cwaApiKey;
-      if (apiKey === undefined) {
+      if (cwaApiKey === undefined) {
         logSystem(ctx.logger, 'CWA_API_KEY is not set; earthquake report polling is disabled');
         return;
       }
       const client = ctx.resolve(TOKENS.DiscordClient);
       const registry = ctx.resolve(TOKENS.GuildRegistry);
       const poller = createReportPoller({
-        fetchReports: () => fetchReports(apiKey),
+        fetchReports: () => fetchReports(cwaApiKey),
         publish: (report) =>
           broadcastEarthquakeReport(client, registry, report, ctx.translator, ctx.logger),
         logger: ctx.logger,
@@ -147,10 +151,10 @@ export const createEarthquakePlugin = (
       await closeServerBounded(listening, () => {
         logSystem(
           ctx.logger,
-          'earthquake webhook server did not close within the shutdown budget; continuing',
+          'earthquake alert API did not close within the shutdown budget; continuing',
         );
       });
-      logSystem(ctx.logger, 'earthquake webhook server closed');
+      logSystem(ctx.logger, 'earthquake alert API closed');
     },
   };
 };

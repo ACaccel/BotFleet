@@ -15,7 +15,7 @@ import { REDACT_FIELD_NAMES, buildPinoRedactPaths } from '../../../../src/core/c
 
 /**
  * A key is treated as credential-bearing when its name carries one of
- * the usual secret markers. `CLIENT_ID`, `PORT`, `NODE_ENV` and
+ * the usual secret markers. `CLIENT_ID`, the API ports, `NODE_ENV` and
  * `LOG_LEVEL` are deliberately outside it — they are not secrets.
  */
 const SECRET_SHAPED = /TOKEN|KEY|SECRET|PASSWORD|URI/;
@@ -36,14 +36,20 @@ describe('REDACT_FIELD_NAMES', () => {
   });
 
   it('does not redact the non-secret Env keys', () => {
-    for (const key of ['CLIENT_ID', 'PORT', 'NODE_ENV', 'LOG_LEVEL']) {
+    for (const key of [
+      'CLIENT_ID',
+      'EARTHQUAKE_ALERT_PORT',
+      'NOTIFY_API_PORT',
+      'NODE_ENV',
+      'LOG_LEVEL',
+    ]) {
       expect(covered.has(key.toLowerCase())).toBe(false);
     }
   });
 
   it('derives nested pino redact paths for every field', () => {
     const paths = buildPinoRedactPaths();
-    for (const field of ['xai_api_key', 'cwa_api_key']) {
+    for (const field of ['xai_api_key', 'cwa_api_key', 'earthquake_alert_key']) {
       expect(paths).toContain(field);
       expect(paths).toContain(`*.${field}`);
     }

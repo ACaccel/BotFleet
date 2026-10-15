@@ -57,8 +57,9 @@ To enable konata's [notification relay API](../configuration.md#notification-rel
 
 1. Generate a key with `openssl rand -hex 32`.
 2. Add `NOTIFY_API_PORT=<port>` and `NOTIFY_API_KEY=<key>` to `src/bot/konata/.env`.
-   Pick a free local port; nijika's `PORT` is already taken. Give the same key to
-   the calling service through its own secret store, never through Git.
+   Pick a free local port that no other bot uses (nijika's `EARTHQUAKE_ALERT_PORT`,
+   for one). Give the same key to the calling service through its own secret store,
+   never through Git.
 3. Add the route to `notificationRoutes` in `src/bot/konata/config.json` and make
    sure konata can view, post and embed links in that channel.
 4. Deploy konata with `npm run deploy` (see [deployment](deployment.md#commands)).
@@ -69,6 +70,44 @@ To enable konata's [notification relay API](../configuration.md#notification-rel
 
 The API listens on `127.0.0.1` only. To rotate the key, change both sides and
 redeploy konata; to disable it, remove `NOTIFY_API_PORT` and redeploy.
+
+## Earthquake alerts
+
+To enable nijika's [early-warning API](../configuration.md#early-warning-api) for the
+地牛Wake Up! app on a Windows machine in the same tailnet:
+
+1. Generate a key with `openssl rand -hex 32`.
+2. In `src/bot/nijika/.env`, remove the retired `PORT` and add
+   `EARTHQUAKE_ALERT_PORT=4000` and `EARTHQUAKE_ALERT_KEY=<key>`. Any free local port
+   works; use the same port in the `tailscale serve` step.
+3. Optionally set the role-ping threshold in `src/bot/nijika/config.json`, for example
+   `"earthquake_alert": { "ping_min_local_intensity": "5-" }`; without it the role is
+   pinged from local intensity 4 (see
+   [the configuration reference](../configuration.md#early-warning-api)).
+4. Publish the API to the tailnet only (HTTPS, prefix stripped), then check the
+   mapping with `tailscale serve status`. Its output shows the full URL,
+   `https://<server>.<tailnet>.ts.net/earthquake/`; the Windows caller needs that URL
+   with `alerts` appended:
+
+   ```bash
+   sudo tailscale serve --bg --set-path /earthquake/ http://127.0.0.1:4000
+   ```
+
+5. Deploy nijika with `npm run deploy` (see [deployment](deployment.md#commands)).
+   Preparation rejects a port without a key of at least 32 characters and a malformed
+   `earthquake_alert` block. Check the startup line `earthquake alert API is listening on 127.0.0.1:4000` in
+   `journalctl -u botfleet@nijika.service`.
+6. On Windows, install the scripts, the `earthquake-alert.config.json` holding
+   `https://<server>.<tailnet>.ts.net/earthquake/alerts` and the key file, and point the app at
+   `earthquake-alert.cmd` as described in
+   [the Windows guide](../../tools/earthquake-alert/windows/README.md), then press the
+   app's test button. A `result=test` request in nijika's log, and a success box on
+   Windows, confirm the whole path without posting to Discord.
+
+To rotate the key, change `.env` and the Windows key file, then redeploy nijika; to
+disable the API, remove `EARTHQUAKE_ALERT_PORT`, redeploy, remove the serve path with
+`sudo tailscale serve --set-path /earthquake/ off` and confirm with
+`tailscale serve status`.
 
 ## Temporary moderation
 

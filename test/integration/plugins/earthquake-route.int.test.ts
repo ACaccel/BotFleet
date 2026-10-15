@@ -1,99 +1,218 @@
 /**
- * Integration test for the earthquake plugin's HTTP route.
- *
- * Drives the plugin's real `start` lifecycle hook (a live Express
- * server on an OS-assigned port), POSTs the webhook, and asserts the
- * per-guild broadcast fires. `onShutdown` must release the socket.
+ * HTTP contract of the earthquake alert API, driven through the plugin's real
+ * `start` hook on an OS-assigned loopback port with a fake Discord client and
+ * a fixed clock. `onShutdown` releases the socket.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Client } from 'discord.js';
-import { createEarthquakePlugin } from '../../../src/plugins/earthquake';
-import { createContainer } from '../../../src/core/ioc';
-import { TOKENS } from '../../../src/bot/tokens';
+import type { Channel, Client } from 'discord.js';
+
 import type { GuildRegistry } from '../../../src/bot/guild-registry';
-import type { Plugin } from '../../../src/core/plugin';
-import { buildSendableChannel } from '../../fixtures/discord/channel-builder';
-import { buildInertClient } from '../../fixtures/discord/client-builder';
-import { buildGuild } from '../../fixtures/discord/guild-builder';
+import { TOKENS } from '../../../src/bot/tokens';
+import { createContainer } from '../../../src/core/ioc';
+import { createFakeClock } from '../../../src/core/time';
+import { createEarthquakePlugin } from '../../../src/plugins/earthquake';
 import { buildPluginContext, silentLogger } from '../../fixtures/runtime';
 
-const BOT = { id: 'bot-1', username: 'bot' };
+const KEY = 'e'.repeat(32);
+const NOW_SECONDS = 1_800_000_000;
 
-const buildRegistry = (overrides: Partial<GuildRegistry> = {}): GuildRegistry =>
-  ({
-    getRepos: () => undefined,
-    getChannel: () => undefined,
-    getRole: () => undefined,
-    ...overrides,
-  }) as unknown as GuildRegistry;
-
-/**
- * Port the server bound, read from its listen log line. The plugin is
- * configured with port 0 so concurrent suites never race for a port
- * reserved and released ahead of time.
- */
-const boundPort = (infoLines: ReadonlyArray<readonly unknown[]>): number => {
-  for (const [msg] of infoLines) {
-    const port = /running on port (\d+)/.exec(String(msg))?.[1];
-    if (port !== undefined) return Number(port);
-  }
-  throw new Error('earthquake listen log line not found');
+const BODY = {
+  epicenterLat: 23.85,
+  epicenterLon: 120.82,
+  depthKm: 10,
+  magnitude: 7.3,
+  maxIntensity: '7',
+  localIntensity: '5+',
+  arrivalTime: NOW_SECONDS + 20,
+  remainingSeconds: 20,
 };
 
-let activeShutdown: (() => Promise<void>) | undefined;
+interface Harness {
+  readonly base: string;
+  readonly send: ReturnType<typeof vi.fn>;
+  readonly edit: ReturnType<typeof vi.fn>;
+  readonly logLines: () => string;
+}
+
+let shutdown: (() => Promise<void>) | undefined;
 afterEach(async () => {
-  await activeShutdown?.();
-  activeShutdown = undefined;
+  await shutdown?.();
+  shutdown = undefined;
 });
 
-/** Start the plugin on an OS-assigned port and return that port. */
-const startOnFreePort = async (client: Client, registry: GuildRegistry): Promise<number> => {
+const start = async (options: { ready?: boolean; broken?: boolean } = {}): Promise<Harness> => {
+  const edit = vi.fn(async () => ({}));
+  const send = vi.fn(async () => ({ edit, reply: vi.fn(async () => ({})) }));
+  const channel = { isSendable: () => true, send } as unknown as Channel;
+  const client = {
+    isReady: () => options.ready ?? true,
+    guilds: options.broken === true ? undefined : { cache: new Map([['g1', { id: 'g1' }]]) },
+  } as unknown as Client;
+  const registry = {
+    getChannel: () => channel,
+    getRole: () => ({ id: 'role-1' }),
+  } as unknown as GuildRegistry;
+
   const container = createContainer();
   container.registerSingleton(TOKENS.DiscordClient, () => client);
   container.registerSingleton(TOKENS.GuildRegistry, () => registry);
-
   const logger = silentLogger();
-  const info = vi.spyOn(logger, 'info');
-  const ctx = buildPluginContext({ logger, resolve: container.resolve.bind(container) });
-  const plugin: Plugin = createEarthquakePlugin({ port: 0 });
+  const lines: unknown[][] = [];
+  for (const level of ['info', 'warn', 'error'] as const) {
+    vi.spyOn(logger, level).mockImplementation((...args: unknown[]) => {
+      lines.push(args);
+    });
+  }
+  const ctx = buildPluginContext({
+    logger,
+    clock: createFakeClock(NOW_SECONDS * 1000),
+    resolve: container.resolve.bind(container),
+  });
+  const plugin = createEarthquakePlugin({ alertPort: 0, alertKey: KEY });
   await plugin.start?.(ctx);
-  activeShutdown = async () => {
+  shutdown = async () => {
     await plugin.onShutdown?.(ctx);
   };
-  return boundPort(info.mock.calls);
+  const logLines = (): string => JSON.stringify(lines);
+  const port = /listening on 127\.0\.0\.1:(\d+)/.exec(logLines())?.[1];
+  if (port === undefined) throw new Error('listen log line not found');
+  return { base: `http://127.0.0.1:${port}`, send, edit, logLines };
 };
 
-describe('earthquake plugin HTTP route', () => {
-  it('broadcasts to configured guilds when the webhook is hit', async () => {
-    const { channel, send } = buildSendableChannel();
-    const client = buildInertClient({ user: BOT });
-    client.guilds.cache.set('g1', buildGuild({ id: 'g1' }));
-    const registry = buildRegistry({
-      getChannel: () => channel,
-      getRole: () => ({ id: 'role-1' }) as never,
-    });
-
-    const port = await startOnFreePort(client, registry);
-
-    const res = await fetch(`http://127.0.0.1:${port}/discord/earthquake`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    });
-    expect(res.status).toBe(200);
-
-    // The broadcast is detached from the request; poll for it instead of
-    // sleeping a guessed interval, which either flakes on a slow runner
-    // or wastes the difference on a fast one.
-    await vi.waitFor(() => {
-      expect(send).toHaveBeenCalled();
-    });
+const post = (
+  h: Harness,
+  body: unknown = BODY,
+  /** `null` sends no `Authorization` header. */
+  auth: string | null = `Bearer ${KEY}`,
+  path = '/alerts',
+): Promise<Response> =>
+  fetch(`${h.base}${path}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(auth === null ? {} : { authorization: auth }),
+    },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
   });
 
-  it('serves the health check on GET /discord/', async () => {
-    const port = await startOnFreePort(buildInertClient({ user: BOT }), buildRegistry());
+describe('earthquake alert HTTP API', () => {
+  it('posts a live alert and edits it for an update of the same quake', async () => {
+    const h = await start();
 
-    const res = await fetch(`http://127.0.0.1:${port}/discord/`);
+    const first = await post(h);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ result: 'created', pinged: true, guilds: 1 });
+
+    const second = await post(h, { ...BODY, magnitude: 7.1, remainingSeconds: 15 });
+    expect(second.status).toBe(200);
+    expect(await second.json()).toEqual({ result: 'updated', pinged: false, guilds: 1 });
+    expect(h.send).toHaveBeenCalledOnce();
+    expect(h.edit).toHaveBeenCalledOnce();
+    expect(h.logLines()).toContain('"result":"updated"');
+  });
+
+  it('acknowledges an alert that arrived over 10 minutes ago as a test without posting', async () => {
+    const h = await start();
+
+    // The warning app's test button sends its fixed 2024 example.
+    const res = await post(h, { ...BODY, arrivalTime: 1_717_142_400 });
+
     expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ result: 'test' });
+    expect(h.send).not.toHaveBeenCalled();
+    expect(h.logLines()).toContain('"result":"test"');
+  });
+
+  it('treats exactly 10 minutes either side as live', async () => {
+    const h = await start();
+
+    expect((await post(h, { ...BODY, arrivalTime: NOW_SECONDS - 600 })).status).toBe(200);
+    expect((await post(h, { ...BODY, arrivalTime: NOW_SECONDS + 600 })).status).toBe(200);
+    expect(h.send).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an arrival time more than 10 minutes ahead', async () => {
+    const h = await start();
+
+    const res = await post(h, { ...BODY, arrivalTime: NOW_SECONDS + 601 });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'arrival time out of range' });
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a missing header', null],
+    ['a wrong token', `Bearer ${'w'.repeat(32)}`],
+    ['another scheme', `Basic ${KEY}`],
+  ])('answers 401 to %s before looking at anything else', async (_label, auth) => {
+    const h = await start();
+
+    for (const path of ['/alerts', '/discord/earthquake', '/elsewhere']) {
+      const res = await post(h, '{not json', auth, path);
+      expect(res.status).toBe(401);
+      expect(res.headers.get('www-authenticate')).toBe('Bearer');
+      expect(await res.json()).toEqual({ error: 'unauthorized' });
+    }
+    expect(h.send).not.toHaveBeenCalled();
+    expect(h.logLines()).not.toContain(KEY);
+  });
+
+  it('answers 404 to other paths once authorized', async () => {
+    const h = await start();
+
+    expect((await post(h, BODY, `Bearer ${KEY}`, '/discord/earthquake')).status).toBe(404);
+    const get = await fetch(`${h.base}/alerts`, { headers: { authorization: `Bearer ${KEY}` } });
+    expect(get.status).toBe(404);
+  });
+
+  it('rejects unknown fields, invalid values and malformed JSON with 400', async () => {
+    const h = await start();
+
+    const unknownField = await post(h, { ...BODY, mention: '@everyone' });
+    expect(unknownField.status).toBe(400);
+    expect(await unknownField.json()).toEqual({ error: 'invalid body', fields: ['(root)'] });
+
+    const badValues = await post(h, {
+      ...BODY,
+      localIntensity: '5',
+      epicenterLat: 91,
+      depthKm: '10',
+    });
+    expect(await badValues.json()).toEqual({
+      error: 'invalid body',
+      fields: ['epicenterLat', 'depthKm', 'localIntensity'],
+    });
+
+    expect((await post(h, { ...BODY, arrivalTime: NOW_SECONDS + 0.5 })).status).toBe(400);
+    expect((await post(h, '{not json')).status).toBe(400);
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it('answers 413 to a body over 4 KB', async () => {
+    const h = await start();
+
+    const res = await post(h, { ...BODY, padding: 'x'.repeat(5 * 1024) });
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: 'body too large' });
+  });
+
+  it('answers 503 until the Discord client is ready', async () => {
+    const h = await start({ ready: false });
+
+    const res = await post(h);
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'discord client not ready' });
+  });
+
+  it('answers 500 without detail when delivery throws unexpectedly', async () => {
+    const h = await start({ broken: true });
+
+    const res = await post(h);
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'internal error' });
   });
 });

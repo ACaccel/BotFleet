@@ -75,15 +75,15 @@ describe('release preparation', () => {
     expect(release.units['botfleet@gopher.service']).not.toContain('mongo-ready');
   });
 
-  it('still rejects nijika without its webhook port', () => {
+  it('rejects nijika with an earthquake alert port but no key', () => {
     config.bots = ['nijika'];
     file(
       'src/bot/nijika/.env',
-      'TOKEN=valid-token\nCLIENT_ID=123456\nMONGO_URI=mongodb://localhost/test\n',
+      'TOKEN=valid-token\nCLIENT_ID=123456\nMONGO_URI=mongodb://localhost/test\nEARTHQUAKE_ALERT_PORT=4000\n',
     );
     file('src/bot/nijika/config.json', '{}');
 
-    expect(() => makeRelease(root, config, false)).toThrow('PORT');
+    expect(() => makeRelease(root, config, false)).toThrow('EARTHQUAKE_ALERT_KEY');
     expect(readdirSync(join(root, '.deploy/releases'))).toEqual([]);
   });
 

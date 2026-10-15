@@ -1,7 +1,8 @@
 /**
- * Lifecycle tests for the earthquake plugin's CWA report poller: it
+ * Lifecycle tests for the earthquake plugin: the alert API's configuration
+ * fails fast and the API stays off without a port; the CWA report poller
  * stays off without a key, polls with one, and leaves no timer behind
- * after shutdown. The webhook's HTTP lifecycle is covered by
+ * after shutdown. The alert API's HTTP contract is covered by
  * `test/integration/plugins/earthquake-route.int.test.ts`.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -58,7 +59,7 @@ describe('earthquake plugin report poller', () => {
     vi.useFakeTimers();
     const get = vi.spyOn(boundedHttp, 'get');
     const fetchReports = vi.fn();
-    const plugin = createEarthquakePlugin({ port: 0 }, { fetchReports });
+    const plugin = createEarthquakePlugin({}, { fetchReports });
     const { ctx, info } = buildContext();
 
     await plugin.onReady?.(ctx);
@@ -74,7 +75,7 @@ describe('earthquake plugin report poller', () => {
   it('polls with the configured key once a minute', async () => {
     vi.useFakeTimers();
     const fetchReports = vi.fn(async () => ({ reports: [], rejected: [] }));
-    const plugin = createEarthquakePlugin({ port: 0, cwaApiKey: 'cwa-test-key' }, { fetchReports });
+    const plugin = createEarthquakePlugin({ cwaApiKey: 'cwa-test-key' }, { fetchReports });
     const { ctx } = buildContext();
 
     await plugin.onReady?.(ctx);
@@ -90,7 +91,7 @@ describe('earthquake plugin report poller', () => {
   it('clears the poll timer on shutdown', async () => {
     vi.useFakeTimers();
     const fetchReports = vi.fn(async () => ({ reports: [], rejected: [] }));
-    const plugin = createEarthquakePlugin({ port: 0, cwaApiKey: 'cwa-test-key' }, { fetchReports });
+    const plugin = createEarthquakePlugin({ cwaApiKey: 'cwa-test-key' }, { fetchReports });
     const { ctx } = buildContext();
 
     await plugin.onReady?.(ctx);
@@ -105,9 +106,38 @@ describe('earthquake plugin report poller', () => {
   });
 
   it('tolerates shutdown before it ever started', async () => {
-    const plugin = createEarthquakePlugin({ port: 0, cwaApiKey: 'cwa-test-key' });
+    const plugin = createEarthquakePlugin({ cwaApiKey: 'cwa-test-key' });
     const { ctx } = buildContext();
 
+    await expect(plugin.onShutdown?.(ctx)).resolves.toBeUndefined();
+  });
+});
+
+describe('earthquake plugin alert API', () => {
+  it('rejects a port without a long enough key', () => {
+    expect(() => createEarthquakePlugin({ alertPort: 4000 })).toThrow(/at least 32 characters/);
+    expect(() => createEarthquakePlugin({ alertPort: 4000, alertKey: 'e'.repeat(31) })).toThrow(
+      /at least 32 characters/,
+    );
+  });
+
+  it('rejects a malformed earthquake_alert block at composition', () => {
+    expect(() =>
+      createEarthquakePlugin({ alertConfig: { ping_min_local_intensity: '8' } }),
+    ).toThrow(/earthquake_alert\.ping_min_local_intensity/);
+    expect(() => createEarthquakePlugin({ alertConfig: { extra: true } })).toThrow(
+      /Invalid earthquake_alert config/,
+    );
+  });
+
+  it('logs that it is disabled without a port and binds nothing', async () => {
+    const plugin = createEarthquakePlugin({ alertKey: 'e'.repeat(32) });
+    const { ctx, info } = buildContext();
+
+    await plugin.start?.(ctx);
+
+    expect(info).toHaveBeenCalledWith(expect.stringMatching(/EARTHQUAKE_ALERT_PORT is not set/));
+    expect(info).not.toHaveBeenCalledWith(expect.stringMatching(/listening/));
     await expect(plugin.onShutdown?.(ctx)).resolves.toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EarthquakeAlertConfigSchema } from '../../src/plugins/earthquake/internal/alert-config';
 import { parseArchiveSettings } from '../../src/plugins/message-backup/config';
 import { NotificationRoutesSchema } from '../../src/plugins/notification-relay/internal/config';
 
@@ -24,6 +25,10 @@ const konataSettings = settings.extend({
   notificationRoutes: NotificationRoutesSchema.optional(),
 });
 
+const nijikaSettings = settings.extend({
+  earthquake_alert: EarthquakeAlertConfigSchema.optional(),
+});
+
 const archiveSettings = settings.extend({
   backup_server: z.array(z.string().regex(/^\d+$/)),
   backup_interval_minutes: z.number().positive().optional(),
@@ -38,6 +43,10 @@ export function validateBotSettings(bot: string, text: string): void {
     const input: unknown = JSON.parse(text);
     if (bot === 'konata') {
       konataSettings.parse(input);
+      return;
+    }
+    if (bot === 'nijika') {
+      nijikaSettings.parse(input);
       return;
     }
     if (bot !== 'msg-archive') {

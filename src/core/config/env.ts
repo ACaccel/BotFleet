@@ -83,6 +83,12 @@ const optionalApiKeySchema = z.preprocess(
   z.string().min(1).optional(),
 );
 
+/** An optional TCP port (1–65535); a blank value means absent. */
+const optionalPortSchema = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
+  z.coerce.number().int().min(1).max(65_535).optional(),
+);
+
 /**
  * The typed environment contract, as a zod shape.
  *
@@ -108,8 +114,6 @@ const envShape = {
   MONGO_INSPECT_URI: mongoUriSchema('MONGO_INSPECT_URI').optional(),
   /** Cooldown and polling interval for transient per-guild connection failures. */
   MONGO_RECOVERY_INTERVAL_MS: z.coerce.number().int().positive().max(2_147_483_647).default(60_000),
-  /** HTTP port for nijika's earthquake webhook. */
-  PORT: z.coerce.number().int().positive().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   /**
@@ -137,24 +141,31 @@ const envShape = {
   XAI_API_KEY: optionalApiKeySchema,
   /**
    * Central Weather Administration open-data key for nijika's earthquake
-   * reports. Optional: without it the report poller stays off and only
-   * the webhook alert runs.
+   * reports. Optional: without it the report poller stays off; early-warning
+   * alerts are unaffected.
    */
   CWA_API_KEY: optionalApiKeySchema,
+  /**
+   * Loopback port for nijika's earthquake early-warning API. Optional:
+   * without it the alert API stays off. Requires {@link EARTHQUAKE_ALERT_KEY}.
+   */
+  EARTHQUAKE_ALERT_PORT: optionalPortSchema,
+  /** Bearer secret for the earthquake alert API; required with its port. */
+  EARTHQUAKE_ALERT_KEY: optionalApiKeySchema,
   /**
    * Loopback port for konata's notification relay API. Optional: without it
    * the relay stays off. Requires {@link NOTIFY_API_KEY}.
    */
-  NOTIFY_API_PORT: z.preprocess(
-    (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
-    z.coerce.number().int().min(1).max(65_535).optional(),
-  ),
+  NOTIFY_API_PORT: optionalPortSchema,
   /** Bearer secret for the notification relay API; required with its port. */
   NOTIFY_API_KEY: optionalApiKeySchema,
 } as const;
 
 /** Shortest accepted notification relay key, so a guessable secret fails startup. */
 export const NOTIFY_API_KEY_MIN_LENGTH = 32;
+
+/** Shortest accepted earthquake alert key, for the same reason. */
+export const EARTHQUAKE_ALERT_KEY_MIN_LENGTH = 32;
 
 const envSchema = z
   .object(envShape)
@@ -203,8 +214,6 @@ interface LoadEnvOptions {
   envFile?: string;
   /** Require MONGO_URI to be present and valid. Defaults to true. */
   requireDb?: boolean;
-  /** Require PORT to be present and a positive integer. Defaults to false. */
-  requirePort?: boolean;
   /** When true (default), validation failure exits the process. */
   exitOnFailure?: boolean;
   /** Override source object — primarily for unit tests. Defaults to process.env. */
@@ -218,7 +227,7 @@ interface LoadEnvOptions {
  * @returns a frozen {@link Env} containing only the typed, known keys.
  */
 export const loadEnv = (options: LoadEnvOptions = {}): Env => {
-  const { envFile, requireDb = true, requirePort = false, exitOnFailure = true, source } = options;
+  const { envFile, requireDb = true, exitOnFailure = true, source } = options;
 
   if (envFile && !source) {
     const resolved = path.isAbsolute(envFile) ? envFile : path.resolve(process.cwd(), envFile);
@@ -256,11 +265,15 @@ export const loadEnv = (options: LoadEnvOptions = {}): Env => {
         message: `NOTIFY_API_KEY of at least ${NOTIFY_API_KEY_MIN_LENGTH} characters is required when NOTIFY_API_PORT is set`,
       });
     }
-    if (requirePort && value.PORT === undefined) {
+    if (
+      value.EARTHQUAKE_ALERT_PORT !== undefined &&
+      (value.EARTHQUAKE_ALERT_KEY === undefined ||
+        value.EARTHQUAKE_ALERT_KEY.length < EARTHQUAKE_ALERT_KEY_MIN_LENGTH)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['PORT'],
-        message: 'PORT is required for this bot',
+        path: ['EARTHQUAKE_ALERT_KEY'],
+        message: `EARTHQUAKE_ALERT_KEY of at least ${EARTHQUAKE_ALERT_KEY_MIN_LENGTH} characters is required when EARTHQUAKE_ALERT_PORT is set`,
       });
     }
   });

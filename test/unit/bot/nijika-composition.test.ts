@@ -6,9 +6,9 @@
  * one of the registered plugins — is caught by spying on
  * `BaseBot.prototype.use`.
  *
- * It pins the earthquake plugin's wiring: the webhook port and the
- * optional CWA key reach the factory, and the plugin is registered
- * whether or not a key is set.
+ * It pins the earthquake plugin's wiring: the optional alert port and key
+ * and the optional CWA key reach the factory, and the plugin is registered
+ * whether or not any of them is set.
  *
  * It pins the `/db` wiring: the db-inspect plugin is registered only when
  * `config.commands` lists `db`, and only with `MONGO_INSPECT_URI`.
@@ -44,7 +44,7 @@ import { createEarthquakePlugin } from '../../../src/plugins/earthquake/plugin';
 /** Build nijika with the minimum config its constructor requires. */
 const buildNijika = (
   config: Record<string, unknown> = {},
-  cwaApiKey?: string,
+  earthquake: ConstructorParameters<typeof Nijika>[5] = {},
   mongoInspectUri?: string,
 ): Nijika =>
   new Nijika(
@@ -53,8 +53,7 @@ const buildNijika = (
     '',
     'bot-client',
     { commands: [], level_roles: {}, ...config },
-    3000,
-    cwaApiKey,
+    earthquake,
     mongoInspectUri,
   );
 
@@ -114,16 +113,40 @@ describe('Nijika composition', () => {
     expect(registry?.get('x')?.id).toBe('x');
   });
 
-  it('hands the earthquake plugin its webhook port and the CWA key', () => {
+  it('hands the earthquake plugin its alert port and key and the CWA key', () => {
     vi.mocked(createEarthquakePlugin).mockClear();
-    buildNijika({}, 'cwa-test-key');
-    expect(createEarthquakePlugin).toHaveBeenCalledWith({ port: 3000, cwaApiKey: 'cwa-test-key' });
+    const alertKey = 'e'.repeat(32);
+    buildNijika({}, { alertPort: 4000, alertKey, cwaApiKey: 'cwa-test-key' });
+    expect(createEarthquakePlugin).toHaveBeenCalledWith({
+      alertPort: 4000,
+      alertKey,
+      cwaApiKey: 'cwa-test-key',
+      alertConfig: undefined,
+    });
   });
 
-  it('still registers the earthquake webhook without a CWA key', () => {
+  it('hands the earthquake plugin its earthquake_alert block and fails fast on a bad one', () => {
+    vi.mocked(createEarthquakePlugin).mockClear();
+    const block = { ping_min_local_intensity: '5-' };
+    buildNijika({ earthquake_alert: block });
+    expect(createEarthquakePlugin).toHaveBeenCalledWith(
+      expect.objectContaining({ alertConfig: block }),
+    );
+
+    expect(() => buildNijika({ earthquake_alert: { ping_min_local_intensity: '8' } })).toThrow(
+      /Invalid earthquake_alert config/,
+    );
+  });
+
+  it('still registers the earthquake plugin with neither feed configured', () => {
     vi.mocked(createEarthquakePlugin).mockClear();
     buildNijika();
-    expect(createEarthquakePlugin).toHaveBeenCalledWith({ port: 3000, cwaApiKey: undefined });
+    expect(createEarthquakePlugin).toHaveBeenCalledWith({
+      alertPort: undefined,
+      alertKey: undefined,
+      cwaApiKey: undefined,
+      alertConfig: undefined,
+    });
     expect(collectRegisteredPluginIds()).toContain('earthquake');
   });
 
@@ -131,7 +154,7 @@ describe('Nijika composition', () => {
     expect(collectRegisteredPluginIds()).not.toContain('db-inspect');
     expect(
       collectRegisteredPluginIds(() =>
-        buildNijika({ commands: ['db'] }, undefined, 'mongodb://reader@db.example.com:27017'),
+        buildNijika({ commands: ['db'] }, {}, 'mongodb://reader@db.example.com:27017'),
       ),
     ).toContain('db-inspect');
   });

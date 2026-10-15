@@ -568,7 +568,32 @@
     }
   },
   "earthquake": {
-    "alert": "# <@&{{role}}> Taipei strong earthquake alert!!! (intensity 4 or above)\n> Why must there be an earthquake!?",
+    "alert": {
+      "title": "Earthquake early warning",
+      "headline": "**Earthquake early warning**: local intensity {{intensity}}",
+      "upgraded": "Local intensity raised to {{intensity}}",
+      "magnitude": "Magnitude",
+      "depth": "Depth",
+      "depth_value": "{{depth}} km",
+      "max_intensity": "Maximum intensity",
+      "local_intensity": "Local intensity",
+      "arrival": "Local S-wave arrival",
+      "epicenter": "Epicenter",
+      "footer": "Source: 地牛Wake Up! (CWA earthquake early warning)",
+      "footer_updated": "Source: 地牛Wake Up! (CWA earthquake early warning) · Updated",
+      "intensity": {
+        "0": "0",
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4",
+        "5_lower": "5 Weak",
+        "5_upper": "5 Strong",
+        "6_lower": "6 Weak",
+        "6_upper": "6 Strong",
+        "7": "7"
+      }
+    },
     "report": {
       "title": "Earthquake report No. {{number}}",
       "origin_time": "Origin time",

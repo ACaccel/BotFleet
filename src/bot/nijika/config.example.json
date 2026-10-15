@@ -5,6 +5,9 @@
   "thread_moderation": {
     "enabled": true
   },
+  "earthquake_alert": {
+    "ping_min_local_intensity": "4"
+  },
   "guilds": {
     "YOUR_GUILD_ID": {
       "channels": {

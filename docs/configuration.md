@@ -22,7 +22,6 @@ placeholders fail startup; there is no root `.env.example`.
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `TOKEN`, `CLIENT_ID`                                                   | Required Discord token and application ID                                                        |
 | `MONGO_URI`                                                            | Required for database-backed bots; optional for gopher                                           |
-| `PORT`                                                                 | Required by nijika's earthquake webhook                                                          |
 | `MONGO_RECOVERY_INTERVAL_MS`                                           | Recovery polling, default `60000`                                                                |
 | `NODE_ENV`                                                             | `development` (default), `test`, or `production`                                                 |
 | `LOG_LEVEL`                                                            | `trace`, `debug`, `info` (default), `warn`, `error`, or `fatal`                                  |
@@ -30,6 +29,8 @@ placeholders fail startup; there is no root `.env.example`.
 | `LOG_RETENTION_DAYS`                                                   | Days of file logs to keep, default `60`; `0` keeps all                                           |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                                                   |
 | `CWA_API_KEY`                                                          | Optional nijika key for [earthquake reports](#earthquake-alerts-and-reports); blank means absent |
+| `EARTHQUAKE_ALERT_PORT`                                                | Optional nijika [earthquake alert](#early-warning-api) port (1–65535); blank means absent        |
+| `EARTHQUAKE_ALERT_KEY`                                                 | Alert bearer secret, at least 32 characters; required when `EARTHQUAKE_ALERT_PORT` is set        |
 | `MONGO_INSPECT_URI`                                                    | Read-only account for nijika's [`/db`](#database-inspection); required once `db` is enabled      |
 | `NOTIFY_API_PORT`                                                      | Optional konata [notification relay](#notification-relay-api) port (1–65535); blank means absent |
 | `NOTIFY_API_KEY`                                                       | Relay bearer secret, at least 32 characters; required when `NOTIFY_API_PORT` is set              |
@@ -70,9 +71,9 @@ Features look up these symbolic names:
 | `debug`      | channel | Command logs, archive panels and operator notices            |
 | `event`      | channel | Guild-event mirror (message edits, deletions, member events) |
 | `giveaway`   | channel | `/giveaway create destination:configured`                    |
-| `earthquake` | channel | Earthquake alerts (with the role below) and CWA reports      |
+| `earthquake` | channel | Earthquake early warnings and CWA reports                    |
 | `ban_user`   | role    | Pinged by `/ban_user` vote calls; none when unset            |
-| `earthquake` | role    | Pinged by earthquake alerts; reports ping nobody             |
+| `earthquake` | role    | Pinged by early warnings at the configured local intensity   |
 
 Missing channel mappings skip channel-bound output. Message backups still run
 without a `debug` channel.
@@ -291,13 +292,86 @@ Discord accepts the complete message; send failures retry on the next pass.
 
 Nijika posts two kinds of earthquake message to each guild's `earthquake` channel:
 
-| Message     | Trigger                                                                                             | Guilds                        | Mentions              |
-| ----------- | --------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------- |
-| Early alert | `POST /discord/earthquake` on `PORT` (warning app webhook)                                          | `earthquake` channel and role | The `earthquake` role |
-| CWA report  | New Central Weather Administration significant earthquake report (`E-A0015-001`), polled every 60 s | `earthquake` channel          | None                  |
+| Message       | Trigger                                                                                             | Mentions                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Early warning | `POST /alerts` from the 地牛Wake Up! caller script ([early-warning API](#early-warning-api))        | The `earthquake` role, when set, from the [ping threshold](#early-warning-api) |
+| CWA report    | New Central Weather Administration significant earthquake report (`E-A0015-001`), polled every 60 s | None                                                                           |
 
-- Reports need `CWA_API_KEY`. Without it nijika logs one startup line and runs the
-  webhook alone. Get a free key by registering at
+Both feeds are optional and independent. Without `EARTHQUAKE_ALERT_PORT` or
+`CWA_API_KEY`, nijika logs one startup line and leaves that feed off.
+
+#### Early-warning API
+
+```text
+地牛Wake Up! (Windows) → earthquake-alert.cmd → earthquake-alert.ps1
+  → https://<server>.<tailnet>.ts.net/earthquake/alerts  (tailnet-only HTTPS, tailscale serve)
+  → http://127.0.0.1:<EARTHQUAKE_ALERT_PORT>/alerts  (nijika)
+```
+
+The API binds `127.0.0.1` only and is reached through `tailscale serve`, which strips
+the `/earthquake` mount prefix. Set it up with the
+[operator steps](contributing/operations.md#earthquake-alerts); the Windows side is in
+[`tools/earthquake-alert/windows`](../tools/earthquake-alert/windows/README.md).
+
+The ping threshold is the optional `earthquake_alert` block of nijika's `config.json`:
+
+```json
+"earthquake_alert": { "ping_min_local_intensity": "4" }
+```
+
+`ping_min_local_intensity` is a CWA intensity string (`0`–`4`, `5-`, `5+`, `6-`, `6+`,
+`7`) and defaults to `4` when the block or field is absent. Any other value or an
+unknown key stops startup and deployment preparation. It sets the lowest local
+intensity that pings the role, sends the upgrade reply and turns the embed red.
+
+`POST /alerts` with `Authorization: Bearer <EARTHQUAKE_ALERT_KEY>` and a JSON body of at
+most 4 KB. Unknown fields are rejected.
+
+| Field              | Type                                                       | Range                   |
+| ------------------ | ---------------------------------------------------------- | ----------------------- |
+| `epicenterLat`     | number                                                     | −90 to 90               |
+| `epicenterLon`     | number                                                     | −180 to 180             |
+| `depthKm`          | number                                                     | 0 to 1000               |
+| `magnitude`        | number                                                     | 0 to 10                 |
+| `maxIntensity`     | CWA intensity string: `0`–`4`, `5-`, `5+`, `6-`, `6+`, `7` | —                       |
+| `localIntensity`   | CWA intensity string, as above                             | —                       |
+| `arrivalTime`      | integer, local S-wave arrival in Unix seconds              | see test handling below |
+| `remainingSeconds` | integer, the app's countdown to that arrival               | −600 to 600             |
+
+`remainingSeconds` may be negative: in the blind zone, or for an update issued after
+the S-wave arrived, the countdown has already run out. It is only logged; the message
+counts down from `arrivalTime`.
+
+- **Test and replay.** An `arrivalTime` more than 10 minutes before the server clock
+  posts nothing and answers `200 {"result": "test"}`. The app's test button sends a
+  fixed 2024 example, so it checks the whole path without posting, and a captured
+  request cannot be replayed into a post once it is 10 minutes old. An `arrivalTime`
+  more than 10 minutes ahead answers `400`.
+- **Posting.** Every live alert is posted; the app's own threshold decides what is
+  sent. The guild's `earthquake` role is pinged only when `localIntensity` is at or
+  above the ping threshold (below). Guilds with the channel but no role get the alert
+  without a ping.
+- **Updates.** An alert within 3 minutes of the open event's latest alert, with an
+  epicenter within 100 km (haversine) of that alert's epicenter, updates the event:
+  each guild's message is edited, which never pings. When an update is the event's
+  first alert at or above the ping threshold, each guild with the role also gets a
+  short reply that pings it. A deleted message is posted anew. Alerts are processed one at
+  a time; event state is in memory, so after a restart the next alert posts anew.
+- **Message.** The content line holds the headline, prefixed by the role mention when
+  pinging. The embed shows magnitude, depth, maximum and local intensity (`5-` as
+  5弱, 5 Weak), the arrival as a relative and absolute Discord timestamp, and the
+  epicenter (`23.85°N, 120.82°E`, linked to a map). It is red at or above the ping
+  threshold, amber below, and its footer credits the source and marks edits.
+- **Responses.** `200 {"result": "created" | "updated", "pinged", "guilds"}` (`guilds`
+  counts guilds whose message was posted or edited); `200 {"result": "test"}`; `400`
+  invalid body (with up to five `fields` paths) or arrival out of range; `401` missing
+  or wrong token, with `WWW-Authenticate: Bearer`, checked before anything else; `404`
+  other paths; `413` body too large; `503` Discord not ready; `500` unexpected failure.
+  Each outcome is logged without headers or the key.
+
+#### CWA reports
+
+- Reports need `CWA_API_KEY`. Get a free key by registering at
   [opendata.cwa.gov.tw](https://opendata.cwa.gov.tw) and copying the member
   page's API authorization code (API授權碼).
 - The first successful poll after startup only records the newest report, so a
