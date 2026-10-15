@@ -1,12 +1,13 @@
 import { z } from 'zod';
 
-export const GUILD_SETTINGS_SCHEMA_VERSION = 3;
+export const GUILD_SETTINGS_SCHEMA_VERSION = 4;
 
 /**
  * Older stored versions the repository upgrades on read. Version 2 added
- * defaulted sections; version 3 opens the gallery previews.
+ * defaulted sections; version 3 opens gallery previews; version 4 adds
+ * opt-in earthquake destinations and removes targeted-user replies.
  */
-export const UPGRADABLE_GUILD_SETTINGS_VERSIONS: readonly number[] = [1, 2];
+export const UPGRADABLE_GUILD_SETTINGS_VERSIONS: readonly number[] = [1, 2, 3];
 
 /**
  * Preview providers version 3 adds to every stored server once, so the
@@ -112,6 +113,15 @@ const guildSettingsAccessSchema = guildSettingsAccessDraftSchema.refine(
 export const guildSettingsDraftSchema = z
   .object({
     general: generalSettingsSchema,
+    earthquake: z
+      .object({
+        alertsEnabled: z.boolean(),
+        reportsEnabled: z.boolean(),
+        channelId: snowflake.nullable(),
+        roleId: snowflake.nullable(),
+      })
+      .strict()
+      .default({ alertsEnabled: false, reportsEnabled: false, channelId: null, roleId: null }),
     entertainment: entertainmentSettingsSchema,
     moderationVote: z
       .object({
@@ -134,7 +144,6 @@ export const guildSettingsDraftSchema = z
     autoReply: z
       .object({
         keywords: z.boolean(),
-        lucky: z.boolean(),
         random: z.boolean(),
         dice: z.boolean(),
         reactions: z.boolean(),
@@ -159,8 +168,21 @@ export const guildSettingsSchema = guildSettingsDraftSchema.extend({
   access: guildSettingsAccessSchema,
 });
 export type GuildSettings = z.infer<typeof guildSettingsSchema>;
-export const normalizeGuildSettings = (value: unknown): GuildSettings =>
-  guildSettingsSchema.parse(value);
+export const normalizeGuildSettings = (value: unknown): GuildSettings => {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const stored = value as Record<string, unknown>;
+    if (
+      stored.autoReply !== null &&
+      typeof stored.autoReply === 'object' &&
+      !Array.isArray(stored.autoReply)
+    ) {
+      // Versions 1–3 stored this retired preference; retain strict validation for other keys.
+      const { lucky: _lucky, ...autoReply } = stored.autoReply as Record<string, unknown>;
+      return guildSettingsSchema.parse({ ...stored, autoReply });
+    }
+  }
+  return guildSettingsSchema.parse(value);
+};
 
 /** Bring settings stored under `fromVersion` to the current schema version. */
 export const upgradeGuildSettings = (fromVersion: number, value: unknown): GuildSettings => {
@@ -205,6 +227,10 @@ export interface GuildSettingsActor {
   readonly messageId?: string;
 }
 export interface OperatorCapabilities {
+  readonly earthquake?: {
+    readonly alerts: boolean;
+    readonly reports: boolean;
+  };
   readonly features: Readonly<Record<GuildFeature, boolean>>;
   readonly socialProviders: readonly string[];
   readonly maxRandomProbability: number;
@@ -238,6 +264,7 @@ export class GuildSettingsError extends Error {
 }
 export const defaultGuildSettings = (capabilities: OperatorCapabilities): GuildSettings => ({
   general: guildSettingsSchema.shape.general.parse(undefined),
+  earthquake: guildSettingsSchema.shape.earthquake.parse(undefined),
   entertainment: entertainmentSettingsSchema.parse(undefined),
   moderationVote: guildSettingsSchema.shape.moderationVote.parse(undefined),
   features: guildSettingsSchema.shape.features.parse(
@@ -265,7 +292,6 @@ export const defaultGuildSettings = (capabilities: OperatorCapabilities): GuildS
   channels: { debug: null, event: null, giveaway: null },
   autoReply: {
     keywords: true,
-    lucky: true,
     random: true,
     dice: true,
     reactions: true,

@@ -25,7 +25,7 @@ const konataSettings = settings.extend({
   notificationRoutes: NotificationRoutesSchema.optional(),
 });
 
-const nijikaSettings = settings.extend({
+const earthquakeSettings = settings.extend({
   earthquake_alert: EarthquakeAlertConfigSchema.optional(),
 });
 
@@ -45,8 +45,8 @@ export function validateBotSettings(bot: string, text: string): void {
       konataSettings.parse(input);
       return;
     }
-    if (bot === 'nijika') {
-      nijikaSettings.parse(input);
+    if (bot === 'nijika' || bot === 'tomori') {
+      earthquakeSettings.parse(input);
       return;
     }
     if (bot !== 'msg-archive') {

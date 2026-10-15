@@ -88,9 +88,11 @@ const actualFields = (
     id: 0,
     label: customId,
     component: {
-      type: ['roles', 'voter_roles'].includes(customId)
+      type: ['roles', 'voter_roles', 'earthquake_role'].includes(customId)
         ? ComponentType.RoleSelect
-        : ['allowed', 'excluded', 'debug', 'event', 'giveaway'].includes(customId)
+        : ['allowed', 'excluded', 'debug', 'event', 'giveaway', 'earthquake_channel'].includes(
+              customId,
+            )
           ? ComponentType.ChannelSelect
           : ComponentType.StringSelect,
       id: 0,
@@ -495,7 +497,7 @@ describe('settings parameter presentation', () => {
         key === 'video' ? ['off'] : key === 'strategy' ? ['leave'] : [],
     } as unknown as ModalSubmitInteraction['fields'];
     applyPanelModal(draft, { fields }, 'auto_reply', false, caps);
-    for (const key of ['keywords', 'lucky', 'random', 'dice', 'reactions'] as const)
+    for (const key of ['keywords', 'random', 'dice', 'reactions'] as const)
       expect(draft.autoReply[key]).toBe(false);
     applyPanelModal(draft, { fields }, 'social', false, caps);
     expect(draft.socialPreview.providers).toEqual([]);
@@ -858,5 +860,53 @@ describe('v2 settings modal contracts', () => {
     await handleSettingsInteraction(interaction as unknown as ModalSubmitInteraction, host);
     expect(service.stage).not.toHaveBeenCalled();
     expect(service.consumeModalNonce).not.toHaveBeenCalled();
+  });
+});
+
+describe('earthquake settings panel', () => {
+  const available: OperatorCapabilities = { ...caps, earthquake: { alerts: true, reports: true } };
+  it('offers the page only to managers on bots with earthquake capabilities', () => {
+    expect(panelCategories(actor, session(), undefined, available)).toContain('earthquake');
+    expect(
+      panelCategories({ ...actor, manager: false }, session(), undefined, available),
+    ).not.toContain('earthquake');
+    expect(panelCategories(actor, session(), undefined, caps)).not.toContain('earthquake');
+    expect(
+      renderSettingsPanel(session(), actor, available, t, 'earthquake').components?.length,
+    ).toBeLessThanOrEqual(5);
+  });
+  it('uses an optional single role and accepts clearing it while enabling a feed', () => {
+    const edit = session();
+    edit.draft.earthquake.roleId = '555555555555555555';
+    const modal = buildPanelModal(edit, 'earthquake', 'nonce', true, available, t).toJSON();
+    expect(modal.components).toHaveLength(4);
+    const role = modal.components.find(
+      (label) => 'component' in label && label.component.custom_id === 'earthquake_role',
+    );
+    expect(role).toMatchObject({
+      component: { type: ComponentType.RoleSelect, min_values: 0, max_values: 1, required: false },
+    });
+    const fields = actualFields({
+      alerts: ['on'],
+      reports: ['off'],
+      earthquake_channel: ['666666666666666666'],
+      earthquake_role: [],
+    });
+    applyPanelModal(edit.draft, { fields }, 'earthquake', true, available);
+    expect(edit.draft.earthquake).toEqual({
+      alertsEnabled: true,
+      reportsEnabled: false,
+      channelId: '666666666666666666',
+      roleId: null,
+    });
+    expect(() => applyPanelModal(edit.draft, { fields }, 'earthquake', false, available)).toThrow(
+      GuildSettingsError,
+    );
+    expect(() =>
+      applyPanelModal(edit.draft, { fields }, 'earthquake', true, {
+        ...caps,
+        earthquake: { alerts: false, reports: true },
+      }),
+    ).toThrow(GuildSettingsError);
   });
 });

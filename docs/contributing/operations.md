@@ -79,7 +79,7 @@ redeploy konata; to disable it, remove `NOTIFY_API_PORT` and redeploy.
 
 ## Earthquake alerts
 
-To enable nijika's [early-warning API](../configuration.md#early-warning-api) for the
+To enable Nijika or Tomori's [early-warning API](../configuration.md#early-warning-api) for the
 地牛Wake Up! app on a Windows machine in the same tailnet:
 
 1. Generate a key with `openssl rand -hex 32`.
@@ -110,7 +110,14 @@ To enable nijika's [early-warning API](../configuration.md#early-warning-api) fo
    app's test button. A `result=test` request in nijika's log, and a success box on
    Windows, confirm the whole path without posting to Discord.
 
-To rotate the key, change `.env` and the Windows key file, then redeploy nijika; to
+For Tomori, use its own `.env`, unused local port, proxy path and caller key/URL
+instead of the Nijika values above, then deploy with `npm run deploy -t tomori`.
+Set `CWA_API_KEY` for reports. In Tomori's `/settings` > **Earthquake notifications**,
+select a destination and enable each required feed; the warning role may be empty.
+Both feeds start off on every server, and CWA reports never mention anyone.
+Use separate caller/proxy routes when both bots receive warnings.
+
+To rotate the key, change `.env` and the Windows key file, then redeploy the selected bot; to
 disable the API, remove `EARTHQUAKE_ALERT_PORT`, redeploy, remove the serve path with
 `sudo tailscale serve --set-path /earthquake/ off` and confirm with
 `tailscale serve status`.

@@ -21,7 +21,6 @@ const build = async () => {
   });
   const auto = createAutoReplyPlugin({
     globalLuckyProbability: 1,
-    luckyReplies: [{ userId: targetId, probability: 1, reply: 'lucky' }],
   });
   await auto.init?.(ctx);
   const llmReply = vi.fn();

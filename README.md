@@ -16,14 +16,14 @@ shared `BaseBot` and registers its own plugins and services.
 | Bot           | Run                   | Required environment              | What the implementation wires                                                                                                                                                                                                                                                                              |
 | ------------- | --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `nijika`      | `npm run nijika`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI` | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles, plus social-feed polling with its platform registry, an optional loopback [earthquake early-warning API](docs/configuration.md#early-warning-api) and CWA earthquake reports (optional `CWA_API_KEY`) |
-| `tomori`      | `npm run tomori`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI` | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles                                                                                                                                                                                                        |
+| `tomori`      | `npm run tomori`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI` | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles, plus social-feed polling and optional earthquake early warnings/CWA reports; earthquake delivery starts off and is configured per server in `/settings`                                               |
 | `konata`      | `npm run konata`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI` | LLM chat for whitelisted users (a mention starts a session, a reply continues it), an online presence and an optional loopback [notification relay API](docs/configuration.md#notification-relay-api); the guild-join listener is off                                                                      |
 | `gopher`      | `npm run gopher`      | `TOKEN`, `CLIENT_ID`              | Self-hosted LLM auto-replies and daily avatar/nickname sync; no database. [Endpoint changes](docs/configuration.md#gopher-llm-endpoint) take effect after a restart                                                                                                                                        |
 | `msg-archive` | `npm run msg-archive` | `TOKEN`, `CLIENT_ID`, `MONGO_URI` | The only [message archive](docs/message-archive.md) writer: live capture, periodic and full backups, and archive control; it exposes exactly `/archive`                                                                                                                                                    |
 
 Event mirroring posts message edits, deletions and role changes to a guild's event
 channel and keeps deleted attachments through an attachment cache. LLM providers
-and nijika's [earthquake feeds](docs/configuration.md#earthquake-alerts-and-reports)
+and Nijika/Tomori's [earthquake feeds](docs/configuration.md#earthquake-alerts-and-reports)
 need their own keys; see
 [environment variables](docs/configuration.md#environment-variables).
 
@@ -42,7 +42,8 @@ Every bot shares the framework capabilities:
 - **Tomori and Nijika server settings.** A private [`/settings` panel](docs/tomori-settings.md)
   with manager/role/everyone editing, form-based scope/destination controls,
   server language/time zone, individual entertainment switches/cooldowns,
-  moderation-vote parameters, automatic replies and social previews. Changes
+  moderation-vote parameters, automatic replies and social previews. Tomori also has
+  opt-in earthquake warnings/reports, a destination channel and an optional warning role. Changes
   use drafts, explicit saves and bounded configuration history.
 
 - **Slash commands and components.** Commands, context menus, buttons, modals and
@@ -83,11 +84,12 @@ Every bot shares the framework capabilities:
 - **Database inspection.** Nijika's admins browse any guild database read-only
   with [`/db`](docs/configuration.md#database-inspection): statistics, fields,
   filtered pages and single documents, with every option offered as a list.
-- **Earthquake early warnings.** Nijika's optional loopback
+- **Earthquake early warnings.** Nijika and Tomori's optional loopback
   [HTTP API](docs/configuration.md#early-warning-api) receives alerts from the
   地牛Wake Up! desktop app through a [Windows caller script](tools/earthquake-alert/windows/README.md)
   and posts one embed per quake, edited as the CWA updates it; the guild's role is
-  pinged from a configurable local intensity (default 4).
+  pinged from a configurable local intensity (default 4). Tomori delivery requires
+  per-server opt-in in `/settings`; CWA reports never mention anyone.
 - **Notification relay.** Konata's optional loopback
   [HTTP API](docs/configuration.md#notification-relay-api) lets a local service,
   such as a deployment controller, post a progress embed and keep editing it.
@@ -139,15 +141,15 @@ actions are grouped under one root. `/help` shows a private root-command overvie
 with a category selector, whose first entry returns to the overview; `/help command:<name>`
 lists that command's paths and options. Admin-only paths are hidden from non-admins.
 
-| Area              | Commands                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
-| Grouped roots     | `/activity`, `/ai`, `/feed`, `/giveaway`, `/reply`, `/role`, `/thread`, `/traffic`, `/archive` |
-| Activity reports  | `/traffic overview`, `channel`, `me`, `user`, `apps`, `emoji`, `sticker`                       |
-| Server and roles  | `/role`, `/level_detail`, `/roll_call`, `/ban_user`                                            |
-| Bot persona       | `/talk`, `/change_avatar`                                                                      |
-| Utilities and fun | `/help`, `/bug_report`, `/random_restaurant`, `/give_score`, `/gay`                            |
-| Administration    | `/db stats`, `schema`, `list`, `get` (nijika only)                                             |
-| Context menus     | Get avatar (from a member or a message author), get sticker, score a message                   |
+| Area              | Commands                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| Grouped roots     | `/activity`, `/ai`, `/feed`, `/giveaway`, `/reply`, `/role`, `/thread`, `/traffic`, `/archive`, `/settings` |
+| Activity reports  | `/traffic overview`, `channel`, `me`, `user`, `apps`, `emoji`, `sticker`                                    |
+| Server and roles  | `/role`, `/level_detail`, `/roll_call`, `/ban_user`                                                         |
+| Bot persona       | `/talk`, `/change_avatar`                                                                                   |
+| Utilities and fun | `/help`, `/bug_report`, `/random_restaurant`, `/give_score`, `/gay`                                         |
+| Administration    | `/db stats`, `schema`, `list`, `get` (nijika only)                                                          |
+| Context menus     | Get avatar (from a member or a message author), get sticker, score a message                                |
 
 Upgrading from standalone commands such as `/feed_subscribe`, or from the removed
 `/emoji_frequency`, `/sticker_frequency` and `/db_list_message`? See

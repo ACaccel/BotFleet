@@ -8,7 +8,9 @@ handlers declare supported component types in the shared select-menu contract.
 Modal submissions bind their context to the owner-bound one-use nonce. Preserve
 per-guild asynchronous locale/time-zone context across delayed work; never mutate
 shared translator defaults. Changes to voting must retain fresh human-member and
-role eligibility checks and Discord timeout authority.
+role eligibility checks and Discord timeout authority. Tomori earthquake changes
+must preserve [opt-in delivery and optional-role semantics](docs/tomori-settings.md#earthquake-notifications),
+including settings rechecks before an update can mention a role.
 
 Start with [local setup](docs/contributing/local-setup.md) and the
 [architecture overview](docs/architecture.md).

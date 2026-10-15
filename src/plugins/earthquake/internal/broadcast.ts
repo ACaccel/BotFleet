@@ -9,11 +9,10 @@ import type { Client } from 'discord.js';
 import type { GuildRegistry } from '../../../bot/guild-registry';
 import type { Translator } from '../../../core/i18n';
 import { logError, type Logger } from '../../../core/logger';
+import type { GuildSettingsRuntime } from '../../../core/guild-settings';
+import { resolveEarthquakeDestination } from './destination';
 import type { CwaReport } from './cwa-report';
 import { buildReportEmbed } from './report-embed';
-
-/** Symbolic channel name looked up via the guild registry. */
-const EARTHQUAKE = 'earthquake';
 
 /**
  * Post a CWA earthquake report to every guild with an `earthquake`
@@ -27,14 +26,22 @@ export const broadcastEarthquakeReport = async (
   report: CwaReport,
   translator: Translator,
   logger: Logger | undefined,
+  settings?: GuildSettingsRuntime,
 ): Promise<void> => {
   const embed = buildReportEmbed(report, translator);
   const guildIds = [...client.guilds.cache.keys()];
   await Promise.all(
     guildIds.map(async (guildId) => {
       try {
-        const channel = registry.getChannel(guildId, EARTHQUAKE);
-        if (channel === undefined || !channel.isSendable()) return;
+        const destination = await resolveEarthquakeDestination(
+          client,
+          registry,
+          guildId,
+          'reports',
+          settings,
+        );
+        if (!destination) return;
+        const { channel } = destination;
         await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
       } catch (err: unknown) {
         logError(logger, guildId, err);

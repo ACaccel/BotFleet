@@ -16,6 +16,7 @@ import zhCommands from '../../src/i18n/locales/zh-TW/commands.json';
 import zhReplies from '../../src/i18n/locales/zh-TW/replies.json';
 import zhErrors from '../../src/i18n/locales/zh-TW/errors.json';
 const capabilities: OperatorCapabilities = {
+  earthquake: { alerts: true, reports: true },
   features: Object.fromEntries(
     FEATURES.map((value) => [value, true]),
   ) as OperatorCapabilities['features'],
@@ -62,6 +63,7 @@ describe.each(['en', 'zh-TW'] as const)('settings panel in %s', (locale) => {
     'social',
     'entertainment',
     'moderation',
+    'earthquake',
     'status',
     'history',
   ] as const)('resolves every %s page string and validates builders', (category) => {
@@ -78,6 +80,7 @@ describe.each(['en', 'zh-TW'] as const)('settings panel in %s', (locale) => {
     'auto_reply',
     'social',
     'moderation',
+    'earthquake',
     'scope_auto_reply',
     'entertainment_menu_author_avatar',
   ] as const)('resolves every %s modal label', (category) => {

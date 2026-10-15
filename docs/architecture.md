@@ -121,7 +121,7 @@ thread are serialized in process; the thread's message ID lives in the route gui
 database, so a restart keeps editing the same message. See the
 [API contract](configuration.md#notification-relay-api).
 
-Nijika's earthquake early-warning API uses the same model: `127.0.0.1` only, behind
+Nijika and Tomori's earthquake early-warning APIs use the same model: `127.0.0.1` only, behind
 `tailscale serve`, with the shared bearer check before routing or body parsing. An
 alert whose arrival time is over 10 minutes old is acknowledged as a test without
 posting, which also blocks replays. Alerts are serialized through one in-memory
@@ -217,8 +217,13 @@ Guild locale/time-zone resolution uses asynchronous context around interactions,
 events and scheduled work; explicit UI locales remain authoritative. Individual
 entertainment switches/cooldowns and fresh-member moderation voter checks use the
 same committed guild snapshot. See the panel guide for bounds and defaults.
-Nijika's social-feed subscriptions, earthquake notifications and level-role sync
-retain their existing controls outside the panel.
+Both bots manage social-feed subscriptions through `/feed`. Tomori's earthquake
+section has separate warning/report switches, a shared destination and an optional
+warning role; all delivery starts disabled. Upstream capability checks constrain
+the switches, and delivery revalidates current preferences, destinations and roles.
+CWA reports never mention anyone. Schema version 4 adds disabled earthquake defaults
+and removes the retired targeted-reply flag while preserving revision/history.
+Nijika's earthquake notifications and level-role sync retain deployment controls.
 
 [Repositories](../src/persistence/repositories/) form a per-guild bundle and can be
 replaced with test fakes. Operational failures return `Result<T, DatabaseError>`;

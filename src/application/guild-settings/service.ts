@@ -307,6 +307,8 @@ export class GuildSettingsService implements GuildSettingsRuntime {
     });
     this.snapshots.set(snapshot.guildId, immutable);
     const effective = cloneSettings(immutable.settings);
+    effective.earthquake.alertsEnabled &&= this.capabilities.earthquake?.alerts ?? false;
+    effective.earthquake.reportsEnabled &&= this.capabilities.earthquake?.reports ?? false;
     for (const feature of FEATURES)
       effective.features[feature].enabled &&= this.capabilities.features[feature];
     effective.socialPreview.providers = effective.socialPreview.providers.filter((provider) =>

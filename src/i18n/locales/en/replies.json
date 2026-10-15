@@ -1170,7 +1170,8 @@
       "history": "History",
       "general": "General",
       "entertainment": "Entertainment",
-      "moderation": "Moderation votes"
+      "moderation": "Moderation votes",
+      "earthquake": "Earthquake notifications"
     },
     "button": {
       "save": "Save",
@@ -1236,7 +1237,6 @@
     "behaviors": "Reply behaviors",
     "behavior": {
       "keywords": "Keyword replies",
-      "lucky": "Targeted replies",
       "random": "Random replies",
       "dice": "Dice",
       "reactions": "Special reactions"
@@ -1313,7 +1313,6 @@
     "configured": "Configured",
     "parameter": {
       "keywords": "Keyword replies",
-      "lucky": "Targeted lucky replies",
       "random": "Random replies",
       "dice": "Dice expressions",
       "reactions": "Special reactions",
@@ -1328,7 +1327,11 @@
       "threshold": "Votes required",
       "voteWindowSeconds": "Voting window (seconds)",
       "durationMinutes": "Default timeout (minutes)",
-      "voterRoleIds": "Eligible voter roles"
+      "voterRoleIds": "Eligible voter roles",
+      "alertsEnabled": "Early warnings",
+      "reportsEnabled": "CWA reports",
+      "earthquakeChannelId": "Notification channel",
+      "earthquakeRoleId": "Early-warning role (optional)"
     },
     "destination_unavailable": "{{destination}}: destination missing or the bot lacks permission.",
     "hidden_resource": "Hidden or unavailable resource",
@@ -1364,6 +1367,10 @@
       "menu_get_avatar": "Get avatar",
       "menu_get_sticker": "Get sticker",
       "menu_give_score": "Message score"
-    }
+    },
+    "modal_earthquake": "Edit earthquake notifications",
+    "earthquake_notice": "Both feeds start disabled. A channel is required when enabled. The optional role is mentioned only by early warnings at the configured intensity threshold; CWA reports never mention anyone.",
+    "earthquake_alerts_unavailable": "Early warnings are unavailable until the operator configures the alert source.",
+    "earthquake_reports_unavailable": "CWA reports are unavailable until the operator configures the CWA API key."
   }
 }

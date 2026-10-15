@@ -109,7 +109,7 @@ deployment successful. Releases from
 Each selected bot's local JSON settings are parsed before release copying or service
 cutover. For msg-archive, preparation uses the same policy and runtime validators as
 plugin startup, including concurrency and notification cadence; for konata, it checks
-`notificationRoutes` with the relay's own schema, and for nijika, `earthquake_alert`
+`notificationRoutes` with the relay's own schema, and for nijika/tomori, `earthquake_alert`
 with the earthquake plugin's schema. Invalid settings
 abort preparation with the affected field path; existing units keep running.
 

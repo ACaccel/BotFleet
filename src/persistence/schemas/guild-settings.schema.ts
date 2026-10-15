@@ -27,6 +27,24 @@ const entertainmentCommandSchema = new Schema(
 );
 const settingsSchema = new Schema(
   {
+    earthquake: {
+      type: new Schema(
+        {
+          alertsEnabled: { type: Boolean, required: true },
+          reportsEnabled: { type: Boolean, required: true },
+          channelId: { type: String, default: null },
+          roleId: { type: String, default: null },
+        },
+        nestedOptions,
+      ),
+      required: true,
+      default: () => ({
+        alertsEnabled: false,
+        reportsEnabled: false,
+        channelId: null,
+        roleId: null,
+      }),
+    },
     general: {
       type: new Schema(
         {
@@ -108,7 +126,6 @@ const settingsSchema = new Schema(
       type: new Schema(
         {
           keywords: { type: Boolean, required: true },
-          lucky: { type: Boolean, required: true },
           random: { type: Boolean, required: true },
           dice: { type: Boolean, required: true },
           reactions: { type: Boolean, required: true },

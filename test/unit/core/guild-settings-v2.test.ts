@@ -28,6 +28,37 @@ const legacySettings = () => {
   return legacy;
 };
 describe('guild settings v2 model', () => {
+  it.each([1, 2, 3])(
+    'upgrades version %s with independent, disabled earthquake preferences',
+    (version) => {
+      const { earthquake: _earthquake, ...stored } = defaultGuildSettings(capabilities);
+      const upgraded = upgradeGuildSettings(version, stored);
+      expect(upgraded.earthquake).toEqual({
+        alertsEnabled: false,
+        reportsEnabled: false,
+        channelId: null,
+        roleId: null,
+      });
+      upgraded.earthquake.alertsEnabled = true;
+      expect(upgradeGuildSettings(version, stored).earthquake.alertsEnabled).toBe(false);
+    },
+  );
+  it('preserves current earthquake choices and validates optional resources', () => {
+    const settings = defaultGuildSettings(capabilities);
+    settings.earthquake = {
+      alertsEnabled: true,
+      reportsEnabled: false,
+      channelId: '400000000000000001',
+      roleId: null,
+    };
+    expect(normalizeGuildSettings(settings).earthquake).toEqual(settings.earthquake);
+    expect(() =>
+      normalizeGuildSettings({
+        ...settings,
+        earthquake: { ...settings.earthquake, roleId: 'invalid' },
+      }),
+    ).toThrow();
+  });
   it('normalizes old payloads with inherited locale and independent command defaults', () => {
     const normalized = normalizeGuildSettings(legacySettings());
     expect(normalized.general).toEqual({ language: 'inherit', timeZone: null });
@@ -43,6 +74,21 @@ describe('guild settings v2 model', () => {
     normalized.entertainment.gay.cooldownSeconds = 10;
     expect(normalized.entertainment.give_score.cooldownSeconds).toBe(0);
     expect(normalizeGuildSettings(legacySettings()).entertainment.gay.cooldownSeconds).toBe(0);
+  });
+  it.each([1, 2, 3])('removes the retired targeted-reply flag from version %s', (version) => {
+    const stored = version === 1 ? legacySettings() : defaultGuildSettings(capabilities);
+    const old = { ...stored, autoReply: { ...stored.autoReply, lucky: true } };
+    const normalized = upgradeGuildSettings(version, old);
+    expect(normalized.autoReply).not.toHaveProperty('lucky');
+    expect(normalized.autoReply.random).toBe(true);
+    expect(old.autoReply.lucky).toBe(true);
+    expect(normalizeGuildSettings(old).autoReply).not.toHaveProperty('lucky');
+    expect(() =>
+      normalizeGuildSettings({
+        ...old,
+        autoReply: { ...old.autoReply, unknown: true },
+      }),
+    ).toThrow();
   });
   it.each(['Asia/Taipei', 'Europe/London', 'UTC'])('accepts the IANA time zone %s', (timeZone) => {
     const settings = defaultGuildSettings(capabilities);

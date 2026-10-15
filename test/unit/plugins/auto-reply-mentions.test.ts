@@ -45,7 +45,7 @@ describe('auto-reply mention safety', () => {
   it('sends a keyword reply with every mention disabled', async () => {
     const send = vi.fn(async () => undefined);
     const ctx = buildCtx((input) => ok(input === 'hello' ? [{ reply: PINGING_REPLY }] : []));
-    const plugin = createAutoReplyPlugin({ luckyReplies: [], globalLuckyProbability: 0 });
+    const plugin = createAutoReplyPlugin({ globalLuckyProbability: 0 });
 
     await deliver(plugin, ctx, message('hello', send));
 
@@ -55,7 +55,7 @@ describe('auto-reply mention safety', () => {
   it('sends a random [*] reply with every mention disabled', async () => {
     const send = vi.fn(async () => undefined);
     const ctx = buildCtx((input) => ok(input === '[*]' ? [{ reply: PINGING_REPLY }] : []));
-    const plugin = createAutoReplyPlugin({ luckyReplies: [], globalLuckyProbability: 1 });
+    const plugin = createAutoReplyPlugin({ globalLuckyProbability: 1 });
 
     await deliver(plugin, ctx, message('unmatched', send));
 

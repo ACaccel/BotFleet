@@ -22,7 +22,10 @@ const identity = {
   userId: '300000000000000001',
 };
 const actor: GuildSettingsActor = { ...identity, manager: true, roleIds: [] };
-const build = (config: Parameters<typeof createGuildSettings>[1] = {}) => {
+const build = (
+  config: Parameters<typeof createGuildSettings>[1] = {},
+  capabilities: Parameters<typeof createGuildSettings>[2] = {},
+) => {
   const permissions = { has: vi.fn(() => true) };
   const member = { roles: { cache: new Collection() }, permissions };
   const fetch = vi.fn(async () => member);
@@ -38,16 +41,66 @@ const build = (config: Parameters<typeof createGuildSettings>[1] = {}) => {
     clientId: identity.botId,
     client: { guilds: { cache: new Map([[guild.id, guild]]) } },
   });
-  createGuildSettings(bot, {
-    commands: ['giveaway', 'talk'],
-    guild_settings: { maxRandomProbability: 0.05, minCooldownSeconds: 2 },
-    ...config,
-  });
+  createGuildSettings(
+    bot,
+    {
+      commands: ['giveaway', 'talk'],
+      guild_settings: { maxRandomProbability: 0.05, minCooldownSeconds: 2 },
+      ...config,
+    },
+    capabilities,
+  );
   const options = hooks.options.mock.lastCall?.[0] as GuildSettingsServiceOptions;
   return { options, permissions, fetch, fetchChannel, guild };
 };
 
 describe('Shared guild settings composition', () => {
+  it('does not seed Tomori earthquake delivery even when both sources are available', async () => {
+    const { options } = build({}, { earthquake: { alerts: true, reports: true } });
+    expect(options.capabilities.earthquake).toEqual({ alerts: true, reports: true });
+    expect((await options.legacySeed(identity.guildId)).earthquake).toEqual({
+      alertsEnabled: false,
+      reportsEnabled: false,
+      channelId: null,
+      roleId: null,
+    });
+  });
+  it('accepts enabled earthquake notifications without a role and rechecks destination permissions', async () => {
+    const { options, fetchChannel } = build({}, { earthquake: { alerts: true, reports: true } });
+    const committed = defaultGuildSettings(options.capabilities);
+    committed.earthquake.channelId = '500000000000000001';
+    const draft = cloneSettings(committed);
+    draft.earthquake.alertsEnabled = true;
+    const has = vi.fn(() => true);
+    fetchChannel.mockResolvedValue({
+      guildId: identity.guildId,
+      type: ChannelType.GuildText,
+      permissionsFor: () => ({ has }),
+    });
+    await expect(options.validateResources?.(draft, actor, committed)).resolves.toBeUndefined();
+    expect(fetchChannel).toHaveBeenCalled();
+    has.mockReturnValue(false);
+    await expect(options.validateResources?.(draft, actor, committed)).rejects.toMatchObject({
+      code: 'invalid',
+    });
+  });
+  it.each(['missing', 'foreign', 'everyone'])(
+    'rejects an %s earthquake notification role',
+    async (kind) => {
+      const { options, guild } = build();
+      const committed = defaultGuildSettings(options.capabilities);
+      const draft = cloneSettings(committed);
+      draft.earthquake.roleId = kind === 'everyone' ? identity.guildId : '600000000000000001';
+      guild.roles.fetch.mockResolvedValue(
+        kind === 'missing'
+          ? null
+          : { guild: { id: kind === 'foreign' ? '200000000000000002' : identity.guildId } },
+      );
+      await expect(options.validateResources?.(draft, actor, committed)).rejects.toMatchObject({
+        code: 'invalid',
+      });
+    },
+  );
   it('seeds only supported destinations and leaves deployment-only settings intact', async () => {
     const channels = {
       debug: '500000000000000001',

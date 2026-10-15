@@ -76,7 +76,6 @@ describe('guild-scoped automatic replies', () => {
   it('fails closed on unknown guilds and disables every branch, including bot goodnight', async () => {
     const { deliver, find } = await setup(runtime([snapshot()], false), {
       globalLuckyProbability: 1,
-      luckyReplies: [{ guildId: guildA, userId, probability: 1, reply: 'lucky' }],
     });
     for (const content of ['hello', '1d6', '長髮男', '該睡覺了，肥貓跟你說晚安']) {
       const result = await deliver(content);
@@ -112,34 +111,17 @@ describe('guild-scoped automatic replies', () => {
     );
   });
 
-  it('withholds unbound and other-guild lucky replies', async () => {
-    const { deliver } = await setup(runtime([snapshot(), snapshot(guildB)]), {
-      luckyReplies: [
-        { userId, probability: 1, reply: 'unbound' },
-        { guildId: guildA, userId, probability: 1, reply: 'bound' },
-      ],
-    });
-    expect((await deliver('unmatched')).send).toHaveBeenCalledExactlyOnceWith({
-      content: 'bound',
-      allowedMentions: { parse: [] },
-    });
-    expect((await deliver('unmatched', guildB)).send).not.toHaveBeenCalled();
-  });
-
   it('honors every granular switch even when the master gate allows delivery', async () => {
     const value = snapshot();
     value.settings.autoReply = {
       keywords: false,
-      lucky: false,
       random: false,
       dice: false,
       reactions: false,
       probability: 1,
       cooldownSeconds: 0,
     };
-    const { deliver, find } = await setup(runtime([value]), {
-      luckyReplies: [{ guildId: guildA, userId, probability: 1, reply: 'lucky' }],
-    });
+    const { deliver, find } = await setup(runtime([value]));
     for (const content of ['hello', '1d6', '長髮男', '該睡覺了，肥貓跟你說晚安']) {
       const result = await deliver(content);
       expect(result.send).not.toHaveBeenCalled();

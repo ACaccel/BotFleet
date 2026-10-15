@@ -97,12 +97,13 @@ const setup = async (
   repo = new MemoryRepo(),
   guilds: readonly string[] = [guildId],
   now?: () => number,
+  capabilities: OperatorCapabilities = caps,
 ) => {
   const service = new GuildSettingsService({
     botId,
     repo: () => repo,
     migrationRepo: () => repo,
-    capabilities: caps,
+    capabilities,
     legacySeed: () => {
       const settings = defaultGuildSettings(caps);
       settings.features.auto_reply.enabled = true;
@@ -853,5 +854,65 @@ describe('GuildSettingsService', () => {
     const active = await service.open(actor);
     service.forgetGuild(guildId);
     await expect(service.getSession(active.id, actor)).rejects.toMatchObject({ code: 'expired' });
+  });
+});
+
+describe('earthquake settings policy', () => {
+  const available: OperatorCapabilities = { ...caps, earthquake: { alerts: true, reports: true } };
+  it('requires a destination, permits no role, and saves both switches independently', async () => {
+    const { service } = await setup(new MemoryRepo(), [guildId], undefined, available);
+    const session = await service.open(actor);
+    const draft = cloneSettings(session.draft);
+    draft.earthquake.alertsEnabled = true;
+    await expect(service.stage(session.id, actor, draft)).rejects.toMatchObject({
+      code: 'invalid',
+    });
+    draft.earthquake.channelId = channelId;
+    await service.stage(session.id, actor, draft);
+    await service.save(session.id, actor);
+    expect(service.get(guildId)?.settings.earthquake).toEqual({
+      alertsEnabled: true,
+      reportsEnabled: false,
+      channelId,
+      roleId: null,
+    });
+  });
+  it('rejects unavailable feeds and delegated edits to earthquake preferences', async () => {
+    const { service } = await setup();
+    const session = await service.open(actor);
+    const draft = cloneSettings(session.draft);
+    draft.earthquake = { alertsEnabled: true, reportsEnabled: false, channelId, roleId: null };
+    await expect(service.stage(session.id, actor, draft)).rejects.toMatchObject({
+      code: 'invalid',
+    });
+    const repo = new MemoryRepo();
+    const settings = defaultGuildSettings(available);
+    settings.access = { mode: 'everyone', roleIds: [], categories: ['auto_reply'] };
+    await repo.seed({ botId, guildId, settings, revision: 0, audit: [], lastOperationId: 'seed' });
+    const delegated = await setup(repo, [guildId], undefined, available);
+    const editor = { ...actor, manager: false };
+    const edit = await delegated.service.open(editor);
+    const modified = cloneSettings(edit.draft);
+    modified.earthquake.channelId = channelId;
+    await expect(delegated.service.stage(edit.id, editor, modified)).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+  });
+  it('clamps stored switches when upstream capabilities disappear without rewriting preferences', async () => {
+    const repo = new MemoryRepo();
+    const settings = defaultGuildSettings(available);
+    settings.earthquake = { alertsEnabled: true, reportsEnabled: true, channelId, roleId };
+    await repo.seed({ botId, guildId, settings, revision: 0, audit: [], lastOperationId: 'seed' });
+    const { service } = await setup(repo);
+    expect(service.get(guildId)?.settings.earthquake).toEqual({
+      alertsEnabled: false,
+      reportsEnabled: false,
+      channelId,
+      roleId,
+    });
+    expect(await repo.find(botId, guildId)).toMatchObject({
+      ok: true,
+      value: { settings: { earthquake: { alertsEnabled: true, reportsEnabled: true } } },
+    });
   });
 });

@@ -66,6 +66,8 @@ describe('Tomori composition', () => {
         'temp-role',
         'bug-report',
         'activity',
+        'social-feed',
+        'earthquake',
       ]),
     );
   });
@@ -74,6 +76,32 @@ describe('Tomori composition', () => {
     // The reported bug: without this plugin the bot never subscribes to
     // messageUpdate / messageDelete, so no audit log is produced.
     expect(collectRegisteredPluginIds()).toContain('guild-events');
+  });
+  it('shares configured feed platforms with commands and keeps earthquake capabilities operator-controlled', () => {
+    const bot = new Tomori(
+      buildInertClient(),
+      'token',
+      '',
+      'bot-client',
+      {
+        commands: ['feed'],
+        social_feed: { enabled: true, platforms: { x: {} } },
+      },
+      { cwaApiKey: 'test-cwa-key' },
+    );
+    expect(bot.feedPlatformRegistry?.get('x')?.id).toBe('x');
+    expect(bot.guildSettings?.capabilities.earthquake).toEqual({ alerts: false, reports: true });
+  });
+  it('validates the early-warning key and threshold at composition time', () => {
+    expect(
+      () => new Tomori(buildInertClient(), 'token', '', 'bot-client', {}, { alertPort: 4001 }),
+    ).toThrow(/needs a key/);
+    expect(
+      () =>
+        new Tomori(buildInertClient(), 'token', '', 'bot-client', {
+          earthquake_alert: { ping_min_local_intensity: '8' },
+        }),
+    ).toThrow(/Invalid earthquake_alert/);
   });
 });
 

@@ -31,9 +31,12 @@ once; later joins receive safe defaults. After seeding, edit those preferences i
 the panel rather than `config.json`. Tomori's saved settings are unaffected:
 records and migration inventories are keyed by application ID.
 
-Before deploying, bind each `auto_reply.luckyReplies[]` entry to its intended
-`guildId`; unbound entries no longer send on Nijika. Optional `guild_settings`
-operator limits use the same contract as Tomori. Nijika moderation votes now
+Remove `auto_reply.luckyReplies` from both Nijika and Tomori deployment
+configuration before restarting: targeted member replies are retired, and startup
+validation rejects the removed key. Existing stored `autoReply.lucky` preferences
+are discarded automatically when read. Keyword replies, random `[*]` replies,
+dice and special reactions are preserved. Optional `guild_settings` operator
+limits use the same contract as Tomori. Nijika moderation votes now
 follow the [panel voter-role policy](tomori-settings.md#moderation-vote-preferences),
 including no role ping by default and no message-deletion fallback when a timeout
 is refused. Remove the unused `guilds.<id>.roles.ban_user` mapping and use the

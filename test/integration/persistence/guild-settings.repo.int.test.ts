@@ -59,12 +59,56 @@ const installLegacyDocument = async (guild: GuildConnection): Promise<MongoGuild
         'settings.general': '',
         'settings.entertainment': '',
         'settings.moderationVote': '',
+        'settings.earthquake': '',
       },
     },
   );
   return repo;
 };
 describe('MongoGuildSettingsRepo', () => {
+  it('upgrades v3 without enabling earthquake delivery and removes the retired reply flag', async () => {
+    await withFreshConnection(async (connection) => {
+      const guild = await new StaticConnectionManager(connection).getConnection(asGuildId(guildId));
+      const repo = new MongoGuildSettingsRepo(guild);
+      unwrap(await repo.seed(seed()));
+      await guild.models.GuildSettings.collection.updateOne(
+        { botId, guildId },
+        {
+          $set: { schemaVersion: 3, revision: 7, 'settings.autoReply.lucky': true },
+          $unset: { 'settings.earthquake': '' },
+        },
+      );
+      const upgraded = unwrap(await repo.find(botId, guildId));
+      expect(upgraded?.revision).toBe(7);
+      expect(upgraded?.schemaVersion).toBe(GUILD_SETTINGS_SCHEMA_VERSION);
+      expect(upgraded?.settings.earthquake).toEqual({
+        alertsEnabled: false,
+        reportsEnabled: false,
+        channelId: null,
+        roleId: null,
+      });
+      expect(upgraded?.settings.autoReply).not.toHaveProperty('lucky');
+      const settings = defaultGuildSettings(caps);
+      settings.earthquake = {
+        alertsEnabled: true,
+        reportsEnabled: true,
+        channelId: '400000000000000001',
+        roleId: null,
+      };
+      unwrap(
+        await repo.compareAndSwap(botId, guildId, 7, settings, {
+          operationId: 'enable-earthquake',
+          revision: 8,
+          userId: '500000000000000001',
+          at: 1,
+          paths: ['earthquake.alertsEnabled'],
+        }),
+      );
+      expect(
+        unwrap(await new MongoGuildSettingsRepo(guild).find(botId, guildId))?.settings.earthquake,
+      ).toEqual(settings.earthquake);
+    });
+  });
   it('upgrades v1 structurally while preserving revision, audit, operation and explicit legacy preferences', async () => {
     await withFreshConnection(async (connection) => {
       const guild = await new StaticConnectionManager(connection).getConnection(asGuildId(guildId));
@@ -81,6 +125,12 @@ describe('MongoGuildSettingsRepo', () => {
       expect(upgraded?.audit[0]?.operationId).toBe('previous');
       expect(upgraded?.settings.autoReply.dice).toBe(false);
       expect(upgraded?.settings.general).toEqual({ language: 'inherit', timeZone: null });
+      expect(upgraded?.settings.earthquake).toEqual({
+        alertsEnabled: false,
+        reportsEnabled: false,
+        channelId: null,
+        roleId: null,
+      });
       expect(upgraded?.settings.moderationVote).toEqual({
         threshold: 5,
         voteWindowSeconds: 60,

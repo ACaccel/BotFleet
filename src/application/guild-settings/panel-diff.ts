@@ -11,7 +11,6 @@ export interface SettingsDiffResources {
 }
 const AUTO_PARAMETERS = [
   'keywords',
-  'lucky',
   'random',
   'dice',
   'reactions',
@@ -46,6 +45,13 @@ export const settingsFieldLabel = (path: string, t: SettingsDiffTranslate): stri
   )
     return `${t(`entertainment_command.${name}`)} · ${t(parameter === 'enabled' ? 'enabled' : 'cooldown')}`;
   if (parameter !== undefined) return t('unknown_setting');
+  if (
+    section === 'earthquake' &&
+    ['alertsEnabled', 'reportsEnabled', 'channelId', 'roleId'].includes(name ?? '')
+  )
+    return t(
+      `parameter.${name === 'channelId' ? 'earthquakeChannelId' : name === 'roleId' ? 'earthquakeRoleId' : name}`,
+    );
   if (section === 'general' && ['language', 'timeZone'].includes(name ?? ''))
     return t(`parameter.${name}`);
   if (
@@ -120,7 +126,11 @@ const fieldValue = (
   if (typeof value === 'string') {
     if (path === 'general.language') return t(`language.${value}`);
     if (path === 'general.timeZone') return value;
-    if (path.startsWith('channels.'))
+    if (path === 'earthquake.roleId')
+      return resources.manager && resources.availableRoleIds.has(value)
+        ? `<@&${value}>`
+        : t('hidden_resource');
+    if (path.startsWith('channels.') || path === 'earthquake.channelId')
       return resources.visibleChannelIds.has(value) ? `<#${value}>` : t('hidden_resource');
     if (path === 'access.mode') return t(`mode.${value}`);
     if (path.endsWith('.mode')) return t(value);

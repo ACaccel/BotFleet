@@ -18,23 +18,23 @@ See [local setup](contributing/local-setup.md) and
 [env.ts](../src/core/config/env.ts) defines validation. Invalid values and token
 placeholders fail startup; there is no root `.env.example`.
 
-| Key                                                                    | Requirement / default                                                                            |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `TOKEN`, `CLIENT_ID`                                                   | Required Discord token and application ID                                                        |
-| `MONGO_URI`                                                            | Required for database-backed bots; optional for gopher                                           |
-| `MONGO_RECOVERY_INTERVAL_MS`                                           | Recovery polling, default `60000`                                                                |
-| `NODE_ENV`                                                             | `development` (default), `test`, or `production`                                                 |
-| `LOG_LEVEL`                                                            | `trace`, `debug`, `info` (default), `warn`, `error`, or `fatal`                                  |
-| `LOG_DIR`                                                              | File log root, default `logs`; empty disables file logs                                          |
-| `LOG_RETENTION_DAYS`                                                   | Days of file logs to keep, default `60`; `0` keeps all                                           |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                                                   |
-| `CWA_API_KEY`                                                          | Optional nijika key for [earthquake reports](#earthquake-alerts-and-reports); blank means absent |
-| `EARTHQUAKE_ALERT_PORT`                                                | Optional nijika [earthquake alert](#early-warning-api) port (1–65535); blank means absent        |
-| `EARTHQUAKE_ALERT_KEY`                                                 | Alert bearer secret, at least 32 characters; required when `EARTHQUAKE_ALERT_PORT` is set        |
-| `MONGO_INSPECT_URI`                                                    | Read-only account for nijika's [`/db`](#database-inspection); required once `db` is enabled      |
-| `NOTIFY_API_PORT`                                                      | Optional konata [notification relay](#notification-relay-api) port (1–65535); blank means absent |
-| `NOTIFY_API_KEY`                                                       | Relay bearer secret, at least 32 characters; required when `NOTIFY_API_PORT` is set              |
-| `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup                                       |
+| Key                                                                    | Requirement / default                                                                                   |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `TOKEN`, `CLIENT_ID`                                                   | Required Discord token and application ID                                                               |
+| `MONGO_URI`                                                            | Required for database-backed bots; optional for gopher                                                  |
+| `MONGO_RECOVERY_INTERVAL_MS`                                           | Recovery polling, default `60000`                                                                       |
+| `NODE_ENV`                                                             | `development` (default), `test`, or `production`                                                        |
+| `LOG_LEVEL`                                                            | `trace`, `debug`, `info` (default), `warn`, `error`, or `fatal`                                         |
+| `LOG_DIR`                                                              | File log root, default `logs`; empty disables file logs                                                 |
+| `LOG_RETENTION_DAYS`                                                   | Days of file logs to keep, default `60`; `0` keeps all                                                  |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY` | Keys for enabled providers; blank means absent                                                          |
+| `CWA_API_KEY`                                                          | Optional Nijika/Tomori key for [earthquake reports](#earthquake-alerts-and-reports); blank means absent |
+| `EARTHQUAKE_ALERT_PORT`                                                | Optional Nijika/Tomori [earthquake alert](#early-warning-api) port (1–65535); blank means absent        |
+| `EARTHQUAKE_ALERT_KEY`                                                 | Alert bearer secret, at least 32 characters; required when `EARTHQUAKE_ALERT_PORT` is set               |
+| `MONGO_INSPECT_URI`                                                    | Read-only account for nijika's [`/db`](#database-inspection); required once `db` is enabled             |
+| `NOTIFY_API_PORT`                                                      | Optional konata [notification relay](#notification-relay-api) port (1–65535); blank means absent        |
+| `NOTIFY_API_KEY`                                                       | Relay bearer secret, at least 32 characters; required when `NOTIFY_API_PORT` is set                     |
+| `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup                                              |
 
 ### Log retention
 
@@ -99,10 +99,10 @@ Per-server public language/time zone inherit `language`/`timeZone` until changed
 in the panel. Entertainment cooldowns and moderation-vote parameters live only in
 the per-guild database; see [editable preferences](tomori-settings.md).
 
-Optional `auto_reply.luckyReplies[].guildId` binds an entry to one guild. Tomori
-and Nijika withhold unbound entries; other personalities preserve unbound legacy behavior
-and honor an explicit binding. See the panel guide for seeding, permission policy,
-safe new-guild defaults, storage boundaries and the application control database.
+Automatic replies support keyword matching, random `[*]` replies, dice and special
+reactions. Per-user targeted replies are retired; remove `auto_reply.luckyReplies`
+from existing deployment configuration. See the panel guide for seeding, permission
+policy, safe new-guild defaults, storage boundaries and the application control database.
 
 ## Feature settings
 
@@ -119,13 +119,13 @@ Plugin settings are validated at startup; strict schemas reject unknown keys.
 | `llm_auto_reply`                | gopher         | Self-hosted endpoint, reply probability, context, cooldown and timeout                     |
 | `identity_sync`                 | gopher         | Avatar/nickname sync; requires `sourceUserId` when sync is enabled                         |
 | `social_link_preview`           | nijika, tomori | Disabled; provider/proxy lists and request limits                                          |
-| `social_feed`                   | nijika         | Disabled; enabled feeds require a nonempty `platforms` map (`x` supported)                 |
+| `social_feed`                   | nijika, tomori | Disabled; enabled feeds require a nonempty `platforms` map (`x` supported)                 |
 | `guild_events.attachment_cache` | nijika, tomori | Enabled; see attachment storage below                                                      |
 | `level_roles`                   | nijika         | `level_<n>` to role-ID map for `/role sync`; a non-ID value disables the command           |
 | `temp_role.maxActivePerMember`  | nijika, tomori | Active temporary roles per creator in a guild; default `3`, integer `1`–`50`               |
 | `bug_report.hub`                | nijika, tomori | Required for `/bug_report`: `guildId` and forum `channelId` receiving every ticket         |
 | `bug_report.tags`               | nijika, tomori | Optional forum tag names for `bug`, `suggestion`, `other`, `open`, `in_progress`, `closed` |
-| `auto_reply`                    | nijika, tomori | Per-user `luckyReplies`; `globalLuckyProbability` defaults to `0.005`                      |
+| `auto_reply`                    | nijika, tomori | Random `[*]` reply probability; `globalLuckyProbability` defaults to `0.005`               |
 | `random_restaurant.apiUrl`      | nijika, tomori | Absolute HTTP(S) recommendation endpoint                                                   |
 | `notificationRoutes`            | konata         | Named [notification relay](#notification-relay-api) destinations; default none             |
 
@@ -346,7 +346,11 @@ Discord accepts the complete message; send failures retry on the next pass.
 
 ### Earthquake alerts and reports
 
-Nijika posts two kinds of earthquake message to each guild's `earthquake` channel:
+Nijika and Tomori support two earthquake feeds. Nijika uses each guild's deployment
+`earthquake` channel/role. Tomori starts both feeds disabled, including on existing
+servers; managers opt in separately in [`/settings`](tomori-settings.md#earthquake-notifications),
+choose a shared destination channel and optionally choose an early-warning role.
+No role is required to deliver either feed; CWA reports always suppress mentions.
 
 | Message       | Trigger                                                                                             | Mentions                                                                       |
 | ------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -354,14 +358,16 @@ Nijika posts two kinds of earthquake message to each guild's `earthquake` channe
 | CWA report    | New Central Weather Administration significant earthquake report (`E-A0015-001`), polled every 60 s | None                                                                           |
 
 Both feeds are optional and independent. Without `EARTHQUAKE_ALERT_PORT` or
-`CWA_API_KEY`, nijika logs one startup line and leaves that feed off.
+`CWA_API_KEY`, the bot logs one startup line and leaves that feed off.
+Each process needs its own unused alert port and bearer key; configure the caller
+and reverse proxy for the selected bot. The panel cannot create an upstream source.
 
 #### Early-warning API
 
 ```text
 地牛Wake Up! (Windows) → earthquake-alert.cmd → earthquake-alert.ps1
   → https://<server>.<tailnet>.ts.net/earthquake/alerts  (tailnet-only HTTPS, tailscale serve)
-  → http://127.0.0.1:<EARTHQUAKE_ALERT_PORT>/alerts  (nijika)
+  → http://127.0.0.1:<EARTHQUAKE_ALERT_PORT>/alerts  (nijika or tomori)
 ```
 
 The API binds `127.0.0.1` only and is reached through `tailscale serve`, which strips
@@ -369,7 +375,7 @@ the `/earthquake` mount prefix. Set it up with the
 [operator steps](contributing/operations.md#earthquake-alerts); the Windows side is in
 [`tools/earthquake-alert/windows`](../tools/earthquake-alert/windows/README.md).
 
-The ping threshold is the optional `earthquake_alert` block of nijika's `config.json`:
+The ping threshold is the optional `earthquake_alert` block of either bot's `config.json`:
 
 ```json
 "earthquake_alert": { "ping_min_local_intensity": "4" }
@@ -534,14 +540,17 @@ See [data-command privacy](architecture.md#privacy-aware-data-commands).
 
 ## Attachment storage
 
-Guild-events caches non-bot attachments in `data/attachment_cache/` for 24 hours
+Nijika and Tomori guild-events cache non-bot guild-message attachments in
+`data/attachment_cache/` for 24 hours
 and moves deleted files to
 `data/deleted_attachments/<guildId>/<messageId>/<YYYY-MM-DD_HH-MM-SS>_<name>`,
 for example `data/deleted_attachments/123/456/2026-10-13_09-05-30_image.png`.
 The directory name is the `messageId` in the matching `message_delete` audit line;
 the stamp is the deletion time in the host's local timezone. Same-second duplicates
 get an ordinal (`..._image-2.png`); files are never overwritten. Cache retention
-does not expire the deleted-file archive. Disabling
+does not expire the deleted-file archive. Turning off event mirroring in `/settings`
+or restricting its permission rank does not stop local attachment storage. This is
+independent of msg-archive, which stores attachment metadata rather than files. Disabling
 `guild_events.attachment_cache.enabled` attempts downloads only on deletion,
 when the source may already be unavailable.
 

@@ -68,10 +68,10 @@ describe('deployment bot configuration preflight', () => {
     }
   });
 
-  it('checks the nijika earthquake_alert block before cutover', () => {
+  it.each(['nijika', 'tomori'])('checks the %s earthquake_alert block before cutover', (bot) => {
     for (const block of [undefined, {}, { ping_min_local_intensity: '5-' }]) {
       expect(() =>
-        validateBotSettings('nijika', JSON.stringify({ earthquake_alert: block })),
+        validateBotSettings(bot, JSON.stringify({ earthquake_alert: block })),
       ).not.toThrow();
     }
     for (const block of [
@@ -80,9 +80,9 @@ describe('deployment bot configuration preflight', () => {
       { ping_min_local_intensity: '5' },
       { ping_min_local_intensity: '4', ping_role: 'x' },
     ]) {
-      expect(() =>
-        validateBotSettings('nijika', JSON.stringify({ earthquake_alert: block })),
-      ).toThrow('check earthquake_alert');
+      expect(() => validateBotSettings(bot, JSON.stringify({ earthquake_alert: block }))).toThrow(
+        'check earthquake_alert',
+      );
     }
   });
 });

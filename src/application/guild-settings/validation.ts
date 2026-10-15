@@ -39,7 +39,16 @@ export const validateSettings = (
       settings.socialPreview.maxUrlsPerMessage !== previous?.socialPreview.maxUrlsPerMessage) ||
     (actor &&
       (settings.access.roleIds.includes(actor.guildId) ||
-        settings.moderationVote.voterRoleIds.includes(actor.guildId)))
+        settings.moderationVote.voterRoleIds.includes(actor.guildId) ||
+        settings.earthquake.roleId === actor.guildId)) ||
+    (['alerts', 'reports'] as const).some((kind) => {
+      const key = kind === 'alerts' ? 'alertsEnabled' : 'reportsEnabled';
+      return (
+        settings.earthquake[key] && !capabilities.earthquake?.[kind] && !previous?.earthquake[key]
+      );
+    }) ||
+    ((settings.earthquake.alertsEnabled || settings.earthquake.reportsEnabled) &&
+      settings.earthquake.channelId === null)
   ) {
     throw new GuildSettingsError('invalid', 'Settings exceed deployment capabilities');
   }

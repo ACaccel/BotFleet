@@ -43,7 +43,10 @@ const currentMember = async (guild: Guild, userId: string): Promise<GuildMember>
 };
 
 /** The guild panel can tighten availability, never load a missing plugin. */
-const capabilitiesOf = (config: SettingsConfig): OperatorCapabilities => {
+const capabilitiesOf = (
+  config: SettingsConfig,
+  options: Pick<OperatorCapabilities, 'earthquake'>,
+): OperatorCapabilities => {
   const limits = operatorSchema.parse(config.guild_settings ?? {});
   const social = parseSocialLinkPreviewConfig(config.social_link_preview);
   const commands = new Set(config.commands ?? []);
@@ -71,6 +74,7 @@ const capabilitiesOf = (config: SettingsConfig): OperatorCapabilities => {
     features,
     socialProviders: social.providers ?? LINK_PREVIEW_PROVIDER_NAMES,
     maxPreviewUrls: social.maxUrlsPerMessage,
+    ...options,
     ...limits,
   };
 };
@@ -98,15 +102,30 @@ const validateResources = async (
   );
   const botMember = guild.members.me ?? (await guild.members.fetchMe());
   const channels = new Set<string>();
+  const earthquakeChanged = [...paths].some((path) => path.startsWith('earthquake.'));
+  const earthquakeActive = settings.earthquake.alertsEnabled || settings.earthquake.reportsEnabled;
+  if (earthquakeChanged && earthquakeActive && settings.earthquake.channelId === null)
+    throw new GuildSettingsError('invalid', 'Earthquake notifications require a destination');
   for (const feature of FEATURES) {
     for (const key of ['channelIds', 'excludedChannelIds'] as const) {
       if (paths.has(`features.${feature}.${key}`))
         settings.features[feature][key].forEach((id) => channels.add(id));
     }
   }
-  for (const slot of ['debug', 'event', 'giveaway'] as const) {
-    const id = settings.channels[slot];
-    if (!paths.has(`channels.${slot}`) || id === null) continue;
+  const destinations: [string, string | null, boolean][] = [
+    ...(['debug', 'event', 'giveaway'] as const).map((slot): [string, string | null, boolean] => [
+      `channels.${slot}`,
+      settings.channels[slot],
+      paths.has(`channels.${slot}`),
+    ]),
+    [
+      'earthquake.channelId',
+      settings.earthquake.channelId,
+      paths.has('earthquake.channelId') || (earthquakeChanged && earthquakeActive),
+    ],
+  ];
+  for (const [, id, changed] of destinations) {
+    if (!changed || id === null) continue;
     channels.add(id);
     const channel = await guild.channels.fetch(id, { force: true });
     if (
@@ -135,8 +154,13 @@ const validateResources = async (
   for (const [path, roleIds] of [
     ['access.roleIds', settings.access.roleIds],
     ['moderationVote.voterRoleIds', settings.moderationVote.voterRoleIds],
+    ['earthquake.roleId', settings.earthquake.roleId ? [settings.earthquake.roleId] : []],
   ] as const) {
-    if (!paths.has(path)) continue;
+    if (
+      !paths.has(path) &&
+      !(path === 'earthquake.roleId' && earthquakeChanged && earthquakeActive)
+    )
+      continue;
     for (const id of roleIds) {
       const role = await guild.roles.fetch(id, { force: true });
       if (!role || role.guild.id !== guild.id || id === guild.id)
@@ -145,8 +169,12 @@ const validateResources = async (
   }
 };
 
-export const createGuildSettings = (bot: BaseBot, config: SettingsConfig): GuildSettingsService => {
-  const capabilities = capabilitiesOf(config);
+export const createGuildSettings = (
+  bot: BaseBot,
+  config: SettingsConfig,
+  options: Pick<OperatorCapabilities, 'earthquake'> = {},
+): GuildSettingsService => {
+  const capabilities = capabilitiesOf(config, options);
   const auto = parseAutoReplyConfig(config.auto_reply);
   const social = parseSocialLinkPreviewConfig(config.social_link_preview);
   return new GuildSettingsService({

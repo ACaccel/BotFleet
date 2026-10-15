@@ -144,14 +144,6 @@
     }
   },
   "auto_reply": {
-    "luckyReplies": [
-      {
-        "userId": "YOUR_LUCKY_REPLY_USER_ID",
-        "probability": 0.01,
-        "reply": "YOUR_LUCKY_REPLY_TEXT",
-        "guildId": "YOUR_GUILD_ID"
-      }
-    ],
     "globalLuckyProbability": 0.005
   },
   "random_restaurant": {

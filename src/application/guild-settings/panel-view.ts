@@ -29,6 +29,7 @@ export type PanelCategory =
   | 'social'
   | 'entertainment'
   | 'moderation'
+  | 'earthquake'
   | 'status'
   | 'history';
 export type PanelTranslate = (key: string, params?: Record<string, string | number>) => string;
@@ -54,10 +55,12 @@ export const panelCategories = (
   actor: GuildSettingsActor,
   session: GuildSettingsSession,
   committed = session.base,
+  capabilities?: OperatorCapabilities,
 ): PanelCategory[] => {
   const categories: PanelCategory[] = actor.manager
     ? ['general', 'access', 'features', 'channels', 'moderation']
     : ['features'];
+  if (actor.manager && capabilities?.earthquake) categories.push('earthquake');
   if (canEditPanelPath(actor, committed, 'autoReply.probability')) categories.push('auto_reply');
   if (canEditPanelPath(actor, committed, 'socialPreview.videoEnabled')) categories.push('social');
   if (canEditPanelPath(actor, committed, 'entertainment.gay.enabled'))
@@ -92,7 +95,8 @@ export const renderSettingsPanel = (
   availableRoleIds?: ReadonlySet<string>,
   entertainmentCommand: EntertainmentCommand = 'gay',
 ): MessageEditOptions => {
-  if (!panelCategories(actor, session, committed).includes(category)) category = 'features';
+  if (!panelCategories(actor, session, committed, capabilities).includes(category))
+    category = 'features';
   const editableFeatures = FEATURES.filter((value) =>
     canEditPanelPath(actor, committed, `features.${value}.enabled`),
   );
@@ -115,7 +119,7 @@ export const renderSettingsPanel = (
         .setCustomId(panelId(session.id, 'category'))
         .setPlaceholder(t('category_placeholder'))
         .addOptions(
-          panelCategories(actor, session, committed).map((value) => ({
+          panelCategories(actor, session, committed, capabilities).map((value) => ({
             label: t(`category.${value}`),
             value,
             default: value === category,
@@ -245,6 +249,41 @@ export const renderSettingsPanel = (
         button(session, 'edit', t('button.edit'), `entertainment_${entertainmentCommand}`),
       ),
     );
+  } else if (category === 'earthquake') {
+    const setting = session.draft.earthquake;
+    embed.addFields(
+      ...(['alertsEnabled', 'reportsEnabled'] as const).map((key) => ({
+        name: t(`parameter.${key}`),
+        value: t(setting[key] ? 'enabled' : 'disabled'),
+      })),
+      {
+        name: t('parameter.earthquakeChannelId'),
+        value: !setting.channelId
+          ? t('not_set')
+          : (visibleChannelIds?.has(setting.channelId) ?? true)
+            ? `<#${setting.channelId}>`
+            : t('hidden_resource'),
+      },
+      {
+        name: t('parameter.earthquakeRoleId'),
+        value: !setting.roleId
+          ? t('not_set')
+          : (availableRoleIds?.has(setting.roleId) ?? true)
+            ? `<@&${setting.roleId}>`
+            : t('hidden_resource'),
+      },
+      {
+        name: t('category.status'),
+        value: [
+          t('earthquake_notice'),
+          !capabilities.earthquake?.alerts ? t('earthquake_alerts_unavailable') : '',
+          !capabilities.earthquake?.reports ? t('earthquake_reports_unavailable') : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      },
+    );
+    edit('earthquake');
   } else if (category === 'moderation') {
     const setting = session.draft.moderationVote;
     embed.addFields(

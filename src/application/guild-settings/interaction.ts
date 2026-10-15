@@ -165,8 +165,12 @@ const resourceStatus = (
   const member = interaction.guild.members.me;
   if (!snapshot) return undefined;
   const t = panelTranslate(host.translator, interaction.locale);
+  const destinations = Object.entries(snapshot.settings.channels);
+  const earthquake = snapshot.settings.earthquake;
+  if ((earthquake.alertsEnabled || earthquake.reportsEnabled) && earthquake.channelId)
+    destinations.push(['earthquake', earthquake.channelId]);
   return (
-    Object.entries(snapshot.settings.channels)
+    destinations
       .filter(([, id]) => id !== null)
       .map(([name, id]) => {
         const channel = id ? interaction.guild?.channels.cache.get(id) : undefined;
@@ -183,7 +187,13 @@ const resourceStatus = (
               PermissionFlagsBits.SendMessages,
               PermissionFlagsBits.EmbedLinks,
             ]);
-        return valid ? '' : t('destination_unavailable', { destination: t(`destination.${name}`) });
+        return valid
+          ? ''
+          : t('destination_unavailable', {
+              destination: t(
+                name === 'earthquake' ? 'parameter.earthquakeChannelId' : `destination.${name}`,
+              ),
+            });
       })
       .filter(Boolean)
       .join('\n') || undefined
@@ -245,6 +255,7 @@ const pathForContext = (context: PanelModalContext): string =>
             auto_reply: 'autoReply.probability',
             social: 'socialPreview.videoEnabled',
             moderation: 'moderationVote.threshold',
+            earthquake: 'earthquake.alertsEnabled',
           } as Record<string, string>
         )[context] ?? '');
 const separateAccess = (
@@ -316,9 +327,12 @@ export const handleSettingsInteraction = async (
     const draft = cloneSettings(session.draft);
     if (['save', 'discard', 'reload', 'preview'].includes(id.action) && interaction.isButton()) {
       category =
-        panelCategories(actor, session, service.get(actor.guildId)?.settings).find(
-          (value) => value === id.detail,
-        ) ?? 'features';
+        panelCategories(
+          actor,
+          session,
+          service.get(actor.guildId)?.settings,
+          service.capabilities,
+        ).find((value) => value === id.detail) ?? 'features';
       if (id.action === 'save') {
         await service.save(session.id, actor);
         session = await service.getSession(session.id, actor);
@@ -341,9 +355,12 @@ export const handleSettingsInteraction = async (
           },
         );
     } else if (interaction.isStringSelectMenu() && id.action === 'category') {
-      const selected = panelCategories(actor, session, service.get(actor.guildId)?.settings).find(
-        (value) => value === interaction.values[0],
-      );
+      const selected = panelCategories(
+        actor,
+        session,
+        service.get(actor.guildId)?.settings,
+        service.capabilities,
+      ).find((value) => value === interaction.values[0]);
       if (!selected) throw new GuildSettingsError('forbidden');
       if (selected === 'access' && separateAccess(session, 'access')) notice = t('access_separate');
       else if (
@@ -424,6 +441,20 @@ export const handleSettingsInteraction = async (
                 true,
               )
             )[0] ?? null;
+      } else if (context === 'earthquake') {
+        draft.earthquake.channelId =
+          (
+            await channelIds(
+              interaction,
+              draft.earthquake.channelId ? [draft.earthquake.channelId] : [],
+              true,
+            )
+          )[0] ?? null;
+        await validateRoles(
+          interaction,
+          draft.earthquake.roleId ? [draft.earthquake.roleId] : [],
+          false,
+        );
       } else if (context === 'access') await validateRoles(interaction, draft.access.roleIds, true);
       else if (context === 'moderation')
         await validateRoles(interaction, draft.moderationVote.voterRoleIds, false);

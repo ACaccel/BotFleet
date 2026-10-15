@@ -44,8 +44,9 @@ them. Access changes require a separate save from preference changes.
 | Access            | Form for audience, editor roles and delegated categories; managers only                                                    |
 | Features          | Inline master switches; a scope form selects all/selected channels and exclusions                                          |
 | Channels          | One form for command-log, event-mirror and default giveaway destinations; managers only                                    |
-| Automatic replies | Keyword, targeted lucky, random, dice and reaction switches; random percentage and cooldown seconds                        |
+| Automatic replies | Keyword, random, dice and reaction switches; random percentage and cooldown seconds                                        |
 | Social previews   | Allowed provider subset, video download opt-out, original embed strategy; managers also control deletion and preview count |
+| Earthquake        | Tomori only: separate warning/report switches, shared destination and optional warning role; managers only                 |
 | Status            | Effective capabilities, missing destination permissions and storage notice                                                 |
 | History           | Recent configuration revisions and changed field names, filtered by editing authority                                      |
 
@@ -97,8 +98,8 @@ scope as well as the invoking channel scope.
 Automatic-reply cooldowns are per server/channel, reserved before the first
 matching send, and protect concurrent events. Unmatched messages consume no
 cooldown; attempted sends that fail still consume one. State resets on restart.
-Targeted operator lucky replies require an explicit `guildId` on Tomori and Nijika; unbound
-entries are withheld. Other personalities retain their existing behavior.
+Targeted member replies are retired; stored `autoReply.lucky` preferences are
+removed when read. Random replies still use the server's stored `[*]` entries.
 
 Social providers and preview counts cannot exceed deployment capabilities.
 Disabling videos skips download/attachment work while preserving static preview
@@ -160,8 +161,8 @@ Votes and their scheduled judgements remain in memory and do not survive restart
 
 At first startup, persist a fixed inventory of already joined servers. These
 servers receive a one-time seed of their current feature behavior and static
-channel maps; targeted lucky replies still require guild binding. Later joins
-receive safe defaults: interactive features are available, while automatic
+channel maps. Later joins receive safe defaults: interactive features are
+available, while automatic
 replies, social previews, event mirroring, command logs and moderation votes
 start off. Destinations are unset and editing is manager-only. New automatic
 reply preferences start at 0.5% with a five-second cooldown, subject to operator
@@ -210,18 +211,41 @@ attachment caching/archiving or message-archive collection. The panel reports
 this distinction and never deletes historical data. Operator-only settings
 remain in deployment configuration: secrets, external endpoints/proxies, global
 identity, bug-report hub, storage retention and hard resource limits. Neither bot
-composes AI chat; this panel cannot enable it. Nijika's social-feed subscriptions
-remain managed by `/feed`; earthquake destinations/roles and level-role sync
-remain deployment-controlled. These features have no switches in this panel.
+composes AI chat; this panel cannot enable it. Both bots' social-feed subscriptions
+remain managed by `/feed`. Nijika's earthquake destinations/roles and level-role
+sync remain deployment-controlled; Tomori earthquake delivery uses the panel.
 Social-feed and earthquake background posts use deployment language rather than
 the panel's per-server language preference.
+
+## Earthquake notifications
+
+Tomori managers open **Earthquake notifications** and **Edit parameters** to choose
+separate early-warning and CWA-report switches, a shared text/announcement channel,
+and an optional role. Save the draft to apply changes. Both switches default off
+for existing and new servers. Enabling either feed requires a destination; clearing
+the role is valid and preserves delivery without mentions. Only warnings reaching
+the deployment intensity threshold mention the selected role. CWA reports never
+mention anyone.
+
+Unavailable sources cannot be enabled: the operator must configure Tomori's
+`EARTHQUAKE_ALERT_PORT`/`EARTHQUAKE_ALERT_KEY` and caller/proxy route for warnings,
+and `CWA_API_KEY` for reports. Each bot process needs a separate unused alert port.
+Settings are server-scoped and manager-only, including when other categories are
+delegated. Source capability removal suppresses delivery without discarding saved
+preferences. Missing settings or invalid destination permissions stop delivery;
+there is no fallback to deployment channel maps. Updates recheck current settings,
+so disabling a feed or changing its channel/role affects subsequent deliveries.
+Nijika retains its deployment-controlled earthquake routing.
+
+Version 4 adds the disabled earthquake section and removes the retired targeted
+reply flag without changing existing settings revisions or audit history.
 
 ## Planned extensions
 
 Tracked next-stage work for this feature:
 
 - Optional setup wizard and activity/giveaway/temporary-role defaults.
-- Guild-bound lucky-reply content editing and narrower feature-use role policies.
+- Narrower feature-use role policies.
 - Dynamic privacy-rank editing and true per-guild collection/retention controls.
 - Cross-process snapshot invalidation before supporting multiple replicas.
 

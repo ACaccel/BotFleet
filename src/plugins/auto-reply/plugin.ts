@@ -6,9 +6,7 @@
  *   - Hard-coded reaction to the "肥貓晚安" line (fires even for bots).
  *   - DB-backed reply lookup via `ReplyRepo.findByInput`; random pick
  *     when multiple replies match the same input.
- *   - Per-user lucky replies from the operator's `auto_reply` config
- *     block (see `./config.ts`), and a global lucky "[*]" reply at the
- *     configured probability.
+ *   - Random DB-backed "[*]" replies at the configured probability.
  *   - `長髮男` regex reply.
  *   - `<count>d<sides>` dice expression with 0 < count < 100 and
  *     0 < sides < 2^30 bounds.
@@ -182,33 +180,14 @@ export const createAutoReplyPlugin = (
               );
             }
 
-            for (const lucky of config.luckyReplies) {
-              if (settings !== undefined && lucky.guildId !== guildId) continue;
-              if (
-                (preferences?.lucky ?? true) &&
-                message.author.id === lucky.userId &&
-                Math.random() < lucky.probability
-              ) {
-                // Operator-supplied text goes out verbatim, so mentions are
-                // disabled: a stray `@everyone` in config.json would
-                // otherwise become a ping.
-                await send(() =>
-                  message.channel.send({
-                    content: lucky.reply,
-                    allowedMentions: { parse: [] },
-                  }),
-                );
-              }
-            }
-
             if (
               (preferences?.random ?? true) &&
               Math.random() < (preferences?.probability ?? config.globalLuckyProbability)
             ) {
-              const lucky = await safeLookup(registry, guildId, '[*]', logger, 'lucky');
-              if (lucky !== null) {
+              const randomReply = await safeLookup(registry, guildId, '[*]', logger, 'random');
+              if (randomReply !== null) {
                 await send(() =>
-                  message.channel.send({ content: lucky, allowedMentions: { parse: [] } }),
+                  message.channel.send({ content: randomReply, allowedMentions: { parse: [] } }),
                 );
               }
             }

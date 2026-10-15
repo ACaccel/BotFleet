@@ -8,7 +8,7 @@
  *   - the CWA significant earthquake report, polled from the open-data
  *     API once a minute and posted as an embed that pings nobody.
  *
- * Assembled only by `nijika`. Each feed is optional: without an alert port
+ * Assembled by Nijika and Tomori. Each feed is optional: without an alert port
  * the API stays off, and without a CWA key the poller does. `start` binds
  * the server, so a taken port fails startup; requests that arrive before
  * the Discord client is ready are answered with 503. `onReady` starts the
@@ -25,6 +25,7 @@ import { EARTHQUAKE_ALERT_KEY_MIN_LENGTH } from '../../core/config';
 import { closeServerBounded, createBearerCheck } from '../../core/http';
 import { logError, logSystem } from '../../core/logger';
 import type { Plugin } from '../../core/plugin';
+import type { GuildSettingsRuntime } from '../../core/guild-settings';
 import {
   broadcastEarthquakeReport,
   buildAlertApp,
@@ -59,6 +60,8 @@ interface EarthquakePluginConfig {
 
 /** Optional collaborators for tests. */
 interface EarthquakePluginDeps {
+  /** Tomori's persisted opt-in destinations; omitted for Nijika's static routing. */
+  readonly settings?: GuildSettingsRuntime | undefined;
   /** Replaces the CWA HTTP fetch; receives the configured key. */
   readonly fetchReports?: (apiKey: string) => Promise<ParsedReports>;
 }
@@ -102,6 +105,7 @@ export const createEarthquakePlugin = (
         clock: ctx.clock,
         logger: ctx.logger,
         pingThreshold: alertSettings.pingMinLocalIntensity,
+        settings: deps.settings,
       });
       const app = buildAlertApp({
         isAuthorized: createBearerCheck(alertKey),
@@ -135,7 +139,14 @@ export const createEarthquakePlugin = (
       const poller = createReportPoller({
         fetchReports: () => fetchReports(cwaApiKey),
         publish: (report) =>
-          broadcastEarthquakeReport(client, registry, report, ctx.translator, ctx.logger),
+          broadcastEarthquakeReport(
+            client,
+            registry,
+            report,
+            ctx.translator,
+            ctx.logger,
+            deps.settings,
+          ),
         logger: ctx.logger,
       });
       reportPolling = startReportPolling(poller, REPORT_POLL_INTERVAL_MS, ctx.logger);

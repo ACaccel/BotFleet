@@ -45,10 +45,15 @@ export type PanelModalContext =
   | 'auto_reply'
   | 'social'
   | 'moderation'
+  | 'earthquake'
   | `scope_${GuildFeature}`
   | `entertainment_${EntertainmentCommand}`;
 export const parseModalContext = (value: string): PanelModalContext | undefined => {
-  if (['access', 'channels', 'general', 'auto_reply', 'social', 'moderation'].includes(value))
+  if (
+    ['access', 'channels', 'general', 'auto_reply', 'social', 'moderation', 'earthquake'].includes(
+      value,
+    )
+  )
     return value as PanelModalContext;
   if (
     FEATURES.some((feature) => value === `scope_${feature}`) ||
@@ -125,12 +130,13 @@ const roles = (
   label: string,
   values: readonly string[],
   resources: PanelModalResources,
+  maximum = 25,
 ): LabelBuilder =>
   new LabelBuilder().setLabel(label).setRoleSelectMenuComponent(
     new RoleSelectMenuBuilder()
       .setCustomId(id)
       .setMinValues(0)
-      .setMaxValues(25)
+      .setMaxValues(maximum)
       .setRequired(false)
       .setDefaultRoles(values.filter((value) => resources.availableRoleIds?.has(value) ?? true)),
   );
@@ -153,7 +159,39 @@ export const buildPanelModal = (
         : context;
   let title = t(`modal_${modalType}`);
   const setting = session.draft;
-  if (context === 'auto_reply') {
+  if (context === 'earthquake') {
+    if (!manager || !capabilities.earthquake) throw new GuildSettingsError('forbidden');
+    for (const kind of ['alerts', 'reports'] as const) {
+      const key = kind === 'alerts' ? 'alertsEnabled' : 'reportsEnabled';
+      labels.push(
+        select(
+          kind,
+          t(`parameter.${key}`),
+          (capabilities.earthquake[kind] ? ['on', 'off'] : ['off']).map((value) => ({
+            label: t(value === 'on' ? 'enabled' : 'disabled'),
+            value,
+            default: (value === 'on') === setting.earthquake[key],
+          })),
+        ),
+      );
+    }
+    labels.push(
+      channels(
+        'earthquake_channel',
+        t('parameter.earthquakeChannelId'),
+        setting.earthquake.channelId ? [setting.earthquake.channelId] : [],
+        resources,
+        true,
+      ),
+      roles(
+        'earthquake_role',
+        t('parameter.earthquakeRoleId'),
+        setting.earthquake.roleId ? [setting.earthquake.roleId] : [],
+        resources,
+        1,
+      ),
+    );
+  } else if (context === 'auto_reply') {
     title = t('modal_auto');
     labels.push(
       text(
@@ -165,7 +203,7 @@ export const buildPanelModal = (
       select(
         'behaviors',
         t('behaviors'),
-        (['keywords', 'lucky', 'random', 'dice', 'reactions'] as const).map((value) => ({
+        (['keywords', 'random', 'dice', 'reactions'] as const).map((value) => ({
           label: t(`behavior.${value}`),
           value,
           default: setting.autoReply[value],
@@ -353,18 +391,32 @@ export const applyPanelModal = (
   manager: boolean,
   capabilities: OperatorCapabilities,
 ): void => {
-  if (['access', 'channels', 'general', 'moderation'].includes(context) && !manager)
+  if (['access', 'channels', 'general', 'moderation', 'earthquake'].includes(context) && !manager)
     throw new GuildSettingsError('forbidden');
-  if (context === 'auto_reply') {
+  if (context === 'earthquake') {
+    if (!capabilities.earthquake) throw new GuildSettingsError('forbidden');
+    for (const kind of ['alerts', 'reports'] as const) {
+      const key = kind === 'alerts' ? 'alertsEnabled' : 'reportsEnabled';
+      draft.earthquake[key] =
+        choice(interaction, kind, capabilities.earthquake[kind] ? ['on', 'off'] : ['off']) === 'on';
+    }
+    const channelIds = modalResourceValues(
+      interaction,
+      'earthquake_channel',
+      ComponentType.ChannelSelect,
+    );
+    const roleIds = modalResourceValues(interaction, 'earthquake_role', ComponentType.RoleSelect);
+    if (channelIds.length > 1 || roleIds.length > 1) throw new GuildSettingsError('invalid');
+    draft.earthquake.channelId = channelIds[0] ?? null;
+    draft.earthquake.roleId = roleIds[0] ?? null;
+  } else if (context === 'auto_reply') {
     draft.autoReply.probability =
       numeric(interaction.fields.getTextInputValue('probability')) / 100;
     draft.autoReply.cooldownSeconds = numeric(interaction.fields.getTextInputValue('cooldown'));
     const values = interaction.fields.getStringSelectValues('behaviors');
-    if (
-      values.some((value) => !['keywords', 'lucky', 'random', 'dice', 'reactions'].includes(value))
-    )
+    if (values.some((value) => !['keywords', 'random', 'dice', 'reactions'].includes(value)))
       throw new GuildSettingsError('invalid');
-    for (const key of ['keywords', 'lucky', 'random', 'dice', 'reactions'] as const)
+    for (const key of ['keywords', 'random', 'dice', 'reactions'] as const)
       draft.autoReply[key] = values.includes(key);
   } else if (context === 'social') {
     draft.socialPreview.videoEnabled = choice(interaction, 'video', ['on', 'off']) === 'on';

@@ -10,11 +10,17 @@ import {
   createAutoReplyPlugin,
   createActivityPlugin,
   createBugReportPlugin,
+  createEarthquakePlugin,
   createGiveawayPlugin,
   createGuildEventsPlugin,
+  createSocialFeedPlugin,
   createSocialLinkPreviewPlugin,
   createTempRolePlugin,
 } from '@plugins';
+import {
+  createDefaultFeedPlatformRegistry,
+  parseFeedPlatformsConfig,
+} from '../../infra/social-feed';
 
 // Public guild preferences supplement the operator's capabilities and static
 // permission ranks.
@@ -41,6 +47,16 @@ interface TomoriConfig extends Config {
   guild_events?: unknown;
   /** Raw `bug_report` block; validated by `/bug_report` and its plugin. */
   bug_report?: unknown;
+  /** Operator-controlled feed platforms and polling limits. */
+  social_feed?: unknown;
+  /** Operator-controlled early-warning ping threshold. */
+  earthquake_alert?: unknown;
+}
+
+interface EarthquakeSettings {
+  readonly alertPort?: number | undefined;
+  readonly alertKey?: string | undefined;
+  readonly cwaApiKey?: string | undefined;
 }
 
 export class Tomori extends BaseBot<TomoriConfig> {
@@ -50,12 +66,20 @@ export class Tomori extends BaseBot<TomoriConfig> {
     mongoURI: string,
     clientId: string,
     config: TomoriConfig,
+    earthquake: EarthquakeSettings = {},
   ) {
     super(client, token, mongoURI, clientId, {
       ...config,
       commands: commandsForBot('tomori', config.commands),
     });
-    this.container.registerSingleton(TOKENS.GuildSettings, () => createGuildSettings(this, config));
+    this.container.registerSingleton(TOKENS.GuildSettings, () =>
+      createGuildSettings(this, config, {
+        earthquake: {
+          alerts: earthquake.alertPort !== undefined,
+          reports: earthquake.cwaApiKey !== undefined,
+        },
+      }),
+    );
     // Intro paragraph rendered at the top of the `/help` embed; the
     // key is resolved once the translator is loaded (see BaseBot.run).
     this.helpMessageKey = 'replies:tomori.help_message';
@@ -91,6 +115,17 @@ export class Tomori extends BaseBot<TomoriConfig> {
         isAdmin: (userId) => this.isAdmin(userId),
         label: () => this.personaName || (this.client.user?.username ?? this.clientId),
       }),
+    );
+    const platforms = createDefaultFeedPlatformRegistry(
+      parseFeedPlatformsConfig(this.config.social_feed),
+    );
+    this.container.registerSingleton(TOKENS.FeedPlatformRegistry, () => platforms);
+    this.use(createSocialFeedPlugin(this.config.social_feed, { platforms }));
+    this.use(
+      createEarthquakePlugin(
+        { ...earthquake, alertConfig: this.config.earthquake_alert },
+        { settings: this.guildSettings },
+      ),
     );
     this.registerPresence();
     this.client.on(Events.GuildDelete, (guild) => this.invalidateGuildRuntime(guild.id));

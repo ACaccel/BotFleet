@@ -71,7 +71,8 @@
     "roll_call",
     "talk",
     "thread",
-    "traffic"
+    "traffic",
+    "feed"
   ],
   "guild_events": {
     "attachment_cache": {
@@ -120,14 +121,6 @@
     ]
   },
   "auto_reply": {
-    "luckyReplies": [
-      {
-        "userId": "YOUR_LUCKY_REPLY_USER_ID",
-        "probability": 0.01,
-        "reply": "YOUR_LUCKY_REPLY_TEXT",
-        "guildId": "YOUR_GUILD_ID"
-      }
-    ],
     "globalLuckyProbability": 0.005
   },
   "random_restaurant": {
@@ -135,5 +128,21 @@
   },
   "temp_role": {
     "maxActivePerMember": 3
+  },
+  "social_feed": {
+    "enabled": true,
+    "pollIntervalMs": 300000,
+    "fullSweepEveryPolls": 12,
+    "maxPostsPerPoll": 5,
+    "platforms": {
+      "x": {
+        "apiBaseUrl": "https://api.fxtwitter.com",
+        "timeoutMs": 8000,
+        "embedProxyHost": "fxtwitter.com"
+      }
+    }
+  },
+  "earthquake_alert": {
+    "ping_min_local_intensity": "4"
   }
 }

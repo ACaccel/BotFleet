@@ -1170,7 +1170,8 @@
       "history": "變更歷史",
       "general": "一般設定",
       "entertainment": "娛樂功能",
-      "moderation": "投票禁言"
+      "moderation": "投票禁言",
+      "earthquake": "地震通知"
     },
     "button": {
       "save": "儲存",
@@ -1236,7 +1237,6 @@
     "behaviors": "回覆行為",
     "behavior": {
       "keywords": "關鍵字回覆",
-      "lucky": "指定成員回覆",
       "random": "隨機回覆",
       "dice": "骰子",
       "reactions": "特殊反應"
@@ -1313,7 +1313,6 @@
     "configured": "已設定",
     "parameter": {
       "keywords": "關鍵字回覆",
-      "lucky": "指定成員回覆",
       "random": "隨機回覆",
       "dice": "骰子",
       "reactions": "特殊反應",
@@ -1328,7 +1327,11 @@
       "threshold": "通過票數",
       "voteWindowSeconds": "投票時間（秒）",
       "durationMinutes": "預設禁言時間（分鐘）",
-      "voterRoleIds": "可投票的身分組"
+      "voterRoleIds": "可投票的身分組",
+      "alertsEnabled": "地震即時速報",
+      "reportsEnabled": "CWA 地震報告",
+      "earthquakeChannelId": "通知頻道",
+      "earthquakeRoleId": "速報通知身分組（選填）"
     },
     "destination_unavailable": "{{destination}}：頻道不存在或機器人權限不足。",
     "hidden_resource": "隱藏或無法使用的資源",
@@ -1364,6 +1367,10 @@
       "menu_get_avatar": "取得頭像",
       "menu_get_sticker": "取得貼圖",
       "menu_give_score": "訊息評分"
-    }
+    },
+    "modal_earthquake": "編輯地震通知",
+    "earthquake_notice": "兩種通知預設關閉，開啟時必須指定頻道。身分組可留空；只有即時速報達設定震度門檻時才標記，CWA 報告不標記任何人。",
+    "earthquake_alerts_unavailable": "即時速報尚未提供，請聯絡操作者設定速報來源。",
+    "earthquake_reports_unavailable": "CWA 報告尚未提供，請聯絡操作者設定 CWA API key。"
   }
 }

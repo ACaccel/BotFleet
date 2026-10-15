@@ -21,6 +21,8 @@ import type { GuildRegistry } from '../../../bot/guild-registry';
 import type { Translator } from '../../../core/i18n';
 import { logError, type Logger } from '../../../core/logger';
 import type { Clock } from '../../../core/time';
+import type { GuildSettingsRuntime } from '../../../core/guild-settings';
+import { resolveEarthquakeDestination } from './destination';
 import {
   isPingWorthy,
   renderAlertContent,
@@ -28,9 +30,6 @@ import {
   renderUpgradeContent,
 } from './alert-message';
 import type { EarthquakeAlert, Intensity } from './alert-request';
-
-/** Symbolic channel / role name looked up via the guild registry. */
-const EARTHQUAKE = 'earthquake';
 
 /** Longest gap between two alerts of one quake. */
 export const EVENT_WINDOW_MS = 3 * 60_000;
@@ -56,6 +55,7 @@ export const distanceKm = (
 
 /** One guild's alert message within an event. */
 interface GuildAlert {
+  readonly channelId: string;
   readonly message: Pick<Message, 'edit' | 'reply'>;
   /** The role mentioned in the message text, kept on edits so the text stays stable. */
   readonly mentionRoleId: string | undefined;
@@ -89,6 +89,7 @@ export interface AlertDispatcherDeps {
   readonly logger: Logger;
   /** Lowest local intensity that pings the guild's `earthquake` role. */
   readonly pingThreshold: Intensity;
+  readonly settings?: GuildSettingsRuntime | undefined;
 }
 
 export interface AlertDispatcher {
@@ -133,24 +134,44 @@ export const createAlertDispatcher = (deps: AlertDispatcherDeps): AlertDispatche
     let pinged = false;
 
     const deliverTo = async (guildId: string): Promise<void> => {
-      const channel = registry.getChannel(guildId, EARTHQUAKE);
-      if (channel === undefined || !channel.isSendable()) return;
-      const roleId = registry.getRole(guildId, EARTHQUAKE)?.id;
-      const existing = event.guilds.get(guildId);
+      const destination = await resolveEarthquakeDestination(
+        client,
+        registry,
+        guildId,
+        'alerts',
+        deps.settings,
+      );
+      if (!destination) return;
+      const { channel, roleId } = destination;
+      const previous = event.guilds.get(guildId);
+      const existing = previous?.channelId === channel.id ? previous : undefined;
       if (existing !== undefined) {
         try {
           await existing.message.edit({
-            content: renderAlertContent(alert, translator, existing.mentionRoleId),
+            content: renderAlertContent(
+              alert,
+              translator,
+              existing.mentionRoleId === roleId ? roleId : undefined,
+            ),
             embeds: [embed],
             allowedMentions: { parse: [] },
           });
           delivered += 1;
           if (pingNow && roleId !== undefined) {
-            await existing.message.reply({
-              content: renderUpgradeContent(alert, translator, roleId),
-              allowedMentions: { roles: [roleId], repliedUser: false },
-            });
-            pinged = true;
+            const latest = await resolveEarthquakeDestination(
+              client,
+              registry,
+              guildId,
+              'alerts',
+              deps.settings,
+            );
+            if (latest?.channel.id === channel.id && latest.roleId === roleId) {
+              await existing.message.reply({
+                content: renderUpgradeContent(alert, translator, roleId),
+                allowedMentions: { roles: [roleId], repliedUser: false },
+              });
+              pinged = true;
+            }
           }
           return;
         } catch (error: unknown) {
@@ -164,7 +185,7 @@ export const createAlertDispatcher = (deps: AlertDispatcherDeps): AlertDispatche
         embeds: [embed],
         allowedMentions: mentionRoleId === undefined ? { parse: [] } : { roles: [mentionRoleId] },
       });
-      event.guilds.set(guildId, { message, mentionRoleId });
+      event.guilds.set(guildId, { message, mentionRoleId, channelId: channel.id });
       delivered += 1;
       if (mentionRoleId !== undefined) pinged = true;
     };
