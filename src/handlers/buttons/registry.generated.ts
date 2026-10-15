@@ -10,12 +10,13 @@ import { default as Handler_2 } from './bug_ticket';
 import { default as Handler_3 } from './db_page';
 import { default as Handler_4 } from './feed_clear_cancel';
 import { default as Handler_5 } from './feed_clear_confirm';
-import { default as Handler_6 } from './level_page';
-import { default as Handler_7 } from './roll_call';
-import { default as Handler_8 } from './settings';
-import { default as Handler_9 } from './thread_claim';
-import { default as Handler_10 } from './thread_list';
-import { default as Handler_11 } from './toggle_role';
+import { default as Handler_6 } from './gallery_page';
+import { default as Handler_7 } from './level_page';
+import { default as Handler_8 } from './roll_call';
+import { default as Handler_9 } from './settings';
+import { default as Handler_10 } from './thread_claim';
+import { default as Handler_11 } from './thread_list';
+import { default as Handler_12 } from './toggle_role';
 export const BUTTON_REGISTRY = {
   activity: Handler_0,
   archive: Handler_1,
@@ -23,10 +24,11 @@ export const BUTTON_REGISTRY = {
   db_page: Handler_3,
   feed_clear_cancel: Handler_4,
   feed_clear_confirm: Handler_5,
-  level_page: Handler_6,
-  roll_call: Handler_7,
-  settings: Handler_8,
-  thread_claim: Handler_9,
-  thread_list: Handler_10,
-  toggle_role: Handler_11,
+  gallery_page: Handler_6,
+  level_page: Handler_7,
+  roll_call: Handler_8,
+  settings: Handler_9,
+  thread_claim: Handler_10,
+  thread_list: Handler_11,
+  toggle_role: Handler_12,
 } as const satisfies Readonly<Record<string, new () => ButtonHandler>>;

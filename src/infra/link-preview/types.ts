@@ -12,6 +12,8 @@
  *     video metadata for separate attachment delivery (Facebook).
  *   - `post`: a structured post from a JSON API (X), used for a video post only
  *     when no proxy yields playable video, so the renderer uploads it.
+ *   - `gallery`: a multi-page work (nhentai, wnacg) the consumer turns into
+ *     a paged reader; see `./gallery/`.
  *
  * Adding a provider: implement {@link LinkPreviewProvider} (or reuse
  * `createRewriteProvider`) under `providers/`, append its name to
@@ -41,6 +43,8 @@ export const LINK_PREVIEW_PROVIDER_NAMES = [
   'reddit',
   'bahamut',
   'bilibili',
+  'nhentai',
+  'wnacg',
 ] as const;
 
 export type LinkPreviewProviderName = (typeof LINK_PREVIEW_PROVIDER_NAMES)[number];
@@ -126,6 +130,50 @@ export interface SocialPost {
   };
 }
 
+/** One page of a gallery, with its download candidates in preference order. */
+export interface GalleryPage {
+  /** Absolute HTTPS image URLs; later entries are mirrors tried after a failure. */
+  readonly urls: readonly string[];
+}
+
+/** One tag group of a gallery (`artist`, `parody`, `tag`, ...), names in source order. */
+export interface GalleryTagGroup {
+  readonly type: string;
+  readonly names: readonly string[];
+}
+
+/**
+ * Neutral, Discord-agnostic multi-page gallery. Page URLs may carry
+ * expiring signatures, so a consumer refetches the gallery rather than
+ * keeping it indefinitely.
+ */
+export interface Gallery {
+  readonly source: GallerySourceName;
+  /** Source-local identifier, digits only. */
+  readonly id: string;
+  /** Canonical gallery link. */
+  readonly url: string;
+  readonly title: string;
+  /** Secondary title (e.g. the original-language one), when it differs. */
+  readonly subtitle?: string;
+  readonly tags: readonly GalleryTagGroup[];
+  readonly pages: readonly GalleryPage[];
+  readonly favorites?: number;
+  /** Upload time, epoch milliseconds. */
+  readonly uploadedAt?: number;
+}
+
+/** The providers that yield a {@link Gallery} instead of a static preview. */
+export const GALLERY_SOURCE_NAMES = [
+  'nhentai',
+  'wnacg',
+] as const satisfies readonly LinkPreviewProviderName[];
+
+export type GallerySourceName = (typeof GALLERY_SOURCE_NAMES)[number];
+
+export const isGallerySourceName = (name: string): name is GallerySourceName =>
+  (GALLERY_SOURCE_NAMES as readonly string[]).includes(name);
+
 /**
  * The preview mechanisms, unified. `sourceUrl` is the original link
  * that matched, carried for logging / de-duplication.
@@ -138,7 +186,20 @@ export type LinkPreviewResult =
       readonly sourceUrl: string;
       readonly media?: { readonly url: string; readonly fallbackUrl: string };
     }
-  | { readonly kind: 'post'; readonly post: SocialPost; readonly sourceUrl: string };
+  | { readonly kind: 'post'; readonly post: SocialPost; readonly sourceUrl: string }
+  | {
+      readonly kind: 'gallery';
+      readonly gallery: Gallery;
+      /** 1-based page the link pointed at, already clamped to the gallery. */
+      readonly startPage: number;
+      readonly sourceUrl: string;
+    };
+
+/**
+ * The results a single static reply can render. A gallery is interactive:
+ * its consumer owns the paging message, so the shared renderer never sees one.
+ */
+export type RenderablePreviewResult = Exclude<LinkPreviewResult, { readonly kind: 'gallery' }>;
 
 /** Per-call collaborators handed to {@link LinkPreviewProvider.build}. */
 export interface LinkPreviewBuildContext {

@@ -83,6 +83,36 @@ describe('parseSocialLinkPreviewConfig', () => {
     },
   );
 
+  it('defaults the gallery reader and bounds its memory and bandwidth settings', () => {
+    expect(parseSocialLinkPreviewConfig(undefined).gallery).toEqual({
+      prefetchPages: 5,
+      cacheMaxBytes: 64 * 1024 * 1024,
+      maxImageBytes: 8 * 1024 * 1024,
+      imageTimeoutMs: 15_000,
+      stagingChannelId: null,
+    });
+    expect(
+      parseSocialLinkPreviewConfig({ gallery: { prefetchPages: 0 } }).gallery.prefetchPages,
+    ).toBe(0);
+    expect(issuePaths(parseFailure({ gallery: { prefetchPages: 11 } }))).toContain(
+      'gallery.prefetchPages',
+    );
+    expect(issuePaths(parseFailure({ gallery: { maxImageBytes: 11 * 1024 * 1024 } }))).toContain(
+      'gallery.maxImageBytes',
+    );
+    expect(
+      issuePaths(parseFailure({ gallery: { cacheMaxBytes: 1024, maxImageBytes: 2048 } })),
+    ).toContain('gallery.cacheMaxBytes');
+    expect(issuePaths(parseFailure({ gallery: { prefetch: 5 } }))).toContain('gallery');
+    expect(
+      parseSocialLinkPreviewConfig({ gallery: { stagingChannelId: '123456789012345678' } }).gallery
+        .stagingChannelId,
+    ).toBe('123456789012345678');
+    expect(issuePaths(parseFailure({ gallery: { stagingChannelId: 'general' } }))).toContain(
+      'gallery.stagingChannelId',
+    );
+  });
+
   it('accepts an explicitly disabled block with no host lists at all', () => {
     const config = parseSocialLinkPreviewConfig({ enabled: false, maxUrlsPerMessage: 3 });
     expect(config.enabled).toBe(false);

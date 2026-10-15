@@ -619,6 +619,27 @@
     "post_watch_video": "▶ [Watch the video on X]({{url}})",
     "post_view_original": "[View on X]({{url}})"
   },
+  "gallery_preview": {
+    "footer": "{{site}} #{{id}} · page {{page}} / {{total}}",
+    "pages": "Pages",
+    "favorites": "Favorites",
+    "tag_types": {
+      "parody": "Parodies",
+      "character": "Characters",
+      "artist": "Artists",
+      "group": "Groups",
+      "language": "Languages",
+      "tag": "Tags"
+    },
+    "jump_title": "Go to page",
+    "jump_label": "Page number (1-{{total}})",
+    "jump_invalid": "Enter a page number of 1 or more.",
+    "inactive": "This gallery reader is no longer active. Post the link again to open a new one.",
+    "age_restricted": "nhentai and wnacg previews only work in age-restricted channels.",
+    "not_found": "This gallery is no longer available.",
+    "unavailable": "That page could not be loaded right now. Try again in a moment.",
+    "failed": "Could not turn the page. (error code: {{traceId}})"
+  },
   "feed": {
     "post": "**@{{author}}** has a new post on {{platform}}\n{{url}}",
     "subscribe_header": "{{platform}} subscription results for {{channel}}:",
@@ -1259,7 +1280,9 @@
       "bilibili": "Bilibili",
       "threads": "Threads",
       "bahamut": "Bahamut",
-      "bluesky": "Bluesky"
+      "bluesky": "Bluesky",
+      "nhentai": "nhentai",
+      "wnacg": "wnacg"
     },
     "field": {
       "access": "Access",

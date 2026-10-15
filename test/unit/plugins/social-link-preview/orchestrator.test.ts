@@ -10,10 +10,12 @@ import { DiscordAPIError } from 'discord.js';
 
 import { runSocialLinkPreview } from '../../../../src/plugins/social-link-preview/internal/orchestrator';
 import type {
+  Gallery,
   LinkPreviewProvider,
   LinkPreviewResult,
   LinkPreviewFailure,
 } from '../../../../src/infra/link-preview';
+import type { GalleryPageOutcome } from '../../../../src/application/gallery-reader/service';
 import { ok, err, type Result } from '../../../../src/core/result';
 import {
   invalidResponseError,
@@ -202,5 +204,106 @@ describe('runSocialLinkPreview', () => {
     expect(error).not.toHaveBeenCalled();
     expect(debug).toHaveBeenCalledTimes(1);
     expect(provider.build).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runSocialLinkPreview gallery links', () => {
+  const gallery: Gallery = {
+    source: 'nhentai',
+    id: '1',
+    url: 'https://nhentai.net/g/1/',
+    title: 'Title',
+    tags: [],
+    pages: [{ urls: ['https://i1.nhentai.net/galleries/9/1.webp'] }],
+  };
+  const galleryResult: LinkPreviewResult = {
+    kind: 'gallery',
+    gallery,
+    startPage: 1,
+    sourceUrl: 'https://nhentai.net/g/1/',
+  };
+  const galleryProvider = (): LinkPreviewProvider => ({
+    name: 'nhentai',
+    canHandle: () => true,
+    build: vi.fn(async () => ok(galleryResult)),
+  });
+  const fakeReader = (outcome: GalleryPageOutcome) => ({
+    remember: vi.fn(),
+    loadPage: vi.fn(async () => outcome),
+  });
+  const loaded: GalleryPageOutcome = {
+    status: 'ok',
+    gallery,
+    page: 1,
+    media: { kind: 'file', image: { data: Buffer.from([1]), extension: 'webp' } },
+  };
+  const galleryMessage = (nsfw: boolean) => {
+    const built = makeMessage('https://nhentai.net/g/1/');
+    Object.assign(built.message, {
+      channel: { isThread: () => false, nsfw, permissionsFor: () => ({ has: () => true }) },
+    });
+    return built;
+  };
+
+  it('posts a reader message with the page attached in an age-restricted channel', async () => {
+    const { message, replies, calls } = galleryMessage(true);
+    const reader = fakeReader(loaded);
+    await runSocialLinkPreview(
+      {
+        registry: registryReturning(galleryProvider()),
+        config,
+        translator,
+        logger: silentLogger(),
+        galleryReader: reader,
+      },
+      message,
+    );
+
+    expect(reader.remember).toHaveBeenCalledWith(gallery);
+    expect(reader.loadPage).toHaveBeenCalledWith('nhentai', '1', 1);
+    expect(replies).toHaveLength(1);
+    expect((replies[0] as { files: unknown[] }).files).toHaveLength(1);
+    expect(calls.suppress).toBe(1);
+  });
+
+  it('never fetches a gallery outside an age-restricted channel or without a reader', async () => {
+    const provider = galleryProvider();
+    const sfw = galleryMessage(false);
+    await runSocialLinkPreview(
+      {
+        registry: registryReturning(provider),
+        config,
+        translator,
+        logger: silentLogger(),
+        galleryReader: fakeReader(loaded),
+      },
+      sfw.message,
+    );
+    const noReader = galleryMessage(true);
+    await runSocialLinkPreview(
+      { registry: registryReturning(provider), config, translator, logger: silentLogger() },
+      noReader.message,
+    );
+
+    expect(provider.build).not.toHaveBeenCalled();
+    expect(sfw.replies).toHaveLength(0);
+    expect(noReader.replies).toHaveLength(0);
+  });
+
+  it('leaves the original message alone when the page cannot be loaded', async () => {
+    const { message, replies, calls } = galleryMessage(true);
+    await runSocialLinkPreview(
+      {
+        registry: registryReturning(galleryProvider()),
+        config,
+        translator,
+        logger: silentLogger(),
+        galleryReader: fakeReader({ status: 'unavailable' }),
+      },
+      message,
+    );
+
+    expect(replies).toHaveLength(0);
+    expect(calls.suppress).toBe(0);
   });
 });

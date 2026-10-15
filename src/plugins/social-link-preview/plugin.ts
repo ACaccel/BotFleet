@@ -11,15 +11,29 @@
  * `social_preview` feature, unbounded by default). `deps.registry` is a
  * test seam.
  *
+ * When gallery previews are enabled (a gallery source survives the
+ * `providers` kill-switch), `init` publishes the paged reader as
+ * `TOKENS.GalleryReader` for the page buttons. The reader and the
+ * registry's gallery providers share the same source instances. With
+ * `gallery.stagingChannelId` set, the reader also uploads prefetched pages
+ * there; `onReady` starts deleting this bot's day-old staging messages.
+ *
  * The event handler swallows every error so a bad link cannot break the
  * channel.
  */
 import { logError } from '../../core/logger';
 import type { PermissionRankPolicy, Plugin } from '../../core/plugin';
 import { TOKENS } from '../../bot/tokens';
+import { GalleryReaderService } from '../../application/gallery-reader/service';
 import { ancestorChannelIdsOf } from '../../infra/discord';
+import { DiscordGalleryStaging } from '../../infra/discord/gallery-staging';
 import {
+  createDefaultGallerySources,
   createDefaultLinkPreviewRegistry,
+  createGalleryHttp,
+  GALLERY_SOURCE_NAMES,
+  type GalleryHttp,
+  type GallerySource,
   type LinkPreviewProviderRegistry,
 } from '../../infra/link-preview';
 import { parseSocialLinkPreviewConfig } from './config';
@@ -28,12 +42,16 @@ import type { GuildSettingsRuntime } from '../../core/guild-settings';
 
 const PLUGIN_ID = 'social-link-preview';
 const PLUGIN_VERSION = '1.0.0';
+/** Staged pages are kept a day, about as long as Discord's signed attachment URLs last. */
+const STAGING_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 /** Optional collaborators wired by the composition root / tests. */
 interface CreateSocialLinkPreviewDeps {
   /** Provider registry; injectable so tests can supply fakes without the network. */
   readonly registry?: LinkPreviewProviderRegistry;
   readonly settings?: GuildSettingsRuntime;
+  /** Gallery HTTP access; injectable so tests can serve fixtures. */
+  readonly galleryHttp?: GalleryHttp;
 }
 
 export const createSocialLinkPreviewPlugin = (
@@ -42,6 +60,13 @@ export const createSocialLinkPreviewPlugin = (
 ): Plugin => {
   const config = parseSocialLinkPreviewConfig(rawConfig);
   const allowedBotIds = new Set(config.allowedBotIds);
+  const galleryEnabled =
+    config.enabled && GALLERY_SOURCE_NAMES.some((name) => config.providers?.includes(name) ?? true);
+  const galleryHttp = galleryEnabled ? (deps.galleryHttp ?? createGalleryHttp()) : undefined;
+  const gallerySources: readonly GallerySource[] =
+    galleryHttp === undefined ? [] : createDefaultGallerySources(galleryHttp);
+  let galleryReader: GalleryReaderService | undefined;
+  let galleryStaging: DiscordGalleryStaging | undefined;
   const registry =
     deps.registry ??
     (config.enabled
@@ -55,6 +80,7 @@ export const createSocialLinkPreviewPlugin = (
           facebookProxyHosts: config.facebookProxyHosts,
           redditProxyHosts: config.redditProxyHosts,
           bilibiliProxyHosts: config.bilibiliProxyHosts,
+          gallerySources,
           enabledProviders: config.providers,
         })
       : undefined);
@@ -78,6 +104,38 @@ export const createSocialLinkPreviewPlugin = (
 
     async init(ctx): Promise<void> {
       resolvedPolicy = ctx.resolve(TOKENS.PermissionRankPolicy);
+      if (galleryHttp !== undefined) {
+        const stagingChannelId = config.gallery.stagingChannelId;
+        galleryStaging =
+          stagingChannelId === null
+            ? undefined
+            : new DiscordGalleryStaging({
+                client: ctx.resolve(TOKENS.DiscordClient),
+                channelId: stagingChannelId,
+                retentionMs: STAGING_RETENTION_MS,
+                logger: ctx.logger,
+              });
+        galleryReader = new GalleryReaderService({
+          sources: gallerySources,
+          http: galleryHttp,
+          prefetchPages: config.gallery.prefetchPages,
+          cacheMaxBytes: config.gallery.cacheMaxBytes,
+          maxImageBytes: config.gallery.maxImageBytes,
+          imageTimeoutMs: config.gallery.imageTimeoutMs,
+          metadataTimeoutMs: config.timeoutMs,
+          ...(galleryStaging === undefined ? {} : { staging: galleryStaging }),
+          logger: ctx.logger,
+        });
+        ctx.registerInstance(TOKENS.GalleryReader, galleryReader);
+      }
+    },
+
+    async onReady(): Promise<void> {
+      galleryStaging?.start();
+    },
+
+    async onShutdown(): Promise<void> {
+      galleryStaging?.stop();
     },
 
     events: {
@@ -143,6 +201,7 @@ export const createSocialLinkPreviewPlugin = (
                   }),
               translator: ctx.translator,
               logger: ctx.logger,
+              ...(galleryReader === undefined ? {} : { galleryReader }),
             },
             message,
           );

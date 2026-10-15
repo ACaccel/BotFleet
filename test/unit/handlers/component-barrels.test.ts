@@ -59,6 +59,7 @@ describe('modal barrel', () => {
       'activity_create',
       'ai_settings',
       'bug_report',
+      'gallery_page',
       'giveaway_create',
       'settings',
     ]);

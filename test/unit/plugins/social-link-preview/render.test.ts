@@ -17,7 +17,7 @@ import {
   buildCardEmbed,
 } from '../../../../src/plugins/social-link-preview/internal/render';
 import type { Translator } from '../../../../src/core/i18n';
-import type { LinkPreviewResult } from '../../../../src/infra/link-preview';
+import type { RenderablePreviewResult } from '../../../../src/infra/link-preview';
 import { buildMessage } from '../../../fixtures/discord/message-builder';
 import { echoTranslator } from '../../../fixtures/runtime';
 
@@ -55,7 +55,7 @@ const makeMessage = (): { message: Message; replies: ReplyPayload[] } => {
 };
 
 describe('renderPreview', () => {
-  const facebookResult: LinkPreviewResult = {
+  const facebookResult: RenderablePreviewResult = {
     kind: 'card',
     card: {
       url: 'https://www.facebook.com/reel/1',
@@ -199,7 +199,7 @@ describe('renderPreview', () => {
 
   it('replies with the proxy URL as content for a rewritten-url result', async () => {
     const { message, replies } = makeMessage();
-    const result: LinkPreviewResult = {
+    const result: RenderablePreviewResult = {
       kind: 'rewritten-url',
       url: 'https://fxtwitter.com/a/status/1',
       sourceUrl: 'https://x.com/a/status/1',
@@ -215,7 +215,7 @@ describe('renderPreview', () => {
 
   it('replies with an embed for a card result', async () => {
     const { message, replies } = makeMessage();
-    const result: LinkPreviewResult = {
+    const result: RenderablePreviewResult = {
       kind: 'card',
       card: {
         url: 'https://forum.gamer.com.tw/post/1',
@@ -549,7 +549,7 @@ describe('buildCardEmbed', () => {
 });
 
 describe('renderPreview X post', () => {
-  const post = (video?: boolean): LinkPreviewResult => ({
+  const post = (video?: boolean): RenderablePreviewResult => ({
     kind: 'post',
     sourceUrl: 'https://x.com/NASA/status/1',
     post: {

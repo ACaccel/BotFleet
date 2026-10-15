@@ -38,6 +38,46 @@ const proxyHostList = (key: string): z.ZodArray<z.ZodString, 'atleastone'> =>
     })
     .nonempty(`${key} must list at least one embed-proxy host`);
 
+/**
+ * The nhentai / wnacg paged reader. Images are downloaded and re-uploaded,
+ * so these bound the host's memory and bandwidth: `prefetchPages` pages
+ * after the one shown are fetched ahead into a byte-bounded cache, and
+ * uploaded ahead to `stagingChannelId` when one is set.
+ * `maxImageBytes` stays under Discord's default 10 MiB upload limit.
+ */
+const GallerySchema = z
+  .object({
+    prefetchPages: z.number().int().min(0).max(10).default(5),
+    cacheMaxBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(512 * 1024 * 1024)
+      .default(64 * 1024 * 1024),
+    maxImageBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(10 * 1024 * 1024)
+      .default(8 * 1024 * 1024),
+    imageTimeoutMs: z.number().int().positive().max(60_000).default(15_000),
+    /**
+     * Age-restricted channel the bot uploads prefetched pages to, so a page
+     * turn only swaps a URL. `null` uploads each page with its turn instead.
+     */
+    stagingChannelId: z
+      .string()
+      .regex(/^\d{17,20}$/, 'gallery.stagingChannelId must be a Discord channel ID (17-20 digits)')
+      .nullable()
+      .default(null),
+  })
+  .strict()
+  .refine((gallery) => gallery.cacheMaxBytes >= gallery.maxImageBytes, {
+    message: 'gallery.cacheMaxBytes must be at least gallery.maxImageBytes',
+    path: ['cacheMaxBytes'],
+  })
+  .default({});
+
 /** Fields shared by both branches; all defaulted, none operator-mandatory. */
 const commonShape = {
   /** Attachment downloads are bounded independently of metadata probes. */
@@ -93,6 +133,7 @@ const commonShape = {
    * `maxUrlsPerMessage × hosts per list × timeoutMs`; keep this small.
    */
   maxUrlsPerMessage: z.number().int().positive().max(MAX_URLS_PER_MESSAGE).default(1),
+  gallery: GallerySchema,
 };
 
 /** The operator-supplied embed-proxy host lists, one per rewrite provider. */

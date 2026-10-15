@@ -261,6 +261,25 @@ media, limits and metadata availability.
 Feed polling shares account reads; delivery and cursors remain per subscription.
 Cursors advance after successful delivery; post IDs stay strings.
 
+nhentai and wnacg links are gallery providers in the same registry, so they share
+URL extraction, the provider kill-switch and per-guild provider preferences, but
+their `gallery` result never reaches the static renderer. The plugin skips them
+outside age-restricted channels before any request and otherwise posts a reader
+message through the [gallery reader](../src/application/gallery-reader/service.ts),
+which it publishes as `TOKENS.GalleryReader` for the stateless `gallery_page`
+button and form handlers (any member may page; the custom ID names only the
+target). The reader caches metadata with shared in-flight reads, keeps
+downloaded pages in a byte-bounded LRU, prefetches neighbours behind a
+two-priority download limit, refetches metadata once when page URLs go stale,
+and serializes turns per message. Pages are uploaded rather than hot-linked
+because source image URLs carry expiring signatures. Uploading during a turn
+dominates its latency, so with a staging channel the reader uploads prefetched
+pages ahead through a `GalleryStagingPort`, implemented by
+[`DiscordGalleryStaging`](../src/infra/discord/gallery-staging.ts), warms
+Discord's media proxy for each, and turns to a staged page by swapping the embed
+URL; unstaged pages are attached to the edit. The adapter validates the channel
+at use time and deletes its own messages after a day.
+
 ## Errors, logs and localization
 
 `DomainError` carries a code, translation key, parameters and cause. Expected

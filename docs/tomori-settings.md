@@ -57,6 +57,9 @@ has a command selector and individual switch/cooldown controls.
 Open **Edit parameters** on the Automatic replies or Social previews page to
 change its values, submit the form, then choose **Save** on the panel. Reply
 behaviors and providers allow an empty selection to disable all entries.
+The nhentai and wnacg providers act only in age-restricted channels and start
+off on servers saved before they existed; see
+[nhentai and wnacg readers](configuration.md#nhentai-and-wnacg-readers).
 The preview-count field shows the actual deployment-constrained range: integer
 `1` through `min(5, social_link_preview.maxUrlsPerMessage)`. This counts successful
 URL previews from one message, rather than restricting posted links. Optional

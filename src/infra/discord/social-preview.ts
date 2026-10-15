@@ -1,5 +1,6 @@
 /**
- * Render a {@link LinkPreviewResult} through a Discord send or reply adapter.
+ * Render a static link preview through a Discord send or reply adapter.
+ * Galleries are interactive and rendered by their own reader instead.
  *
  * This is the one place that branches on the result mechanism:
  *   - `rewritten-url`: reply with the proxy URL as plain content so
@@ -24,7 +25,7 @@ import {
 } from 'discord.js';
 
 import type { Translator } from '../../core/i18n';
-import type { LinkPreviewResult, PreviewCard, SocialPost } from '../link-preview';
+import type { PreviewCard, RenderablePreviewResult, SocialPost } from '../link-preview';
 import { downloadPreviewVideo } from '../link-preview';
 import { buildPostContainer, buildPostEmbeds, pickVideoVariants } from './social-post';
 
@@ -194,7 +195,7 @@ const renderPost = async (
 
 export const renderPreviewTo = async (
   send: PreviewSender,
-  result: LinkPreviewResult,
+  result: RenderablePreviewResult,
   translator: Translator,
   options: PreviewRenderOptions = {},
 ): Promise<void> => {

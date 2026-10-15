@@ -619,6 +619,27 @@
     "post_watch_video": "▶ [在 X 上觀看影片]({{url}})",
     "post_view_original": "[在 X 上查看]({{url}})"
   },
+  "gallery_preview": {
+    "footer": "{{site}} #{{id}} · 第 {{page}} / {{total}} 頁",
+    "pages": "頁數",
+    "favorites": "收藏數",
+    "tag_types": {
+      "parody": "原作",
+      "character": "角色",
+      "artist": "作者",
+      "group": "社團",
+      "language": "語言",
+      "tag": "標籤"
+    },
+    "jump_title": "跳至指定頁",
+    "jump_label": "頁碼（1-{{total}}）",
+    "jump_invalid": "請輸入 1 以上的頁碼。",
+    "inactive": "這個閱讀器已失效，請重新貼上連結開啟新的閱讀器。",
+    "age_restricted": "nhentai 與 wnacg 預覽只能在年齡限制頻道使用。",
+    "not_found": "這本已經下架或不存在。",
+    "unavailable": "這一頁暫時載入失敗，請稍後再試。",
+    "failed": "翻頁失敗 (錯誤代碼:{{traceId}})"
+  },
   "feed": {
     "post": "**@{{author}}** 在 {{platform}} 發布了新貼文\n{{url}}",
     "subscribe_header": "{{channel}} 的 {{platform}} 訂閱結果:",
@@ -1259,7 +1280,9 @@
       "bilibili": "Bilibili",
       "threads": "Threads",
       "bahamut": "巴哈姆特",
-      "bluesky": "Bluesky"
+      "bluesky": "Bluesky",
+      "nhentai": "nhentai",
+      "wnacg": "紳士漫畫 (wnacg)"
     },
     "field": {
       "access": "權限",

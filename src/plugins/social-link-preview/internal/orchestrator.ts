@@ -10,13 +10,24 @@
  * message withdrawn while its preview was being built ends the pass at
  * debug level, and suppression failures are swallowed inside
  * {@link applyOriginalMessageStrategy}.
+ *
+ * Gallery links (nhentai, wnacg) are skipped outside age-restricted
+ * channels before any request is made, and otherwise become a paged reader
+ * message posted through the shared {@link GalleryReaderService}.
  */
 import type { Message } from 'discord.js';
 
+import type { GalleryReaderService } from '../../../application/gallery-reader/service';
+import { buildGalleryMessage } from '../../../application/gallery-reader/view';
 import { logError, type Logger } from '../../../core/logger';
-import type { Translator } from '../../../core/i18n';
+import { bindTranslator, type Translator } from '../../../core/i18n';
+import { isAgeRestrictedChannel } from '../../../infra/discord';
 import { isUnknownMessageReferenceError } from '../../../infra/discord/unknown-message-reference';
-import type { LinkPreviewProviderRegistry } from '../../../infra/link-preview';
+import {
+  isGallerySourceName,
+  type LinkPreviewProviderRegistry,
+  type LinkPreviewResult,
+} from '../../../infra/link-preview';
 import type { SocialLinkPreviewPluginConfig } from '../config';
 import { extractUrls } from './extract-urls';
 import { renderPreview } from './render';
@@ -25,6 +36,9 @@ import { applyOriginalMessageStrategy } from './suppress';
 /** Operator-facing debug line for the withdrawn-message race (no scattered literals). */
 const LOG_MESSAGE_WITHDRAWN =
   'social-link-preview: original message deleted before its preview was posted; skipped';
+const LOG_GALLERY_UNAVAILABLE = 'social-link-preview: gallery page unavailable; skipped';
+
+type GalleryReader = Pick<GalleryReaderService, 'remember' | 'loadPage'>;
 
 /** Collaborators for {@link runSocialLinkPreview}; all injectable for tests. */
 interface RunSocialLinkPreviewDeps {
@@ -41,7 +55,37 @@ interface RunSocialLinkPreviewDeps {
   readonly logger: Logger;
   readonly providers?: ReadonlySet<string>;
   readonly videoEnabled?: boolean;
+  /** Absent when gallery previews are off; gallery links are then ignored. */
+  readonly galleryReader?: GalleryReader;
 }
+
+/** Post a gallery's reader message; `false` when its page could not be loaded. */
+const postGallery = async (
+  message: Message,
+  preview: Extract<LinkPreviewResult, { readonly kind: 'gallery' }>,
+  reader: GalleryReader,
+  deps: Pick<RunSocialLinkPreviewDeps, 'translator' | 'logger'>,
+): Promise<boolean> => {
+  const { gallery } = preview;
+  reader.remember(gallery);
+  const outcome = await reader.loadPage(gallery.source, gallery.id, preview.startPage);
+  if (outcome.status !== 'ok') {
+    deps.logger.debug(
+      { guildId: message.guildId, source: gallery.source, galleryId: gallery.id, outcome },
+      LOG_GALLERY_UNAVAILABLE,
+    );
+    return false;
+  }
+  await message.reply(
+    buildGalleryMessage(
+      outcome.gallery,
+      outcome.page,
+      outcome.media,
+      bindTranslator(deps.translator),
+    ),
+  );
+  return true;
+};
 
 export const runSocialLinkPreview = async (
   deps: RunSocialLinkPreviewDeps,
@@ -57,6 +101,12 @@ export const runSocialLinkPreview = async (
     const provider = deps.registry.findProvider(url);
     if (provider === undefined) continue;
     if (deps.providers !== undefined && !deps.providers.has(provider.name)) continue;
+    if (
+      isGallerySourceName(provider.name) &&
+      (deps.galleryReader === undefined || !isAgeRestrictedChannel(message.channel))
+    ) {
+      continue;
+    }
 
     const result = await provider.build(url, {
       timeoutMs: deps.config.timeoutMs,
@@ -68,12 +118,18 @@ export const runSocialLinkPreview = async (
     }
     if (result.value === null) continue; // matched host but not previewable
 
+    const preview = result.value;
     try {
-      await renderPreview(message, result.value, deps.translator, {
-        maxVideoBytes: deps.config.maxVideoBytes,
-        videoTimeoutMs: deps.config.videoTimeoutMs,
-        videoEnabled: deps.videoEnabled,
-      });
+      if (preview.kind === 'gallery') {
+        if (deps.galleryReader === undefined) continue;
+        if (!(await postGallery(message, preview, deps.galleryReader, deps))) continue;
+      } else {
+        await renderPreview(message, preview, deps.translator, {
+          maxVideoBytes: deps.config.maxVideoBytes,
+          videoTimeoutMs: deps.config.videoTimeoutMs,
+          videoEnabled: deps.videoEnabled,
+        });
+      }
       await applyOriginalMessageStrategy(message, deps.config.originalMessageStrategy, deps.logger);
       previewed += 1;
     } catch (err: unknown) {

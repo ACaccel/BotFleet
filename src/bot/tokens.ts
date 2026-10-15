@@ -22,6 +22,7 @@ import type { GuildOnboardingPort, PermissionRankPolicy } from '../core/plugin';
 import type { Clock } from '../core/time';
 import type { ArchiveControlFactory } from '../application/archive/control';
 import type { DbInspectService } from '../application/db-inspect/service';
+import type { GalleryReaderService } from '../application/gallery-reader/service';
 import type { GuildSettingsService } from '../application/guild-settings/service';
 import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { ModelCatalog } from '../infra/llm/models-catalog';
@@ -122,6 +123,12 @@ interface Tokens {
    * through `BaseBot.dbInspectService`.
    */
   readonly DbInspectService: ServiceToken<DbInspectService>;
+  /**
+   * Paged nhentai / wnacg reader, published by the social-link-preview
+   * plugin when gallery previews are enabled; the page buttons read it
+   * through `BaseBot.galleryReader`.
+   */
+  readonly GalleryReader: ServiceToken<GalleryReaderService>;
 }
 
 export const TOKENS: Tokens = {
@@ -142,4 +149,5 @@ export const TOKENS: Tokens = {
   FeedPlatformRegistry: token<FeedPlatformRegistry>('FeedPlatformRegistry'),
   ArchiveControlFactory: token<ArchiveControlFactory>('ArchiveControlFactory'),
   DbInspectService: token<DbInspectService>('DbInspectService'),
+  GalleryReader: token<GalleryReaderService>('GalleryReader'),
 };

@@ -147,7 +147,9 @@ export class XPlatform implements FeedPlatform {
     if (!this.previewProvider.canHandle(url)) return err(invalidResponseError('twitter'));
     const result = await this.previewProvider.build(url, { timeoutMs: this.timeoutMs, logger });
     if (!result.ok) return result;
-    if (result.value?.kind === 'card') return err(invalidResponseError('twitter'));
+    if (result.value?.kind === 'card' || result.value?.kind === 'gallery') {
+      return err(invalidResponseError('twitter'));
+    }
     return ok(result.value);
   }
 

@@ -367,7 +367,7 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
 };
 
 /** Decode the small set of HTML entities that appear in OpenGraph content. */
-const decodeEntities = (value: string): string =>
+export const decodeEntities = (value: string): string =>
   value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, body: string) => {
     const named = NAMED_ENTITIES[body.toLowerCase()];
     if (named !== undefined) return named;

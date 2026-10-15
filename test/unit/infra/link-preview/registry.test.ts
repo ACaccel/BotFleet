@@ -95,6 +95,10 @@ describe('createDefaultLinkPreviewRegistry', () => {
       'bilibili',
     );
     expect(registry.findProvider(u('https://b23.tv/mHCI3y3'))?.name).toBe('bilibili');
+    expect(registry.findProvider(u('https://nhentai.net/g/123456/'))?.name).toBe('nhentai');
+    expect(registry.findProvider(u('https://www.wnacg.com/photos-index-aid-1.html'))?.name).toBe(
+      'wnacg',
+    );
   });
 
   it('honours the enabledProviders allow-list', () => {

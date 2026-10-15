@@ -64,10 +64,17 @@ const enabledConfig = (overrides: Record<string, unknown> = {}): Record<string, 
   ...overrides,
 });
 
-const ctx = (policy: PermissionRankPolicy) => {
+const ctx = (
+  policy: PermissionRankPolicy,
+  registerInstance: Parameters<typeof buildPluginContext>[0] extends infer O
+    ? O extends { registerInstance?: infer R }
+      ? R
+      : never
+    : never = () => undefined,
+) => {
   const container = createContainer();
   container.registerSingleton(TOKENS.PermissionRankPolicy, () => policy);
-  return buildPluginContext({ resolve: container.resolve.bind(container) });
+  return buildPluginContext({ resolve: container.resolve.bind(container), registerInstance });
 };
 
 const makeRegistry = (): {
@@ -148,8 +155,51 @@ describe('createSocialLinkPreviewPlugin shape', () => {
     createSocialLinkPreviewPlugin(enabledConfig({ providers: ['twitter', 'bilibili'] }));
     expect(spy).toHaveBeenCalledWith({
       ...PROXY_HOSTS,
+      gallerySources: [],
       enabledProviders: ['twitter', 'bilibili'],
     });
+  });
+
+  it('publishes the gallery reader, sharing its sources with the registry', async () => {
+    const spy = vi.mocked(createDefaultLinkPreviewRegistry);
+    spy.mockClear();
+    const registerInstance = vi.fn();
+    const plugin = createSocialLinkPreviewPlugin(
+      enabledConfig({ providers: ['twitter', 'wnacg'] }),
+    );
+    await plugin.init?.(ctx(emptyPolicy, registerInstance));
+
+    const sources = spy.mock.calls[0]?.[0].gallerySources ?? [];
+    expect(sources.map((source) => source.name)).toEqual(['nhentai', 'wnacg']);
+    expect(registerInstance).toHaveBeenCalledWith(TOKENS.GalleryReader, expect.anything());
+  });
+
+  it('stages pages through the configured channel and stops its cleanup on shutdown', async () => {
+    const registerInstance = vi.fn();
+    const container = createContainer();
+    container.registerSingleton(TOKENS.PermissionRankPolicy, () => emptyPolicy);
+    const client = { user: null, channels: { fetch: vi.fn(async () => null) } };
+    container.registerSingleton(TOKENS.DiscordClient, () => client as never);
+    const context = buildPluginContext({
+      resolve: container.resolve.bind(container),
+      registerInstance,
+    });
+    const plugin = createSocialLinkPreviewPlugin(
+      enabledConfig({ gallery: { stagingChannelId: '123456789012345678' } }),
+    );
+
+    await plugin.init?.(context);
+    await plugin.onReady?.(context);
+    await plugin.onShutdown?.(context);
+
+    expect(registerInstance).toHaveBeenCalledWith(TOKENS.GalleryReader, expect.anything());
+  });
+
+  it('publishes no gallery reader when the kill-switch omits every gallery source', async () => {
+    const registerInstance = vi.fn();
+    const plugin = createSocialLinkPreviewPlugin(enabledConfig({ providers: ['twitter'] }));
+    await plugin.init?.(ctx(emptyPolicy, registerInstance));
+    expect(registerInstance).not.toHaveBeenCalled();
   });
 
   it('refuses to run an event that somehow precedes init', async () => {

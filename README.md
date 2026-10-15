@@ -65,7 +65,8 @@ Every bot shares the framework capabilities:
   proxies for playable videos, and bounded video uploads as a fallback.
   Facebook uses custom cards with truncated text, complete image galleries and separate video
   attachments and engagement counts when available; the title links to the post,
-  and failed video delivery falls back to a link. See
+  and failed video delivery falls back to a link. nhentai and wnacg links in
+  age-restricted channels open a paged reader with prefetched pages. See
   [preview configuration](docs/configuration.md#social-previews-and-feeds).
 - **Message archive.** msg-archive captures messages, edits (up to 50 previous
   versions), deletions and complete reaction memberships. Administrators run a

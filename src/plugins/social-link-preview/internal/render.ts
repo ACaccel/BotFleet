@@ -1,13 +1,13 @@
 /** Reply adapter for the shared Discord preview renderer. */
 import type { Message } from 'discord.js';
 import type { Translator } from '../../../core/i18n';
-import type { LinkPreviewResult } from '../../../infra/link-preview';
+import type { RenderablePreviewResult } from '../../../infra/link-preview';
 import { renderPreviewTo, type PreviewRenderOptions } from '../../../infra/discord/social-preview';
 
 export { buildCardEmbed } from '../../../infra/discord/social-preview';
 
 /** Keep thumbnails and source links while withholding downloadable video variants. */
-const withoutDownloads = (result: LinkPreviewResult): LinkPreviewResult => {
+const withoutDownloads = (result: RenderablePreviewResult): RenderablePreviewResult => {
   if (result.kind === 'card') {
     return { kind: 'card', card: result.card, sourceUrl: result.sourceUrl };
   }
@@ -19,7 +19,7 @@ const withoutDownloads = (result: LinkPreviewResult): LinkPreviewResult => {
 
 export const renderPreview = (
   message: Message,
-  result: LinkPreviewResult,
+  result: RenderablePreviewResult,
   translator: Translator,
   options: PreviewRenderOptions & { readonly videoEnabled?: boolean } = {},
 ): Promise<void> =>

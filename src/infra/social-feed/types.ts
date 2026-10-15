@@ -16,10 +16,10 @@
 import type { FeedError } from '../../core/errors';
 import type { Result } from '../../core/result';
 import type { Logger } from '../../core/logger';
-import type { LinkPreviewResult, LinkPreviewFailure } from '../link-preview';
+import type { LinkPreviewFailure, RenderablePreviewResult } from '../link-preview';
 
 /** Feed previews must fit in one send so delivery-based cursors remain atomic. */
-export type FeedPreview = Exclude<LinkPreviewResult, { readonly kind: 'card' }>;
+export type FeedPreview = Exclude<RenderablePreviewResult, { readonly kind: 'card' }>;
 
 /**
  * Platform ids the bot ships support for.

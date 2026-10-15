@@ -254,6 +254,54 @@ link with automatic embedding suppressed. Static cards retain their preview
 image. No Facebook login or additional scraper service is required; previews
 depend on publicly available metadata and media URLs.
 
+#### nhentai and wnacg readers
+
+nhentai gallery links (`nhentai.net/g/<id>/`, optionally `/<page>/`) and wnacg
+album links (`photos-index`, `-slist`, `-gallery` or `-slide` pages on any
+`wnacg.com` or `wnacg.org` host) become a paged reader, but only in
+age-restricted channels; a thread follows its parent. Elsewhere the link is
+ignored without contacting the site. The reader is one public message: the
+first page lists tags, page count and favourites, and any member can turn
+pages with first, previous, next and last buttons, or jump through the form
+behind the `page / total` button. Presses on one message are applied in order.
+
+The bot downloads each page and uploads it to Discord itself, so Discord never
+contacts the source. After every page shown it downloads the next
+`prefetchPages` pages and the previous one in the background. Gallery metadata
+is cached for 30 minutes, pages for 30 minutes within `cacheMaxBytes`; both are
+lost on restart. Image hosts named by the sites pass the same HTTPS, DNS and
+redirect screening as video downloads, and at most four downloads run at once.
+
+With `stagingChannelId` set, prefetched pages (up to twice `prefetchPages`
+ahead) are also uploaded to that channel, the next page alone and the rest a
+few per message, and requested once through Discord's media proxy. A turn to a
+staged page then only changes the embed's image URL; other pages are attached
+to the edit. In a measurement on the deployment host, a URL turn took about
+0.3–0.5 seconds against 1–1.9 seconds for an attached one. Turns made within a
+few seconds of the preview appearing may still attach.
+
+The staging channel must be age-restricted and let the bot view it, send
+messages, attach files and read history; Manage Messages enables bulk cleanup.
+Otherwise staging stays off, a warning is logged, and the channel is checked
+again after ten minutes. Each bot deletes its own staging messages after 24
+hours, hourly and at startup, so several bots can share one channel. A reader
+left idle for a day can lose its image when its page is deleted or its signed
+URL expires; any button restores it. Server administrators can see the
+channel, since Discord cannot hide a channel from them.
+
+Both sources are provider names, so `providers` and the `/settings` provider
+subset control them. Servers whose saved settings predate them start with both
+off until a manager enables them; a `providers` list in `config.json` must name
+them explicitly.
+
+| `social_link_preview.gallery` field | Default             | Allowed values                                       | Purpose                                                   |
+| ----------------------------------- | ------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
+| `prefetchPages`                     | `5`                 | Integer `0` to `10`                                  | Pages after the one shown to download ahead               |
+| `cacheMaxBytes`                     | `67108864` (64 MiB) | Positive integer, at most 512 MiB, ≥ `maxImageBytes` | In-memory page cache budget                               |
+| `maxImageBytes`                     | `8388608` (8 MiB)   | Positive integer, at most `10485760` (10 MiB)        | Largest page accepted; stays under Discord's upload limit |
+| `imageTimeoutMs`                    | `15000`             | Positive integer, at most `60000`                    | Deadline for one page download                            |
+| `stagingChannelId`                  | `null`              | Discord channel ID or `null`                         | Age-restricted channel for pages uploaded ahead of turns  |
+
 `social_link_preview.allowedBotIds` is an array of Discord bot user ID strings,
 defaulting to `[]`. Add a source bot's user ID to let its links trigger previews;
 for example, put gopher's user ID in nijika's allow list to preview gopher's links.

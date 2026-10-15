@@ -62,6 +62,7 @@ import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { FeedPlatformRegistry } from '../infra/social-feed';
 import type { ArchiveControlFactory } from '../application/archive/control';
 import type { DbInspectService } from '../application/db-inspect/service';
+import type { GalleryReaderService } from '../application/gallery-reader/service';
 import type { GuildSettingsService } from '../application/guild-settings/service';
 
 import { ClientEventBridge, type ClientEventBridgeSuppression } from './client-event-bridge';
@@ -443,6 +444,15 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   public get dbInspectService(): DbInspectService | undefined {
     return this.container.tryResolve<DbInspectService>(TOKENS.DbInspectService);
+  }
+
+  /**
+   * Paged gallery reader behind the nhentai / wnacg previews, published by
+   * the social-link-preview plugin; `undefined` when gallery previews are
+   * off or the bot does not run the plugin.
+   */
+  public get galleryReader(): GalleryReaderService | undefined {
+    return this.container.tryResolve<GalleryReaderService>(TOKENS.GalleryReader);
   }
 
   /** Bot-scoped {@link Translator}. Undefined only in the pre-`run()` window. */
