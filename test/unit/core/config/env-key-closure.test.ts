@@ -36,7 +36,7 @@ const FULL_SOURCE: NodeJS.ProcessEnv = {
   XAI_API_KEY: 'sk-xai',
   CWA_API_KEY: 'cwa-key',
   NOTIFY_API_PORT: '8787',
-  NOTIFY_API_KEY: 'notify-relay-key-0123456789abcdef',
+  NOTIFY_API_KEY: 'x'.repeat(32),
 };
 
 describe('Env key closure', () => {
