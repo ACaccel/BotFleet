@@ -1042,7 +1042,8 @@
   },
   "give_score": {
     "result": "{{persona}}給「{{subject}}」打了 **{{score}}/10** 分!",
-    "message_result": "{{persona}}給 {{author}} 的[這則訊息]({{url}})打了 **{{score}}/10** 分!",
+    "message_result": "{{persona}}給 {{author}} 的[{{preview}}]({{url}})打了 **{{score}}/10** 分!",
+    "message_empty": "這則訊息",
     "comment": {
       "negative_1": "這已經不是分數的問題了……",
       "negative_2": "扣分扣到變負的,恭喜創下紀錄。",

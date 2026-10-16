@@ -61,6 +61,9 @@ Every bot shares the framework capabilities:
   message menu) and `/gay` give daily readings in the bot's configured time zone, with member and
   pair options and mention-safe replies. [`/gay`](docs/fun-readings.md) optionally uses archived
   activity and mutual interactions, with bounded queries and stored daily results.
+  The message score menu links the original text, collapsing whitespace and truncating
+  previews to 100 characters (including `…`, without splitting emoji). Markdown is
+  escaped; messages without text use a localized message label.
 - **Social media.** Rich previews for shared links and per-channel subscriptions to
   social feeds. X links and subscriptions use custom cards for text and photos,
   proxies for playable videos, and bounded video uploads as a fallback.
