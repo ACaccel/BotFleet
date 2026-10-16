@@ -57,6 +57,26 @@ export const buildSendableChannel = (
   };
 };
 
+/**
+ * Channel types `isTextBased()` answers `true` for. Mirrors discord.js's
+ * own set so a fixture cannot claim a category or forum is postable.
+ */
+const THREAD_CHANNEL_TYPES: ReadonlySet<ChannelType> = new Set([
+  ChannelType.PublicThread,
+  ChannelType.PrivateThread,
+  ChannelType.AnnouncementThread,
+]);
+
+const TEXT_CAPABLE_CHANNEL_TYPES: ReadonlySet<ChannelType> = new Set([
+  ChannelType.GuildText,
+  ChannelType.GuildAnnouncement,
+  ChannelType.GuildVoice,
+  ChannelType.GuildStageVoice,
+  ChannelType.PublicThread,
+  ChannelType.PrivateThread,
+  ChannelType.AnnouncementThread,
+]);
+
 interface BuildChannelInput {
   readonly id: string;
   readonly name?: string;
@@ -70,24 +90,42 @@ interface BuildChannelInput {
   readonly viewableByAll?: boolean;
   /** When true `permissionsFor` returns null (permissions uncomputable). */
   readonly permissionsNull?: boolean;
+  /**
+   * Exact permission bits per subject id, for paths that ask about more
+   * than ViewChannel. Takes precedence over `viewableBy*`; a subject
+   * absent from the record holds no permission at all.
+   */
+  readonly permissionsBySubject?: Readonly<Record<string, readonly bigint[]>>;
 }
 
 export const buildTextChannel = (input: BuildChannelInput): GuildBasedChannel => {
   const viewableByAll = input.viewableByAll ?? true;
+  const type = input.type ?? ChannelType.GuildText;
+  // discord.js accepts a bare id wherever it accepts a member or role,
+  // and handlers use that to avoid the `APIInteractionGuildMember` union.
   const permissionsFor = (
-    subject: GuildMember | Role,
+    subject: GuildMember | Role | string,
   ): { has: (flag: bigint) => boolean } | null => {
     if (input.permissionsNull === true) return null;
-    const subjectId = subject.id;
+    const subjectId = typeof subject === 'string' ? subject : subject.id;
+    if (input.permissionsBySubject !== undefined) {
+      const bits = input.permissionsBySubject[subjectId] ?? [];
+      return { has: (flag: bigint) => bits.includes(flag) };
+    }
     const granted = viewableByAll || (input.viewableBy?.has(subjectId) ?? false);
     return { has: () => granted };
   };
   return {
     id: input.id,
     name: input.name ?? `channel-${input.id}`,
-    type: input.type ?? ChannelType.GuildText,
+    type,
     parentId: input.parentId ?? null,
     parent: input.parent ?? null,
+    isTextBased: () => TEXT_CAPABLE_CHANNEL_TYPES.has(type),
+    // The predicate the feed poller actually demands of a destination;
+    // a category or forum answers false for both.
+    isSendable: () => TEXT_CAPABLE_CHANNEL_TYPES.has(type),
+    isThread: () => THREAD_CHANNEL_TYPES.has(type),
     permissionsFor,
   } as unknown as GuildBasedChannel;
 };

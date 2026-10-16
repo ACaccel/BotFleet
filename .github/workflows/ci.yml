@@ -23,150 +23,101 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Runners are pinned to the deployment host's Ubuntu release rather than
+# `ubuntu-latest`, so a runner image migration is a deliberate change.
 jobs:
-  lint:
-    runs-on: ubuntu-latest
+  quality:
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/yarn-install
-      - run: yarn lint
-      - run: yarn format:check
-      - run: yarn handlers:gen:check
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/yarn-install
-      # `tsconfig.strict.json` includes the whole `src/` tree, so
-      # `yarn typecheck` compiles `src/bot/<name>/index.ts`, which
-      # `import`s the gitignored per-bot `config.json`. Seed it so type
-      # resolution succeeds — same reason as `typecheck-emit`.
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/npm-install
+      # TypeScript imports gitignored per-bot config.json files. Seed
+      # placeholder copies for both noEmit and emit-mode checks.
       - uses: ./.github/actions/seed-bot-config
-      - run: yarn typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run handlers:gen:check
+      - run: npm run typecheck
+      - run: npm run typecheck:emit
+      - run: npm run knip
 
-  test-coverage:
-    # `yarn test:coverage` is `vitest run --coverage`, which runs every
-    # project — unit, integration, integration-nodb, contract, i18n and
-    # tools. It is therefore the single job that executes the whole
-    # suite; separate `test-unit` / `test-tools` jobs only re-ran a
-    # subset of it. The dedicated `test-int` / `test-contract` jobs
-    # below stay because they carry the empty-project guard, which this
-    # job cannot express.
-    #
-    # Coverage floors (`src/core/**` ≥ 90%, overall ≥ baseline) live in
-    # vitest.config.ts; this job is the gate that enforces them.
-    runs-on: ubuntu-latest
+  tests:
+    # Coverage runs all six projects once and enforces the thresholds in
+    # vitest.config.ts. Check discovery first because Vitest can succeed
+    # when one project silently contains no tests.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/yarn-install
-      - run: yarn test:coverage
-
-  test-int:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/yarn-install
-      # Run integration tests with JSON reporter so the next step can
-      # verify the project actually loaded files (no silent green).
-      # `test:int` does not pass `--passWithNoTests`, so vitest itself
-      # exits nonzero on a glob mismatch; the JSON guard below is
-      # defense-in-depth for the case where suites load but every test
-      # inside them is skipped.
-      - name: Run integration tests
-        run: yarn test:int --reporter=json --outputFile=.vitest-int.json
-      # Empty-project guard: a zero-suite run means the vitest project
-      # glob is broken — fail the build.
-      - name: Empty-project guard
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/npm-install
+      - uses: ./.github/actions/seed-bot-config
+      - name: Require tests in every Vitest project
+        shell: bash
         run: |
           set -euo pipefail
-          if [ -f .vitest-int.json ]; then
-            suites="$(jq '.numTotalTestSuites // 0' .vitest-int.json)"
-          else
-            suites=0
-          fi
-          echo "::notice::numTotalTestSuites=$suites"
-          if [ "$suites" -gt 0 ]; then
-            echo "Integration test suites present; guard satisfied."
-            exit 0
-          fi
-          echo "::error::Expected at least one integration test suite, but vitest reported 0."
-          exit 1
+          node scripts/runtime.mjs exec vitest list --json | jq -e '
+            group_by(.projectName)
+            | map({key: .[0].projectName, value: length})
+            | from_entries
+            | . as $counts
+            | ["unit", "integration", "integration-nodb", "contract", "i18n", "tools"]
+            | map(select(($counts[.] // 0) == 0))
+            | if length == 0 then "All six Vitest projects contain tests."
+              else error("Empty Vitest projects: \(join(", "))") end
+          '
+      - run: npm run test:coverage
 
-  test-contract:
-    runs-on: ubuntu-latest
+  migration-drill:
+    # The MongoDB migration drill skips itself unless
+    # MIGRATION_TEST_BIN_DIR names real database binaries, so `tests`
+    # never executes it. This job provisions the pinned runtime and
+    # fails when the drill is skipped rather than run.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/yarn-install
-      - name: Run contract tests
-        run: yarn test:contract --reporter=json --outputFile=.vitest-contract.json
-      # Empty-project guard: a zero-suite run means the vitest project
-      # glob is broken — fail the build.
-      - name: Empty-project guard
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/npm-install
+      - name: Provision the pinned MongoDB runtime
+        shell: bash
+        run: CONDA_EXE="$CONDA/bin/conda" bash scripts/setup-mongo.sh "$RUNNER_TEMP/mongodb"
+      - name: Run the migration drill and require it to execute
+        shell: bash
         run: |
           set -euo pipefail
-          if [ -f .vitest-contract.json ]; then
-            suites="$(jq '.numTotalTestSuites // 0' .vitest-contract.json)"
-          else
-            suites=0
-          fi
-          echo "::notice::numTotalTestSuites=$suites (contract)"
-          if [ "$suites" -gt 0 ]; then exit 0; fi
-          echo "::error::Expected at least one contract test suite, but vitest reported 0."
-          exit 1
-
-  knip:
-    # Detects unused files, dependencies, exports and types. The
-    # `knip.json` rules table errors on all of them except
-    # `classMembers`, which stays at `warn`.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/yarn-install
-      - run: yarn knip
-
-  typecheck-emit:
-    # Confirm `tsc -p tsconfig.build.json` actually compiles outside
-    # the strict-tsconfig include scope. `yarn
-    # typecheck` runs noEmit on the strict project; this job runs the
-    # whole src/ tree through emit-mode tsc so a broken `import`
-    # outside the strict scope is caught at PR time, not runtime.
-    #
-    # NOTE: this is NOT a deploy build. Runtime is `ts-node` from
-    # source (see `yarn nijika` etc. in package.json). The emitted
-    # `dist/` retains TS path aliases (`require("@utils")`) and does
-    # not bundle non-TS assets (config.json / locale JSON), so
-    # invoking `node dist/...` would fail. The only signal this job
-    # carries is whether tsc emits cleanly.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/yarn-install
-      - uses: ./.github/actions/seed-bot-config
-      - run: yarn typecheck:emit
+          export MIGRATION_TEST_BIN_DIR="$RUNNER_TEMP/mongodb/bin"
+          # Appended so the database runtime's own node cannot shadow
+          # the project runtime that npm-install put first on PATH.
+          export PATH="$PATH:$MIGRATION_TEST_BIN_DIR"
+          report="$RUNNER_TEMP/migration-drill.json"
+          npm run test:tools -- tools/migration/mongo.integration.test.ts \
+            --reporter=default --reporter=json --outputFile.json="$report"
+          jq -e '
+            if .numTotalTests > 0 and .numPassedTests == .numTotalTests
+            then "Migration drill ran \(.numPassedTests) tests."
+            else error("Migration drill did not run: \(.numPassedTests) of \(.numTotalTests) passed, \(.numPendingTests) skipped.")
+            end
+          ' "$report"
 
   security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The only job that needs more than the workflow-level `contents:
     # read`: gitleaks annotates the pull request with what it found.
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # gitleaks needs full history
-      - uses: ./.github/actions/yarn-install
+      - uses: ./.github/actions/npm-install
       - name: audit-ci (HIGH+ with documented allowlist)
         # `pipefail` is what makes this a gate: without it the step's exit
         # status is `tee`'s (always 0) and a HIGH+ advisory would pass.
         shell: bash
         run: |
           set -euo pipefail
-          yarn security --output-format=json | tee audit-ci-report.json
+          npm run security -- --output-format=json | tee audit-ci-report.json
       - name: Archive audit report + allowlist
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-ci-report-${{ github.run_id }}
           path: |
@@ -178,6 +129,6 @@ jobs:
         # scanner runs with repository contents in scope, so an
         # upstream tag repoint must not change what executes here.
         # Bump deliberately alongside the version comment.
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

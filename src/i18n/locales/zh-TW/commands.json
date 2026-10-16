@@ -1,222 +1,81 @@
 {
-  "activity_create": {
-    "description": "建立活動",
-    "options": {
-      "title": {
-        "description": "活動標題"
-      },
-      "duration": {
-        "description": "活動時限 (1s, 1m, 1h, 1d, 1w)"
-      },
-      "description": {
-        "description": "活動描述 (optional)"
-      }
-    }
-  },
-  "activity_delete": {
-    "description": "刪除活動",
-    "options": {
-      "activity_id": {
-        "description": "活動ID"
-      }
-    }
-  },
-  "add_reply": {
-    "description": "新增自動回覆",
-    "options": {
-      "keyword": {
-        "description": "關鍵字"
-      },
-      "reply": {
-        "description": "回覆"
-      }
-    }
-  },
-  "ai_settings": {
-    "description": "一次性編輯你的 AI 設定（model / temperature / web search / system prompt）",
-    "options": {
-      "provider": {
-        "description": "選擇 AI provider，後續 model 候選將依此 provider 動態載入"
-      }
-    }
-  },
-  "ai_status": {
-    "description": "顯示你目前的 AI 設定"
-  },
-  "ai_whitelist_add": {
-    "description": "[管理員] 將用戶加入 AI 白名單",
-    "options": {
-      "user": {
-        "description": "要加入白名單的用戶"
-      }
-    }
-  },
-  "ai_whitelist_list": {
-    "description": "列出目前 AI 白名單的所有用戶"
-  },
-  "ai_whitelist_remove": {
-    "description": "[管理員] 將用戶從 AI 白名單移除",
-    "options": {
-      "user": {
-        "description": "要移除的用戶"
-      }
-    }
-  },
   "ban_user": {
-    "description": "暫時禁言使用者(ban_threshold: 5 votes, judge_time: 1 min)",
+    "description": "依照伺服器設定發起禁言投票，禁言時間為 1–5 分鐘",
     "options": {
       "user": {
-        "description": "被禁言的使用者"
+        "description": "要投票禁言的成員"
       },
       "duration": {
-        "description": "禁言時限 (單位: 分鐘, max: 5)"
-      }
-    }
-  },
-  "bubble_wrap": {
-    "description": "產生泡泡紙",
-    "options": {
-      "str": {
-        "description": "隱藏字"
+        "description": "覆寫預設禁言時間，單位為分鐘（1–5）"
       }
     }
   },
   "bug_report": {
-    "description": "回報問題",
-    "options": {
-      "content": {
-        "description": "問題描述"
-      }
-    }
+    "description": "向 bot 管理員回報問題或建議"
   },
   "change_avatar": {
-    "description": "人格變換",
+    "description": "切換 bot 的人格(頭像、暱稱與代表色)",
     "options": {
       "identity": {
-        "description": "就是身分"
-      }
-    }
-  },
-  "change_nickname": {
-    "description": "更改bot暱稱",
-    "options": {
-      "nickname": {
-        "description": "新暱稱"
-      }
-    }
-  },
-  "db_list_message": {
-    "description": "列出特定頻道、特定日期、特定時段(hour)的訊息紀錄",
-    "options": {
-      "channel": {
-        "description": "要查詢的頻道/討論串"
-      },
-      "date": {
-        "description": "日期 (YYYY-MM-DD)"
-      },
-      "print": {
-        "description": "是否直接發成訊息 (yes: 直接發訊息, no: 文字檔, 預設 no)",
-        "choices": {
-          "no": "文字檔 (預設)",
-          "yes": "訊息"
-        }
-      },
-      "hour": {
-        "description": "時段 (0-23)"
-      }
-    }
-  },
-  "delete_reply": {
-    "description": "刪除自動回覆",
-    "options": {
-      "keyword": {
-        "description": "關鍵字"
-      }
-    }
-  },
-  "emoji_frequency": {
-    "description": "統計表情符號使用頻率",
-    "options": {
-      "frequency": {
-        "description": "頻率順序 (optional)",
-        "choices": {
-          "asc": "前n低頻率",
-          "desc": "前n高頻率"
-        }
-      },
-      "type": {
-        "description": "動態或靜態 (optional)",
-        "choices": {
-          "animated": "動態",
-          "static": "靜態"
-        }
-      },
-      "top_n": {
-        "description": "前n名 (optional, max: 30)"
-      },
-      "last_n_months": {
-        "description": "搜尋過去n個月 (optional, max: 24)"
+        "description": "要切換成的人格"
       }
     }
   },
   "gay": {
-    "description": "是不是給",
+    "description": "測量成員的 gay 指數,或兩人的 CP 指數(純娛樂)",
     "options": {
       "user": {
-        "description": "選擇對象"
+        "description": "要測量的成員"
+      },
+      "user2": {
+        "description": "第二位成員,填了就改測兩人的 CP 指數"
       }
     }
-  },
-  "get_avatar": {
-    "description": "取得使用者頭像",
-    "options": {
-      "user": {
-        "description": "選擇對象"
-      }
-    }
-  },
-  "giveaway_create": {
-    "description": "建立抽獎"
-  },
-  "giveaway_delete": {
-    "description": "刪除抽獎"
   },
   "give_score": {
-    "description": "給分"
-  },
-  "help": {
-    "description": "顯示指令清單與說明"
-  },
-  "level_detail": {
-    "description": "查看等級詳細資訊",
+    "description": "幫任何東西打 0-10 分,每天結果固定",
     "options": {
-      "left": {
-        "description": "左邊界"
+      "subject": {
+        "description": "要評分的東西(不填則幫你自己打分)"
       },
-      "right": {
-        "description": "右邊界"
+      "user": {
+        "description": "要評分的成員"
       }
     }
   },
-  "list_guild_members": {
-    "description": "列出目前伺服器所有成員（含機器人）"
-  },
-  "list_reply": {
-    "description": "列出自動回覆",
+  "help": {
+    "description": "顯示指令清單,或查看某個指令的詳細用法",
     "options": {
-      "keyword": {
-        "description": "關鍵字"
+      "command": {
+        "description": "要查看的指令"
+      }
+    }
+  },
+  "level_detail": {
+    "description": "查看 MEE6 等級排行榜,或某位成員的等級卡片",
+    "options": {
+      "rank": {
+        "description": "跳到這個名次所在的頁面並標示出來"
+      },
+      "member": {
+        "description": "查看這位成員的等級卡片(與 rank 同時填寫時以此為準)"
       }
     }
   },
   "menu_get_avatar": {
     "name": "取得用戶頭像連結"
   },
+  "menu_author_avatar": {
+    "name": "取得作者頭像連結"
+  },
   "menu_get_sticker": {
     "name": "取得表符/貼圖連結"
   },
+  "menu_give_score": {
+    "name": "幫這則訊息打分"
+  },
   "random_restaurant": {
-    "description": "隨機餐廳抽取器 (台北/部分新北地區)",
+    "description": "隨機推薦餐廳(台北/部分新北地區)",
     "options": {
       "type": {
         "description": "餐廳種類"
@@ -228,186 +87,630 @@
         "description": "餐廳地址關鍵字"
       },
       "budget": {
-        "description": "預算（整數）"
+        "description": "預算上限(新台幣)"
       },
       "min_rating": {
-        "description": "最低評分"
+        "description": "最低評分(0-5,可有小數)"
       },
       "max_rating": {
-        "description": "最高評分"
-      }
-    }
-  },
-  "record": {
-    "description": "錄音",
-    "options": {
-      "action": {
-        "description": "開始或停止錄音",
-        "choices": {
-          "start": "開始",
-          "stop": "停止",
-          "save": "儲存音檔 (last n minutes)"
-        }
-      },
-      "duration": {
-        "description": "錄音時間長度 (last n minutes) (optional)"
-      }
-    }
-  },
-  "role_message": {
-    "description": "發送身份組領取訊息",
-    "options": {
-      "roles": {
-        "description": "可領取身份組id (ex: @身份組1 @身份組2...)"
+        "description": "最高評分(0-5,可有小數)"
       }
     }
   },
   "roll_call": {
-    "description": "點名",
+    "description": "點名成員、身分組或活動參加者,被點到的人按按鈕簽到",
     "options": {
+      "role": {
+        "description": "要點名的身分組"
+      },
       "users": {
-        "description": "被點名者或身份組 (ex: @user1 @role1 @user2...)"
+        "description": "要點名的成員,直接 @ 提及,可以多個"
       },
-      "activity_id": {
-        "description": "活動ID (用於連動活動參與者點名)"
-      }
-    }
-  },
-  "search_anime_scene": {
-    "description": "搜尋動漫截圖來源",
-    "options": {
-      "image": {
-        "description": "動漫截圖"
+      "activity": {
+        "description": "點名這個活動的參加者"
       },
-      "display_num": {
-        "description": "顯示幾筆搜尋結果 (optional)"
-      }
-    }
-  },
-  "sticker_frequency": {
-    "description": "統計貼圖使用頻率",
-    "options": {
-      "frequency": {
-        "description": "頻率順序 (optional)",
-        "choices": {
-          "asc": "前n低頻率",
-          "desc": "前n高頻率"
-        }
-      },
-      "top_n": {
-        "description": "前n名 (optional, max: 30)"
-      },
-      "last_n_months": {
-        "description": "搜尋過去n個月 (optional, max: 24)"
+      "deadline": {
+        "description": "多久後自動結束(例:10m、2h,最長 1d)"
       }
     }
   },
   "talk": {
-    "description": "讓機器人說話",
+    "description": "讓 bot 代你發言(預設會署名)",
     "options": {
+      "content": {
+        "description": "要說的話(最多 1900 字)"
+      },
       "channel": {
-        "description": "選擇頻道"
+        "description": "發送到哪個頻道(預設為目前頻道)"
       },
-      "content": {
-        "description": "就是內容"
+      "anonymous": {
+        "description": "不署名發送(僅 bot 管理員)"
       }
     }
   },
-  "talk_signed": {
-    "description": "讓機器人說話(署名)",
-    "options": {
-      "content": {
-        "description": "就是內容"
+  "archive": {
+    "description": "管理 msg-archive 的完整備份與日常備份",
+    "subcommands": {
+      "backup": {
+        "description": "開始、繼續或停止完整備份"
+      },
+      "status": {
+        "description": "在一個面板查看所有備份狀態"
+      },
+      "schedule": {
+        "description": "查看或修改日常備份排程",
+        "options": {
+          "enabled": {
+            "description": "啟用或停用日常備份（省略時不變）"
+          },
+          "minutes": {
+            "description": "每次備份的間隔分鐘數，1–10080（省略時不變）"
+          }
+        }
       }
     }
   },
-  "temp_role": {
-    "description": "建立一個暫時性的通知身份組,任何人都能領取,到期後自動刪除",
-    "options": {
-      "name": {
-        "description": "身份組名稱"
+  "feed": {
+    "description": "管理社群訂閱",
+    "subcommands": {
+      "subscribe": {
+        "description": "把某個社群帳號的新貼文轉發到頻道",
+        "options": {
+          "platform": {
+            "description": "帳號所在的社群平台",
+            "choices": {
+              "x": "X (Twitter)"
+            }
+          },
+          "account": {
+            "description": "帳號名稱,多個帳號用逗號分隔,前面加不加 @ 都可以"
+          },
+          "channel": {
+            "description": "要轉發到的頻道 (預設為目前頻道)"
+          },
+          "media": {
+            "description": "依貼文附加的媒體決定轉發範圍",
+            "choices": {
+              "media_only": "只轉發含圖片或影片的貼文,不含純文字",
+              "photo_only": "只轉發含圖片的貼文",
+              "video_only": "只轉發含影片的貼文",
+              "any": "轉發所有貼文:純文字、圖片、影片都包含"
+            }
+          },
+          "keyword": {
+            "description": "只轉發內文包含這段文字的貼文 (最多 100 字)"
+          }
+        }
       },
-      "days": {
-        "description": "存活天數 (1-30,預設 30)"
+      "unsubscribe": {
+        "description": "停止把社群貼文轉發到某個頻道",
+        "options": {
+          "channel": {
+            "description": "要退訂的頻道 (預設為目前頻道)"
+          },
+          "platform": {
+            "description": "只移除這個平台的訂閱",
+            "choices": {
+              "x": "X (Twitter)"
+            }
+          },
+          "account": {
+            "description": "只移除這些帳號的訂閱,多個帳號用逗號分隔"
+          }
+        }
+      },
+      "list": {
+        "description": "列出本伺服器的社群動態訂閱"
+      }
+    }
+  },
+  "reply": {
+    "description": "管理自動回覆",
+    "subcommands": {
+      "add": {
+        "description": "新增自動回覆:有人發出與關鍵字完全相同的訊息時,bot 會回覆",
+        "options": {
+          "keyword": {
+            "description": "觸發用的完整訊息;填 [*] 代表隨機插話"
+          },
+          "reply": {
+            "description": "bot 要回覆的內容"
+          }
+        }
+      },
+      "delete": {
+        "description": "刪除某個關鍵字的自動回覆",
+        "options": {
+          "keyword": {
+            "description": "關鍵字"
+          }
+        }
+      },
+      "list": {
+        "description": "列出自動回覆",
+        "options": {
+          "keyword": {
+            "description": "只列出這個關鍵字(不填則列出全部)"
+          }
+        }
+      }
+    }
+  },
+  "activity": {
+    "description": "發起與管理活動",
+    "subcommands": {
+      "create": {
+        "description": "在這個頻道發起活動,只有看得到頻道的人能報名",
+        "options": {
+          "role": {
+            "description": "只開放這個身分組報名(選填)"
+          }
+        }
+      },
+      "list": {
+        "description": "列出你看得到的進行中活動"
+      },
+      "cancel": {
+        "description": "取消活動(發起人或管理員)",
+        "options": {
+          "activity": {
+            "description": "要取消的活動"
+          }
+        }
+      }
+    }
+  },
+  "giveaway": {
+    "description": "管理抽獎",
+    "subcommands": {
+      "create": {
+        "description": "建立抽獎(會開啟表單,填寫獎品、名額與時間)",
+        "options": {
+          "destination": {
+            "description": "抽獎發布頻道（預設為當前頻道）",
+            "choices": {
+              "current": "當前頻道",
+              "configured": "預設抽獎頻道"
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "取消進行中的抽獎"
+      }
+    }
+  },
+  "ai": {
+    "description": "管理 AI 設定與存取權限",
+    "subcommands": {
+      "settings": {
+        "description": "一次性編輯你的 AI 設定（model / temperature / web search / system prompt）",
+        "options": {
+          "provider": {
+            "description": "選擇 AI provider，後續 model 候選將依此 provider 動態載入"
+          }
+        }
+      },
+      "status": {
+        "description": "顯示你目前的 AI 設定"
+      }
+    },
+    "groups": {
+      "whitelist": {
+        "subcommands": {
+          "add": {
+            "description": "[管理員] 將用戶加入 AI 白名單",
+            "options": {
+              "user": {
+                "description": "要加入白名單的用戶"
+              }
+            }
+          },
+          "remove": {
+            "description": "[管理員] 將用戶從 AI 白名單移除",
+            "options": {
+              "user": {
+                "description": "要移除的用戶"
+              }
+            }
+          },
+          "list": {
+            "description": "[管理員] 列出目前 AI 白名單的所有用戶"
+          }
+        },
+        "description": "管理 AI 白名單"
+      }
+    }
+  },
+  "thread": {
+    "description": "管理討論串",
+    "subcommands": {
+      "ban": {
+        "description": "透過此 bot 禁止指定使用者在此討論串發言、使用指令及觸發 bot",
+        "options": {
+          "users": {
+            "description": "1–20 位使用者的提及或 ID，以空白或逗號分隔"
+          }
+        }
+      },
+      "allow": {
+        "description": "透過此 bot 恢復指定使用者在此討論串發言、使用指令及觸發 bot 的權利",
+        "options": {
+          "users": {
+            "description": "1–20 位使用者的提及或 ID，以空白或逗號分隔"
+          }
+        }
+      },
+      "list": {
+        "description": "列出目前討論串中被此 bot 禁止的使用者"
+      },
+      "claim": {
+        "description": "申請成為討論串代理管理者",
+        "options": {
+          "thread": {
+            "description": "要申請管理的討論串(預設為目前的討論串)"
+          },
+          "reason": {
+            "description": "申請原因（1–1000 字）"
+          }
+        }
+      }
+    },
+    "groups": {
+      "manager": {
+        "description": "管理討論串代理管理者（僅 bot 管理員）",
+        "subcommands": {
+          "add": {
+            "description": "授予討論串代理管理權",
+            "options": {
+              "thread": {
+                "description": "目標討論串(預設為目前的討論串)"
+              },
+              "user": {
+                "description": "指定使用者"
+              }
+            }
+          },
+          "remove": {
+            "description": "撤銷討論串代理管理權",
+            "options": {
+              "thread": {
+                "description": "目標討論串(預設為目前的討論串)"
+              },
+              "user": {
+                "description": "指定使用者"
+              }
+            }
+          },
+          "list": {
+            "description": "列出代理管理者（預設為全伺服器）",
+            "options": {
+              "thread": {
+                "description": "只列出此討論串（省略時列出全伺服器）"
+              },
+              "page": {
+                "description": "頁碼（每頁 20 筆設定）"
+              }
+            }
+          }
+        }
       }
     }
   },
   "traffic": {
-    "description": "顯示伺服器訊息流量圖表與統計",
-    "options": {
-      "visibility": {
-        "description": "誰能看到回覆 (optional,預設:ephemeral)",
-        "choices": {
-          "ephemeral": "僅你自己",
-          "public": "所有人"
+    "description": "查看訊息流量統計",
+    "subcommands": {
+      "overview": {
+        "description": "顯示伺服器活動：數量、趨勢、排行、熱度圖與熱門訊息",
+        "options": {
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:7d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天",
+              "90d": "最近 90 天",
+              "365d": "最近 365 天"
+            }
+          },
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:public)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          }
         }
       },
-      "range": {
-        "description": "回顧的時間範圍 (optional,預設:7d)",
-        "choices": {
-          "24h": "最近 24 小時",
-          "7d": "最近 7 天",
-          "30d": "最近 30 天"
+      "channel": {
+        "description": "顯示單一頻道的活動",
+        "options": {
+          "channel": {
+            "description": "要查詢的頻道、論壇或討論串"
+          },
+          "include_threads": {
+            "description": "是否包含頻道底下的討論串 (optional,預設:true)"
+          },
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:7d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天",
+              "90d": "最近 90 天",
+              "365d": "最近 365 天"
+            }
+          },
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:public)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          }
         }
       },
-      "top_n": {
-        "description": "排行要顯示幾個頻道／用戶 (optional,1-25,預設:10)"
-      }
-    }
-  },
-  "traffic_me": {
-    "description": "顯示你自己的訊息活動統計",
-    "options": {
-      "visibility": {
-        "description": "誰能看到回覆 (optional,預設:ephemeral)",
-        "choices": {
-          "ephemeral": "僅你自己",
-          "public": "所有人"
+      "me": {
+        "description": "顯示你自己的活動統計",
+        "options": {
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:7d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天",
+              "90d": "最近 90 天",
+              "365d": "最近 365 天"
+            }
+          },
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:public)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          }
         }
       },
-      "range": {
-        "description": "回顧的時間範圍 (optional,預設:7d)",
-        "choices": {
-          "24h": "最近 24 小時",
-          "7d": "最近 7 天",
-          "30d": "最近 30 天"
-        }
-      },
-      "top_n": {
-        "description": "排行要顯示幾個頻道 (optional,1-25,預設:10)"
-      }
-    }
-  },
-  "traffic_user": {
-    "description": "顯示指定用戶的訊息活動統計",
-    "options": {
       "user": {
-        "description": "要查詢的用戶"
-      },
-      "visibility": {
-        "description": "誰能看到回覆 (optional,預設:ephemeral)",
-        "choices": {
-          "ephemeral": "僅你自己",
-          "public": "所有人"
+        "description": "顯示指定成員的活動統計",
+        "options": {
+          "user": {
+            "description": "要查詢的成員"
+          },
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:7d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天",
+              "90d": "最近 90 天",
+              "365d": "最近 365 天"
+            }
+          },
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:ephemeral)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          }
         }
       },
-      "range": {
-        "description": "回顧的時間範圍 (optional,預設:7d)",
-        "choices": {
-          "24h": "最近 24 小時",
-          "7d": "最近 7 天",
-          "30d": "最近 30 天"
+      "apps": {
+        "description": "顯示指令與應用程式的使用統計",
+        "options": {
+          "app": {
+            "description": "只顯示這個 bot (optional)"
+          },
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:7d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天",
+              "90d": "最近 90 天",
+              "365d": "最近 365 天"
+            }
+          },
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:public)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          }
         }
       },
-      "top_n": {
-        "description": "排行要顯示幾個頻道 (optional,1-25,預設:10)"
+      "emoji": {
+        "description": "顯示此伺服器自訂表情的使用統計",
+        "options": {
+          "order": {
+            "description": "排行順序 (optional,預設:most)",
+            "choices": {
+              "most": "由多到少",
+              "least": "由少到多"
+            }
+          },
+          "kind": {
+            "description": "靜態或動態表情 (optional,預設:all)",
+            "choices": {
+              "all": "全部",
+              "static": "靜態",
+              "animated": "動態"
+            }
+          },
+          "source": {
+            "description": "統計內文、reaction 或兩者 (optional,預設:all)",
+            "choices": {
+              "all": "兩者",
+              "message": "內文",
+              "reaction": "Reaction"
+            }
+          },
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:30d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天",
+              "90d": "最近 90 天",
+              "365d": "最近 365 天"
+            }
+          },
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:public)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          },
+          "top_n": {
+            "description": "排行顯示幾名 (optional,1-20,預設:20)"
+          }
+        }
+      },
+      "sticker": {
+        "description": "顯示此伺服器貼圖的使用統計",
+        "options": {
+          "order": {
+            "description": "排行順序 (optional,預設:most)",
+            "choices": {
+              "most": "由多到少",
+              "least": "由少到多"
+            }
+          },
+          "range": {
+            "description": "回顧的時間範圍 (optional,預設:30d)",
+            "choices": {
+              "24h": "最近 24 小時",
+              "7d": "最近 7 天",
+              "30d": "最近 30 天",
+              "90d": "最近 90 天",
+              "365d": "最近 365 天"
+            }
+          },
+          "visibility": {
+            "description": "誰能看到回覆 (optional,預設:public)",
+            "choices": {
+              "ephemeral": "僅你自己",
+              "public": "所有人"
+            }
+          },
+          "top_n": {
+            "description": "排行顯示幾名 (optional,1-12,預設:12)"
+          }
+        }
       }
     }
   },
-  "update_role": {
-    "description": "更新Mee6等級身分組"
+  "role": {
+    "description": "領取或管理身分組",
+    "subcommands": {
+      "panel": {
+        "description": "發送身分組領取面板(需要管理身分組權限)",
+        "options": {
+          "roles": {
+            "description": "要放上面板的身分組,直接 @ 提及,可以多個"
+          }
+        }
+      },
+      "sync": {
+        "description": "依 MEE6 等級立即同步等級身分組"
+      }
+    },
+    "groups": {
+      "temp": {
+        "description": "暫時通知身分組",
+        "subcommands": {
+          "create": {
+            "description": "建立暫時通知身分組,任何人可領取,到期自動刪除",
+            "options": {
+              "name": {
+                "description": "身分組名稱(會自動加上 🔔)"
+              },
+              "days": {
+                "description": "存活天數(1-30,預設 30)"
+              }
+            }
+          },
+          "list": {
+            "description": "列出進行中的暫時通知身分組"
+          },
+          "delete": {
+            "description": "提前刪除暫時通知身分組(建立者或管理員)",
+            "options": {
+              "role": {
+                "description": "要刪除的暫時通知身分組"
+              }
+            }
+          }
+        }
+      }
+    }
   },
-  "weather_forecast": {
-    "description": "天氣預報(台北)"
+  "db": {
+    "description": "唯讀查看 bot 的資料庫（限 bot 管理員）",
+    "subcommands": {
+      "stats": {
+        "description": "查看各 collection 的筆數與大小",
+        "options": {
+          "guild": {
+            "description": "要查看的伺服器資料庫（預設為目前伺服器，DM 中必填）"
+          }
+        }
+      },
+      "schema": {
+        "description": "查看 collection 的欄位與最新一筆資料",
+        "options": {
+          "collection": {
+            "description": "要查看的 collection"
+          },
+          "guild": {
+            "description": "要查看的伺服器資料庫（預設為目前伺服器，DM 中必填）"
+          }
+        }
+      },
+      "list": {
+        "description": "瀏覽 collection 的資料，可加上篩選條件",
+        "options": {
+          "collection": {
+            "description": "要瀏覽的 collection"
+          },
+          "guild": {
+            "description": "要查看的伺服器資料庫（預設為目前伺服器，DM 中必填）"
+          },
+          "field": {
+            "description": "篩選的欄位"
+          },
+          "operator": {
+            "description": "比較方式"
+          },
+          "value": {
+            "description": "比較的值（日期可用 YYYY-MM-DD）"
+          },
+          "sort": {
+            "description": "排序方式（預設新到舊）"
+          }
+        }
+      },
+      "get": {
+        "description": "查看單筆資料的完整內容",
+        "options": {
+          "collection": {
+            "description": "資料所在的 collection"
+          },
+          "id": {
+            "description": "資料的 ID"
+          },
+          "guild": {
+            "description": "要查看的伺服器資料庫（預設為目前伺服器，DM 中必填）"
+          }
+        }
+      }
+    }
+  },
+  "settings": {
+    "description": "設定此伺服器的機器人功能與偏好"
   }
 }

@@ -3,7 +3,7 @@ import { Schema, type InferSchemaType, type Types } from 'mongoose';
 /**
  * Temporary notification-role state.
  *
- * One document per role created via `/temp_role`. The Discord role
+ * One document per role created via `/role temp create`. The Discord role
  * carries no permissions and exists only so members can self-claim it
  * (to be `@mentioned`) until `expires_at`, at which point a scheduled
  * job deletes the role, edits the claim message, and removes this

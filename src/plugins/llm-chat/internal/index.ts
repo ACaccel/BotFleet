@@ -6,3 +6,4 @@
  * directly from there.
  */
 export { SessionManager } from './session-manager';
+export { gateChatRequest, releaseChatRequest } from './gate';

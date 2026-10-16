@@ -10,7 +10,7 @@
  * modularity is type-enforced rather than discipline-enforced.
  */
 import { ConfigurationError } from '../../errors';
-import type { Translator } from '../../i18n';
+import { withGuildContext, type Translator } from '../../i18n';
 import type { ServiceContainer, ServiceToken } from '../../ioc';
 import type { Logger } from '../../logger';
 import type { Clock } from '../../time';
@@ -149,6 +149,23 @@ export class PluginLifecycleRunner {
     }
   }
 
+  /** A guild recovery failure must not disable a plugin for healthy guilds. */
+  public async runGuildDatabaseReady(guildId: string): Promise<void> {
+    for (const [id, entry] of this.host.registered) {
+      if (this.host.disabled.has(id)) continue;
+      try {
+        await withGuildContext(this.host.translator, guildId, () =>
+          entry.plugin.onGuildDatabaseReady?.(this.buildRuntimeContext(entry), guildId),
+        );
+      } catch (err: unknown) {
+        this.host.logger.error(
+          { plugin: id, guildId, err: err instanceof Error ? err : new Error(String(err)) },
+          'plugin onGuildDatabaseReady threw; guild recovery may be incomplete',
+        );
+      }
+    }
+  }
+
   /**
    * Run `onShutdown` in reverse registration order. Failures are always
    * non-fatal — the bot is shutting down regardless.
@@ -184,10 +201,6 @@ export class PluginLifecycleRunner {
       this.host.dispatcher.unsubscribeAll(id);
     }
   }
-
-  // -------------------------------------------------------------------
-  // Internals
-  // -------------------------------------------------------------------
 
   private async runPhase(
     phase: 'init' | 'start' | 'onReady',

@@ -1,255 +1,213 @@
-# BotFleet
+# Pleiades
 
-A multi-personality Discord bot framework built on TypeScript,
-discord.js and MongoDB, with a layered plugin architecture, bilingual
-i18n, and strict type safety.
+A multi-personality Discord bot framework built with TypeScript, discord.js and MongoDB.
+Each bot runs as its own process and composes its features from a shared plugin
+system, with English and Traditional Chinese replies throughout.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](tsconfig.strict.json)
 
----
+## Bots
 
-## What this is
+Each bot is a composition root under [`src/bot/<bot>/`](src/bot/) that extends the
+shared `BaseBot` and registers its own plugins and services.
 
-`BotFleet` hosts several independent bot personalities on a single
-shared core. Each personality is a thin composition root that opts
-into the plugins it wants; the core takes care of lifecycle,
-dependency injection, per-guild MongoDB connections, internationalised
-replies, slash-command codegen, and structured error handling.
+| Bot           | Run                   | Required environment              | What the implementation wires                                                                                                                                                                                                                                                                              |
+| ------------- | --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nijika`      | `npm run nijika`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI` | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles, plus social-feed polling with its platform registry, an optional loopback [earthquake early-warning API](docs/configuration.md#early-warning-api) and CWA earthquake reports (optional `CWA_API_KEY`) |
+| `tomori`      | `npm run tomori`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI` | Automatic replies, event mirroring, social-link previews, giveaways, activities and temporary roles, plus social-feed polling and optional earthquake early warnings/CWA reports; earthquake delivery starts off and is configured per server in `/settings`                                               |
+| `konata`      | `npm run konata`      | `TOKEN`, `CLIENT_ID`, `MONGO_URI` | LLM chat for whitelisted users (a mention starts a session, a reply continues it), an online presence and an optional loopback [notification relay API](docs/configuration.md#notification-relay-api); the guild-join listener is off                                                                      |
+| `gopher`      | `npm run gopher`      | `TOKEN`, `CLIENT_ID`              | Self-hosted LLM auto-replies and daily avatar/nickname sync; no database. [Endpoint changes](docs/configuration.md#gopher-llm-endpoint) take effect after a restart                                                                                                                                        |
+| `msg-archive` | `npm run msg-archive` | `TOKEN`, `CLIENT_ID`, `MONGO_URI` | The only [message archive](docs/message-archive.md) writer: live capture, periodic and full backups, and archive control; it exposes exactly `/archive`                                                                                                                                                    |
 
-Highlights:
+Event mirroring posts message edits, deletions and role changes to a guild's event
+channel and keeps deleted attachments through an attachment cache. LLM providers
+and Nijika/Tomori's [earthquake feeds](docs/configuration.md#earthquake-alerts-and-reports)
+need their own keys; see
+[environment variables](docs/configuration.md#environment-variables).
 
-- **Layered architecture** with ESLint-enforced dependency direction (`core → persistence/infra → handlers/plugins → bot`).
-- **Plugin system** with a four-phase lifecycle (`init`, `start`, `onReady`, `onShutdown`), per-plugin failure isolation, and config parsed by each plugin's own factory.
-- **Typed IoC container** (no `reflect-metadata`, no DI framework) reachable from plugins only through a typed barrel.
-- **Repository pattern** over Mongoose; tests inject in-memory fakes.
-- **Strategy-based LLM provider layer** (OpenAI, Anthropic, Gemini, xAI).
-- **Strict TypeScript** across the entire `src/`; CJK literals forbidden in handler / plugin code.
-- **Bilingual catalogs** (`en`, `zh-TW`) with a CI parity check.
+Every bot shares the framework capabilities:
 
-See [`docs/architecture.md`](docs/architecture.md) for the full
-single-page overview.
-
-## Built-in personalities
-
-| Bot           | Yarn script        | Surface                                                      |
-| ------------- | ------------------ | ------------------------------------------------------------ |
-| `nijika`      | `yarn nijika`      | Web-facing; exposes an Express`/discord/earthquake` webhook  |
-| `konata`      | `yarn konata`      | Full interactive feature set                                 |
-| `tomori`      | `yarn tomori`      | Full interactive feature set                                 |
-| `msg-archive` | `yarn msg-archive` | Worker-style; runs only the message-backup plugin            |
-| `gopher`      | `yarn gopher`      | Database-free; self-hosted-LLM auto-reply and a settings API |
+- Any registered slash command can be enabled per bot through its command list,
+  except on msg-archive, which always exposes exactly `/archive`. A command that
+  depends on a service the bot does not wire cannot run there; `/archive`, for
+  example, needs msg-archive's archive control.
+- [Thread moderation](docs/thread-moderation.md) is a per-bot option that requires
+  MongoDB.
+- Replies are localized in English or Traditional Chinese, selected per bot.
 
 ## Features
 
-- Slash commands, buttons, modals, select menus, and reaction handlers.
-- Multi-provider LLM chat with web-search toggle and per-user session persistence.
-- Voice channel recording.
-- Message backup to MongoDB.
-- Giveaways with reaction-driven winner selection.
-- Per-member activity tracking.
-- Social-media share-link previews (Twitter/X, Instagram, Threads, Facebook, Reddit, Bahamut, Bilibili) with original-embed suppression.
-- Earthquake alert broadcast via HTTP webhook.
-- Scheduled jobs hosted by plugins.
-- Built-in `en` / `zh-TW` locales; per-guild command localisation.
+- **Tomori and Nijika server settings.** A private [`/settings` panel](docs/tomori-settings.md)
+  with manager/role/everyone editing, form-based scope/destination controls,
+  server language/time zone, individual entertainment switches/cooldowns,
+  moderation-vote parameters, automatic replies and social previews. Tomori also has
+  opt-in earthquake warnings/reports, a destination channel and an optional warning role. Changes
+  use drafts, explicit saves and bounded configuration history.
+
+- **Slash commands and components.** Commands, context menus, buttons, modals and
+  select menus, with shared [state-based embed colors](docs/architecture.md#discord-presentation-colors).
+- **LLM integration.** Chat through OpenAI, Anthropic, Gemini and xAI, with the
+  user whitelist and settings managed through `/ai`, configurable
+  [model and usage limits](docs/configuration.md#ai-models-and-usage-limits),
+  and self-hosted auto-replies.
+- **Moderation.** [Temporary moderation](docs/contributing/operations.md#temporary-moderation)
+  through `/ban_user` votes with automatic reply suppression, and
+  [thread moderation](docs/thread-moderation.md) with paginated ban lists,
+  delegated management approved by DM and deletion of attributable bot replies.
+- **Community tools.** Giveaways, activities, temporary notification roles,
+  role-claim messages, level roles and restaurant picks. `/give_score` (also a
+  message menu) and `/gay` give daily readings in the bot's configured time zone, with member and
+  pair options and mention-safe replies. [`/gay`](docs/fun-readings.md) optionally uses archived
+  activity and mutual interactions, with bounded queries and stored daily results.
+- **Social media.** Rich previews for shared links and per-channel subscriptions to
+  social feeds. X links and subscriptions use custom cards for text and photos,
+  proxies for playable videos, and bounded video uploads as a fallback.
+  Facebook uses custom cards with truncated text, complete image galleries,
+  video uploads and engagement counts when available; the title links to the post,
+  and failed video delivery falls back to a link. Threads also renders custom
+  cards and video uploads from validated proxy metadata, without relying on
+  Discord to expand a proxy URL. Uploaded videos use a single Components V2
+  card with all post information above the video. nhentai and wnacg links in
+  age-restricted channels open a paged reader with prefetched pages. See
+  [preview configuration](docs/configuration.md#social-previews-and-feeds).
+- **Message archive.** msg-archive captures messages, edits (up to 50 previous
+  versions), deletions and complete reaction memberships. Administrators run a
+  resumable [full backup](docs/message-archive.md#full-backup) after one
+  confirmation, check status and set the
+  [periodic schedule](docs/message-archive.md#periodic-schedule) (disabled by
+  default) from the guild's debug channel.
+- **Activity reports.** Any bot can enable the read-only
+  [`/traffic` dashboards](docs/message-archive.md#activity-reports) on the archive:
+  dashboard images in embeds (two for the activity reports), public unless requested
+  otherwise.
+- **Database inspection.** Nijika's admins browse any guild database read-only
+  with [`/db`](docs/configuration.md#database-inspection): statistics, fields,
+  filtered pages and single documents, with every option offered as a list.
+- **Earthquake early warnings.** Nijika and Tomori's optional loopback
+  [HTTP API](docs/configuration.md#early-warning-api) receives alerts from the
+  地牛Wake Up! desktop app through a [Windows caller script](tools/earthquake-alert/windows/README.md)
+  and posts one embed per quake, edited as the CWA updates it; the guild's role is
+  pinged from a configurable local intensity (default 4). Tomori delivery requires
+  per-server opt-in in `/settings`; CWA reports never mention anyone.
+- **Notification relay.** Konata's optional loopback
+  [HTTP API](docs/configuration.md#notification-relay-api) lets a local service,
+  such as a deployment controller, post a progress embed and keep editing it.
+- **Command logs.** Compact debug-channel embeds show the full command name,
+  user and channel mentions, and execution time. See
+  [configuration](docs/configuration.md#common-bot-settings).
+
+## Requirements
+
+- Conda or Miniforge. [`scripts/setup-env.sh`](scripts/setup-env.sh) installs
+  into the project's `.conda` the pinned Node.js 22.13 runtime and the CJK and colour
+  emoji fonts used by dashboard images; it then installs the locked npm dependencies
+  and verifies Canvas (see [local setup](docs/contributing/local-setup.md#prerequisites)).
+- MongoDB for every bot except gopher. Integration tests use an in-memory server.
+- A Discord application per bot, plus provider API keys for the features you enable.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/ACaccel/BotFleet.git
-cd BotFleet
-yarn install --frozen-lockfile
-```
-
-Prerequisites:
-
-- Node.js **>= 22.13** (see [`.nvmrc`](.nvmrc))
-- Yarn 1 (classic)
-- MongoDB (local or hosted) — only the bots that use persistent state need it
-- `ffmpeg` on `PATH` if the voice plugin will be enabled
-
-For **each** personality you want to run, create the two configuration
-files in its directory:
-
-```bash
+git clone https://github.com/ACaccel/pleiades-fleet.git
+cd pleiades-fleet
+CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-env.sh
+export PATH="$PWD/.conda/bin:$PATH"
 cp src/bot/nijika/config.example.json src/bot/nijika/config.json
-# then create src/bot/nijika/.env with TOKEN, CLIENT_ID, MONGO_URI, ...
 ```
 
-Run the bot:
+Edit `config.json` with your Discord IDs and the commands to expose, removing
+unused placeholder entries. Create `src/bot/nijika/.env` with `TOKEN`, `CLIENT_ID`
+and `MONGO_URI`. Keep both files out of version control. The
+[configuration reference](docs/configuration.md) covers the other bots, every
+environment variable and each feature's settings.
 
 ```bash
-yarn nijika        # or yarn konata / yarn tomori / yarn msg-archive
+npm run register -t nijika --dry-run   # preview the commands
+npm run register -t nijika             # register one bot
+npm run nijika
 ```
 
-Deploy / refresh slash commands (run once after editing commands):
+`npm run register` without `-t` registers every bot that has both `config.json` and
+`.env`. Global registration **prunes guild-scoped commands**; see
+[registering slash commands](docs/contributing/local-setup.md#registering-slash-commands)
+for test-guild registration and the opt-out flags. Registration is separate from
+[deployment](docs/contributing/deployment.md), which runs the bots as systemd services.
 
-```bash
-yarn deploy
+## Commands
+
+A bot exposes only the command IDs listed in its `config.json` `commands`. Related
+actions are grouped under one root. `/help` shows a private root-command overview
+with a category selector, whose first entry returns to the overview; `/help command:<name>`
+lists that command's paths and options. Admin-only paths are hidden from non-admins.
+
+| Area              | Commands                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| Grouped roots     | `/activity`, `/ai`, `/feed`, `/giveaway`, `/reply`, `/role`, `/thread`, `/traffic`, `/archive`, `/settings` |
+| Activity reports  | `/traffic overview`, `channel`, `me`, `user`, `apps`, `emoji`, `sticker`                                    |
+| Server and roles  | `/role`, `/level_detail`, `/roll_call`, `/ban_user`                                                         |
+| Bot persona       | `/talk`, `/change_avatar`                                                                                   |
+| Utilities and fun | `/help`, `/bug_report`, `/random_restaurant`, `/give_score`, `/gay`                                         |
+| Administration    | `/db stats`, `schema`, `list`, `get` (nijika only)                                                          |
+| Context menus     | Get avatar (from a member or a message author), get sticker, score a message                                |
+
+Upgrading from standalone commands such as `/feed_subscribe`, or from the removed
+`/emoji_frequency`, `/sticker_frequency` and `/db_list_message`? See
+[grouped slash commands](docs/upgrading.md#grouped-slash-commands) and
+[message statistics commands](docs/upgrading.md#message-statistics-commands).
+To add a command, follow [adding a slash command](docs/contributing/adding-a-command.md).
+
+## Project layout
+
+```text
+src/
+  core/         contracts, errors, Result, i18n, IoC, logging, policies
+  persistence/  repository contracts and Mongoose storage
+  infra/        Discord, MongoDB, HTTP and provider adapters
+  application/  feature services shared by handlers and plugins
+  handlers/     commands, buttons, modals, select menus
+  plugins/      features, event subscriptions and scheduled jobs
+  bot/          composition roots (one directory per bot) and lifecycle
+  i18n/         en and zh-TW translation catalogs
+scripts/        runtime launcher, environment setup, deployment, codegen
+tools/          operator CLIs: db maintenance, backups, host migration, archive benchmarks
+test/           unit, integration, contract and i18n suites
 ```
 
-## Configuration
+Lower layers never import higher ones, and handlers and plugins do not import each
+other; ESLint enforces the boundaries.
+[Architecture](docs/architecture.md) explains the layers, startup, plugins and
+dependency injection, the request flow and message archive ownership.
 
-### `.env`
+## Documentation
 
-Each personality reads its own `.env` from `src/bot/<name>/.env`. The
-authoritative schema lives in [`src/core/config/env.ts`](src/core/config/env.ts).
+The [documentation index](docs/README.md) lists the guides under `docs/`.
 
-| Key                       | Required | Notes                                                                   |
-| ------------------------- | -------- | ----------------------------------------------------------------------- |
-| `TOKEN`                   | yes      | Discord bot token                                                       |
-| `CLIENT_ID`               | yes      | Discord application client id                                           |
-| `MONGO_URI`               | optional | Required for any personality that uses persistent state                 |
-| `PORT`                    | optional | HTTP port for the earthquake webhook (nijika) / settings API (gopher)   |
-| `NODE_ENV`                | optional | `development` (default), `test`, `production`                           |
-| `LOG_LEVEL`               | optional | `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`            |
-| `OPENAI_API_KEY`          | optional | Enables OpenAI provider for the LLM chat plugin                         |
-| `ANTHROPIC_API_KEY`       | optional | Enables Anthropic provider                                              |
-| `GEMINI_API_KEY`          | optional | Enables Gemini provider                                                 |
-| `XAI_API_KEY`             | optional | Enables xAI provider                                                    |
-| `ACCUWEATHER_KEY`         | optional | Weather command                                                         |
-| `GOPHER_SETTINGS_API_KEY` | optional | Bearer key for gopher's settings REST API (required when it is enabled) |
-
-Secrets must never be committed. The schema rejects obvious
-placeholders (`your_token`, `changeme`, etc.) at startup.
-
-There is no root `.env.example`: the env contract is per-personality,
-and the zod schema in `src/core/config/env.ts` plus the table above are
-the authoritative definition. A template file would be a third copy
-free to drift from both.
-
-**Transport security for `GOPHER_SETTINGS_API_KEY`.** Bearer auth
-authenticates the caller; it does not encrypt the request. Over plain
-HTTP the `Authorization: Bearer <key>` header — and the endpoint being
-written — travel in cleartext, so a firewall or source-IP allow-list
-limits _who_ can connect but does not stop on-path eavesdropping. The
-API binds to `127.0.0.1` by default. If you expose the port (router
-port-forward, or `settings_api.host: "0.0.0.0"`), front it with TLS — a
-reverse proxy such as Caddy or nginx terminating HTTPS and proxying to
-`127.0.0.1:<PORT>` — or reach it through an encrypted tunnel (SSH,
-Tailscale/WireGuard) and keep the bind on loopback. Rotate the key if it
-may have been sent in cleartext.
-
-### `config.json`
-
-Per-personality static configuration, loaded as a sibling of each
-composition root (`src/bot/<name>/config.json`). Every personality ships
-a checked-in `config.example.json` — copy it, fill in the real IDs, and
-keep your `config.json` out of git (it is `.gitignore`d). The shape is
-`Config` in [`src/bot/index.ts`](src/bot/index.ts) plus per-personality
-extensions. Snowflake ids exceed JavaScript's safe-integer range, so
-every id must be a JSON **string**.
-
-Common fields:
-
-| Field                         | Type                | Required | Notes                                                                                                                                                                         |
-| ----------------------------- | ------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                       | `string[]`          | no       | User ids with bot-admin privileges. Gates `/ai_whitelist_*`; `/bug_report` DMs every id. Default `[]`.                                                                        |
-| `language`                    | `"zh-TW"` \| `"en"` | no       | Default display locale, also used for registered slash-command text. Default `"zh-TW"`; an unsupported value warns and falls back.                                            |
-| `commands`                    | `string[]`          | no       | The slash commands this personality registers with Discord. Removing an entry only stops re-registering it — run `yarn deploy -t <name>` to take the command down on Discord. |
-| `guilds.<id>.channels`        | `Record<name, id>`  | no       | Symbolic channel names (`"debug"`, `"event"`, `"x_feed"`, …) → Discord ids, so handlers look channels up by name.                                                             |
-| `guilds.<id>.roles`           | `Record<name, id>`  | no       | Symbolic role names → Discord ids.                                                                                                                                            |
-| `guilds.<id>.permission_rank` | object              | no       | Privacy / clearance ranks for this guild — see below. Validated at startup; a malformed block fails the boot naming the guild.                                                |
-
-`guilds` and both of its maps are optional. A bot may omit a map, a
-guild entry, or the whole block: unresolvable ids are dropped and the
-bot keeps every feature while silently skipping channel-bound side
-effects (the debug interaction log, the guild-event mirror). `tomori`
-runs this way. The exception is `msg-archive`, whose backup pass
-requires a `debug` channel and aborts without one.
-
-`permission_rank` carries three optional maps: `channels`
-(`channelId -> integer >= 0`, higher = more private; an unlisted channel
-is rank 0), `roles` (`roleId -> integer >= 0`, keyed by raw Discord role
-id — a member's clearance is the max over their ranked roles), and
-`features` (per-feature `maxChannelRank` ceiling). A feature is
-suppressed on a channel when the channel's effective rank — the max over
-the channel and its full ancestry — exceeds that feature's ceiling;
-`null` means unbounded. Defaults: `guild_events` `0`,
-`channel_logging` `0`, `social_preview` `null`.
-
-Feature blocks are per-personality and every one is optional. Each is
-zod-validated with `.strict()` at startup, so an unknown key fails the
-boot, and every scalar has a code default — the block may be partial or
-omitted entirely.
-
-| Block                     | Loaded by      | Fields (default)                                                                                                                                                                                                                                                                                 |
-| ------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `llm_auto_reply`          | gopher         | `enabled` (`false`), `probability` (`0.05`), `messageCount` (`5`), `windowSeconds` (`30`), `cooldownSeconds` (`30`), `endpoint` (placeholder), `timeoutMs` (`10000`)                                                                                                                             |
-| `settings_api`            | gopher         | `enabled` (`false`), `host` (`127.0.0.1`), `basePath` (`/settings`). The bearer key comes from `GOPHER_SETTINGS_API_KEY`, never this block; an enabled API with no key refuses to start. The listen port is `PORT`.                                                                              |
-| `identity_sync`           | gopher         | `enabled` (`false`), `syncWithSource` (`false`), `sourceUserId` (**required** when `enabled && syncWithSource`), `schedule` (`0 4 * * *`), `syncAvatar` / `syncNickname` (`true`), `fallbackNickname` (empty = leave untouched), `fallbackAvatarPath` (`assets/gopher.png`)                      |
-| `social_link_preview`     | nijika, tomori | `enabled` (`false`), `originalMessageStrategy` (`suppress`), `providers` (all), `timeoutMs` (`4000`), `validationBudgetMs` (`8000`), `maxUrlsPerMessage` (`1`), plus six `*ProxyHosts` lists — see below                                                                                         |
-| `x_media_feed`            | nijika         | `enabled` (`false`), `accounts` (`{ handle, channel? }[]`), `defaultChannel` (`x_feed`), `pollIntervalMs` (`300000`, floor `60000`), `fullSweepEveryPolls` (`12`), `apiBaseUrl` (`https://api.fxtwitter.com`), `timeoutMs` (`8000`), `maxPostsPerPoll` (`5`), `embedProxyHost` (`fxtwitter.com`) |
-| `level_roles`             | nijika         | `level_<n>` → role name for the level-role sync. Required by `/update_role`; a malformed block disables the command with `replies:update_role.no_config`.                                                                                                                                        |
-| `auto_reply`              | nijika, tomori | `luckyReplies` (`{ userId, probability, reply }[]`, default `[]`) and `globalLuckyProbability` (`0.005`). Each entry fires `reply` verbatim for `userId` at `probability`; the lines are operator data, not catalog copy.                                                                        |
-| `weather_forecast`        | nijika, tomori | `locationKey` (**required** when `/weather_forecast` is enabled) — the AccuWeather location id, e.g. `315078` for Taipei. The API key stays in `ACCUWEATHER_KEY`.                                                                                                                                |
-| `random_restaurant`       | nijika, tomori | `apiUrl` (**required** when `/random_restaurant` is enabled) — absolute `http(s)` URL of the recommendation endpoint.                                                                                                                                                                            |
-| `backup_log_enabled`      | msg-archive    | `false` — when `true`, each backup pass also writes a transcript under `logs/backup/`                                                                                                                                                                                                            |
-| `backup_interval_minutes` | msg-archive    | `60` — minutes between backup passes                                                                                                                                                                                                                                                             |
-
-Several fields carry a required-when rule worth calling out:
-
-- `weather_forecast.locationKey` and `random_restaurant.apiUrl` — both
-  are **required whenever their command appears in `commands`**. There
-  is no safe default for "which city" or "which recommendation
-  service", so the handler validates its block at startup: a missing or
-  malformed one is logged at error level and that single command is not
-  registered, leaving the rest of the bot's command set intact. Copy the
-  values from `config.example.json`.
-- `social_link_preview.*ProxyHosts` — the six per-source embed-proxy
-  lists (`twitterProxyHosts`, `instagramProxyHosts`, `threadsProxyHosts`,
-  `facebookProxyHosts`, `redditProxyHosts`, `bilibiliProxyHosts`) have
-  **no code defaults and are required whenever `enabled` is `true`**.
-  They name third-party services whose availability changes faster than
-  a release ships, so the operator owns them; enabling the feature
-  without one fails the boot with an error naming the missing key. Copy
-  the audited values from the personality's `config.example.json` rather
-  than inventing hosts. While `enabled` is `false` the lists are
-  accepted but unread.
-- `x_media_feed.accounts[].channel` / `defaultChannel` — a symbolic
-  channel name, so the guild's `channels` map must carry a matching
-  entry. A guild without it silently opts out.
-
-## Adding a command, button, modal, or plugin
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) — it documents the recipe,
-the 150-line cap for handler `index.ts`, the i18n discipline, the
-plugin / IoC contract, and the quality gates.
-
-## Architecture
-
-```
-            bot/         composition roots (one per personality)
-              |
-              v
-   handlers/     plugins/        feature surface
-              |
-              v
-    persistence/   infra/        adapters to external systems
-              |
-              v
-            core/               pure domain — no Discord, no Mongo
-```
-
-Read [`docs/architecture.md`](docs/architecture.md) for the layer
-breakdown, key abstractions, request flow, and plugin lifecycle.
-
-## Development
-
-Every check that gates a change — type-check, lint, format, codegen
-drift, the six test projects, coverage, dead-code, and security — is
-listed with what it covers in
-[`CONTRIBUTING.md` §Quality gates](CONTRIBUTING.md#quality-gates).
+| Task                                       | Guide                                                   |
+| ------------------------------------------ | ------------------------------------------------------- |
+| Install and run locally                    | [Local setup](docs/contributing/local-setup.md)         |
+| Configure a bot                            | [Configuration](docs/configuration.md)                  |
+| Understand the system                      | [Architecture](docs/architecture.md)                    |
+| Operate the message archive and `/traffic` | [Message archive](docs/message-archive.md)              |
+| Moderate threads                           | [Thread moderation](docs/thread-moderation.md)          |
+| Deploy or update systemd services          | [Deployment](docs/contributing/deployment.md)           |
+| Diagnose database or connectivity problems | [Operations](docs/contributing/operations.md)           |
+| Upgrade an existing installation           | [Upgrade notes](docs/upgrading.md)                      |
+| Back up or restore the database            | [Database backups](tools/mongo-backup/README.md)        |
+| Move to another host                       | [Migration runbook](tools/migration/README.md)          |
+| Measure archive performance                | [Archive benchmarks](tools/archive-benchmark/README.md) |
+| Add a command, plugin or persisted model   | [Contributing](CONTRIBUTING.md)                         |
+| Review releases                            | [Changelog](CHANGELOG.md)                               |
 
 ## Contributing
 
-Bug reports, feature suggestions, and pull requests are welcome. Read
-[`CONTRIBUTING.md`](CONTRIBUTING.md) first; it covers the local setup,
-the quality gates that must pass before review, the architectural rules
-a reviewer will hold you to, and how to report a security vulnerability
-privately.
+[CONTRIBUTING.md](CONTRIBUTING.md) owns the [quality gates](CONTRIBUTING.md#quality-gates)
+that must pass before every commit and the
+[architectural rules](CONTRIBUTING.md#architectural-rules). Security issues are
+reported as described in
+[reporting a security vulnerability](CONTRIBUTING.md#reporting-a-security-vulnerability).
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+[MIT](LICENSE).

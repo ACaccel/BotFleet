@@ -2,12 +2,10 @@
  * Env key-closure contract.
  *
  * `loadEnv` projects the parsed environment onto the schema's own keys
- * so `.passthrough()` cannot leak unknown variables to callers. That
- * projection used to be a hand-written destructure, and it silently
- * dropped `ACCUWEATHER_KEY` — the key existed in the schema and in the
- * `Env` type, but never reached the returned object, so
- * `/weather_forecast` reported "service unavailable" on a correctly
- * configured deployment.
+ * so `.passthrough()` cannot leak unknown variables to callers. A
+ * hand-written projection can silently drop a key that the schema and the
+ * `Env` type both declare, so its feature reports "service unavailable" on
+ * a correctly configured deployment.
  *
  * The contract asserted here is closure in both directions: every key
  * the schema declares comes back out, and nothing else does.
@@ -25,15 +23,21 @@ const FULL_SOURCE: NodeJS.ProcessEnv = {
   TOKEN: 'real-bot-token-value-xyz',
   CLIENT_ID: '123456789012345678',
   MONGO_URI: 'mongodb://db.internal:27017',
-  PORT: '8080',
+  MONGO_INSPECT_URI: 'mongodb://inspector@db.internal:27017/?authSource=admin',
+  MONGO_RECOVERY_INTERVAL_MS: '5000',
   NODE_ENV: 'test',
   LOG_LEVEL: 'warn',
+  LOG_RETENTION_DAYS: '30',
+  PLEIADES_READY_FILE: '/run/pleiades-test/ready.json',
   OPENAI_API_KEY: 'sk-openai',
   ANTHROPIC_API_KEY: 'sk-anthropic',
   GEMINI_API_KEY: 'sk-gemini',
   XAI_API_KEY: 'sk-xai',
-  ACCUWEATHER_KEY: 'accuweather-key',
-  GOPHER_SETTINGS_API_KEY: 'gopher-bearer',
+  CWA_API_KEY: 'cwa-key',
+  EARTHQUAKE_ALERT_PORT: '4000',
+  EARTHQUAKE_ALERT_KEY: 'x'.repeat(32),
+  NOTIFY_API_PORT: '8787',
+  NOTIFY_API_KEY: 'x'.repeat(32),
 };
 
 describe('Env key closure', () => {
@@ -48,9 +52,9 @@ describe('Env key closure', () => {
     expect(Object.keys(env).sort()).toEqual([...ENV_KEYS].sort());
   });
 
-  it('carries ACCUWEATHER_KEY through to the result', () => {
+  it('carries an optional API key through to the result', () => {
     const env = loadEnv({ exitOnFailure: false, source: { ...FULL_SOURCE } });
-    expect(env.ACCUWEATHER_KEY).toBe('accuweather-key');
+    expect(env.CWA_API_KEY).toBe('cwa-key');
   });
 
   it('drops keys the schema does not declare', () => {

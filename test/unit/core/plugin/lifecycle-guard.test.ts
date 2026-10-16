@@ -19,7 +19,6 @@ import { describe, expect, it } from 'vitest';
 
 import { ConfigurationError } from '../../../../src/core/errors';
 import { createContainer, token } from '../../../../src/core/ioc';
-import { createLogger } from '../../../../src/core/logger';
 import { EventDispatcher } from '../../../../src/core/plugin/event-dispatcher';
 import {
   PluginLifecycleRunner,
@@ -36,9 +35,9 @@ import type {
 } from '../../../../src/core/plugin/types';
 import { systemClock } from '../../../../src/core/time';
 import { DuplicateRegistrationError } from '../../../../src/core/ioc/container';
+import { echoTranslator, silentLogger } from '../../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
-const fakeTranslator = { t: (k: string) => k } as LifecycleHost['translator'];
+const silent = silentLogger();
 
 interface TestService {
   readonly tag: string;
@@ -60,7 +59,7 @@ const buildHost = (plugins: readonly Plugin[]): LifecycleHost => {
     container,
     dispatcher: new EventDispatcher(silent),
     logger: silent,
-    translator: fakeTranslator,
+    translator: echoTranslator(),
     clock: systemClock,
   };
 };

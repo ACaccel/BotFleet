@@ -1,9 +1,9 @@
 /**
  * Boot-time job rebuild for the activity and giveaway plugins.
  *
- * `onReady` is the only path that repopulates the scheduler after a
- * restart: rows whose deadline is still ahead become scheduled jobs,
- * rows already past their deadline are reaped, and a guild whose
+ * Startup and guild database recovery repopulate the scheduler: rows whose deadline is still ahead become scheduled jobs,
+ * rows already past their deadline are settled (a giveaway is drawn,
+ * which reaps it when its announcement is gone), and a guild whose
  * `listAll` fails must not take the remaining guilds' jobs down with
  * it. The registry here holds two guilds with real rows so those three
  * outcomes are observable in the job map and the repos.
@@ -13,17 +13,13 @@ import type { Job } from 'node-schedule';
 
 import { createGiveawayPlugin } from '../../../src/plugins/giveaway';
 import { createActivityPlugin } from '../../../src/plugins/activity';
-import { createLogger } from '../../../src/core/logger';
-import { systemClock } from '../../../src/core/time';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS } from '../../../src/bot/tokens';
 import { DatabaseError } from '../../../src/core/errors';
 import { err, ok, type Result } from '../../../src/core/result';
 import type { GuildRegistry } from '../../../src/bot/guild-registry';
 import type { Repos } from '../../../src/persistence/repositories';
-import type { PluginRuntimeContext } from '../../../src/core/plugin';
-
-const silent = createLogger({ level: 'silent', pretty: false });
+import { buildPluginContext } from '../../fixtures/runtime';
 
 const HOUR_MS = 60 * 60 * 1000;
 const future = (): number => Date.now() + HOUR_MS;
@@ -89,7 +85,8 @@ class FakeGuildRepos {
           ? ok(this.rows.map((r) => ({ activity_id: r.id, expired_at: r.deadline })))
           : this.list(),
       findByActivityId: async (id: string) => this.find(id),
-      deleteByActivityId: async (id: string) => this.remove(id),
+      // Closing an overdue activity settles it; the fake records that as removal.
+      finish: async (id: string) => this.remove(id),
     };
     const giveaway = {
       listAll: async () =>
@@ -99,7 +96,8 @@ class FakeGuildRepos {
       findByMessageId: async (id: string) => this.find(id),
       deleteByMessageId: async (id: string) => this.remove(id),
     };
-    return { activity, giveaway } as unknown as Repos;
+    const rollCall = { listOpen: async () => ok([]) };
+    return { activity, giveaway, rollCall } as unknown as Repos;
   }
 }
 
@@ -115,21 +113,26 @@ const buildRegistry = (repos: ReadonlyMap<string, FakeGuildRepos>): GuildRegistr
  * seeded from the registry because the reap path (`deleteActivity` /
  * `deleteGiveaway`) short-circuits on a guild the client does not know.
  */
-const buildCtx = (registry: GuildRegistry, jobMap: Map<string, Job>): PluginRuntimeContext => {
-  const guilds = new Map<string, unknown>(registry.listGuildIds().map((id) => [id, { id }]));
+const buildCtx = (registry: GuildRegistry, jobMap: Map<string, Job>) => {
+  const guilds = new Map<string, unknown>(
+    registry
+      .listGuildIds()
+      .map((id) => [id, { id, channels: { cache: new Map() }, members: { cache: new Map() } }]),
+  );
   const container = createContainer();
   container.registerSingleton(TOKENS.GuildRegistry, () => registry);
   container.registerSingleton(
     TOKENS.DiscordClient,
-    () => ({ user: { id: 'bot-1' }, guilds: { cache: guilds } }) as never,
+    () =>
+      ({
+        user: { id: 'bot-1' },
+        guilds: { cache: guilds },
+        // The rows' channels no longer exist, so an overdue draw cannot be announced.
+        channels: { fetch: async () => Promise.reject(new Error('Unknown Channel')) },
+      }) as never,
   );
   container.registerSingleton(TOKENS.JobMap, () => jobMap);
-  return {
-    logger: silent,
-    translator: { t: (k: string) => k } as PluginRuntimeContext['translator'],
-    clock: systemClock,
-    resolve: container.resolve.bind(container) as PluginRuntimeContext['resolve'],
-  };
+  return buildPluginContext({ resolve: container.resolve.bind(container) });
 };
 
 const jobMap = new Map<string, Job>();
@@ -148,9 +151,25 @@ describe.each([
   {
     label: 'activity',
     create: createActivityPlugin,
-    jobKey: (id: string) => `activity:${id}`,
+    jobKey: (id: string) => `activity:close:${id}`,
   },
 ])('$label plugin onReady — job reboot', ({ create, jobKey }) => {
+  it('rebuilds only the recovered guild without replacing healthy jobs', async () => {
+    const healthy = new FakeGuildRepos([{ id: 'healthy', deadline: future() }]);
+    const recovered = new FakeGuildRepos([{ id: 'recovered', deadline: future() }]);
+    const repos = new Map([['healthy-guild', healthy]]);
+    const ctx = buildCtx(buildRegistry(repos), jobMap);
+    const plugin = create();
+    await plugin.onReady?.(ctx);
+    const healthyJob = jobMap.get(jobKey('healthy'));
+    repos.set('recovered-guild', recovered);
+
+    await plugin.onGuildDatabaseReady?.(ctx, 'recovered-guild');
+
+    expect([...jobMap.keys()].sort()).toEqual([jobKey('healthy'), jobKey('recovered')].sort());
+    expect(jobMap.get(jobKey('healthy'))).toBe(healthyJob);
+  });
+
   it('schedules a job for every row whose deadline is still ahead', async () => {
     const repos = new FakeGuildRepos([
       { id: 'row-a', deadline: future() },
@@ -164,7 +183,7 @@ describe.each([
     expect(repos.deleted).toEqual([]);
   });
 
-  it('reaps a row whose deadline already passed instead of scheduling it', async () => {
+  it('settles a row whose deadline already passed instead of scheduling it', async () => {
     const repos = new FakeGuildRepos([
       { id: 'stale', deadline: past() },
       { id: 'live', deadline: future() },

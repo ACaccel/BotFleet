@@ -5,16 +5,14 @@
  *   - whitelisted users only (via `UserApiSettingRepo`);
  *   - @-mention starts a new session;
  *   - a reply to an active session message continues it (owner-only);
- *   - placeholder reply edited with the LLM response;
- *   - 2000-char-safe paragraph-aware chunking;
- *   - usage-footer appended;
- *   - sessions tracked by `SessionManager`;
+ *   - placeholder reply edited with the LLM response, chunked
+ *     paragraph-aware under the 2000-char limit, with a usage footer;
  *   - all bot output sanitised with `allowedMentions: { parse: [] }`
  *     so prompt-induced @everyone/@role/@user pings cannot fire.
  *
- * Bot identity is injected via `clientId` — the plugin uses it to
- * strip its own mention from input, to drive the new-vs-continue
- * branching, and to tag error logs.
+ * Bot identity is injected via `clientId`: it strips the plugin's own
+ * mention from input, drives the new-vs-continue branching, and tags
+ * error logs.
  */
 import type { Message } from 'discord.js';
 
@@ -35,7 +33,8 @@ import {
   type LLMSettings,
 } from '../../infra/llm';
 import { JobManager } from '../../core/scheduling';
-import { SessionManager } from './internal';
+import { effectiveModel, type AiPolicy } from '../../application/ai/policy';
+import { gateChatRequest, releaseChatRequest, SessionManager } from './internal';
 import { logError, type Logger } from '../../core/logger';
 
 const PLUGIN_ID = 'llm-chat';
@@ -49,6 +48,9 @@ const DEFAULT_MODEL_REFRESH_CRON = '0 4 * * 1';
 
 interface LlmChatPluginConfig {
   readonly clientId: string;
+  /** Model allowlist and rate limits; bot admins are exempt from both. */
+  readonly policy: AiPolicy;
+  readonly isAdmin: (userId: string) => boolean;
 }
 
 /** The message path's dependencies, built once by `init`. */
@@ -68,9 +70,9 @@ interface UserApiDoc {
   web_search: boolean;
 }
 
-const toSettings = (doc: UserApiDoc): LLMSettings => ({
-  provider: doc.provider as LLMProviderName,
-  model: doc.model,
+const toSettings = (doc: UserApiDoc, model: { provider: string; model: string }): LLMSettings => ({
+  provider: model.provider as LLMProviderName,
+  model: model.model,
   temperature: doc.temperature,
   systemPrompt: doc.system_prompt,
   webSearch: doc.web_search,
@@ -159,6 +161,8 @@ const handleChatError = async (
 
 export const createLlmChatPlugin = (config: LlmChatPluginConfig): Plugin => {
   const sessions = new SessionManager();
+  // Requests each member has waiting on a provider, for the concurrency limit.
+  const inFlight = new Map<string, number>();
   // Everything the message path needs, built in `init()` from the
   // resolved typed Env rather than at factory time, so the provider
   // registry's API-key gate sees the values supplied through DI rather
@@ -208,7 +212,7 @@ export const createLlmChatPlugin = (config: LlmChatPluginConfig): Plugin => {
       ctx.registerInstance(TOKENS.DefaultModelResolver, defaultModelResolver);
       // Pre-warm each provider's live model catalog at boot. The call
       // returns a fallback sync while kicking off the SDK fetch, so by
-      // the time `/ai_settings` is invoked the cache is usually warm.
+      // the time `/ai settings` is invoked the cache is usually warm.
       for (const provider of PREWARM_PROVIDERS) {
         modelCatalog.list(provider);
       }
@@ -244,33 +248,68 @@ export const createLlmChatPlugin = (config: LlmChatPluginConfig): Plugin => {
 
         // Case 1: @-mention -> new session. `ignoreRepliedUser` is
         // critical so a reply to the bot does not get classed as a
-        // fresh @-tag.
-        if (message.mentions.has(config.clientId, { ignoreRepliedUser: true })) {
-          await handleNewSession(
-            message,
-            userDoc,
-            sessions,
-            llmService,
-            logger,
-            config.clientId,
-            ctx.translator,
-          );
-          return;
+        // fresh @-tag. Case 2: a reply to a bot message belonging to an
+        // active session continues that session.
+        const refId = message.reference?.messageId;
+        const isNew = message.mentions.has(config.clientId, { ignoreRepliedUser: true });
+        const userId = message.author.id;
+        if (isNew) {
+          if (stripMention(message.content, config.clientId).length === 0) return;
+        } else {
+          if (refId === undefined || message.content.trim().length === 0) return;
+          const session = sessions.resolveSessionByBotMessage(refId);
+          if (session === undefined || session.userId !== userId) return;
         }
 
-        // Case 2: reply to a bot message belonging to an active
-        // session continues that session.
-        const refId = message.reference?.messageId;
-        if (refId !== undefined && sessions.hasActiveSession(refId)) {
-          await handleContinueSession(
-            message,
-            refId,
-            userDoc,
-            sessions,
-            llmService,
-            logger,
-            ctx.translator,
+        const exempt = config.isAdmin(userId);
+        if (!exempt) {
+          const gate = await gateChatRequest(
+            repos.aiUsage,
+            inFlight,
+            userId,
+            ctx.clock.now(),
+            config.policy.rateLimit,
           );
+          if (!gate.ok) throw gate.error;
+          if (gate.value.kind !== 'admitted') {
+            const content =
+              gate.value.kind === 'busy'
+                ? ctx.translator.t('replies:llm_chat.busy')
+                : ctx.translator.t('replies:llm_chat.rate_limited', {
+                    at: `<t:${String(Math.ceil(gate.value.retryAt / 1000))}:R>`,
+                  });
+            await message.reply({ content, allowedMentions: NO_MENTIONS });
+            return;
+          }
+        }
+        const model = exempt ? userDoc : effectiveModel(config.policy, userDoc);
+        const settings = toSettings(userDoc, model);
+
+        if (exempt) inFlight.set(userId, (inFlight.get(userId) ?? 0) + 1);
+        try {
+          if (isNew) {
+            await handleNewSession(
+              message,
+              settings,
+              sessions,
+              llmService,
+              logger,
+              config.clientId,
+              ctx.translator,
+            );
+          } else if (refId !== undefined) {
+            await handleContinueSession(
+              message,
+              refId,
+              settings,
+              sessions,
+              llmService,
+              logger,
+              ctx.translator,
+            );
+          }
+        } finally {
+          releaseChatRequest(inFlight, userId);
         }
       },
     },
@@ -285,7 +324,7 @@ const sendPlaceholder = async (message: Message, translator: Translator): Promis
 
 const handleNewSession = async (
   message: Message,
-  userConfig: UserApiDoc,
+  settings: LLMSettings,
   sessions: SessionManager,
   llmService: LLMService,
   logger: Logger | undefined,
@@ -295,7 +334,6 @@ const handleNewSession = async (
   const userText = stripMention(message.content, clientId);
   if (userText.length === 0) return;
 
-  const settings = toSettings(userConfig);
   const userMsg: LLMMessage = { role: 'user', content: userText };
   const placeholder = await sendPlaceholder(message, translator);
 
@@ -325,7 +363,7 @@ const handleNewSession = async (
 const handleContinueSession = async (
   message: Message,
   refBotMessageId: string,
-  userConfig: UserApiDoc,
+  settings: LLMSettings,
   sessions: SessionManager,
   llmService: LLMService,
   logger: Logger | undefined,
@@ -340,7 +378,6 @@ const handleContinueSession = async (
   const userText = message.content.trim();
   if (userText.length === 0) return;
 
-  const settings = toSettings(userConfig);
   const userMsg: LLMMessage = { role: 'user', content: userText };
   const history = [...session.history, userMsg];
   const placeholder = await sendPlaceholder(message, translator);

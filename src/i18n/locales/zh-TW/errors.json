@@ -23,6 +23,7 @@
     "unavailable": "資料庫暫時無法連線,本指令稍後可重試。",
     "duplicate_key": "這筆資料已經存在,沒辦法重複新增喔,確認一下再試一次吧。",
     "timeout": "資料庫回應有點慢,連線逾時了,稍等一下再重試看看。",
+    "query_timeout": "查詢時間太長,已經停止。請縮小範圍再試一次。",
     "network": "連不上資料庫,可能是網路出狀況,等一下再試試看吧。",
     "validation": "資料格式不太對,沒辦法存進資料庫,檢查一下輸入內容再試一次。",
     "operation_failed": "資料庫操作失敗,請稍後再試。",
@@ -46,20 +47,36 @@
     "invalid_response": "連結預覽來源 `{{provider}}` 回傳了非預期的內容(狀態 {{status}})。",
     "unknown": "建立 `{{provider}}` 連結預覽時發生未預期的錯誤(狀態 {{status}})。"
   },
-  "x_feed": {
-    "fetch_failed": "無法讀取 `@{{handle}}` 在 X 的貼文(狀態 {{status}})。",
-    "timeout": "讀取 `@{{handle}}` 在 X 的貼文逾時(狀態 {{status}})。",
-    "upstream_failure": "讀取 `@{{handle}}` 時 X 貼文來源暫時無法存取(狀態 {{status}}),請稍後再試。",
-    "rate_limited": "讀取 `@{{handle}}` 時 X 貼文來源觸發限流(狀態 {{status}}),請稍後再試。",
-    "not_found": "找不到 X 帳號 `@{{handle}}`(狀態 {{status}}),可能已改名、被停權,或設定中拼錯。",
-    "invalid_response": "X 貼文來源對 `@{{handle}}` 回傳了非預期的內容(狀態 {{status}})。"
+  "feed": {
+    "fetch_failed": "無法讀取 `@{{account}}` 在 {{platform}} 的貼文(狀態 {{status}})。",
+    "timeout": "讀取 `@{{account}}` 在 {{platform}} 的貼文逾時(狀態 {{status}})。",
+    "upstream_failure": "讀取 `@{{account}}` 時 {{platform}} 貼文來源暫時無法存取(狀態 {{status}}),請稍後再試。",
+    "rate_limited": "讀取 `@{{account}}` 時 {{platform}} 貼文來源觸發限流(狀態 {{status}}),請稍後再試。",
+    "not_found": "找不到 {{platform}} 帳號 `@{{account}}`(狀態 {{status}}),可能已改名、被停權,或是帳號名稱打錯了。",
+    "invalid_response": "{{platform}} 貼文來源對 `@{{account}}` 回傳了非預期的內容(狀態 {{status}})。",
+    "invalid_account": "`@{{account}}` 不是有效的 {{platform}} 帳號名稱。",
+    "platform_not_configured": "尚未設定 `{{platform}}` 這個貼文平台。"
   },
   "plugin": {
     "lifecycle_phase_violation": "Plugin `{{plugin}}` 在階段 `{{phase}}` 呼叫了 registerInstance(`{{token}}`),只有 `init` 階段允許此操作。"
   },
   "bot": {
     "login_failed": "登入 Discord 失敗({{clientId}})。",
-    "login_no_user": "登入 Discord 後未取得 user({{clientId}})。"
+    "login_no_user": "登入 Discord 後未取得 user({{clientId}})。",
+    "inspect_account_invalid": "資料庫檢視帳號設定錯誤：`MONGO_INSPECT_URI` 必須是只能讀取的帳號。"
   },
-  "unexpected": "指令執行時發生未預期的錯誤,管理員已收到通知(錯誤編號:{{traceId}})。"
+  "unexpected": "指令執行時發生未預期的錯誤,管理員已收到通知(錯誤編號:{{traceId}})。",
+  "graphics": {
+    "font_missing": "這台主機目前無法產生圖表，請通知管理員。"
+  },
+  "settings": {
+    "forbidden": "你目前沒有編輯這些設定的權限。",
+    "expired": "此設定面板已過期，請重新輸入 /settings。",
+    "invalid": "設定或資源無效，請檢查數值與頻道／身分組權限。",
+    "conflict": "其他編輯者已先儲存。已保留你的草稿；請預覽差異或載入最新設定。",
+    "unavailable": "設定暫時無法使用，請稍後重試。",
+    "pending": "正在確認上次儲存的結果，暫時無法再次儲存。",
+    "guild_only": "請在伺服器中使用 /settings。",
+    "failed": "無法更新設定，請稍後重試。"
+  }
 }

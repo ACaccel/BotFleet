@@ -17,7 +17,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createContainer } from '../../../../src/core/ioc';
 import { TOKENS } from '../../../../src/bot/tokens';
-import { createLogger, type Logger } from '../../../../src/core/logger';
 import { EventDispatcher } from '../../../../src/core/plugin/event-dispatcher';
 import {
   PluginLifecycleRunner,
@@ -27,10 +26,11 @@ import {
 import type { DisabledPlugin, Plugin, PluginId } from '../../../../src/core/plugin/types';
 import { systemClock } from '../../../../src/core/time';
 import { ModelCatalog } from '../../../../src/infra/llm/models-catalog';
+import { DEFAULT_RATE_LIMIT } from '../../../../src/application/ai/policy';
 import { createLlmChatPlugin } from '../../../../src/plugins/llm-chat';
+import { echoTranslator, silentLogger } from '../../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
-const fakeTranslator = { t: (k: string) => k } as LifecycleHost['translator'];
+const silent = silentLogger();
 
 interface PartialEnv {
   readonly XAI_API_KEY?: string;
@@ -63,7 +63,11 @@ describe('ModelCatalog DI wiring', () => {
       listGuildIds: () => [],
     }));
 
-    const plugin = createLlmChatPlugin({ clientId: 'bot-1' }) as Plugin;
+    const plugin = createLlmChatPlugin({
+      clientId: 'bot-1',
+      policy: { rateLimit: DEFAULT_RATE_LIMIT },
+      isAdmin: () => false,
+    }) as Plugin;
     const registered = new Map<PluginId, RegisteredPlugin>([[plugin.id, { plugin }]]);
     const host: LifecycleHost = {
       registered,
@@ -72,7 +76,7 @@ describe('ModelCatalog DI wiring', () => {
       container,
       dispatcher: new EventDispatcher(silent),
       logger: silent,
-      translator: fakeTranslator,
+      translator: echoTranslator(),
       clock: systemClock,
     };
 
@@ -83,7 +87,7 @@ describe('ModelCatalog DI wiring', () => {
     const catalog = container.resolve(TOKENS.ModelCatalog);
     expect(catalog).toBeInstanceOf(ModelCatalog);
     // Cache miss returns an empty array (the synchronous contract the
-    // `/ai_settings` modal builder depends on); we only check the
+    // `/ai settings` modal builder depends on); we only check the
     // shape, not the contents.
     expect(Array.isArray(catalog.list('openai'))).toBe(true);
   });
@@ -151,14 +155,14 @@ describe('ModelCatalog background fetch resilience', () => {
         throw new Error('getaddrinfo ENOTFOUND');
       }),
     );
-    const warn = vi.fn();
-    const logger = { warn } as unknown as Logger;
+    const logger = silentLogger();
+    const warn = vi.spyOn(logger, 'warn');
 
     const catalog = new ModelCatalog({ gemini: 'test-key' }, logger);
     expect(catalog.list('gemini')).toEqual([]);
     await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
 
-    expect((warn.mock.calls[0] as [{ provider: string }])[0].provider).toBe('gemini');
+    expect(warn.mock.calls[0]?.[0]).toMatchObject({ provider: 'gemini' });
   });
 
   it('releases the in-flight marker when a fetch never settles, so a later call retries', async () => {

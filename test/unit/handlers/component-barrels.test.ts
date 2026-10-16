@@ -5,26 +5,30 @@
  * against synthetic handlers. What only these two barrels can show is
  * that the real generated registry, the real handler classes, and the
  * `BaseBot` field each family publishes to are actually joined up — and
- * that the thin `giveaway_*` components forward to the plugin that owns
- * the behaviour rather than reimplementing it.
+ * that the thin `giveaway_*` components forward to the shared giveaway
+ * interaction bodies rather than reimplementing them.
  */
 import type { ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  handleGiveawayCreate,
-  handleGiveawayDeleteSelection,
-} from '../../../src/plugins/giveaway/internal';
+import { handleGiveawayCreate } from '../../../src/handlers/commands/giveaway-shared/create';
+import { handleGiveawayDeleteSelection } from '../../../src/handlers/commands/giveaway-shared/delete';
 import { executeModal, registerModals } from '../../../src/handlers/modals';
 import { executeSSM, registerSSMs } from '../../../src/handlers/select-menus';
 import type { BaseBot } from '../../../src/bot';
 import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import {
+  buildModalSubmitInteraction,
+  buildStringSelectInteraction,
+} from '../../fixtures/discord/interaction-builder';
 
-// The two `giveaway_*` components are pure delegations, so the plugin
-// surface they delegate to is replaced with spies. Its own behaviour is
-// covered in `test/unit/plugins/giveaway-*.test.ts`.
-vi.mock('../../../src/plugins/giveaway/internal', () => ({
+// The two `giveaway_*` components are pure delegations, so the bodies
+// they delegate to are replaced with spies. Their own behaviour is
+// covered in `test/unit/handlers/giveaway-*.test.ts`.
+vi.mock('../../../src/handlers/commands/giveaway-shared/create', () => ({
   handleGiveawayCreate: vi.fn(async () => undefined),
+}));
+vi.mock('../../../src/handlers/commands/giveaway-shared/delete', () => ({
   handleGiveawayDeleteSelection: vi.fn(async () => undefined),
 }));
 
@@ -40,10 +44,10 @@ beforeEach(() => {
 });
 
 const modalInteraction = (customId: string): ModalSubmitInteraction =>
-  ({ customId }) as unknown as ModalSubmitInteraction;
+  buildModalSubmitInteraction({ customId });
 
 const selectInteraction = (customId: string): StringSelectMenuInteraction =>
-  ({ customId }) as unknown as StringSelectMenuInteraction;
+  buildStringSelectInteraction({ customId, values: [] });
 
 describe('modal barrel', () => {
   it('publishes one handler per generated registry entry', async () => {
@@ -51,16 +55,26 @@ describe('modal barrel', () => {
 
     await registerModals(bot);
 
-    expect([...bot.modalHandlers.keys()].sort()).toEqual(['ai_settings', 'giveaway_create']);
+    expect([...bot.modalHandlers.keys()].sort()).toEqual([
+      'activity_create',
+      'ai_settings',
+      'bug_report',
+      'gallery_page',
+      'giveaway_create',
+      'settings',
+    ]);
   });
 
   it('routes a customId to the handler its leading segment names', async () => {
     const bot = buildHostBot();
     await registerModals(bot);
 
-    await executeModal(modalInteraction('giveaway_create|prize'), bot);
+    const interaction = modalInteraction('giveaway_create|prize');
+
+    await executeModal(interaction, bot);
 
     expect(vi.mocked(handleGiveawayCreate)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(handleGiveawayCreate)).toHaveBeenCalledWith(interaction, bot);
   });
 
   it('ignores a modal another bot in the guild owns', async () => {
@@ -73,21 +87,43 @@ describe('modal barrel', () => {
 });
 
 describe('select-menu barrel', () => {
+  it('rejects a role selector targeting a string-only handler', async () => {
+    const bot = buildHostBot();
+    await registerSSMs(bot);
+    const interaction = selectInteraction('giveaway_delete|msg-1');
+    const reply = vi.spyOn(interaction, 'reply');
+    Object.assign(interaction, { componentType: 6 });
+    await executeSSM(interaction, bot);
+    expect(vi.mocked(handleGiveawayDeleteSelection)).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'errors:command.unsupported_interaction_type' }),
+    );
+  });
   it('publishes one handler per generated registry entry', async () => {
     const bot = buildHostBot();
 
     await registerSSMs(bot);
 
-    expect([...bot.ssmHandlers.keys()].sort()).toEqual(['delete_reply', 'giveaway_delete']);
+    expect([...bot.ssmHandlers.keys()].sort()).toEqual([
+      'bug_ticket_pick',
+      'db_view',
+      'delete_reply',
+      'giveaway_delete',
+      'help_category',
+      'settings',
+    ]);
   });
 
   it('routes a customId to the handler its leading segment names', async () => {
     const bot = buildHostBot();
     await registerSSMs(bot);
 
-    await executeSSM(selectInteraction('giveaway_delete|msg-1'), bot);
+    const interaction = selectInteraction('giveaway_delete|msg-1');
+
+    await executeSSM(interaction, bot);
 
     expect(vi.mocked(handleGiveawayDeleteSelection)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(handleGiveawayDeleteSelection)).toHaveBeenCalledWith(interaction, bot);
   });
 
   it('ignores a select menu another bot in the guild owns', async () => {

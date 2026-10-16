@@ -7,41 +7,50 @@ import type { BaseBot } from '@bot';
  * — but pulls the component assembly out of the command handler so
  * `index.ts` stays well under the 150-line cap.
  *
- * The four text inputs carry the whole command payload (duration /
+ * The four text inputs carry the giveaway details (duration /
  * prize / winner_num / description). `winner_num` is a free-text field
  * because modals have no numeric input type; the submit handler parses
  * and validates it.
  */
-export const buildGiveawayModal = (translator: BaseBot['translator']): ModalBuilder => {
+export const buildGiveawayModal = (
+  translator: BaseBot['translator'],
+  useConfiguredChannel = false,
+): ModalBuilder => {
   const t = (key: string, params?: Record<string, string | number>): string =>
     translator?.t(key, params) ?? '';
 
+  // Lengths keep the announcement within Discord's embed limits
+  // (256-character title, 1024-character field).
   const durationInput = new TextInputBuilder()
     .setCustomId('duration')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
+    .setMaxLength(10)
     .setPlaceholder(t('replies:giveaway.modal_duration_placeholder'));
 
   const prizeInput = new TextInputBuilder()
     .setCustomId('prize')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
+    .setMaxLength(200)
     .setPlaceholder(t('replies:giveaway.modal_prize_placeholder'));
 
   const winnerInput = new TextInputBuilder()
     .setCustomId('winner_num')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
+    .setMaxLength(3)
     .setPlaceholder(t('replies:giveaway.modal_winner_placeholder'));
 
   const descriptionInput = new TextInputBuilder()
     .setCustomId('description')
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(false)
+    .setMaxLength(1000)
     .setPlaceholder(t('replies:giveaway.modal_description_placeholder'));
 
   return new ModalBuilder()
-    .setCustomId('giveaway_create')
+    .setCustomId(useConfiguredChannel ? 'giveaway_create|configured' : 'giveaway_create')
     .setTitle(t('replies:giveaway.modal_title'))
     .setLabelComponents(
       new LabelBuilder()

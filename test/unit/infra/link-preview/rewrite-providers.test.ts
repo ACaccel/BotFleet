@@ -17,6 +17,10 @@
  * end-to-end through the Threads provider, whose proxies divide the work so
  * unevenly (one holds the real post asset, the others the video and the
  * gated posts) that the tier order decides which card a reader actually sees.
+ *
+ * The punt suite pins the case a real Instagram outage produced: a proxy
+ * that 302s back to instagram.com, where the bot host reads a genuine image
+ * card that Discord's own crawler never gets to see.
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -31,6 +35,7 @@ import {
 import {
   scoreMeta,
   isJunkPreviewTitle,
+  landsOnSource,
 } from '../../../../src/infra/link-preview/providers/rewrite-provider';
 import { ok, err, isOk, type Result } from '../../../../src/core/result';
 import type {
@@ -88,6 +93,16 @@ const buildUrl = async (
   return result.value.url;
 };
 
+/** Build neutral preview data for providers that render custom cards. */
+const buildPreview = async (
+  provider: LinkPreviewProvider,
+  href: string,
+): Promise<LinkPreviewResult | null> => {
+  const result = await provider.build(u(href), { timeoutMs: 1000 });
+  if (!isOk(result)) throw new Error(`expected ok for ${href}`);
+  return result.value;
+};
+
 // ---------------------------------------------------------------------------
 // canHandle matrices (pure — no network)
 // ---------------------------------------------------------------------------
@@ -137,6 +152,18 @@ describe('instagram provider canHandle', () => {
 
   it('rejects profile URLs', () => {
     expect(provider.canHandle(u('https://www.instagram.com/someuser/'))).toBe(false);
+  });
+
+  it('matches app share links, typed or not', () => {
+    expect(provider.canHandle(u('https://www.instagram.com/share/BAabcdEF1/'))).toBe(true);
+    expect(provider.canHandle(u('https://www.instagram.com/share/reel/BAabcdEF1/'))).toBe(true);
+    expect(provider.canHandle(u('https://instagram.com/share/p/BAabcdEF1'))).toBe(true);
+  });
+
+  it('rejects a token-less share path and nested share paths', () => {
+    expect(provider.canHandle(u('https://www.instagram.com/share/'))).toBe(false);
+    expect(provider.canHandle(u('https://www.instagram.com/share/reel/'))).toBe(false);
+    expect(provider.canHandle(u('https://www.instagram.com/share/stories/x/y/'))).toBe(false);
   });
 });
 
@@ -188,6 +215,19 @@ describe('facebook provider canHandle', () => {
   it('rejects bare profile URLs', () => {
     expect(provider.canHandle(u('https://www.facebook.com/someuser'))).toBe(false);
   });
+
+  it('matches single-photo viewers addressed by a numeric fbid, and group permalinks', () => {
+    expect(provider.canHandle(u('https://www.facebook.com/photo/?fbid=123&set=a.456'))).toBe(true);
+    expect(provider.canHandle(u('https://www.facebook.com/photo.php?fbid=123'))).toBe(true);
+    expect(provider.canHandle(u('https://www.facebook.com/groups/123/permalink/456/'))).toBe(true);
+  });
+
+  it('rejects a photo viewer without a numeric fbid, and other group pages', () => {
+    expect(provider.canHandle(u('https://www.facebook.com/photo/'))).toBe(false);
+    expect(provider.canHandle(u('https://www.facebook.com/photo/?fbid=abc'))).toBe(false);
+    expect(provider.canHandle(u('https://www.facebook.com/groups/123/'))).toBe(false);
+    expect(provider.canHandle(u('https://www.facebook.com/someone/photos/'))).toBe(false);
+  });
 });
 
 describe('reddit provider canHandle', () => {
@@ -201,6 +241,18 @@ describe('reddit provider canHandle', () => {
     expect(provider.canHandle(u('https://old.reddit.com/r/pics/comments/haucpf/slug/'))).toBe(true);
     expect(provider.canHandle(u('https://np.reddit.com/comments/abc123'))).toBe(true); // bare /comments/
     expect(provider.canHandle(u('https://www.reddit.com/r/videos/s/aB9xYz0Q'))).toBe(true); // share link
+    expect(provider.canHandle(u('https://sh.reddit.com/r/aww/comments/abc123/'))).toBe(true);
+  });
+
+  it('matches redd.it short links and gallery posts', () => {
+    expect(provider.canHandle(u('https://redd.it/g0xb6c'))).toBe(true);
+    expect(provider.canHandle(u('https://www.reddit.com/gallery/g0xb6c'))).toBe(true);
+  });
+
+  it('rejects v.redd.it assets and a bare redd.it host', () => {
+    expect(provider.canHandle(u('https://v.redd.it/9ukt2b9v4o1d1'))).toBe(false);
+    expect(provider.canHandle(u('https://redd.it/'))).toBe(false);
+    expect(provider.canHandle(u('https://redd.it/a/b'))).toBe(false);
   });
 
   it('rejects bare subreddit, user, and home URLs', () => {
@@ -294,30 +346,30 @@ describe('rewrite-provider validation loop', () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it('stops probing once the validation budget elapses, using the best so far', async () => {
+  it('walks past every failed host until one succeeds, however far down the list', async () => {
+    const hosts = ['a.example', 'b.example', 'c.example'];
+    const at = (host: string): string => `https://${host}/jack/status/20`;
     const { client, fetch } = makeOgClient({
-      [fx]: ok(meta({ images: ['a.jpg'] })), // image-only -> remembered
-      [vx]: ok(meta({ video: 'v.mp4' })), // would win, but we never reach it
+      [at('a.example')]: err(invalidResponseError('twitter')),
+      [at('b.example')]: err(invalidResponseError('twitter')),
+      [at('c.example')]: ok(meta({ images: ['c.jpg'] })),
     });
-    const provider = createTwitterProvider({ proxyHosts: HOSTS, ogClient: client });
-    // now(): first call computes the deadline (0 + 100); the loop-top check
-    // after host 1 sees 10_000 >= 100 and breaks before probing host 2.
-    const times = [0, 10_000];
-    const now = (): number => times.shift() ?? 10_000;
-    expect(await buildUrl(provider, tweet, { timeoutMs: 1000, budgetMs: 100, now })).toBe(fx);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    const provider = createTwitterProvider({ proxyHosts: hosts, ogClient: client });
+    expect(await buildUrl(provider, 'https://x.com/jack/status/20')).toBe(at('c.example'));
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
-  it('returns null when the budget elapses before any host yields a candidate', async () => {
+  it('probes the whole list before giving up when every host fails', async () => {
+    const hosts = ['a.example', 'b.example', 'c.example'];
+    const at = (host: string): string => `https://${host}/jack/status/20`;
     const { client, fetch } = makeOgClient({
-      [fx]: err(invalidResponseError('twitter')), // host 1 fails -> no candidate remembered
-      [vx]: ok(meta({ video: 'v.mp4' })), // would win, but budget stops us first
+      [at('a.example')]: err(invalidResponseError('twitter')),
+      [at('b.example')]: err(invalidResponseError('twitter')),
+      [at('c.example')]: err(invalidResponseError('twitter')),
     });
-    const provider = createTwitterProvider({ proxyHosts: HOSTS, ogClient: client });
-    const times = [0, 10_000];
-    const now = (): number => times.shift() ?? 10_000;
-    expect(await buildUrl(provider, tweet, { timeoutMs: 1000, budgetMs: 100, now })).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    const provider = createTwitterProvider({ proxyHosts: hosts, ogClient: client });
+    expect(await buildUrl(provider, 'https://x.com/jack/status/20')).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -338,6 +390,43 @@ describe('scoreMeta login-wall / junk rejection', () => {
     expect(scoreMeta(meta({ title: 'Log in or sign up to view', images: ['logo.png'] }))).toBe(
       'none',
     );
+  });
+
+  it('rejects an Instagram proxy that answers "Post not found" under its product title', () => {
+    // eeinstagram cannot resolve a post: `og:title` is the product name and
+    // the description says "Post not found" — a text card with no content.
+    expect(scoreMeta(meta({ title: 'fix instagram embeds', description: 'Post not found' }))).toBe(
+      'none',
+    );
+  });
+
+  it('rejects a Bilibili proxy error page served under an error title', () => {
+    expect(scoreMeta(meta({ title: 'Error - Video Not Found', description: 'nothing here' }))).toBe(
+      'none',
+    );
+    // bembedfix reports the upstream failure after an HTTP status prefix.
+    expect(isJunkPreviewTitle('404: upstream request failed')).toBe(true);
+    expect(isJunkPreviewTitle('500 - Internal Server Error')).toBe(true);
+    expect(isJunkPreviewTitle('404 Days of Summer')).toBe(false);
+  });
+
+  it('rejects an EmbedEZ fallback whose description is the service blurb', () => {
+    expect(
+      scoreMeta(
+        meta({
+          title: 'someone (@r/pics)',
+          description: 'Learn about the purpose of EmbedEZ and how we strive to provide',
+        }),
+      ),
+    ).toBe('none');
+  });
+
+  it('rejects an InstaFix share link it could not resolve', () => {
+    expect(
+      scoreMeta(
+        meta({ title: 'InstaFix', description: 'Failed to get new postID from share URL' }),
+      ),
+    ).toBe('none');
   });
 
   it('rejects a vxReddit proxy-error page (title is the proxy name / description says failed)', () => {
@@ -496,7 +585,9 @@ describe('probe-loop precedence around the weak-image tier', () => {
       [at('fzthreads.com')]: ok(meta({ title: 'a post', images: [AVATAR_IMAGE] })),
       [at('viewthreads.com')]: ok(meta({ title: 'a post', images: [POST_IMAGE] })),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('viewthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: POST_IMAGE },
+    });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -505,7 +596,9 @@ describe('probe-loop precedence around the weak-image tier', () => {
       [at('viewthreads.com')]: ok(meta({ title: 'a post' })),
       [at('fzthreads.com')]: ok(meta({ title: 'a post', images: [AVATAR_THUMB] })),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: AVATAR_THUMB },
+    });
   });
 
   it('posts a weak image rather than nothing', async () => {
@@ -513,7 +606,9 @@ describe('probe-loop precedence around the weak-image tier', () => {
       [at('viewthreads.com')]: ok(meta()),
       [at('fzthreads.com')]: ok(meta({ images: [AVATAR_IMAGE] })),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: AVATAR_IMAGE },
+    });
   });
 
   it('does not short-circuit on a weak image — a later video host still wins', async () => {
@@ -521,7 +616,9 @@ describe('probe-loop precedence around the weak-image tier', () => {
       [at('fzthreads.com')]: ok(meta({ images: [AVATAR_IMAGE] })),
       [at('fixthreads.seria.moe')]: ok(meta({ video: 'https://v.example/clip.mp4' })),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fixthreads.seria.moe'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      media: { url: 'https://v.example/clip.mp4', fallbackUrl: at('fixthreads.seria.moe') },
+    });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
@@ -565,7 +662,12 @@ describe('threads host selection per post type', () => {
         }),
       ),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      media: {
+        url: 'https://scontent-tpe1-1.cdninstagram.com/o1/v/t2/f2/m86/clip.mp4',
+        fallbackUrl: at('fzthreads.com'),
+      },
+    });
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([at('viewthreads.com'), at('fzthreads.com')]);
   });
 
@@ -589,9 +691,42 @@ describe('threads host selection per post type', () => {
         meta({ title: 'ajit86403 on Threads', images: [AVATAR_THUMB] }),
       ),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('viewthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: POST_IMAGE },
+    });
     // No video anywhere, so every host is probed before the choice is made.
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('skips a Threads account-title placeholder when another host has the post image', async () => {
+    const { provider } = providerWith({
+      [at('viewthreads.com')]: ok(meta({ title: '@ajit86403 on Threads', description: '' })),
+      [at('fzthreads.com')]: ok(
+        meta({ title: '@ajit86403 (@ajit86403)', description: 'Post text', images: [POST_IMAGE] }),
+      ),
+    });
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: POST_IMAGE, description: 'Post text' },
+    });
+  });
+
+  it('skips an empty Threads account card when no host resolves the post', async () => {
+    const { provider, fetch } = providerWith({
+      [at('viewthreads.com')]: ok(meta({ title: '@ajit86403 on Threads', description: '' })),
+    });
+    expect(await buildPreview(provider, permalink)).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps a text-only Threads post when its description contains content', async () => {
+    const { provider } = providerWith({
+      [at('viewthreads.com')]: ok(
+        meta({ title: '@ajit86403 on Threads', description: 'Post text' }),
+      ),
+    });
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { description: 'Post text' },
+    });
   });
 
   it('skips a login wall in the image slot and picks the host that resolved the post', async () => {
@@ -616,7 +751,9 @@ describe('threads host selection per post type', () => {
         }),
       ),
     });
-    expect(await buildUrl(provider, permalink)).toBe(at('fzthreads.com'));
+    expect(await buildPreview(provider, permalink)).toMatchObject({
+      card: { imageUrl: POST_IMAGE },
+    });
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 });
@@ -643,11 +780,84 @@ describe('rewrite URL construction', () => {
     expect(await buildUrl(provider, 'https://www.instagram.com/reel/Cabc/?igsh=xyz')).toBe(url);
   });
 
+  it('instagram passes a share link through unchanged for the proxy to resolve', async () => {
+    const url = 'https://oginstagram.com/share/reel/BAabcdEF1/';
+    const { client } = makeOgClient({ [url]: ok(meta({ video: 'v.mp4' })) });
+    const provider = createInstagramProvider({ proxyHosts: ['oginstagram.com'], ogClient: client });
+    expect(await buildUrl(provider, 'https://www.instagram.com/share/reel/BAabcdEF1/')).toBe(url);
+  });
+
+  it('reddit rewrites short links and gallery posts onto the permalink form', async () => {
+    const url = 'https://vxreddit.com/comments/g0xb6c';
+    const { client } = makeOgClient({ [url]: ok(meta({ video: 'v.mp4' })) });
+    const provider = createRedditProvider({ proxyHosts: ['vxreddit.com'], ogClient: client });
+    expect(await buildUrl(provider, 'https://redd.it/g0xb6c')).toBe(url);
+    expect(await buildUrl(provider, 'https://www.reddit.com/gallery/g0xb6c/')).toBe(url);
+  });
+
+  it('reddit keeps a permalink path as-is', async () => {
+    const url = 'https://vxreddit.com/r/aww/comments/abc123/';
+    const { client } = makeOgClient({ [url]: ok(meta({ video: 'v.mp4' })) });
+    const provider = createRedditProvider({ proxyHosts: ['vxreddit.com'], ogClient: client });
+    expect(await buildUrl(provider, 'https://www.reddit.com/r/aww/comments/abc123/?utm=x')).toBe(
+      url,
+    );
+  });
+
+  it('facebook links the card to the post, not to a hashtag page the proxy reports', async () => {
+    const url = 'https://facebed.com/page/posts/123';
+    const { client } = makeOgClient({
+      [url]: ok(
+        meta({
+          title: 'post',
+          images: ['https://cdn.example/a.jpg'],
+          url: 'https://www.facebook.com/hashtag/tag?__eep__=6',
+        }),
+      ),
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    const result = await provider.build(u('https://www.facebook.com/page/posts/123'), {
+      timeoutMs: 1000,
+    });
+    if (!isOk(result) || result.value?.kind !== 'card') throw new Error('expected a card');
+    expect(result.value.card.url).toBe('https://www.facebook.com/page/posts/123');
+  });
+
   it('facebook PRESERVES the query string (watch ids live there)', async () => {
     const url = 'https://facebed.com/watch/?v=123';
     const { client } = makeOgClient({ [url]: ok(meta({ video: 'v.mp4' })) });
     const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
-    expect(await buildUrl(provider, 'https://www.facebook.com/watch/?v=123')).toBe(url);
+    const result = await provider.build(u('https://www.facebook.com/watch/?v=123'), {
+      timeoutMs: 1000,
+    });
+    expect(result).toEqual(
+      ok({
+        kind: 'card',
+        card: {
+          url: 'https://www.facebook.com/watch/?v=123',
+          title: undefined,
+          description: undefined,
+          imageUrl: undefined,
+          siteName: 'Facebook',
+        },
+        media: { url: 'v.mp4', fallbackUrl: url },
+        sourceUrl: 'https://www.facebook.com/watch/?v=123',
+      }),
+    );
+  });
+
+  it('facebook retains every image from proxy metadata', async () => {
+    const images = ['https://cdn.example/first.jpg', 'https://cdn.example/second.jpg'];
+    const { client } = makeOgClient({
+      'https://facebed.com/page/posts/123': ok(meta({ images })),
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    const result = await provider.build(u('https://www.facebook.com/page/posts/123'), {
+      timeoutMs: 1000,
+    });
+    if (!isOk(result) || result.value?.kind !== 'card') throw new Error('expected a card');
+    expect(result.value.card.imageUrls).toEqual(images);
+    expect(result.value.card.imageUrl).toBe(images[0]);
   });
 
   it('threads probes its hosts in priority order until one yields media', async () => {
@@ -657,12 +867,45 @@ describe('rewrite URL construction', () => {
       proxyHosts: ['vxthreads.net', 'viewthreads.com', 'threadsez.com'],
       ogClient: client,
     });
-    expect(await buildUrl(provider, 'https://www.threads.net/@user/post/Cabc')).toBe(third);
+    expect(await buildPreview(provider, 'https://www.threads.net/@user/post/Cabc')).toMatchObject({
+      kind: 'card',
+      media: { url: 'v.mp4', fallbackUrl: third },
+    });
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([
       'https://vxthreads.net/@user/post/Cabc',
       'https://viewthreads.com/@user/post/Cabc',
       third,
     ]);
+  });
+
+  it('threads retains post metadata and every image without trusting the proxy card URL', async () => {
+    const source = 'https://www.threads.com/@user/post/Cabc?hl=zh-tw';
+    const images = ['https://cdn.example/first.jpg', 'https://cdn.example/second.jpg'];
+    const { client, fetch } = makeOgClient({
+      'https://viewthreads.com/@user/post/Cabc': ok(
+        meta({
+          title: 'Author on Threads',
+          description: 'Post text',
+          images,
+          url: 'https://unrelated.example/post',
+        }),
+      ),
+    });
+    const provider = createThreadsProvider({ proxyHosts: ['viewthreads.com'], ogClient: client });
+
+    expect(await buildPreview(provider, source)).toEqual({
+      kind: 'card',
+      card: {
+        url: source,
+        title: 'Author on Threads',
+        description: 'Post text',
+        imageUrl: images[0],
+        imageUrls: images,
+        siteName: 'Threads',
+      },
+      sourceUrl: source,
+    });
+    expect(fetch).toHaveBeenCalledWith('https://viewthreads.com/@user/post/Cabc', 'threads', 1000);
   });
 });
 
@@ -721,8 +964,15 @@ describe('threads share-link resolution', () => {
       fetchByUrl: { [proxyPermalink]: ok(meta({ video: 'v.mp4' })) },
     });
     expect(await build(providerWith(client), share)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPermalink,
+      kind: 'card',
+      card: {
+        url: permalink,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Threads',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyPermalink },
       sourceUrl: share, // original share link is carried, not the resolved permalink
     });
     expect(resolveRedirectChain).toHaveBeenCalledWith(share, 1000, 'threads', MINIMAL_UA);
@@ -741,8 +991,15 @@ describe('threads share-link resolution', () => {
       fetchByUrl: { [proxyPermalink]: ok(meta({ video: 'v.mp4' })) },
     });
     expect(await build(providerWith(client), share)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPermalink, // the single-use xmt/slof share attribution is dropped
+      kind: 'card',
+      card: {
+        url: permalink,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Threads',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyPermalink },
       sourceUrl: share,
     });
     // A landing-URL resolution would have probed the error page instead.
@@ -756,8 +1013,14 @@ describe('threads share-link resolution', () => {
       fetchByUrl: { [proxyPermalink]: ok(meta({ images: ['i.jpg'] })) },
     });
     expect(await build(providerWith(client), legacyShare)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPermalink,
+      kind: 'card',
+      card: {
+        url: permalink,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: 'i.jpg',
+        siteName: 'Threads',
+      },
       sourceUrl: legacyShare,
     });
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([proxyPermalink]);
@@ -795,8 +1058,15 @@ describe('threads share-link resolution', () => {
       fetchByUrl: { [proxyPermalink]: ok(meta({ video: 'v.mp4' })) },
     });
     expect(await build(providerWith(client), permalink)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPermalink,
+      kind: 'card',
+      card: {
+        url: permalink,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Threads',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyPermalink },
       sourceUrl: permalink,
     });
     expect(resolveRedirectChain).not.toHaveBeenCalled();
@@ -859,12 +1129,58 @@ describe('facebook share-link resolution + card fallback', () => {
     });
     const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
     expect(await build(provider, share)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyCanonical,
+      kind: 'card',
+      card: {
+        url: canonical,
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyCanonical },
       sourceUrl: share, // original link is carried, not the resolved canonical
     });
     expect(resolveCanonical).toHaveBeenCalledWith(share, 1000, 'facebook');
     expect(fetch).toHaveBeenCalledWith(proxyCanonical, 'facebook', 1000); // never the /share/ token
+  });
+
+  it('enriches a direct-video proxy response from Facebook without losing its video', async () => {
+    const { client } = makeFbClient({
+      resolve: { [share]: ok(canonical) },
+      fetchByUrl: {
+        [proxyCanonical]: ok(
+          meta({
+            video: 'https://cdn.example/video.mp4',
+            siteName: 'facebed by pi.kt\n👍 42 • 💬 3 • 🔁 1',
+          }),
+        ),
+        [share]: ok(
+          meta({
+            title: 'Post title',
+            description: 'Post text',
+            authorName: 'Example Author',
+            authorUrl: 'https://www.facebook.com/author',
+            images: [POST_IMAGE],
+          }),
+        ),
+      },
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    expect(await build(provider, share)).toEqual({
+      kind: 'card',
+      card: {
+        url: canonical,
+        title: 'Post title',
+        description: 'Post text',
+        imageUrl: POST_IMAGE,
+        siteName: 'Facebook',
+        engagement: { likes: 42, comments: 3, shares: 1 },
+        authorName: 'Example Author',
+        authorUrl: 'https://www.facebook.com/author',
+      },
+      media: { url: 'https://cdn.example/video.mp4', fallbackUrl: proxyCanonical },
+      sourceUrl: share,
+    });
   });
 
   it('drops the share-attribution query from the resolved URL before probing', async () => {
@@ -874,10 +1190,80 @@ describe('facebook share-link resolution + card fallback', () => {
     });
     const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
     expect(await build(provider, share)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyCanonical,
+      kind: 'card',
+      card: {
+        url: canonical,
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyCanonical },
       sourceUrl: share,
     });
+  });
+
+  it('retries the source-owned OpenGraph permalink when the browser share chase fails', async () => {
+    const { client, fetch } = makeFbClient({
+      resolve: { [share]: err(invalidResponseError('facebook')) },
+      fetchByUrl: {
+        [proxyShare]: ok(meta({ title: 'Log in or sign up to view' })),
+        [share]: ok(meta({ title: 'Source title', images: [POST_IMAGE], url: canonical })),
+        [proxyCanonical]: ok(
+          meta({
+            title: 'Proxy title',
+            description: 'Post text',
+            video: 'https://cdn.example/video.mp4',
+            siteName: 'facebed by pi.kt\n👍 708 • 💬 10 • 🔁 5',
+          }),
+        ),
+      },
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    expect(await build(provider, share)).toEqual({
+      kind: 'card',
+      card: {
+        url: canonical,
+        title: 'Proxy title',
+        description: 'Post text',
+        imageUrl: POST_IMAGE,
+        siteName: 'Facebook',
+        engagement: { likes: 708, comments: 10, shares: 5 },
+      },
+      media: { url: 'https://cdn.example/video.mp4', fallbackUrl: proxyCanonical },
+      sourceUrl: share,
+    });
+    expect(fetch.mock.calls.map((call) => call[0])).toEqual([proxyShare, share, proxyCanonical]);
+  });
+
+  it('does not retry an off-site OpenGraph URL', async () => {
+    const { client, fetch } = makeFbClient({
+      resolve: { [share]: err(invalidResponseError('facebook')) },
+      fetchByUrl: {
+        [proxyShare]: ok(meta({ title: 'Log in or sign up to view' })),
+        [share]: ok(
+          meta({
+            title: 'Post title',
+            images: [POST_IMAGE],
+            url: 'https://untrusted.example/reel/1',
+            authorUrl: 'https://untrusted.example/author',
+          }),
+        ),
+      },
+    });
+    const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
+    expect(await build(provider, share)).toEqual({
+      kind: 'card',
+      card: {
+        url: share,
+        title: 'Post title',
+        description: undefined,
+        imageUrl: POST_IMAGE,
+        siteName: 'Facebook',
+      },
+      sourceUrl: share,
+    });
+    expect(fetch.mock.calls.map((call) => call[0])).toEqual([proxyShare, share]);
   });
 
   it('falls back to a Facebook OpenGraph card when resolution fails and the proxy is a login wall', async () => {
@@ -891,7 +1277,7 @@ describe('facebook share-link resolution + card fallback', () => {
             title: 'Lil mouse',
             description: 'a clip',
             images: [fbImage],
-            url: 'https://www.facebook.com/p/1/',
+            url: 'https://www.facebook.com/page/posts/1/',
           }),
         ),
       },
@@ -900,7 +1286,7 @@ describe('facebook share-link resolution + card fallback', () => {
     expect(await build(provider, share)).toEqual({
       kind: 'card',
       card: {
-        url: 'https://www.facebook.com/p/1/',
+        url: 'https://www.facebook.com/page/posts/1/',
         title: 'Lil mouse',
         description: 'a clip',
         imageUrl: fbImage,
@@ -930,8 +1316,15 @@ describe('facebook share-link resolution + card fallback', () => {
     });
     const provider = createFacebookProvider({ proxyHosts: ['facebed.com'], ogClient: client });
     expect(await build(provider, post)).toEqual({
-      kind: 'rewritten-url',
-      url: proxyPost,
+      kind: 'card',
+      card: {
+        url: post,
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'v.mp4', fallbackUrl: proxyPost },
       sourceUrl: post,
     });
     expect(resolveCanonical).not.toHaveBeenCalled();
@@ -987,8 +1380,14 @@ describe('facebook legacy album-photo normalisation', () => {
     // content filter can detect — only the ids name the right photo.
     const { provider, fetch } = providerWith({ [idForm]: ok(meta({ images: [POST_IMAGE] })) });
     expect(await build(provider, legacy)).toEqual({
-      kind: 'rewritten-url',
-      url: idForm,
+      kind: 'card',
+      card: {
+        url: idForm.replace('facebed.com', 'www.facebook.com'),
+        title: undefined,
+        description: undefined,
+        imageUrl: POST_IMAGE,
+        siteName: 'Facebook',
+      },
       sourceUrl: legacy,
     });
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([idForm]);
@@ -999,11 +1398,18 @@ describe('facebook legacy album-photo normalisation', () => {
     const expected = `https://facebed.com/photo/?fbid=${PHOTO_ID}&set=a.101.202.303`;
     const { provider, fetch } = providerWith({ [expected]: ok(meta({ video: 'v.mp4' })) });
     expect(await build(provider, multiPart)).toEqual({
-      kind: 'rewritten-url',
-      url: expected,
+      kind: 'card',
+      card: {
+        url: expected.replace('facebed.com', 'www.facebook.com'),
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'v.mp4', fallbackUrl: expected },
       sourceUrl: multiPart,
     });
-    expect(fetch.mock.calls.map((c) => c[0])).toEqual([expected]);
+    expect(fetch.mock.calls.map((c) => c[0])).toEqual([expected, multiPart]);
   });
 
   it('probes every other Facebook path shape unchanged', async () => {
@@ -1020,11 +1426,116 @@ describe('facebook legacy album-photo normalisation', () => {
     for (const [source, expected] of cases) {
       const { provider, fetch } = providerWith({ [expected]: ok(meta({ video: 'v.mp4' })) });
       expect(await build(provider, source)).toEqual({
-        kind: 'rewritten-url',
-        url: expected,
+        kind: 'card',
+        card: {
+          url: source,
+          title: undefined,
+          description: undefined,
+          imageUrl: undefined,
+          siteName: 'Facebook',
+        },
+        media: { url: 'v.mp4', fallbackUrl: expected },
         sourceUrl: source,
       });
-      expect(fetch.mock.calls.map((c) => c[0])).toEqual([expected]);
+      expect(fetch.mock.calls.map((c) => c[0])).toEqual([expected, source]);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Proxy punt: a probe finally served from the source site is never posted
+// ---------------------------------------------------------------------------
+
+describe('landsOnSource', () => {
+  const domains = ['twitter.com', 'x.com'];
+
+  it('matches the apex, www, and any deeper subdomain of a source domain', () => {
+    expect(landsOnSource('https://x.com/jack/status/20', domains)).toBe(true);
+    expect(landsOnSource('https://www.twitter.com/jack/status/20', domains)).toBe(true);
+    expect(landsOnSource('https://mobile.Twitter.com/jack/status/20', domains)).toBe(true);
+  });
+
+  it('does not match the source CDN, look-alike hosts, or an unparseable URL', () => {
+    expect(landsOnSource('https://video.twimg.com/v.mp4', domains)).toBe(false);
+    expect(landsOnSource('https://fxtwitter.com/jack/status/20', domains)).toBe(false);
+    expect(landsOnSource('https://notx.com/jack/status/20', domains)).toBe(false);
+    expect(landsOnSource('not a url', domains)).toBe(false);
+  });
+});
+
+describe('proxy punt back to the source site', () => {
+  const HOSTS = ['mbdinstagram.com', 'kkinstagram.com'];
+  const reel = 'https://www.instagram.com/reel/Dc2tQQNs7RF/';
+  const mbd = 'https://mbdinstagram.com/reel/Dc2tQQNs7RF/';
+  const kk = 'https://kkinstagram.com/reel/Dc2tQQNs7RF/';
+  // What instagram.com serves the bot host once the proxy has 302'd there: a
+  // genuine image card. Discord's crawler, following the same redirect from
+  // its own address, gets "Login • Instagram" with no content.
+  const punted = ok(
+    meta({
+      title: 'eva on Instagram: "Let\'s draw a circle together"',
+      images: ['https://scontent.cdninstagram.com/v/t51/793573682_n.jpg'],
+      finalUrl: 'https://www.instagram.com/reel/Dc2tQQNs7RF/',
+    }),
+  );
+
+  it('skips a host that redirected to the source despite an image-bearing OG, logging at debug', async () => {
+    const { client, fetch } = makeOgClient({
+      [mbd]: punted,
+      [kk]: ok(meta({ video: 'https://scontent.cdninstagram.com/v/reel.mp4', finalUrl: kk })),
+    });
+    const provider = createInstagramProvider({ proxyHosts: HOSTS, ogClient: client });
+    const logger = makeLogger();
+    expect(await buildUrl(provider, reel, { timeoutMs: 1000, logger })).toBe(kk);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(logger.debug).toHaveBeenCalledTimes(1);
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'instagram', host: 'mbdinstagram.com' }),
+      expect.stringContaining('redirected back to the source site'),
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('skips a punt landing on the bare apex host as well as on www', async () => {
+    const { client } = makeOgClient({
+      [mbd]: ok(meta({ images: ['i.jpg'], finalUrl: 'https://instagram.com/reel/Dc2tQQNs7RF/' })),
+      [kk]: ok(meta({ images: ['k.jpg'] })),
+    });
+    const provider = createInstagramProvider({ proxyHosts: HOSTS, ogClient: client });
+    expect(await buildUrl(provider, reel)).toBe(kk);
+  });
+
+  it('returns null (no bare link) when every host punts to the source', async () => {
+    const { client, fetch } = makeOgClient({ [mbd]: punted, [kk]: punted });
+    const provider = createInstagramProvider({ proxyHosts: HOSTS, ogClient: client });
+    expect(await buildUrl(provider, reel)).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a redirect to the source CDN as a real proxy answer, not a punt', async () => {
+    const video = 'https://scontent.cdninstagram.com/v/reel.mp4';
+    const { client } = makeOgClient({ [mbd]: ok(meta({ video, finalUrl: video })) });
+    const provider = createInstagramProvider({ proxyHosts: HOSTS, ogClient: client });
+    expect(await buildUrl(provider, reel)).toBe(mbd);
+  });
+
+  it('ranks a candidate normally when the probe reports no final URL', async () => {
+    const { client } = makeOgClient({ [mbd]: ok(meta({ images: ['i.jpg'] })) });
+    const provider = createInstagramProvider({ proxyHosts: HOSTS, ogClient: client });
+    expect(await buildUrl(provider, reel)).toBe(mbd);
+  });
+
+  it('recognises a punt onto a sibling source domain (x.com for a twitter.com link)', async () => {
+    const fx = 'https://fxtwitter.com/jack/status/20';
+    const vx = 'https://vxtwitter.com/jack/status/20';
+    const { client } = makeOgClient({
+      [fx]: ok(meta({ images: ['i.jpg'], finalUrl: 'https://x.com/jack/status/20' })),
+      [vx]: ok(meta({ images: ['v.jpg'], finalUrl: vx })),
+    });
+    const provider = createTwitterProvider({
+      proxyHosts: ['fxtwitter.com', 'vxtwitter.com'],
+      ogClient: client,
+    });
+    expect(await buildUrl(provider, 'https://twitter.com/jack/status/20')).toBe(vx);
   });
 });

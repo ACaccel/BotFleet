@@ -23,6 +23,7 @@
     "unavailable": "The database is temporarily unreachable. You can retry this command later.",
     "duplicate_key": "That record already exists, so it can't be added again. Double-check and try once more.",
     "timeout": "The database took too long to respond and the request timed out. Give it a moment and retry.",
+    "query_timeout": "The query took too long and was stopped. Try a smaller range.",
     "network": "I can't reach the database right now, the network might be acting up. Try again in a little while.",
     "validation": "The data format isn't quite right, so it couldn't be saved. Check the input and try again.",
     "operation_failed": "The database operation failed. Please try again later.",
@@ -46,20 +47,36 @@
     "invalid_response": "The link preview source `{{provider}}` returned an unexpected response (status {{status}}).",
     "unknown": "An unexpected error occurred while building the link preview from `{{provider}}` (status {{status}})."
   },
-  "x_feed": {
-    "fetch_failed": "Could not read `@{{handle}}`'s posts from X (status {{status}}).",
-    "timeout": "Reading `@{{handle}}`'s posts from X timed out (status {{status}}).",
-    "upstream_failure": "The X feed source is temporarily unavailable while reading `@{{handle}}` (status {{status}}). Please try again later.",
-    "rate_limited": "The X feed source is rate limited while reading `@{{handle}}` (status {{status}}). Please try again later.",
-    "not_found": "The X account `@{{handle}}` was not found (status {{status}}). It may have been renamed, suspended, or misspelled in the configuration.",
-    "invalid_response": "The X feed source returned an unexpected response for `@{{handle}}` (status {{status}})."
+  "feed": {
+    "fetch_failed": "Could not read `@{{account}}`'s posts from {{platform}} (status {{status}}).",
+    "timeout": "Reading `@{{account}}`'s posts from {{platform}} timed out (status {{status}}).",
+    "upstream_failure": "The {{platform}} feed source is temporarily unavailable while reading `@{{account}}` (status {{status}}). Please try again later.",
+    "rate_limited": "The {{platform}} feed source is rate limited while reading `@{{account}}` (status {{status}}). Please try again later.",
+    "not_found": "The {{platform}} account `@{{account}}` was not found (status {{status}}). It may have been renamed, suspended, or misspelled.",
+    "invalid_response": "The {{platform}} feed source returned an unexpected response for `@{{account}}` (status {{status}}).",
+    "invalid_account": "`@{{account}}` is not a valid {{platform}} account name.",
+    "platform_not_configured": "The feed platform `{{platform}}` is not configured on this bot."
   },
   "plugin": {
     "lifecycle_phase_violation": "Plugin `{{plugin}}` called registerInstance(`{{token}}`) during phase `{{phase}}`; only `init` is allowed."
   },
   "bot": {
     "login_failed": "Failed to log in to Discord ({{clientId}}).",
-    "login_no_user": "Logged in to Discord but no user was returned ({{clientId}})."
+    "login_no_user": "Logged in to Discord but no user was returned ({{clientId}}).",
+    "inspect_account_invalid": "The database inspection account is misconfigured: `MONGO_INSPECT_URI` must be a read-only account."
   },
-  "unexpected": "An unexpected error occurred while running the command. An administrator has been notified (error ID: {{traceId}})."
+  "unexpected": "An unexpected error occurred while running the command. An administrator has been notified (error ID: {{traceId}}).",
+  "graphics": {
+    "font_missing": "Charts are unavailable on this host right now. Please tell an administrator."
+  },
+  "settings": {
+    "forbidden": "You no longer have permission to edit these settings.",
+    "expired": "This panel expired. Open /settings again.",
+    "invalid": "Invalid settings or resources. Check the values and channel/role permissions.",
+    "conflict": "Another editor saved first. Your draft is preserved; preview it or reload the latest settings.",
+    "unavailable": "Settings are temporarily unavailable. Please try again later.",
+    "pending": "The previous save outcome is being reconciled. Further saves are blocked.",
+    "guild_only": "Open /settings in a server.",
+    "failed": "Settings could not be updated. Please try again later."
+  }
 }

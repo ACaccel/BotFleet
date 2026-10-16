@@ -8,17 +8,13 @@
  * happy-path cases unwrap with the test-only `unwrap`; the closed-
  * connection case asserts the `err(DatabaseError)` channel directly.
  */
-import mongoose from 'mongoose';
 import { describe, expect, it } from 'vitest';
 import { asGuildId } from '../../../src/core/ids';
 import { DatabaseError } from '../../../src/core/errors';
 import { isErr, unwrap } from '../../../src/core/result';
-import {
-  StaticConnectionManager,
-  buildGuildMongoUri,
-} from '../../../src/infra/mongo/connection-manager';
+import { StaticConnectionManager } from '../../../src/infra/mongo/connection-manager';
 import { MongoReplyRepo } from '../../../src/persistence/repositories/reply.repo';
-import { withFreshConnection } from '../helpers/mongo';
+import { withClosedConnection, withFreshConnection } from '../helpers/mongo';
 
 const guildId = asGuildId('999999999999999999');
 
@@ -28,9 +24,22 @@ describe('MongoReplyRepo (integration)', () => {
       const repo = new MongoReplyRepo(
         await new StaticConnectionManager(connection).getConnection(guildId),
       );
-      const doc = unwrap(await repo.create('hello', 'world'));
+      const doc = unwrap(await repo.create('hello', 'world', 'u-creator'));
       expect(doc.input).toBe('hello');
       expect(doc.reply).toBe('world');
+      expect(doc.created_by).toBe('u-creator');
+    });
+  });
+
+  it('listAll returns every pair in the guild', async () => {
+    await withFreshConnection(async (connection) => {
+      const repo = new MongoReplyRepo(
+        await new StaticConnectionManager(connection).getConnection(guildId),
+      );
+      unwrap(await repo.create('a', '1', 'u-creator'));
+      unwrap(await repo.create('b', '2', 'u-creator'));
+      const all = unwrap(await repo.listAll());
+      expect(all.map((doc) => doc.input).sort()).toEqual(['a', 'b']);
     });
   });
 
@@ -39,8 +48,8 @@ describe('MongoReplyRepo (integration)', () => {
       const repo = new MongoReplyRepo(
         await new StaticConnectionManager(connection).getConnection(guildId),
       );
-      unwrap(await repo.create('hi', 'there'));
-      unwrap(await repo.create('hi', 'world')); // same input, different reply
+      unwrap(await repo.create('hi', 'there', 'u-creator'));
+      unwrap(await repo.create('hi', 'world', 'u-creator')); // same input, different reply
       const exact = unwrap(await repo.findExactPair('hi', 'there'));
       expect(exact).toHaveLength(1);
       expect(exact[0]?.reply).toBe('there');
@@ -52,9 +61,9 @@ describe('MongoReplyRepo (integration)', () => {
       const repo = new MongoReplyRepo(
         await new StaticConnectionManager(connection).getConnection(guildId),
       );
-      unwrap(await repo.create('q', 'a1'));
-      unwrap(await repo.create('q', 'a2'));
-      unwrap(await repo.create('other', 'noise'));
+      unwrap(await repo.create('q', 'a1', 'u-creator'));
+      unwrap(await repo.create('q', 'a2', 'u-creator'));
+      unwrap(await repo.create('other', 'noise', 'u-creator'));
       const got = unwrap(await repo.findByInput('q'));
       expect(got.map((d) => d.reply).sort()).toEqual(['a1', 'a2']);
     });
@@ -65,7 +74,7 @@ describe('MongoReplyRepo (integration)', () => {
       const repo = new MongoReplyRepo(
         await new StaticConnectionManager(connection).getConnection(guildId),
       );
-      const created = unwrap(await repo.create('k', 'v'));
+      const created = unwrap(await repo.create('k', 'v', 'u-creator'));
       const found = unwrap(await repo.findById(created._id.toString()));
       expect(found?.reply).toBe('v');
     });
@@ -86,7 +95,7 @@ describe('MongoReplyRepo (integration)', () => {
       const repo = new MongoReplyRepo(
         await new StaticConnectionManager(connection).getConnection(guildId),
       );
-      const created = unwrap(await repo.create('k', 'v'));
+      const created = unwrap(await repo.create('k', 'v', 'u-creator'));
       expect(unwrap(await repo.deleteById(created._id.toString()))).toBe(true);
       expect(unwrap(await repo.findById(created._id.toString()))).toBeUndefined();
     });
@@ -102,18 +111,10 @@ describe('MongoReplyRepo (integration)', () => {
   });
 
   it('findByInput resolves to err(DatabaseError) when the connection is closed', async () => {
-    const baseUri = (() => {
-      const uri = process.env.INTEGRATION_MONGO_URI;
-      if (uri === undefined) throw new Error('INTEGRATION_MONGO_URI not set');
-      return uri.replace(/[^/]*$/, '');
-    })();
-    const connection = await mongoose
-      .createConnection(buildGuildMongoUri(baseUri, guildId))
-      .asPromise();
-    const repo = new MongoReplyRepo(
-      await new StaticConnectionManager(connection).getConnection(guildId),
+    const repo = await withClosedConnection(
+      async (connection) =>
+        new MongoReplyRepo(await new StaticConnectionManager(connection).getConnection(guildId)),
     );
-    await connection.close();
 
     const result = await repo.findByInput('anything');
     expect(isErr(result)).toBe(true);

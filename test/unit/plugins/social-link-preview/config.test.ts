@@ -52,12 +52,65 @@ describe('parseSocialLinkPreviewConfig', () => {
     expect(config.originalMessageStrategy).toBe('suppress');
     expect(config.maxUrlsPerMessage).toBe(1);
     expect(config.timeoutMs).toBe(4000);
-    expect(config.validationBudgetMs).toBe(8000);
+    expect(config.maxVideoBytes).toBe(8 * 1024 * 1024);
+    expect(config.videoTimeoutMs).toBe(15_000);
     expect(config.providers).toBeUndefined();
+    expect(config.allowedBotIds).toEqual([]);
     // No host list is invented in code: a disabled feature probes nothing.
     for (const key of PROXY_HOST_KEYS) {
       expect(config[key]).toBeUndefined();
     }
+  });
+
+  it.each([false, true])('accepts bot IDs when enabled is %s', (enabled) => {
+    const allowedBotIds = ['111111111111111111', '222222222222222222'];
+    expect(
+      parseSocialLinkPreviewConfig({ enabled, ...proxyHosts(), allowedBotIds }).allowedBotIds,
+    ).toEqual(allowedBotIds);
+  });
+
+  it.each(['gopher', '', '123', '1'.repeat(21), ' 111111111111111111', 123])(
+    'rejects an invalid bot ID: %s',
+    (id) => {
+      expect(issuePaths(parseFailure({ allowedBotIds: [id] }))).toContain('allowedBotIds.0');
+    },
+  );
+
+  it.each([null, '111111111111111111', {}])(
+    'rejects a non-array bot allow-list: %j',
+    (allowedBotIds) => {
+      expect(issuePaths(parseFailure({ allowedBotIds }))).toContain('allowedBotIds');
+    },
+  );
+
+  it('defaults the gallery reader and bounds its memory and bandwidth settings', () => {
+    expect(parseSocialLinkPreviewConfig(undefined).gallery).toEqual({
+      prefetchPages: 5,
+      cacheMaxBytes: 64 * 1024 * 1024,
+      maxImageBytes: 8 * 1024 * 1024,
+      imageTimeoutMs: 15_000,
+      stagingChannelId: null,
+    });
+    expect(
+      parseSocialLinkPreviewConfig({ gallery: { prefetchPages: 0 } }).gallery.prefetchPages,
+    ).toBe(0);
+    expect(issuePaths(parseFailure({ gallery: { prefetchPages: 11 } }))).toContain(
+      'gallery.prefetchPages',
+    );
+    expect(issuePaths(parseFailure({ gallery: { maxImageBytes: 11 * 1024 * 1024 } }))).toContain(
+      'gallery.maxImageBytes',
+    );
+    expect(
+      issuePaths(parseFailure({ gallery: { cacheMaxBytes: 1024, maxImageBytes: 2048 } })),
+    ).toContain('gallery.cacheMaxBytes');
+    expect(issuePaths(parseFailure({ gallery: { prefetch: 5 } }))).toContain('gallery');
+    expect(
+      parseSocialLinkPreviewConfig({ gallery: { stagingChannelId: '123456789012345678' } }).gallery
+        .stagingChannelId,
+    ).toBe('123456789012345678');
+    expect(issuePaths(parseFailure({ gallery: { stagingChannelId: 'general' } }))).toContain(
+      'gallery.stagingChannelId',
+    );
   });
 
   it('accepts an explicitly disabled block with no host lists at all', () => {
@@ -114,9 +167,50 @@ describe('parseSocialLinkPreviewConfig', () => {
     ).toContain('redditProxyHosts');
   });
 
-  it('rejects an out-of-range timeout / budget and an invalid provider name', () => {
+  it.each([0, -1, 1.5, 25 * 1024 * 1024 + 1])(
+    'rejects an invalid video byte limit: %s',
+    (maxVideoBytes) => {
+      expect(issuePaths(parseFailure({ maxVideoBytes }))).toContain('maxVideoBytes');
+    },
+  );
+
+  it.each([0, -1, 1.5, 60_001])('rejects an invalid video timeout: %s', (videoTimeoutMs) => {
+    expect(issuePaths(parseFailure({ videoTimeoutMs }))).toContain('videoTimeoutMs');
+  });
+
+  it('rejects an out-of-range timeout and an invalid provider name', () => {
     expect(() => parseSocialLinkPreviewConfig({ timeoutMs: 999_999 })).toThrow(z.ZodError);
-    expect(() => parseSocialLinkPreviewConfig({ validationBudgetMs: 999_999 })).toThrow(z.ZodError);
     expect(() => parseSocialLinkPreviewConfig({ providers: ['myspace'] })).toThrow(z.ZodError);
+  });
+
+  describe('twitterApiBaseUrls', () => {
+    const enabled = (extra: Record<string, unknown>): unknown => ({
+      enabled: true,
+      ...proxyHosts(),
+      ...extra,
+    });
+
+    it('is optional, so X links stay on the proxies by default', () => {
+      expect(parseSocialLinkPreviewConfig(enabled({})).twitterApiBaseUrls).toBeUndefined();
+    });
+
+    it('accepts a list of https API bases', () => {
+      const config = parseSocialLinkPreviewConfig(
+        enabled({ twitterApiBaseUrls: ['https://api.fxtwitter.com'] }),
+      );
+      expect(config.twitterApiBaseUrls).toEqual(['https://api.fxtwitter.com']);
+    });
+
+    it('rejects an empty list, a non-https base and a non-URL', () => {
+      expect(issuePaths(parseFailure(enabled({ twitterApiBaseUrls: [] })))).toContain(
+        'twitterApiBaseUrls',
+      );
+      expect(
+        issuePaths(parseFailure(enabled({ twitterApiBaseUrls: ['http://api.fxtwitter.com'] }))),
+      ).toContain('twitterApiBaseUrls.0');
+      expect(issuePaths(parseFailure(enabled({ twitterApiBaseUrls: ['api'] })))).toContain(
+        'twitterApiBaseUrls.0',
+      );
+    });
   });
 });

@@ -11,9 +11,9 @@
  *   - Generic: apiKey, password, secret, client_secret, refresh_token, access_token, private_key
  *   - LLM providers in dependency graph (@anthropic-ai/sdk, openai, @google/generative-ai,
  *     xAI via the OpenAI-compatible client): anthropic*, openai*, google*, gemini*, xai*
- *   - Data store: mongoURI
- *   - Other third-party keys carried in the typed Env: accuweather*,
- *     gopher_settings_api_key
+ *   - Data store: mongoURI, mongo_inspect_uri
+ *   - Other keys carried in the typed Env: cwa_api_key, notify_api_key,
+ *     earthquake_alert_key
  *
  * Every secret-shaped key of `Env` must appear here in lower case; the
  * `redact` unit suite asserts that closure.
@@ -46,6 +46,8 @@ export const REDACT_FIELD_NAMES = Object.freeze([
   // Data store
   'mongoURI',
   'mongo_uri',
+  'mongo_inspect_uri',
+  'mongoInspectUri',
 
   // LLM provider keys (project uses @anthropic-ai/sdk, openai, @google/generative-ai)
   'anthropic_api_key',
@@ -59,11 +61,13 @@ export const REDACT_FIELD_NAMES = Object.freeze([
   'xai_api_key',
   'xaiApiKey',
 
-  // Other third-party keys carried in the typed Env
-  'accuweather_key',
-  'accuweatherKey',
-  'gopher_settings_api_key',
-  'gopherSettingsApiKey',
+  // Other keys carried in the typed Env
+  'cwa_api_key',
+  'cwaApiKey',
+  'notify_api_key',
+  'notifyApiKey',
+  'earthquake_alert_key',
+  'earthquakeAlertKey',
 ] as const);
 
 /**

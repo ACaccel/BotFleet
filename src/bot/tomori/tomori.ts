@@ -3,25 +3,30 @@ import { ActivityType, Events } from 'discord.js';
 
 import type { Config } from '@bot';
 import { BaseBot } from '@bot';
+import { TOKENS } from '../tokens';
+import { createGuildSettings } from '../guild-settings';
+import { commandsForBot } from '../default-commands';
 import {
   createAutoReplyPlugin,
   createActivityPlugin,
+  createBugReportPlugin,
+  createEarthquakePlugin,
   createGiveawayPlugin,
   createGuildEventsPlugin,
+  createSocialFeedPlugin,
   createSocialLinkPreviewPlugin,
   createTempRolePlugin,
-  createVoicePlugin,
 } from '@plugins';
+import {
+  createDefaultFeedPlatformRegistry,
+  parseFeedPlatformsConfig,
+} from '../../infra/social-feed';
 
-// Tomori is the public-facing personality: nijika's interactive feature
-// set minus the self-guild-only surfaces (earthquake webhook, level-role
-// sync). It adds no fields beyond the base `Config` except the optional
-// `social_link_preview` and `auto_reply` blocks, which the owning
-// plugins parse and default in code. Channel suppression for guild-events / social-link-preview /
-// channel-logging comes from the per-guild `permission_rank` block (see
-// `GuildConfig.permission_rank`), resolved via `TOKENS.PermissionRankPolicy`,
-// rather than a personality-level list.
+// Public guild preferences supplement the operator's capabilities and static
+// permission ranks.
 interface TomoriConfig extends Config {
+  /** Operator-only resource ceilings for the per-guild panel. */
+  guild_settings?: unknown;
   /**
    * Raw `social_link_preview` block. Parsed and defaulted by the plugin
    * (see `createSocialLinkPreviewPlugin`), so it is intentionally
@@ -34,6 +39,24 @@ interface TomoriConfig extends Config {
    * here and may be omitted entirely.
    */
   auto_reply?: unknown;
+  /**
+   * Raw `guild_events` block. Parsed and defaulted by the plugin
+   * (see `createGuildEventsPlugin`), so it is intentionally `unknown`
+   * here and may be omitted entirely.
+   */
+  guild_events?: unknown;
+  /** Raw `bug_report` block; validated by `/bug_report` and its plugin. */
+  bug_report?: unknown;
+  /** Operator-controlled feed platforms and polling limits. */
+  social_feed?: unknown;
+  /** Operator-controlled early-warning ping threshold. */
+  earthquake_alert?: unknown;
+}
+
+interface EarthquakeSettings {
+  readonly alertPort?: number | undefined;
+  readonly alertKey?: string | undefined;
+  readonly cwaApiKey?: string | undefined;
 }
 
 export class Tomori extends BaseBot<TomoriConfig> {
@@ -43,13 +66,26 @@ export class Tomori extends BaseBot<TomoriConfig> {
     mongoURI: string,
     clientId: string,
     config: TomoriConfig,
+    earthquake: EarthquakeSettings = {},
   ) {
-    super(client, token, mongoURI, clientId, config);
+    super(client, token, mongoURI, clientId, {
+      ...config,
+      commands: commandsForBot('tomori', config.commands),
+    });
+    this.container.registerSingleton(TOKENS.GuildSettings, () =>
+      createGuildSettings(this, config, {
+        earthquake: {
+          alerts: earthquake.alertPort !== undefined,
+          reports: earthquake.cwaApiKey !== undefined,
+        },
+      }),
+    );
     // Intro paragraph rendered at the top of the `/help` embed; the
     // key is resolved once the translator is loaded (see BaseBot.run).
     this.helpMessageKey = 'replies:tomori.help_message';
+    this.personaSection = 'replies:tomori';
     // Tomori opts into auto-reply, guild-event mirroring, social-link
-    // preview, giveaway, activity, temporary-role and voice behaviour
+    // preview, giveaway, activity and temporary-role behaviour
     // by registering the corresponding plugins explicitly. Plugins
     // resolve their dependencies through `ctx`, so the composition root
     // does not deep-import `plugins/*/internal`.
@@ -58,25 +94,52 @@ export class Tomori extends BaseBot<TomoriConfig> {
     // `messageDelete` / `guildMemberUpdate` / `guildCreate`; without
     // it the ClientEventBridge never wires those Discord events and
     // no audit log / channel mirror is produced.
-    this.use(createAutoReplyPlugin(this.config.auto_reply));
-    this.use(createGuildEventsPlugin());
+    this.use(createAutoReplyPlugin(this.config.auto_reply, this.guildSettings));
+    this.use(createGuildEventsPlugin(this.config.guild_events, { settings: this.guildSettings }));
     // Social-link preview: detect share links, post a richer preview,
     // and suppress the user's original auto-embed (mirrors nijika).
-    this.use(createSocialLinkPreviewPlugin(this.config.social_link_preview));
+    this.use(
+      createSocialLinkPreviewPlugin(this.config.social_link_preview, {
+        settings: this.guildSettings,
+      }),
+    );
     this.use(createGiveawayPlugin());
     this.use(createActivityPlugin());
     // Temporary, permission-less notification roles with a self-claim
     // button and a hard 30-day expiry (see `createTempRolePlugin`).
     this.use(createTempRolePlugin());
-    this.use(createVoicePlugin());
+    // `/bug_report` tickets: relay between the hub forum and reporters' DMs.
+    this.use(
+      createBugReportPlugin({
+        config: this.config.bug_report,
+        isAdmin: (userId) => this.isAdmin(userId),
+        label: () => this.personaName || (this.client.user?.username ?? this.clientId),
+      }),
+    );
+    const platforms = createDefaultFeedPlatformRegistry(
+      parseFeedPlatformsConfig(this.config.social_feed),
+    );
+    this.container.registerSingleton(TOKENS.FeedPlatformRegistry, () => platforms);
+    this.use(createSocialFeedPlugin(this.config.social_feed, { platforms }));
+    this.use(
+      createEarthquakePlugin(
+        { ...earthquake, alertConfig: this.config.earthquake_alert },
+        { settings: this.guildSettings },
+      ),
+    );
     this.registerPresence();
+    this.client.on(Events.GuildDelete, (guild) => this.invalidateGuildRuntime(guild.id));
+  }
+
+  protected override supportsGuildSettings(): boolean {
+    return true;
   }
 
   /**
    * Without an explicit presence, Discord clients tend to render an idle
    * bot as offline even though its gateway session is still alive.
-   * Register a ready-time presence so tomori reliably appears online
-   * with a custom status line.
+   * Register a ready-time presence so tomori reliably appears online.
+   * A Playing activity renders as the profile card's "Playing" panel.
    */
   private registerPresence(): void {
     this.client.once(Events.ClientReady, () => {
@@ -87,8 +150,7 @@ export class Tomori extends BaseBot<TomoriConfig> {
         activities: [
           {
             name: text,
-            type: ActivityType.Custom,
-            state: text,
+            type: ActivityType.Playing,
           },
         ],
       });

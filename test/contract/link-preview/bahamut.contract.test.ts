@@ -78,15 +78,32 @@ describe('Bahamut OpenGraph contract', () => {
     if (isOk(result)) expect(result.value).toBeNull();
   });
 
-  it('returns INVALID_RESPONSE when an og:image exists but the title is missing', async () => {
+  it('skips (Ok(null)) when an og:image exists but the title is missing', async () => {
     nock(ORIGIN)
       .get(PATH)
       .query(true)
       .reply(200, ogHtml('<meta property="og:image" content="https://p2.bahamut.com.tw/og.jpg">'));
 
     const result = await build();
-    expect(isErr(result)).toBe(true);
-    if (isErr(result)) expect(result.error.code).toBe('LINK_PREVIEW_INVALID_RESPONSE');
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBeNull();
+  });
+
+  it('skips (Ok(null)) the age-gate interstitial served for an 18+ board', async () => {
+    nock(ORIGIN)
+      .get(PATH)
+      .query(true)
+      .reply(
+        200,
+        ogHtml(
+          '<meta property="og:description" content="Age verification required.">' +
+            '<meta property="og:image" content="https://i2.bahamut.com.tw/child-protection.png">',
+        ),
+      );
+
+    const result = await build();
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBeNull();
   });
 
   it('does NOT follow a redirect (maxRedirects: 0 is the SSRF guard)', async () => {

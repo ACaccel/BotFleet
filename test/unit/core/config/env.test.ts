@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EnvLoadError, loadEnv } from '../../../../src/core/config/env';
+import { EnvLoadError, loadEnv, readNpmConfigFlags } from '../../../../src/core/config/env';
 import { captureStderrNdjson } from '../../../support/ndjson';
 
 const validBase = {
@@ -24,6 +24,49 @@ describe('loadEnv', () => {
     vi.restoreAllMocks();
   });
 
+  it('validates the recovery interval and supplies its default', () => {
+    expect(loadEnv({ exitOnFailure: false, source: validBase }).MONGO_RECOVERY_INTERVAL_MS).toBe(
+      60_000,
+    );
+    expect(
+      loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, MONGO_RECOVERY_INTERVAL_MS: '5000' },
+      }).MONGO_RECOVERY_INTERVAL_MS,
+    ).toBe(5000);
+    for (const value of ['0', '-1', '1.5', 'invalid', '2147483648']) {
+      expect(() =>
+        loadEnv({
+          exitOnFailure: false,
+          source: { ...validBase, MONGO_RECOVERY_INTERVAL_MS: value },
+        }),
+      ).toThrow(EnvLoadError);
+    }
+  });
+
+  it('accepts only absolute deployment readiness paths', () => {
+    expect(
+      loadEnv({
+        exitOnFailure: false,
+        source: {
+          ...validBase,
+          PLEIADES_READY_FILE: '/run/pleiades/ready.json',
+        },
+      }).PLEIADES_READY_FILE,
+    ).toBe('/run/pleiades/ready.json');
+    for (const value of ['', 'ready.json']) {
+      expect(() =>
+        loadEnv({
+          exitOnFailure: false,
+          source: {
+            ...validBase,
+            PLEIADES_READY_FILE: value,
+          },
+        }),
+      ).toThrow(EnvLoadError);
+    }
+  });
+
   describe('success paths', () => {
     it('parses a valid environment and returns a frozen object', () => {
       const env = loadEnv({ exitOnFailure: false, source: { ...validBase } });
@@ -33,15 +76,6 @@ describe('loadEnv', () => {
       expect(env.NODE_ENV).toBe('test');
       expect(env.LOG_LEVEL).toBe('info');
       expect(Object.isFrozen(env)).toBe(true);
-    });
-
-    it('coerces PORT from a string', () => {
-      const env = loadEnv({
-        exitOnFailure: false,
-        requireDb: false,
-        source: { ...validBase, MONGO_URI: undefined, PORT: '8080' },
-      });
-      expect(env.PORT).toBe(8080);
     });
 
     it('accepts mongodb+srv:// scheme', () => {
@@ -78,19 +112,19 @@ describe('loadEnv', () => {
       expect(env.XAI_API_KEY).toBe('real-xai-key');
     });
 
-    it('passes GOPHER_SETTINGS_API_KEY through to the returned object', () => {
-      // Regression guard: a key present in the schema + type but omitted
-      // from the destructure/freeze block would be silently stripped.
-      const env = loadEnv({
+    it('carries CWA_API_KEY through and treats a blank one as absent', () => {
+      // nijika's .env may keep the line blank to leave report polling off.
+      const withKey = loadEnv({
         exitOnFailure: false,
-        source: { ...validBase, GOPHER_SETTINGS_API_KEY: 'gopher-secret' },
+        source: { ...validBase, CWA_API_KEY: 'CWA-0000-test' },
       });
-      expect(env.GOPHER_SETTINGS_API_KEY).toBe('gopher-secret');
-    });
-
-    it('omits GOPHER_SETTINGS_API_KEY when it is absent', () => {
-      const env = loadEnv({ exitOnFailure: false, source: { ...validBase } });
-      expect(env.GOPHER_SETTINGS_API_KEY).toBeUndefined();
+      expect(withKey.CWA_API_KEY).toBe('CWA-0000-test');
+      for (const blank of ['', '   ']) {
+        const env = loadEnv({ exitOnFailure: false, source: { ...validBase, CWA_API_KEY: blank } });
+        expect(env.CWA_API_KEY).toBeUndefined();
+        expect('CWA_API_KEY' in env).toBe(false);
+      }
+      expect(loadEnv({ exitOnFailure: false, source: validBase }).CWA_API_KEY).toBeUndefined();
     });
   });
 
@@ -156,14 +190,26 @@ describe('loadEnv', () => {
       ).toThrow(EnvLoadError);
     });
 
-    it('rejects when requirePort=true but PORT is missing', () => {
-      expect(() =>
+    it('accepts an optional MONGO_INSPECT_URI and names it when invalid', () => {
+      expect(
         loadEnv({
           exitOnFailure: false,
-          requirePort: true,
-          source: { ...validBase },
-        }),
-      ).toThrow(EnvLoadError);
+          source: { ...validBase, MONGO_INSPECT_URI: 'mongodb://reader@db.example.com:27017' },
+        }).MONGO_INSPECT_URI,
+      ).toBe('mongodb://reader@db.example.com:27017');
+      let failure: unknown;
+      try {
+        loadEnv({
+          exitOnFailure: false,
+          source: { ...validBase, MONGO_INSPECT_URI: 'http://example.com' },
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(EnvLoadError);
+      expect((failure as EnvLoadError).issues.map((issue) => issue.message)).toContain(
+        'MONGO_INSPECT_URI must use the mongodb:// or mongodb+srv:// scheme',
+      );
     });
 
     it('emits an NDJSON failure record to stderr before throwing', () => {
@@ -179,13 +225,137 @@ describe('loadEnv', () => {
       expect(() =>
         loadEnv({
           exitOnFailure: false,
-          envFile: '/tmp/botfleet-no-such-file.env',
+          envFile: '/tmp/pleiades-no-such-file.env',
         }),
       ).toThrow(EnvLoadError);
       const issues = stderrCapture
         .lines()
         .flatMap((l) => (Array.isArray(l['issues']) ? l['issues'] : []));
       expect(issues.some((i) => (i as { path?: string }).path === 'envFile')).toBe(true);
+    });
+  });
+
+  describe('notification relay API', () => {
+    const longKey = 'k'.repeat(32);
+
+    it('accepts a port with a key of at least 32 characters', () => {
+      const env = loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, NOTIFY_API_PORT: '8787', NOTIFY_API_KEY: longKey },
+      });
+      expect(env.NOTIFY_API_PORT).toBe(8787);
+      expect(env.NOTIFY_API_KEY).toBe(longKey);
+    });
+
+    it('treats a blank port as absent and needs no key without one', () => {
+      const env = loadEnv({ exitOnFailure: false, source: { ...validBase, NOTIFY_API_PORT: ' ' } });
+      expect('NOTIFY_API_PORT' in env).toBe(false);
+      expect('NOTIFY_API_KEY' in env).toBe(false);
+    });
+
+    it.each([
+      ['a port without a key', { NOTIFY_API_PORT: '8787' }],
+      ['a port with a short key', { NOTIFY_API_PORT: '8787', NOTIFY_API_KEY: 'k'.repeat(31) }],
+    ])('rejects %s without echoing the key', (_label, extra: NodeJS.ProcessEnv) => {
+      let error: unknown;
+      try {
+        loadEnv({ exitOnFailure: false, source: { ...validBase, ...extra } });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(EnvLoadError);
+      expect((error as EnvLoadError).issues.map((i) => i.path.join('.'))).toEqual([
+        'NOTIFY_API_KEY',
+      ]);
+      expect(String((error as Error).message)).not.toContain('k'.repeat(31));
+    });
+
+    it.each(['0', '65536', '80.5', 'http'])('rejects port %s', (port) => {
+      expect(() =>
+        loadEnv({
+          exitOnFailure: false,
+          source: { ...validBase, NOTIFY_API_PORT: port, NOTIFY_API_KEY: longKey },
+        }),
+      ).toThrow(EnvLoadError);
+    });
+  });
+
+  describe('earthquake alert API', () => {
+    const longKey = 'e'.repeat(32);
+
+    it('accepts a port with a key of at least 32 characters', () => {
+      const env = loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, EARTHQUAKE_ALERT_PORT: '4000', EARTHQUAKE_ALERT_KEY: longKey },
+      });
+      expect(env.EARTHQUAKE_ALERT_PORT).toBe(4000);
+      expect(env.EARTHQUAKE_ALERT_KEY).toBe(longKey);
+    });
+
+    it('is optional: a blank port reads as absent and needs no key', () => {
+      const env = loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, EARTHQUAKE_ALERT_PORT: '' },
+      });
+      expect('EARTHQUAKE_ALERT_PORT' in env).toBe(false);
+      expect('EARTHQUAKE_ALERT_KEY' in env).toBe(false);
+    });
+
+    it.each([
+      ['a port without a key', { EARTHQUAKE_ALERT_PORT: '4000' }],
+      [
+        'a port with a short key',
+        { EARTHQUAKE_ALERT_PORT: '4000', EARTHQUAKE_ALERT_KEY: 'e'.repeat(31) },
+      ],
+    ])('rejects %s without echoing the key', (_label, extra: NodeJS.ProcessEnv) => {
+      let error: unknown;
+      try {
+        loadEnv({ exitOnFailure: false, source: { ...validBase, ...extra } });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(EnvLoadError);
+      expect((error as EnvLoadError).issues.map((i) => i.path.join('.'))).toEqual([
+        'EARTHQUAKE_ALERT_KEY',
+      ]);
+      expect(String((error as Error).message)).not.toContain('e'.repeat(31));
+    });
+
+    it.each(['0', '65536', '80.5', 'http'])('rejects port %s', (port) => {
+      expect(() =>
+        loadEnv({
+          exitOnFailure: false,
+          source: { ...validBase, EARTHQUAKE_ALERT_PORT: port, EARTHQUAKE_ALERT_KEY: longKey },
+        }),
+      ).toThrow(EnvLoadError);
+    });
+
+    it('ignores a leftover PORT from the retired webhook', () => {
+      const env = loadEnv({ exitOnFailure: false, source: { ...validBase, PORT: '3000' } });
+      expect('PORT' in env).toBe(false);
+    });
+  });
+
+  describe('LOG_RETENTION_DAYS', () => {
+    const days = (value: string | undefined): number =>
+      loadEnv({
+        exitOnFailure: false,
+        source: { ...validBase, ...(value === undefined ? {} : { LOG_RETENTION_DAYS: value }) },
+      }).LOG_RETENTION_DAYS;
+
+    it('defaults to 60 days', () => {
+      expect(days(undefined)).toBe(60);
+    });
+
+    it('accepts a positive count and 0 (disabled)', () => {
+      expect(days('14')).toBe(14);
+      expect(days('0')).toBe(0);
+    });
+
+    it('fails startup on blank, negative, fractional or non-numeric values', () => {
+      for (const bad of ['', ' ', '-1', '1.5', 'abc', '1e2', '99999']) {
+        expect(() => days(bad), bad).toThrow(EnvLoadError);
+      }
     });
   });
 
@@ -212,5 +382,23 @@ describe('loadEnv', () => {
       expect(() => loadEnv({ exitOnFailure: true, source: {} })).toThrow('__test_exit:1');
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
+  });
+});
+
+describe('readNpmConfigFlags', () => {
+  it('maps kebab-case flags to their npm_config_ variables and omits unset ones', () => {
+    const flags = readNpmConfigFlags(['t', 'dry-run', 'dev-guild', 'keep-guild-commands'], {
+      npm_config_t: 'true',
+      npm_config_dry_run: 'true',
+      npm_config_dev_guild: '123456789012345678',
+      npm_config_unrelated: 'x',
+    });
+
+    expect(flags).toEqual({ t: 'true', 'dry-run': 'true', 'dev-guild': '123456789012345678' });
+    expect(Object.isFrozen(flags)).toBe(true);
+  });
+
+  it('keeps an empty value npm set for a disabled flag', () => {
+    expect(readNpmConfigFlags(['dry-run'], { npm_config_dry_run: '' })).toEqual({ 'dry-run': '' });
   });
 });

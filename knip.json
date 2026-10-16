@@ -1,9 +1,22 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["scripts/*.ts"],
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "scripts/*.ts",
+    "src/register.ts",
+    "src/bot/*/index.ts",
+    "tools/archive-benchmark/cpu.ts",
+    "tools/archive-benchmark/cpu-persistence.ts",
+    "tools/archive-benchmark/rest.ts",
+    "tools/archive-benchmark/notifications.ts",
+    "tools/archive-benchmark/pipeline.ts",
+    "tools/archive-benchmark/stats.ts",
+    "tools/archive-benchmark/worker.ts",
+    "tools/archive-benchmark/reobserve.ts",
+    "tools/archive-benchmark/storage.ts"
+  ],
   "project": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "tools/**/*.ts"],
   "vitest": {
-    "config": ["vitest.config.ts", "vitest.workspace.ts"],
+    "config": ["vitest.config.ts", "vitest.projects.ts"],
     "entry": ["test/**/*.test.ts", "test/**/setup.ts"]
   },
   "paths": {
@@ -12,26 +25,23 @@
     "@button": ["src/handlers/buttons/index.ts"],
     "@select-menu": ["src/handlers/select-menus/index.ts"],
     "@modal": ["src/handlers/modals/index.ts"],
-    "@reaction": ["src/handlers/reactions/index.ts"],
     "@core/*": ["src/core/*"],
     "@plugins": ["src/plugins/index.ts"]
   },
-  "ignoreDependencies": ["libsodium-wrappers", "tsconfig-paths"],
+  "ignoreBinaries": ["systemd-analyze", "mkfifo"],
+  "ignoreDependencies": ["tsconfig-paths", "audit-ci", "prettier"],
   "ignore": [
     "src/persistence/index.ts",
     "src/persistence/repositories/index.ts",
     "src/persistence/schemas/index.ts",
     "src/core/index.ts",
     "src/core/i18n/index.ts",
-    "src/core/config/index.ts",
     "src/core/errors/index.ts",
     "src/core/ioc/index.ts",
-    "src/core/plugin/index.ts",
     "src/core/result/index.ts",
     "src/infra/llm/index.ts",
-    "src/infra/link-preview/index.ts",
     "src/infra/mongo/index.ts",
-    "src/infra/x-feed/index.ts",
+    "src/infra/social-feed/index.ts",
     "src/handlers/*/index.ts"
   ],
   "rules": {
@@ -45,7 +55,6 @@
     "types": "error",
     "nsExports": "error",
     "nsTypes": "error",
-    "enumMembers": "error",
-    "classMembers": "warn"
+    "enumMembers": "error"
   }
 }

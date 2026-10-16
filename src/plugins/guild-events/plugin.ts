@@ -1,54 +1,60 @@
 /**
- * GuildEventsPlugin — mirrors message edits/deletes and role changes
- * to a guild's configured `event` channel.
+ * GuildEventsPlugin — records message edits/deletes and role changes, and
+ * mirrors them to a guild's configured `event` channel.
  *
- * Behaviours:
- *   - `messageUpdate`: when the content actually changed, record the edit
- *     locally and — unless rank-suppressed — mirror an embed describing the
- *     diff to the `event` channel.
- *   - `messageDelete`: same shape; the embed attaches images / non-image
- *     file URLs separately, and every attachment is archived to disk.
- *   - `guildMemberUpdate`: when role membership changes, send a role-
- *     delta embed (added / removed).
- *   - `guildCreate`: when the bot joins a new guild, onboard it
- *     (connect its per-guild database, register slash commands)
- *     through the typed {@link GuildOnboardingPort} resolved from the
- *     IoC container, so no plugin code reaches into `BaseBot`
- *     internals.
+ *   - `messageCreate`: cache attachments to disk, best-effort and never
+ *     gating the message. Discord purges the CDN object almost as soon as a
+ *     message is deleted, so downloading at `messageDelete` usually 404s.
+ *   - `messageUpdate` / `messageDelete`: when content changed (or on delete),
+ *     record the event locally and mirror an embed; a delete also archives
+ *     every attachment, from the cache when possible, else by download.
+ *   - `messageDeleteBulk`: carries no hydrated content, so it mirrors nothing;
+ *     it rescues cached attachments and records one audit line per rescued
+ *     message before the cache expires them.
+ *   - `guildMemberUpdate`: role-delta embed.
+ *   - `guildCreate`: onboard the guild through {@link GuildOnboardingPort},
+ *     so no plugin code reaches into `BaseBot` internals.
  *
- * Dependencies are resolved once in `init` into a typed bundle the event
- * subscriptions close over, rather than per event.
- *
- * Rank gates DISCLOSURE only. For `messageUpdate` / `messageDelete` the
- * handlers ask the {@link PermissionRankPolicy} whether the `guild_events`
- * feature is suppressed for the message's
- * channel. Suppression withholds the Discord `event`-channel embed, but the
- * local record — the `logGuildEvent` audit line and `archiveDeletedAttachments`
- * forensic download — runs UNCONDITIONALLY for every non-bot guild message.
- * Private (rank-1+) channels are therefore fully recorded server-side yet
- * never mirrored to Discord. A no-arg factory (consistent with the sibling
- * `createGiveawayPlugin()` / `createActivityPlugin()`) keeps the returned
- * object pure data.
+ * Rank gates disclosure only: {@link PermissionRankPolicy} may suppress the
+ * `event`-channel embed for a channel, but the local record (the
+ * `logGuildEvent` audit line and attachment archival) runs unconditionally
+ * for every non-bot guild message. Private channels are therefore fully
+ * recorded server-side yet never mirrored to Discord.
  */
+import { EMBED_COLORS } from '../../infra/discord/presentation-colors';
 import {
   EmbedBuilder,
   type Guild,
   type Message,
   type PartialMessage,
+  type Snowflake,
   type TextChannel,
 } from 'discord.js';
 
 import { TOKENS } from '../../bot/tokens';
 import type { GuildRegistry } from '../../bot/guild-registry';
+import type { GuildSettingsRuntime } from '../../core/guild-settings';
 import type { Plugin } from '../../core/plugin';
 import type { GuildOnboardingPort, PermissionRankPolicy } from '../../core/plugin';
 import { logError, logGuildEvent, logSystem, type Logger } from '../../core/logger';
-import { archiveDeletedAttachments, ancestorChannelIdsOf } from '../../infra/discord';
+import {
+  archiveDeletedAttachments,
+  ancestorChannelIdsOf,
+  createAttachmentCache,
+  type AttachmentCache,
+} from '../../infra/discord';
+import { parseGuildEventsConfig } from './config';
 
 const PLUGIN_ID = 'guild-events';
-const PLUGIN_VERSION = '1.0.0';
+const PLUGIN_VERSION = '1.1.0';
 const EVENT_CHANNEL = 'event';
 const MAX_MESSAGE_PREVIEW = 1000;
+
+/**
+ * How often the expired-cache sweep runs. Hourly is fine granularity
+ * against a TTL measured in hours and costs one directory walk.
+ */
+const CACHE_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 const truncate = (text: string): string =>
   text.length > MAX_MESSAGE_PREVIEW ? `${text.slice(0, MAX_MESSAGE_PREVIEW)}...` : text;
@@ -93,19 +99,64 @@ const safeSendEmbed = async (
 
 /** Everything the event handlers read, resolved once in `init`. */
 interface GuildEventsDeps {
+  readonly settings?: GuildSettingsRuntime;
   readonly registry: GuildRegistry;
   readonly policy: PermissionRankPolicy;
   readonly onboardingPort: GuildOnboardingPort;
   /** The bot-root logger, not the plugin child: audit lines are per-guild. */
   readonly logger: Logger;
+  /** Pre-delete attachment cache; `undefined` when the operator disabled it. */
+  readonly cache: AttachmentCache | undefined;
 }
 
-/** Build the guild-events plugin. Takes no config; suppression is decided
- * per event by the {@link PermissionRankPolicy} resolved in `init`. */
-export const createGuildEventsPlugin = (): Plugin => {
+/** Optional collaborators wired by the composition root / tests. */
+interface CreateGuildEventsDeps {
+  readonly settings?: GuildSettingsRuntime;
+  /**
+   * Pre-delete attachment cache. Injectable (mirroring
+   * `createSocialFeedPlugin`'s `platforms` seam) so tests drive the real
+   * cache against a temporary directory instead of the production tree.
+   */
+  readonly cache?: AttachmentCache;
+}
+
+/**
+ * The cache the handlers use: an injected one wins, otherwise one built
+ * from config — and nothing at all when the operator disabled it, so a
+ * disabled cache is an absent collaborator rather than a no-op object.
+ */
+const buildCache = (
+  config: ReturnType<typeof parseGuildEventsConfig>,
+  deps: CreateGuildEventsDeps,
+  logger: Logger,
+): AttachmentCache | undefined => {
+  if (!config.attachment_cache.enabled) return undefined;
+  return (
+    deps.cache ??
+    createAttachmentCache({
+      ttlHours: config.attachment_cache.ttlHours,
+      minFreeDiskMb: config.attachment_cache.minFreeDiskMb,
+      logger,
+    })
+  );
+};
+
+/**
+ * Build the guild-events plugin from its raw `guild_events` config
+ * block. Suppression is decided per event by the
+ * {@link PermissionRankPolicy} resolved in `init`; the block only
+ * configures the pre-delete attachment cache.
+ */
+export const createGuildEventsPlugin = (
+  rawConfig?: unknown,
+  deps: CreateGuildEventsDeps = {},
+): Plugin => {
+  const config = parseGuildEventsConfig(rawConfig);
   let resolved: GuildEventsDeps | undefined;
+  let sweepHandle: NodeJS.Timeout | undefined;
+  let stopped = false;
   /** See the `init` contract in `core/plugin/types.ts`: unreachable. */
-  const deps = (): GuildEventsDeps => {
+  const resolvedDeps = (): GuildEventsDeps => {
     if (resolved === undefined) {
       throw new TypeError('guild-events: event dispatched before init resolved dependencies');
     }
@@ -117,31 +168,100 @@ export const createGuildEventsPlugin = (): Plugin => {
     version: PLUGIN_VERSION,
 
     async init(ctx): Promise<void> {
+      const logger = ctx.resolve(TOKENS.Logger);
       resolved = {
+        settings: deps.settings,
         registry: ctx.resolve(TOKENS.GuildRegistry),
         policy: ctx.resolve(TOKENS.PermissionRankPolicy),
         onboardingPort: ctx.resolve(TOKENS.GuildOnboardingPort),
-        logger: ctx.resolve(TOKENS.Logger),
+        logger,
+        cache: buildCache(config, deps, logger),
       };
     },
 
+    /**
+     * Start the TTL sweep. The first pass runs immediately so a restart
+     * clears whatever expired while the bot was down, then a
+     * self-rescheduling timer takes over (the `social-feed` loop
+     * shape): a throw is logged and the loop always reschedules.
+     */
+    async onReady(ctx): Promise<void> {
+      const { cache } = resolvedDeps();
+      // A host that stops and restarts reuses this object; without the
+      // reset the sweep would stay permanently disabled while the cache
+      // kept writing.
+      stopped = false;
+      if (cache === undefined) {
+        logSystem(ctx.logger, 'guild-events: attachment cache disabled; not sweeping');
+        return;
+      }
+      const sweepOnce = async (): Promise<void> => {
+        const removed = await cache.sweepExpired(ctx.clock.now());
+        if (removed > 0) {
+          logSystem(ctx.logger, `guild-events: swept ${String(removed)} expired attachment caches`);
+        }
+      };
+      const scheduleNext = (): void => {
+        if (stopped) return;
+        sweepHandle = setTimeout(() => {
+          void (async (): Promise<void> => {
+            try {
+              await sweepOnce();
+            } catch (err: unknown) {
+              logError(ctx.logger, null, err);
+            } finally {
+              scheduleNext();
+            }
+          })();
+        }, CACHE_SWEEP_INTERVAL_MS);
+      };
+      try {
+        await sweepOnce();
+      } catch (err: unknown) {
+        logError(ctx.logger, null, err);
+      }
+      scheduleNext();
+    },
+
+    /** Tolerates un-initialised state — see the `onShutdown` contract. */
+    async onShutdown(): Promise<void> {
+      stopped = true;
+      if (sweepHandle !== undefined) {
+        clearTimeout(sweepHandle);
+        sweepHandle = undefined;
+      }
+    },
+
     events: {
+      messageCreate: (_ctx, message) => {
+        const { cache, logger } = resolvedDeps();
+        // Fire-and-forget: the download must never delay the other
+        // `messageCreate` subscribers. `store` swallows its failures.
+        void cacheMessageAttachments(cache, logger, message);
+      },
       messageUpdate: async (_ctx, oldMessage, newMessage) => {
-        const { registry, policy, logger } = deps();
-        await handleMessageUpdate(registry, policy, logger, oldMessage, newMessage);
+        const { registry, policy, logger, settings } = resolvedDeps();
+        await handleMessageUpdate(registry, policy, logger, oldMessage, newMessage, settings);
       },
       messageDelete: async (_ctx, message) => {
-        const { registry, policy, logger } = deps();
-        await handleMessageDelete(registry, policy, logger, message);
+        await handleMessageDelete(resolvedDeps(), message);
+      },
+      messageDeleteBulk: async (_ctx, messages) => {
+        const { cache, logger } = resolvedDeps();
+        await handleMessageDeleteBulk(cache, logger, messages);
       },
       guildCreate: async (_ctx, guild) => {
-        const { onboardingPort, logger } = deps();
+        const { onboardingPort, logger } = resolvedDeps();
         await handleGuildCreate(onboardingPort, logger, guild);
       },
       guildMemberUpdate: async (_ctx, oldMember, newMember) => {
-        const { registry, logger } = deps();
+        const { registry, logger } = resolvedDeps();
         const guildId = newMember.guild.id;
-        const eventChannel = resolveEventChannel(registry, guildId);
+        const settings = resolvedDeps().settings;
+        const eventChannel =
+          settings && !settings.get(guildId)?.settings.features.guild_events.enabled
+            ? undefined
+            : resolveEventChannel(registry, guildId);
         const oldRoles = oldMember.roles.cache;
         const newRoles = newMember.roles.cache;
         const addedRoles = newRoles.filter((role) => !oldRoles.has(role.id));
@@ -155,7 +275,7 @@ export const createGuildEventsPlugin = (): Plugin => {
         const removedRoleMentions = removedRoles.map((role) => `<@&${role.id}>`);
         if (eventChannel !== undefined) {
           const embed = new EmbedBuilder()
-            .setColor(0x0000ff)
+            .setColor(EMBED_COLORS.info)
             .setTitle('Role Update')
             .setAuthor({
               name: newMember.user.username,
@@ -223,6 +343,7 @@ const handleMessageUpdate = async (
   logger: Logger | undefined,
   oldMessage: Message | PartialMessage,
   newMessage: Message | PartialMessage,
+  settings?: GuildSettingsRuntime,
 ): Promise<void> => {
   // Relevance guards: skip when either content side is missing, identical, or
   // the author / guild is unresolvable. These also filter the partial-message
@@ -243,18 +364,26 @@ const handleMessageUpdate = async (
 
   // Rank gates DISCLOSURE only: a channel above the `guild_events` ceiling is
   // withheld from the Discord `event` channel but still recorded locally below.
-  const suppressed = policy.isSuppressed(
-    newMessage.guildId,
-    'guild_events',
-    oldMessage.channel.id,
-    ancestorChannelIdsOf(oldMessage.channel, oldMessage.guild?.channels.cache),
-  );
+  const suppressed =
+    (settings !== undefined &&
+      !settings.isEnabled(
+        newMessage.guildId,
+        'guild_events',
+        oldMessage.channel.id,
+        ancestorChannelIdsOf(oldMessage.channel, oldMessage.guild?.channels.cache),
+      )) ||
+    policy.isSuppressed(
+      newMessage.guildId,
+      'guild_events',
+      oldMessage.channel.id,
+      ancestorChannelIdsOf(oldMessage.channel, oldMessage.guild?.channels.cache),
+    );
 
   if (!suppressed) {
     const eventChannel = resolveEventChannel(registry, newMessage.guildId);
     if (eventChannel !== undefined) {
       const embed = new EmbedBuilder()
-        .setColor(0x00ff00)
+        .setColor(EMBED_COLORS.info)
         .setTitle('Message Updated')
         .setAuthor({
           name: newMessage.author.displayName,
@@ -294,10 +423,76 @@ const handleMessageUpdate = async (
   logGuildEvent(logger, newMessage.guildId, 'message_update', details, newMessage.guild.name);
 };
 
-const handleMessageDelete = async (
-  registry: GuildRegistry,
-  policy: PermissionRankPolicy,
+/**
+ * Cache a freshly created message's attachments so a later deletion can
+ * archive them from disk. Bot authors and DMs are out of scope: the
+ * archive only ever records non-bot guild messages.
+ */
+const cacheMessageAttachments = async (
+  cache: AttachmentCache | undefined,
   logger: Logger | undefined,
+  message: Message,
+): Promise<void> => {
+  if (cache === undefined) return;
+  if (message.guildId === null) return;
+  if (message.author.bot) return;
+  if (message.attachments.size === 0) return;
+  try {
+    await cache.store(message.guildId, message.id, message.attachments.values());
+  } catch (err: unknown) {
+    logError(logger, message.guildId, err);
+  }
+};
+
+/**
+ * Rescue the cached attachments of a bulk-deleted batch. Discord emits
+ * no per-message `messageDelete` for a bulk purge, so without this the
+ * cached copies would sit untouched until the TTL sweep removed them.
+ *
+ * No embed and no message content: a bulk purge carries neither the
+ * hydrated content the mirror would need nor a per-message disclosure
+ * decision. What it does emit is one audit line per rescued message, so
+ * every file the archive gains is reconcilable against the log rather
+ * than appearing there unexplained.
+ *
+ * Only runs while the attachment cache is enabled — with it off there is
+ * nothing local to rescue and a bulk purge leaves no archive, exactly as
+ * before this path existed.
+ */
+const handleMessageDeleteBulk = async (
+  cache: AttachmentCache | undefined,
+  logger: Logger | undefined,
+  messages: ReadonlyMap<Snowflake, Message | PartialMessage>,
+): Promise<void> => {
+  if (cache === undefined) return;
+  for (const message of messages.values()) {
+    const guildId = message.guildId;
+    if (guildId === null) continue;
+    // Isolated per message: a batch can carry a hundred, and one bad
+    // entry must not abandon the rest of them.
+    try {
+      const archived = await cache.archiveCached(guildId, message.id);
+      if (archived === 0) continue;
+      logGuildEvent(
+        logger,
+        guildId,
+        'message_delete',
+        {
+          channelId: message.channel.id,
+          messageId: message.id,
+          source: 'bulk',
+          archivedAttachments: archived,
+        },
+        message.guild?.name ?? '<unknown>',
+      );
+    } catch (err: unknown) {
+      logError(logger, guildId, err);
+    }
+  }
+};
+
+const handleMessageDelete = async (
+  { registry, policy, logger, cache, settings }: GuildEventsDeps,
   message: Message | PartialMessage,
 ): Promise<void> => {
   if (message.guild === null || message.guildId === null) return;
@@ -311,12 +506,20 @@ const handleMessageDelete = async (
 
   // Rank gates DISCLOSURE only — see handleMessageUpdate. The local record
   // (attachment archival + audit line) runs regardless of this flag.
-  const suppressed = policy.isSuppressed(
-    message.guildId,
-    'guild_events',
-    message.channel.id,
-    ancestorChannelIdsOf(message.channel, message.guild?.channels.cache),
-  );
+  const suppressed =
+    (settings !== undefined &&
+      !settings.isEnabled(
+        message.guildId,
+        'guild_events',
+        message.channel.id,
+        ancestorChannelIdsOf(message.channel, message.guild?.channels.cache),
+      )) ||
+    policy.isSuppressed(
+      message.guildId,
+      'guild_events',
+      message.channel.id,
+      ancestorChannelIdsOf(message.channel, message.guild?.channels.cache),
+    );
 
   const content =
     message.content === null || message.content === undefined || message.content.length === 0
@@ -327,7 +530,7 @@ const handleMessageDelete = async (
     const eventChannel = resolveEventChannel(registry, message.guildId);
     if (eventChannel !== undefined) {
       const embed = new EmbedBuilder()
-        .setColor(0xff0000)
+        .setColor(EMBED_COLORS.neutral)
         .setTitle('Message Deleted')
         .setAuthor({
           name: message.author.displayName,
@@ -353,19 +556,12 @@ const handleMessageDelete = async (
     }
   }
 
-  // Forensic attachment download — unconditional, regardless of rank, runs for
-  // every attachment including images the embed separately previews. URLs are
-  // signed CDN links that expire, so the binary download is what makes the
-  // local record durable. Fire-and-forget; the helper bounds its own
-  // concurrency (a bulk delete can carry a hundred attachments) and has its
-  // own try/catch per file.
-  if (message.attachments.size > 0) {
-    void archiveDeletedAttachments(logger, message.guildId as string, message.attachments.values());
-  }
-
   // Local audit record — unconditional, regardless of rank or event-channel
   // presence, so deletions are traceable even for private channels and when
   // the mirror is offline. Stable ids correlate the line independently.
+  //
+  // Written BEFORE the archival: the record is the one thing that must always
+  // survive, so nothing that touches the disk gets to run ahead of it.
   const channelName = message.guild.channels.cache.get(message.channel.id)?.name;
   const attachmentUrls = message.attachments.map((a) => a.url);
   const details: Record<string, unknown> = {
@@ -380,6 +576,42 @@ const handleMessageDelete = async (
     details['attachments'] = attachmentUrls;
   }
   logGuildEvent(logger, message.guildId, 'message_delete', details, message.guild.name);
+
+  await archiveDeletedMessageAttachments(cache, logger, message);
+};
+
+/**
+ * Archive a deleted message's attachments — unconditional, regardless of rank,
+ * and for every attachment including images the embed separately previews.
+ *
+ * The cache comes first and without a network call: Discord purges the CDN
+ * object nearly synchronously with the deletion, so a download started here
+ * usually 404s.
+ *
+ * The download runs whenever the cache came up short of the message's own
+ * attachment count, not only on a total miss: a partially cached message would
+ * otherwise report a hit and quietly abandon the rest. It may re-archive a file
+ * the cache already moved, and a duplicate forensic copy is much cheaper than a
+ * missing one.
+ */
+const archiveDeletedMessageAttachments = async (
+  cache: AttachmentCache | undefined,
+  logger: Logger | undefined,
+  message: Message | PartialMessage,
+): Promise<void> => {
+  const guildId = message.guildId;
+  if (guildId === null) return;
+  let archivedFromCache = 0;
+  try {
+    archivedFromCache = cache === undefined ? 0 : await cache.archiveCached(guildId, message.id);
+  } catch (err: unknown) {
+    logError(logger, guildId, err);
+  }
+  if (archivedFromCache < message.attachments.size) {
+    // Fire-and-forget: the helper bounds its own concurrency and has its own
+    // try/catch per file.
+    void archiveDeletedAttachments(logger, guildId, message.id, message.attachments.values());
+  }
 };
 
 /**

@@ -15,10 +15,10 @@
  * Factory pattern (mirrors `createEarthquakePlugin`): per-bot settings
  * are parsed once and the `SelfHostedLlmClient` is captured in the
  * closure, so the returned object is pure data. `deps` carries the bot's
- * `clientId` (for @-mention detection), a `random` seam for deterministic
- * tests, and the host's `blockedChannels` list so blocked channels never
- * trigger.
+ * `clientId` (for @-mention detection) and a `random` seam for deterministic
+ * tests.
  */
+import { areAutoRepliesSuppressed } from '../../infra/discord/suppressed-auto-replies';
 import { logError } from '../../core/logger';
 import type { Plugin } from '../../core/plugin';
 import { SelfHostedLlmClient } from '../../infra/llm';
@@ -38,25 +38,10 @@ interface CreateLlmAutoReplyDeps {
    * which fires a reply deterministically (mirrors konata's llm-chat).
    */
   readonly clientId: string;
-  /**
-   * Channel ids that never trigger a reply. This is an intentionally
-   * list-based dep that predates the `permission_rank` model: gopher (the
-   * only consumer) passes none, so folding it into a `RankedFeature` would be
-   * speculative. Kept list-based on purpose; revisit if a gopher guild ever
-   * needs per-channel rank gating.
-   */
-  readonly blockedChannels?: readonly string[];
   /** Random source in [0, 1); injectable for deterministic tests. */
   readonly random?: () => number;
   /** Reply client; injectable so tests can assert the send path without a real HTTP call. */
   readonly client?: Pick<SelfHostedLlmClient, 'reply'>;
-  /**
-   * Live endpoint source, read on every reply. When supplied it overrides
-   * `config.endpoint` so a composition root (e.g. gopher's settings API)
-   * can swap the self-hosted endpoint at runtime without rebuilding the
-   * plugin. Ignored when `client` is injected.
-   */
-  readonly endpointProvider?: () => string;
 }
 
 export const createLlmAutoReplyPlugin = (
@@ -68,13 +53,10 @@ export const createLlmAutoReplyPlugin = (
   const client =
     deps.client ??
     new SelfHostedLlmClient({
-      // A live provider takes precedence so the endpoint can change at
-      // runtime; otherwise the parsed config's static endpoint is used.
-      endpoint: deps.endpointProvider ?? config.endpoint,
+      endpoint: config.endpoint,
       timeoutMs: config.timeoutMs,
     });
   const random = deps.random ?? Math.random;
-  const blockedChannels = new Set(deps.blockedChannels ?? []);
   const cooldown = new ReplyCooldown(config.cooldownSeconds * 1000);
   // Channels with a reply attempt currently in flight. An automatic reply
   // yields to one so two near-simultaneous messages in the same channel
@@ -90,10 +72,10 @@ export const createLlmAutoReplyPlugin = (
 
     events: {
       messageCreate: async (ctx, message): Promise<void> => {
+        if (areAutoRepliesSuppressed(message)) return;
         if (!config.enabled) return;
         if (message.author.bot) return; // self-loop + bot-feedback guard
         if (message.guildId === null) return; // guild-only
-        if (blockedChannels.has(message.channelId)) return;
         if (!message.channel.isSendable()) return;
 
         const channelId = message.channelId;

@@ -21,23 +21,28 @@ import {
   MongoConnectionManager,
   buildGuildMongoUri,
 } from '../../../src/infra/mongo/connection-manager';
+import { integrationMongoBaseUri, uniqueGuildId } from '../helpers/mongo';
 
-const requireMongoUri = (): string => {
-  const uri = process.env.INTEGRATION_MONGO_URI;
-  if (uri === undefined) {
-    throw new Error('INTEGRATION_MONGO_URI not set; vitest globalSetup did not run');
+/**
+ * The production manager names each guild's database after the guild
+ * id, so these tests cannot use `withFreshConnection`. Unique ids plus
+ * this cleanup give them the same isolation.
+ */
+const dropGuildDatabases = async (baseUri: string, guildIds: readonly string[]): Promise<void> => {
+  for (const id of guildIds) {
+    const connection = await mongoose.createConnection(buildGuildMongoUri(baseUri, id)).asPromise();
+    try {
+      await connection.dropDatabase();
+    } finally {
+      await connection.close();
+    }
   }
-  return uri;
 };
-
-const guildId = asGuildId('111111111111111111');
 
 describe('MongoConnectionManager (integration)', () => {
   it('dedupes concurrent getConnection() calls for the same guild', async () => {
-    // memory-server URIs already include a trailing slash + db name.
-    // Reuse the URI directly; appending a guild id is the production
-    // path and is exercised in the unit test for buildGuildMongoUri.
-    const baseUri = requireMongoUri().replace(/[^/]*$/, '');
+    const baseUri = integrationMongoBaseUri();
+    const guildId = asGuildId(uniqueGuildId());
     const mgr = new MongoConnectionManager(baseUri);
     try {
       const [a, b, c] = await Promise.all([
@@ -49,18 +54,22 @@ describe('MongoConnectionManager (integration)', () => {
       expect(b.connection).toBe(c.connection);
     } finally {
       await mgr.closeAll();
+      await dropGuildDatabases(baseUri, [guildId]);
     }
   });
 
   it('opens distinct connections for distinct guild ids', async () => {
-    const baseUri = requireMongoUri().replace(/[^/]*$/, '');
+    const baseUri = integrationMongoBaseUri();
+    const first = asGuildId(uniqueGuildId());
+    const second = asGuildId(uniqueGuildId());
     const mgr = new MongoConnectionManager(baseUri);
     try {
-      const a = await mgr.getConnection(guildId);
-      const b = await mgr.getConnection(asGuildId('222222222222222222'));
+      const a = await mgr.getConnection(first);
+      const b = await mgr.getConnection(second);
       expect(a.connection).not.toBe(b.connection);
     } finally {
       await mgr.closeAll();
+      await dropGuildDatabases(baseUri, [first, second]);
     }
   });
 
@@ -102,70 +111,68 @@ describe('MongoConnectionManager (integration)', () => {
   });
 
   it('tolerates model.init() rejection and still returns a usable connection', async () => {
-    // Trigger a real `model.init()` failure by pre-seeding two docs
-    // that violate `Message.messageId`'s unique index. When the
-    // manager later opens this guild's database, its `m.init()` call
-    // for the `Message` model will fail building the unique index.
-    //
-    // The phase-7 contract: the manager logs the rejection to stderr
-    // but still returns the (cached) `GuildConnection` so DB commands
-    // for that guild keep working — operators fix the data / index
-    // issue out-of-band; the bot does not block on it.
-    const baseUri = requireMongoUri().replace(/[^/]*$/, '');
-    const tolerateGuildId = asGuildId('333333333333333333');
+    // Non-archive models retain best-effort initialization. Archive readers
+    // must not attempt to repair legacy duplicates or create archive indexes.
+    const baseUri = integrationMongoBaseUri();
+    const tolerateGuildId = asGuildId(uniqueGuildId());
     const seedUri = buildGuildMongoUri(baseUri, tolerateGuildId);
 
-    const seed = await mongoose.createConnection(seedUri).asPromise();
     try {
-      await seed.collection('messages').insertMany([
-        { messageId: 'collide', timestamp: 1 },
-        { messageId: 'collide', timestamp: 2 },
-      ]);
+      const seed = await mongoose.createConnection(seedUri).asPromise();
+      try {
+        await seed.collection('messages').insertMany([
+          { messageId: 'collide', timestamp: 1 },
+          { messageId: 'collide', timestamp: 2 },
+        ]);
+        await seed
+          .collection('userapisettings')
+          .insertMany([{ userId: 'same' }, { userId: 'same' }]);
+      } finally {
+        await seed.close();
+      }
+
+      // Silence the operator-facing stderr line during the test run; it
+      // is intentional in production but noisy in vitest output.
+      const stderrWrite = process.stderr.write.bind(process.stderr);
+      const captured: string[] = [];
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        captured.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
+        return true;
+      }) as typeof process.stderr.write;
+
+      const mgr = new MongoConnectionManager(baseUri);
+      try {
+        const guildConn = await mgr.getConnection(tolerateGuildId);
+        expect(guildConn.connection.readyState).toBe(1);
+        // Models map is still wired even though the index for Message
+        // is missing — repository code can still query/insert non-unique
+        // workflows.
+        expect(guildConn.models.Reply).toBeDefined();
+
+        // Subsequent `getConnection` hits the cache and returns the same
+        // entry (no re-attempt, no second stderr line).
+        const reuse = await mgr.getConnection(tolerateGuildId);
+        expect(reuse).toBe(guildConn);
+
+        // Operator MUST see WHICH model failed: a bare "model.init() failed"
+        // line would force them to grep the codebase to learn whether it
+        // was Message, UserApiSetting, or something else. The phase-7
+        // hotfix bakes the model name into the line.
+        const failureLine = captured.find((line) => line.includes('model.init() failed'));
+        expect(failureLine).toBeDefined();
+        expect(failureLine).toMatch(/model\.init\(\) failed for UserApiSetting on guild /);
+        expect(captured.some((line) => line.includes('failed for Message'))).toBe(false);
+        expect(await guildConn.models.Message.collection.countDocuments()).toBe(2);
+        expect(
+          (await guildConn.models.Message.collection.indexes()).map((index) => index.name),
+        ).toEqual(['_id_']);
+        expect(guildConn.archiveOwner).toBeUndefined();
+      } finally {
+        process.stderr.write = stderrWrite;
+        await mgr.closeAll();
+      }
     } finally {
-      await seed.close();
-    }
-
-    // Silence the operator-facing stderr line during the test run; it
-    // is intentional in production but noisy in vitest output.
-    const stderrWrite = process.stderr.write.bind(process.stderr);
-    const captured: string[] = [];
-    process.stderr.write = ((chunk: string | Uint8Array) => {
-      captured.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
-      return true;
-    }) as typeof process.stderr.write;
-
-    const mgr = new MongoConnectionManager(baseUri);
-    try {
-      const guildConn = await mgr.getConnection(tolerateGuildId);
-      expect(guildConn.connection.readyState).toBe(1);
-      // Models map is still wired even though the index for Message
-      // is missing — repository code can still query/insert non-unique
-      // workflows.
-      expect(guildConn.models.Reply).toBeDefined();
-
-      // Subsequent `getConnection` hits the cache and returns the same
-      // entry (no re-attempt, no second stderr line).
-      const reuse = await mgr.getConnection(tolerateGuildId);
-      expect(reuse).toBe(guildConn);
-
-      // Operator MUST see WHICH model failed: a bare "model.init() failed"
-      // line would force them to grep the codebase to learn whether it
-      // was Message, UserApiSetting, or something else. The phase-7
-      // hotfix bakes the model name into the line.
-      const failureLine = captured.find((line) => line.includes('model.init() failed'));
-      expect(failureLine).toBeDefined();
-      expect(failureLine).toMatch(/model\.init\(\) failed for Message on guild /);
-    } finally {
-      process.stderr.write = stderrWrite;
-      await mgr.closeAll();
-    }
-
-    // Cleanup the seed data so a re-run of this suite stays clean.
-    const cleanup = await mongoose.createConnection(seedUri).asPromise();
-    try {
-      await cleanup.dropDatabase();
-    } finally {
-      await cleanup.close();
+      await dropGuildDatabases(baseUri, [tolerateGuildId]);
     }
   });
 });

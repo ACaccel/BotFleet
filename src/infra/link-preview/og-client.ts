@@ -1,45 +1,39 @@
 /**
- * OgClient — SSRF-safe OpenGraph metadata fetcher.
+ * OgClient — the link-preview layer's single, SSRF-safe network boundary.
+ * Rewrite providers validate each candidate proxy URL with the Discord
+ * crawler UA, so they observe what Discord's unfurl sees; the Bahamut provider
+ * scrapes the source page; the X provider reads a JSON API
+ * ({@link OgClient.fetchJson}). Every failure lands on the Result's Err rail
+ * (via {@link translateLinkPreviewError}) so callers can stay silent.
  *
- * The single network boundary for the link-preview layer. Two callers:
- *   - the rewrite providers, which fetch each candidate proxy URL to
- *     VALIDATE (before posting) that Discord will get media — using the
- *     Discord crawler UA so we observe exactly what Discord's unfurl sees;
- *   - the Bahamut provider, which scrapes the source page's OpenGraph.
- * Modeled on `infra/llm/selfhosted-client.ts`: axios + Result + the shared
- * {@link translateLinkPreviewError}. Never throws a `DomainError` — every
- * failure lands on the Result's Err rail so the caller can stay silent.
+ * Discord's unfurl accepts either an HTML page with OpenGraph tags or a
+ * redirect straight to a `video/*` / `image/*` file (e.g. `kkinstagram` 302s a
+ * reel to an Instagram CDN `*.mp4`). So a media `Content-Type` is itself a
+ * valid preview and its body is never downloaded; anything else is read as
+ * HTML up to `<head>` and scanned with a bounded regex. `finalUrl` is
+ * reported because a proxy that cannot fetch a post tends to redirect back to
+ * the source site, whose answer to this host says nothing about what it
+ * serves Discord's crawler.
  *
- * What Discord's unfurl actually accepts — and what we must mirror to
- * validate faithfully — is one of two things at the proxy URL:
- *   1. an HTML page carrying OpenGraph tags (most proxies), or
- *   2. a redirect (for a bot UA) straight to a `video/*` / `image/*` file
- *      that Discord embeds directly (e.g. `kkinstagram` 302s a reel to a
- *      `*.mp4` on the Instagram CDN).
- * So the response is classified by its final `Content-Type`: a media type
- * is itself a valid playable preview (no body is downloaded), otherwise the
- * body is treated as HTML and only its `<head>` is read for `<meta>` tags.
- *
- * SSRF mitigations (the initial host always comes from the operator's
- * configured proxy-host allow-list, or the provider's `canHandle` host
- * allow-list — never arbitrary user input; only the path/query is
- * user-derived):
- *   - Follow at most {@link SAFE_MAX_REDIRECTS} redirects (proxies redirect
- *     to a render / CDN host, and Discord's crawler follows them — so we
- *     must too, or validation false-negatives), but the `beforeRedirect`
- *     guard rejects any hop targeting a private / loopback / link-local
- *     address or a non-`http(s)` scheme. So a crafted redirect to an
- *     internal address still cannot be chased.
- *   - Response is streamed and read incrementally: a media `Content-Type`
- *     is classified from headers alone (the multi-MB body is never pulled),
- *     and an HTML body is read only up to the `<head>` close or a byte cap,
+ * SSRF mitigations (the initial host always comes from an operator or
+ * provider allow-list; only the path and query are user-derived):
+ *   - At most {@link SAFE_MAX_REDIRECTS} redirects are followed, because
+ *     Discord's crawler follows them too, but `beforeRedirect` rejects any hop
+ *     to a private / loopback / link-local address or a non-`http(s)` scheme.
+ *   - The body is streamed and capped at the `<head>` close or a byte limit,
  *     so a hostile or huge page cannot exhaust memory.
- *   - `timeout` bounds time-to-headers; an explicit read deadline bounds the
- *     body read, so a slow trickle cannot stall the event handler.
- * Only the `<head>` is scanned for `<meta>` tags via a bounded regex, so
- * no heavy HTML parser dependency is introduced.
+ *   - `timeout` bounds time-to-headers and a read deadline bounds the body,
+ *     so a slow trickle cannot stall the event handler.
+ *   - DNS is bounded separately: Node's `dns.lookup` blocks a libuv
+ *     threadpool thread for tens of seconds on a dead proxy's silent name
+ *     servers, and a few such probes stall every other lookup in the process.
+ *     Probes resolve through a c-ares resolver with its own timeout instead
+ *     (see {@link createBoundedLookup}).
  */
-import { isIP } from 'node:net';
+import { promises as dnsPromises, type LookupAddress, type LookupOptions } from 'node:dns';
+import http from 'node:http';
+import https from 'node:https';
+import { isIP, type LookupFunction } from 'node:net';
 import type { Readable } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
 
@@ -60,6 +54,16 @@ export interface OpenGraphMeta {
   readonly video?: string;
   readonly url?: string;
   readonly siteName?: string;
+  readonly authorName?: string;
+  readonly authorUrl?: string;
+  /**
+   * URL the response was ultimately served from, after redirects (the
+   * requested URL when there were none). Absent from a pure
+   * {@link parseOpenGraph} result; `fetch` always sets it so a caller can
+   * tell a proxy that served the page itself from one that redirected
+   * elsewhere — in particular back to the source site.
+   */
+  readonly finalUrl?: string;
 }
 
 interface OgClientOptions {
@@ -92,6 +96,17 @@ interface OgClientOptions {
 
 const DEFAULT_MAX_CONTENT_LENGTH = 512 * 1024;
 /**
+ * First-attempt timeout of a probe's DNS query. Short because the hosts in
+ * play are public, well-provisioned names: an answer that takes longer is
+ * almost always a dead name server. c-ares doubles the wait on the retry,
+ * so a silent name server costs about three seconds in total — inside the
+ * operator's per-host request timeout, which would otherwise absorb the
+ * whole wait and report it as a generic abort.
+ */
+const DNS_TIMEOUT_MS = 1000;
+/** Query attempts per name server, so one dropped UDP packet is not a miss. */
+const DNS_TRIES = 2;
+/**
  * Discord's crawler User-Agent. Embed-proxy hosts (fxtwitter, kkinstagram,
  * facebed, ...) serve OpenGraph only to a recognised bot UA and redirect
  * normal browsers to the source site; using this UA both unlocks the OG
@@ -120,6 +135,10 @@ const DEFAULT_CACHE_MAX_ENTRIES = 256;
  * a redirect loop cannot stall the probe.
  */
 const SAFE_MAX_REDIRECTS = 3;
+/** Ceiling on a JSON API body; a single post measures a few kilobytes. */
+const MAX_JSON_BYTES = 1024 * 1024;
+/** Identifies the bot to a JSON API operator (see {@link OgClient.fetchJson}). */
+const API_USER_AGENT = 'Pleiades-link-preview/1.0 (+https://github.com/ACaccel/pleiades-fleet)';
 /** Only the head carries OpenGraph tags; cap parsing work regardless of body size. */
 const HEAD_SCAN_LIMIT = 128 * 1024;
 /** Once seen in the streamed body, the rest is irrelevant — stop reading. */
@@ -311,9 +330,9 @@ const redirectTargetUrl = (options: {
  */
 const classifyRedirectMedia = (targets: readonly string[]): OpenGraphMeta | undefined => {
   const video = targets.find((t) => VIDEO_FILE_RE.test(t));
-  if (video !== undefined) return { images: [], video, url: video };
+  if (video !== undefined) return { images: [], video, url: video, finalUrl: video };
   const image = targets.find((t) => IMAGE_FILE_RE.test(t));
-  if (image !== undefined) return { images: [image], url: image };
+  if (image !== undefined) return { images: [image], url: image, finalUrl: image };
   return undefined;
 };
 
@@ -348,7 +367,7 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
 };
 
 /** Decode the small set of HTML entities that appear in OpenGraph content. */
-const decodeEntities = (value: string): string =>
+export const decodeEntities = (value: string): string =>
   value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, body: string) => {
     const named = NAMED_ENTITIES[body.toLowerCase()];
     if (named !== undefined) return named;
@@ -391,9 +410,7 @@ export const parseOpenGraph = (html: string): OpenGraphMeta => {
 
   const values = new Map<string, string>();
   const imageKeys = new Set<string>(IMAGE_KEYS);
-  // All distinct image URLs in document order. Used only for "has an image?"
-  // (validation) and the first image (Bahamut card), so exact gallery
-  // de-duplication of secure_url/url variants is unnecessary.
+  // Preserve every distinct image URL in document order for gallery cards.
   const images: string[] = [];
   const imageSeen = new Set<string>();
 
@@ -425,8 +442,78 @@ export const parseOpenGraph = (html: string): OpenGraphMeta => {
     video: pick('og:video:secure_url', 'og:video:url', 'og:video'),
     url: pick('og:url'),
     siteName: pick('og:site_name'),
+    ...(pick('author') === undefined ? {} : { authorName: pick('author') }),
+    ...(pick('article:author') === undefined ? {} : { authorUrl: pick('article:author') }),
   };
 };
+
+/**
+ * The slice of a `dns.promises.Resolver` the bounded lookup relies on —
+ * the plain-address overloads only, so a test can supply a fake without
+ * reproducing the resolver's TTL-record overloads.
+ */
+export interface AddressResolver {
+  resolve4(hostname: string): Promise<string[]>;
+  resolve6(hostname: string): Promise<string[]>;
+}
+
+/** Whether a `dns.lookup` family option asks for records of `target`. */
+const wantsFamily = (family: LookupOptions['family'], target: 4 | 6): boolean =>
+  family === undefined ||
+  family === 0 ||
+  family === target ||
+  family === (target === 4 ? 'IPv4' : 'IPv6');
+
+/**
+ * The error a failed lookup reports. A timeout wins over any other reason
+ * because it is the actionable one (a dead name server) and it maps to
+ * `LINK_PREVIEW_TIMEOUT`; a non-`Error` rejection or an empty answer is
+ * reported as `ENOTFOUND`, the code `getaddrinfo` would have used.
+ */
+const lookupFailure = (
+  outcomes: readonly PromiseSettledResult<unknown>[],
+  hostname: string,
+): NodeJS.ErrnoException => {
+  const reasons = outcomes.flatMap((o) => (o.status === 'rejected' ? [o.reason as unknown] : []));
+  const errors = reasons.filter((r): r is NodeJS.ErrnoException => r instanceof Error);
+  const timeout = errors.find((e) => e.code === 'ETIMEOUT');
+  const chosen = timeout ?? errors[0];
+  if (chosen !== undefined) return chosen;
+  return Object.assign(new Error(`link-preview: no address for "${hostname}"`), {
+    code: 'ENOTFOUND',
+    hostname,
+  });
+};
+
+/**
+ * A `net.connect`-compatible `lookup` that resolves through `resolver`
+ * (c-ares: asynchronous, per-query timeout, no threadpool) instead of
+ * `getaddrinfo`. Honours the `family` filter and the `all` flag the socket
+ * layer passes (Node's happy-eyeballs path asks for `all` and both
+ * families). `/etc/hosts` is not consulted, which is fine for the public
+ * proxy and source hosts this client ever probes. Exported for unit tests.
+ */
+export const createBoundedLookup =
+  (resolver: AddressResolver): LookupFunction =>
+  (hostname, options, callback) => {
+    const query = async (target: 4 | 6): Promise<LookupAddress[]> => {
+      if (!wantsFamily(options.family, target)) return [];
+      const records =
+        target === 4 ? await resolver.resolve4(hostname) : await resolver.resolve6(hostname);
+      return records.map((address) => ({ address, family: target }));
+    };
+    void Promise.allSettled([query(4), query(6)]).then((outcomes) => {
+      const addresses = outcomes.flatMap((o) => (o.status === 'fulfilled' ? o.value : []));
+      const first = addresses[0];
+      if (first === undefined) {
+        callback(lookupFailure(outcomes, hostname), []);
+      } else if (options.all === true) {
+        callback(null, addresses);
+      } else {
+        callback(null, first.address, first.family);
+      }
+    });
+  };
 
 interface CacheEntry {
   readonly value: OpenGraphMeta;
@@ -441,6 +528,9 @@ export class OgClient {
   private readonly now: () => number;
   /** Insertion-ordered (Map preserves it) cache of successful fetches by URL. */
   private readonly cache = new Map<string, CacheEntry>();
+  /** Per-protocol agents whose sockets resolve names via the bounded lookup. */
+  private readonly httpAgent: http.Agent;
+  private readonly httpsAgent: https.Agent;
 
   public constructor(options: OgClientOptions = {}) {
     this.maxContentLength = options.maxContentLength ?? DEFAULT_MAX_CONTENT_LENGTH;
@@ -448,14 +538,21 @@ export class OgClient {
     this.cacheTtlMs = options.cacheTtlMs ?? 0;
     this.cacheMaxEntries = options.cacheMaxEntries ?? DEFAULT_CACHE_MAX_ENTRIES;
     this.now = options.now ?? Date.now;
+    const lookup = createBoundedLookup(
+      new dnsPromises.Resolver({ timeout: DNS_TIMEOUT_MS, tries: DNS_TRIES }),
+    );
+    this.httpAgent = new http.Agent({ keepAlive: true, lookup });
+    this.httpsAgent = new https.Agent({ keepAlive: true, lookup });
   }
 
   /**
    * Fetch `url` and parse its OpenGraph metadata. `provider` is the
    * source name used to tag any error. Returns `Err` on transport / HTTP
-   * failure or when the page carries no usable OpenGraph tags. Only
-   * successful results are cached (a transient outage self-heals on the
-   * next call).
+   * failure or when the page carries no usable OpenGraph tags. The result
+   * carries `finalUrl`, the URL the response was served from after any
+   * redirects, so the caller can tell where the metadata really came from.
+   * Only successful results are cached (a transient outage self-heals on
+   * the next call).
    */
   public async fetch(
     url: string,
@@ -480,6 +577,41 @@ export class OgClient {
         this.writeCache(url, media);
         return ok(media);
       }
+      return err(translateLinkPreviewError(provider, e));
+    }
+  }
+
+  /**
+   * GET `url` from a JSON API and return the parsed body, unvalidated — the
+   * caller owns the schema. Used by the X provider to read a post from an
+   * operator-configured FxTwitter-compatible API.
+   *
+   * Same contract as {@link fetch}: `url` is built from an operator-supplied
+   * base and an id the caller already matched, every redirect hop is
+   * screened by {@link assertSafeRedirect}, names resolve through the
+   * bounded lookup, and the body is capped at {@link MAX_JSON_BYTES}. The
+   * request identifies the bot rather than impersonating Discord's crawler:
+   * an API needs no crawler UA, and a descriptive one lets the operator
+   * attribute the traffic. Responses are not cached.
+   */
+  public async fetchJson(
+    url: string,
+    provider: string,
+    timeoutMs: number,
+  ): Promise<Result<unknown, LinkPreviewFailure>> {
+    try {
+      const response = await axios.get<unknown>(url, {
+        responseType: 'json',
+        timeout: timeoutMs,
+        httpAgent: this.httpAgent,
+        httpsAgent: this.httpsAgent,
+        maxRedirects: SAFE_MAX_REDIRECTS,
+        maxContentLength: MAX_JSON_BYTES,
+        beforeRedirect: (options) => assertSafeRedirect(options),
+        headers: { 'User-Agent': API_USER_AGENT, Accept: 'application/json' },
+      });
+      return ok(response.data);
+    } catch (e: unknown) {
       return err(translateLinkPreviewError(provider, e));
     }
   }
@@ -575,6 +707,8 @@ export class OgClient {
     const response = await axios.get<Readable>(url, {
       responseType: 'stream',
       timeout: timeoutMs,
+      httpAgent: this.httpAgent,
+      httpsAgent: this.httpsAgent,
       maxRedirects: SAFE_MAX_REDIRECTS,
       beforeRedirect: (options) => {
         assertSafeRedirect(options);
@@ -608,6 +742,8 @@ export class OgClient {
       // stream, so the read is bounded explicitly in `readHead`.
       responseType: 'stream',
       timeout: timeoutMs,
+      httpAgent: this.httpAgent,
+      httpsAgent: this.httpsAgent,
       // Follow a few redirects (proxies redirect to a render / CDN host, as
       // Discord does), but the SSRF guard refuses internal hops. Record each
       // hop's target for media-file recognition on failure.
@@ -627,14 +763,14 @@ export class OgClient {
 
     if (contentType.startsWith('video/')) {
       discardStream(stream);
-      return { images: [], video: finalUrl, url: finalUrl };
+      return { images: [], video: finalUrl, url: finalUrl, finalUrl };
     }
     if (contentType.startsWith('image/')) {
       discardStream(stream);
-      return { images: [finalUrl], url: finalUrl };
+      return { images: [finalUrl], url: finalUrl, finalUrl };
     }
     const html = await this.readHead(stream, timeoutMs);
-    return parseOpenGraph(html);
+    return { ...parseOpenGraph(html), finalUrl };
   }
 
   /**

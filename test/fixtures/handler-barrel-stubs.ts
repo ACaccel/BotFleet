@@ -1,6 +1,6 @@
 /**
- * Stubs for the five handler barrels (`@cmd`, `@button`, `@modal`,
- * `@select-menu`, `@reaction`).
+ * Stubs for the four handler barrels (`@cmd`, `@button`, `@modal`,
+ * `@select-menu`).
  *
  * Every test that boots a real `BaseBot` has to neutralise them: the
  * barrels pull in `registry.generated.ts`, which imports every handler
@@ -10,7 +10,7 @@
  * `vi.mock` is hoisted above imports by vitest's transform, so the
  * calls have to live in the test file itself. What is shared here are
  * the factories, which is where the actual duplication was: a test
- * file declares the five one-line mocks and points each at the
+ * file declares the four one-line mocks and points each at the
  * matching factory below.
  *
  * Usage:
@@ -22,16 +22,19 @@
  * vi.mock('@button', () => barrelStubs.button);
  * vi.mock('@modal', () => barrelStubs.modal);
  * vi.mock('@select-menu', () => barrelStubs.selectMenu);
- * vi.mock('@reaction', () => barrelStubs.reaction);
  * ```
  */
 const noop = async (): Promise<void> => {};
+/** Every configured command name resolves, so `config.commands` passes validation. */
+class StubCommand {}
 
 export const barrelStubs = {
   cmd: {
     registerCommands: noop,
+    getSlashCommandClass: (): typeof StubCommand => StubCommand,
     getCommandJsonBody: (): unknown[] => [],
     executeCommand: noop,
+    executeAutocomplete: noop,
   },
   button: {
     registerButtons: noop,
@@ -44,10 +47,5 @@ export const barrelStubs = {
   selectMenu: {
     registerSSMs: noop,
     executeSSM: noop,
-  },
-  reaction: {
-    registerReactions: noop,
-    executeReactionAdded: noop,
-    executeReactionRemoved: noop,
   },
 } as const;

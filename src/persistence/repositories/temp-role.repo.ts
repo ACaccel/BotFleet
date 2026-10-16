@@ -3,7 +3,7 @@
  * feature.
  *
  * Documents are keyed by the Discord `role_id`. The scheduler reads
- * pending temp roles on boot (`listAll`), the `/temp_role` command
+ * pending temp roles on boot (`listAll`), `/role temp create`
  * creates one, and the expiry job (or a reboot sweep that finds an
  * already-expired row) deletes it.
  *
@@ -14,7 +14,7 @@
  */
 import type { DatabaseError } from '../../core/errors/external-service-error';
 import { err, ok, type Result } from '../../core/result';
-import type { GuildConnection } from '../../infra/mongo/connection-manager';
+import type { GuildConnection } from '../connection';
 import { databaseErrorFrom } from '../error-translator';
 import type { TempRoleDoc } from '../schemas/temp-role.schema';
 

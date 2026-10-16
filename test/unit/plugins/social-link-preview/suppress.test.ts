@@ -5,23 +5,10 @@
  * fallback), plus "Discord call throws -> swallowed".
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { Message } from 'discord.js';
 
 import { applyOriginalMessageStrategy } from '../../../../src/plugins/social-link-preview/internal/suppress';
-import type { Logger } from '../../../../src/core/logger';
-
-const makeLogger = (): Logger => {
-  const logger = {
-    error: vi.fn(),
-    warn: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-    trace: vi.fn(),
-    fatal: vi.fn(),
-    child: vi.fn(() => logger),
-  };
-  return logger as unknown as Logger;
-};
+import { buildMessage } from '../../../fixtures/discord/message-builder';
+import { silentLogger, spyLogger } from '../../../fixtures/runtime';
 
 interface MsgOpts {
   readonly hasPerm?: boolean;
@@ -40,7 +27,7 @@ const makeMessage = (opts: MsgOpts = {}) => {
       return opts.permsNull === true ? null : permissions;
     }),
   };
-  const message = {
+  const message = buildMessage({
     inGuild: () => opts.inGuild ?? true,
     client: { user: opts.nullBotUser === true ? null : { id: 'bot' } },
     channel,
@@ -53,28 +40,28 @@ const makeMessage = (opts: MsgOpts = {}) => {
     delete: vi.fn(async () => {
       calls.delete += 1;
     }),
-  };
-  return { message: message as unknown as Message, calls };
+  });
+  return { message, calls };
 };
 
 describe('applyOriginalMessageStrategy', () => {
   it('suppresses embeds when permitted', async () => {
     const { message, calls } = makeMessage({ hasPerm: true });
-    await applyOriginalMessageStrategy(message, 'suppress', makeLogger());
+    await applyOriginalMessageStrategy(message, 'suppress', silentLogger());
     expect(calls.suppress).toBe(1);
     expect(calls.delete).toBe(0);
   });
 
   it('deletes the message when permitted and strategy is delete', async () => {
     const { message, calls } = makeMessage({ hasPerm: true });
-    await applyOriginalMessageStrategy(message, 'delete', makeLogger());
+    await applyOriginalMessageStrategy(message, 'delete', silentLogger());
     expect(calls.delete).toBe(1);
     expect(calls.suppress).toBe(0);
   });
 
   it('does nothing and never checks permissions for the leave strategy', async () => {
     const { message, calls } = makeMessage({ hasPerm: true });
-    await applyOriginalMessageStrategy(message, 'leave', makeLogger());
+    await applyOriginalMessageStrategy(message, 'leave', silentLogger());
     expect(calls.permissionsFor).toBe(0);
     expect(calls.suppress).toBe(0);
     expect(calls.delete).toBe(0);
@@ -82,39 +69,41 @@ describe('applyOriginalMessageStrategy', () => {
 
   it('falls back to reply-only (no mutation, debug log) when ManageMessages is missing', async () => {
     const { message, calls } = makeMessage({ hasPerm: false });
-    const logger = makeLogger();
+    const logger = spyLogger();
+    const { debug } = logger;
     await applyOriginalMessageStrategy(message, 'suppress', logger);
     expect(calls.suppress).toBe(0);
     expect(calls.delete).toBe(0);
-    expect(logger.debug).toHaveBeenCalledTimes(1);
+    expect(debug).toHaveBeenCalledTimes(1);
   });
 
   it('treats a null permissions result as missing permission', async () => {
     const { message, calls } = makeMessage({ permsNull: true });
-    await applyOriginalMessageStrategy(message, 'suppress', makeLogger());
+    await applyOriginalMessageStrategy(message, 'suppress', silentLogger());
     expect(calls.suppress).toBe(0);
   });
 
   it('does nothing outside a guild', async () => {
     const { message, calls } = makeMessage({ inGuild: false });
-    await applyOriginalMessageStrategy(message, 'suppress', makeLogger());
+    await applyOriginalMessageStrategy(message, 'suppress', silentLogger());
     expect(calls.permissionsFor).toBe(0);
     expect(calls.suppress).toBe(0);
   });
 
   it('does nothing when the bot user is not yet resolved', async () => {
     const { message, calls } = makeMessage({ nullBotUser: true });
-    await applyOriginalMessageStrategy(message, 'suppress', makeLogger());
+    await applyOriginalMessageStrategy(message, 'suppress', silentLogger());
     expect(calls.permissionsFor).toBe(0);
     expect(calls.suppress).toBe(0);
   });
 
   it('swallows a Discord error and logs it (no throw)', async () => {
     const { message } = makeMessage({ hasPerm: true, suppressThrows: true });
-    const logger = makeLogger();
+    const logger = spyLogger();
+    const { error } = logger;
     await expect(
       applyOriginalMessageStrategy(message, 'suppress', logger),
     ).resolves.toBeUndefined();
-    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledTimes(1);
   });
 });

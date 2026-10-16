@@ -1,9 +1,12 @@
+import { EMBED_COLORS } from '../../../infra/discord/presentation-colors';
 import type { MessageContextMenuCommandInteraction, ContextMenuCommandType } from 'discord.js';
 import { EmbedBuilder, ApplicationCommandType } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
 
 import { replyForError } from '../../../infra/discord/reply-for-error';
+import { collectMedia, MAX_ITEMS } from './collect-media';
+
 export default class menu_get_sticker extends Command {
   constructor() {
     super();
@@ -21,50 +24,28 @@ export default class menu_get_sticker extends Command {
     bot: BaseBot,
   ): Promise<void> {
     await interaction.deferReply();
+    const t = (key: string, params?: Record<string, string | number>): string =>
+      bot.translator?.t(`replies:menu_get_sticker.${key}`, params) ?? '';
     try {
       const message = interaction.targetMessage;
-      const stickers = message.stickers;
-      const content = message.content?.trim() || '';
-
-      // Check for stickers first
-      if (stickers.size > 0) {
-        const embed = new EmbedBuilder().setTitle('Sticker URL').setColor(0x5865f2);
-
-        stickers.forEach((sticker) => {
-          embed.addFields({
-            name: sticker.name,
-            value: sticker.url,
-          });
-        });
-
-        await interaction.editReply({ embeds: [embed] });
+      const items = collectMedia(message.stickers, message.content ?? '');
+      if (items.length === 0) {
+        await interaction.editReply({ content: t('not_found') });
         return;
       }
 
-      // Check for single emoji in message content
-      const emojiPattern = /^<a?:(\w+):(\d+)>$/;
-      const emojiMatch = content.match(emojiPattern);
-
-      if (emojiMatch) {
-        const isAnimated = content.startsWith('<a:');
-        const emojiName = emojiMatch[1] as string;
-        const emojiId = emojiMatch[2] as string;
-        const emojiUrl = isAnimated
-          ? `https://cdn.discordapp.com/emojis/${emojiId}.gif`
-          : `https://cdn.discordapp.com/emojis/${emojiId}.png`;
-
-        const embed = new EmbedBuilder().setTitle('Emoji URL').setColor(0x5865f2).addFields({
-          name: emojiName,
-          value: emojiUrl,
-        });
-
-        await interaction.editReply({ embeds: [embed] });
-        return;
-      }
-
-      // No stickers or emoji found
+      const embeds = items.slice(0, MAX_ITEMS).map((item) => {
+        const embed = new EmbedBuilder()
+          .setTitle(t(`${item.kind}_title`, { name: item.name }))
+          .setURL(item.url)
+          .setColor(EMBED_COLORS.info);
+        if (item.previewable) embed.setImage(item.url);
+        else embed.setDescription(t('lottie_note'));
+        return embed;
+      });
       await interaction.editReply({
-        content: bot.translator?.t('replies:menu_get_sticker.not_found') ?? '',
+        content: items.length > MAX_ITEMS ? t('more_omitted', { count: MAX_ITEMS }) : undefined,
+        embeds,
       });
     } catch (error) {
       await replyForError(
@@ -72,7 +53,7 @@ export default class menu_get_sticker extends Command {
         bot,
         error,
         'replies:menu_get_sticker.failed',
-        interaction.guild?.id,
+        interaction.guildId,
       );
     }
   }

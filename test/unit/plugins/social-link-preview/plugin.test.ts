@@ -13,24 +13,19 @@
  * lists, so every enabled fixture here is built from {@link enabledConfig}; a
  * disabled one carries none of them and must never reach the registry factory.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type MockInstance } from 'vitest';
 import type { Message } from 'discord.js';
 
 import { createSocialLinkPreviewPlugin } from '../../../../src/plugins/social-link-preview';
 import {
   createDefaultLinkPreviewRegistry,
-  type LinkPreviewProviderRegistry,
+  LinkPreviewProviderRegistry,
 } from '../../../../src/infra/link-preview';
-import {
-  createPermissionRankPolicy,
-  type PermissionRankPolicy,
-  type PluginEventContext,
-  type PluginInitContext,
-} from '../../../../src/core/plugin';
+import { createPermissionRankPolicy, type PermissionRankPolicy } from '../../../../src/core/plugin';
 import { createContainer } from '../../../../src/core/ioc';
 import { TOKENS } from '../../../../src/bot/tokens';
-import type { Logger } from '../../../../src/core/logger';
-import type { Translator } from '../../../../src/core/i18n';
+import { buildMessage } from '../../../fixtures/discord/message-builder';
+import { buildPluginContext } from '../../../fixtures/runtime';
 import type * as LinkPreviewModule from '../../../../src/infra/link-preview';
 
 // Spy on the registry factory (wrapping the real impl, so behavior is
@@ -45,19 +40,6 @@ vi.mock('../../../../src/infra/link-preview', async (importOriginal) => {
     createDefaultLinkPreviewRegistry: vi.fn(actual.createDefaultLinkPreviewRegistry),
   };
 });
-
-const makeLogger = (): Logger => {
-  const logger = {
-    error: vi.fn(),
-    warn: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-    trace: vi.fn(),
-    fatal: vi.fn(),
-    child: vi.fn(() => logger),
-  };
-  return logger as unknown as Logger;
-};
 
 /** An empty policy: `social_preview` ceiling defaults to unbounded, so nothing is suppressed. */
 const emptyPolicy = createPermissionRankPolicy({});
@@ -82,39 +64,47 @@ const enabledConfig = (overrides: Record<string, unknown> = {}): Record<string, 
   ...overrides,
 });
 
-const ctx = (policy: PermissionRankPolicy): PluginEventContext => {
+const ctx = (
+  policy: PermissionRankPolicy,
+  registerInstance: Parameters<typeof buildPluginContext>[0] extends infer O
+    ? O extends { registerInstance?: infer R }
+      ? R
+      : never
+    : never = () => undefined,
+) => {
   const container = createContainer();
   container.registerSingleton(TOKENS.PermissionRankPolicy, () => policy);
-  return {
-    logger: makeLogger(),
-    translator: { t: vi.fn((k: string) => k) } as unknown as Translator,
-    resolve: container.resolve.bind(container),
-  } as unknown as PluginEventContext;
+  return buildPluginContext({ resolve: container.resolve.bind(container), registerInstance });
 };
 
 const makeRegistry = (): {
   registry: LinkPreviewProviderRegistry;
-  findProvider: ReturnType<typeof vi.fn>;
+  findProvider: MockInstance;
 } => {
-  const findProvider = vi.fn(() => undefined);
-  return { registry: { findProvider } as unknown as LinkPreviewProviderRegistry, findProvider };
+  // An empty real registry: `findProvider` is a pass-through spy that finds nothing.
+  const registry = new LinkPreviewProviderRegistry([]);
+  return { registry, findProvider: vi.spyOn(registry, 'findProvider') };
 };
 
 interface MsgOpts {
   readonly content?: string;
   readonly bot?: boolean;
+  readonly authorId?: string;
   readonly guildId?: string | null;
   readonly channelId?: string;
   readonly sendable?: boolean;
   readonly parentId?: string | null;
   /** Maps a channel id to its own parentId, so the ancestry walk can climb. */
   readonly ancestors?: Record<string, string | null>;
+  /** The `reply` spy the plugin posts a preview through. */
+  readonly reply?: ReturnType<typeof vi.fn>;
 }
 
 const makeMessage = (opts: MsgOpts = {}): Message =>
-  ({
+  buildMessage({
     content: opts.content ?? 'see https://x.com/a/status/1',
-    author: { bot: opts.bot ?? false },
+    author: { bot: opts.bot ?? false, id: opts.authorId ?? '111111111111111111' },
+    client: { user: { id: '222222222222222222' } },
     guildId: opts.guildId === undefined ? 'g1' : opts.guildId,
     channelId: opts.channelId ?? 'c1',
     channel: { isSendable: () => opts.sendable ?? true, parentId: opts.parentId ?? null },
@@ -126,7 +116,8 @@ const makeMessage = (opts: MsgOpts = {}): Message =>
         },
       },
     },
-  }) as unknown as Message;
+    ...(opts.reply === undefined ? {} : { reply: opts.reply }),
+  });
 
 /**
  * Deliver one `messageCreate` to a constructed plugin. A plugin that declares
@@ -144,7 +135,7 @@ const deliver = async (
   // The host resolves a plugin's dependencies in `init` and only then
   // attaches its subscriptions, so a hand-driven dispatch runs both steps.
   const context = ctx(policy);
-  await plugin.init?.(context as unknown as PluginInitContext);
+  await plugin.init?.(context);
   // The discord.js event arg is OmitPartialGroupDMChannel<Message>; our fake
   // is structurally a Message, so narrow it to the handler's exact param type.
   await handler(context, message as Parameters<typeof handler>[1]);
@@ -164,8 +155,51 @@ describe('createSocialLinkPreviewPlugin shape', () => {
     createSocialLinkPreviewPlugin(enabledConfig({ providers: ['twitter', 'bilibili'] }));
     expect(spy).toHaveBeenCalledWith({
       ...PROXY_HOSTS,
+      gallerySources: [],
       enabledProviders: ['twitter', 'bilibili'],
     });
+  });
+
+  it('publishes the gallery reader, sharing its sources with the registry', async () => {
+    const spy = vi.mocked(createDefaultLinkPreviewRegistry);
+    spy.mockClear();
+    const registerInstance = vi.fn();
+    const plugin = createSocialLinkPreviewPlugin(
+      enabledConfig({ providers: ['twitter', 'wnacg'] }),
+    );
+    await plugin.init?.(ctx(emptyPolicy, registerInstance));
+
+    const sources = spy.mock.calls[0]?.[0].gallerySources ?? [];
+    expect(sources.map((source) => source.name)).toEqual(['nhentai', 'wnacg']);
+    expect(registerInstance).toHaveBeenCalledWith(TOKENS.GalleryReader, expect.anything());
+  });
+
+  it('stages pages through the configured channel and stops its cleanup on shutdown', async () => {
+    const registerInstance = vi.fn();
+    const container = createContainer();
+    container.registerSingleton(TOKENS.PermissionRankPolicy, () => emptyPolicy);
+    const client = { user: null, channels: { fetch: vi.fn(async () => null) } };
+    container.registerSingleton(TOKENS.DiscordClient, () => client as never);
+    const context = buildPluginContext({
+      resolve: container.resolve.bind(container),
+      registerInstance,
+    });
+    const plugin = createSocialLinkPreviewPlugin(
+      enabledConfig({ gallery: { stagingChannelId: '123456789012345678' } }),
+    );
+
+    await plugin.init?.(context);
+    await plugin.onReady?.(context);
+    await plugin.onShutdown?.(context);
+
+    expect(registerInstance).toHaveBeenCalledWith(TOKENS.GalleryReader, expect.anything());
+  });
+
+  it('publishes no gallery reader when the kill-switch omits every gallery source', async () => {
+    const registerInstance = vi.fn();
+    const plugin = createSocialLinkPreviewPlugin(enabledConfig({ providers: ['twitter'] }));
+    await plugin.init?.(ctx(emptyPolicy, registerInstance));
+    expect(registerInstance).not.toHaveBeenCalled();
   });
 
   it('refuses to run an event that somehow precedes init', async () => {
@@ -208,7 +242,7 @@ describe('createSocialLinkPreviewPlugin guards', () => {
     // never-called `reply` is the proof that a disabled plugin does nothing —
     // regardless of whether it declines to subscribe or returns early.
     const reply = vi.fn();
-    const message = { ...makeMessage(), reply } as unknown as Message;
+    const message = makeMessage({ reply });
 
     await deliver(createSocialLinkPreviewPlugin({ enabled: false }), message);
 
@@ -221,6 +255,75 @@ describe('createSocialLinkPreviewPlugin guards', () => {
     await fire(enabledConfig(), makeMessage({ bot: true }), { registry });
     expect(findProvider).not.toHaveBeenCalled();
   });
+
+  it('posts a preview for an allow-listed bot', async () => {
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const build = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { kind: 'rewritten-url', url: 'https://proxy.example/a/status/1' },
+    });
+    const registry = new LinkPreviewProviderRegistry([
+      { name: 'twitter', canHandle: () => true, build },
+    ]);
+    const message = makeMessage({ bot: true, reply });
+
+    await fire(
+      enabledConfig({ allowedBotIds: ['111111111111111111'], originalMessageStrategy: 'leave' }),
+      message,
+      { registry },
+    );
+
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(reply).toHaveBeenCalledWith({
+      content: 'https://proxy.example/a/status/1',
+      allowedMentions: { parse: [] },
+    });
+  });
+
+  it('skips a bot absent from a nonempty allow-list', async () => {
+    const { registry, findProvider } = makeRegistry();
+    await fire(
+      enabledConfig({ allowedBotIds: ['333333333333333333'] }),
+      makeMessage({ bot: true }),
+      { registry },
+    );
+    expect(findProvider).not.toHaveBeenCalled();
+  });
+
+  it('skips its own messages even when allow-listed', async () => {
+    const { registry, findProvider } = makeRegistry();
+    await fire(
+      enabledConfig({ allowedBotIds: ['222222222222222222'] }),
+      makeMessage({ bot: true, authorId: '222222222222222222' }),
+      { registry },
+    );
+    expect(findProvider).not.toHaveBeenCalled();
+  });
+
+  it('continues to preview human messages with a nonempty bot allow-list', async () => {
+    const { registry, findProvider } = makeRegistry();
+    await fire(enabledConfig({ allowedBotIds: ['333333333333333333'] }), makeMessage(), {
+      registry,
+    });
+    expect(findProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([{ guildId: null }, { channelId: 'c-secret' }, { sendable: false }])(
+    'retains other guards for allow-listed bots: %j',
+    async (opts) => {
+      const { registry, findProvider } = makeRegistry();
+      const policy = createPermissionRankPolicy({
+        g1: { channels: { 'c-secret': 1 }, features: { social_preview: { maxChannelRank: 0 } } },
+      });
+      await fire(
+        enabledConfig({ allowedBotIds: ['111111111111111111'] }),
+        makeMessage({ ...opts, bot: true }),
+        { registry },
+        policy,
+      );
+      expect(findProvider).not.toHaveBeenCalled();
+    },
+  );
 
   it('skips direct messages (no guild)', async () => {
     const { registry, findProvider } = makeRegistry();

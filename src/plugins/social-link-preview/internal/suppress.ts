@@ -2,18 +2,15 @@
  * Apply the configured strategy to the user's original message after a
  * preview has been posted.
  *
- * Suppressing or deleting another user's message requires the bot to
- * hold `ManageMessages` in the channel. The permission is checked first;
- * when it is missing the original is left intact and the fact is logged
- * at debug level — the preview reply has already been posted, so the
- * feature degrades to reply-only rather than failing. Every Discord call
- * is wrapped so a permission/race failure can never throw out of the
- * event handler.
+ * Suppressing or deleting another user's message requires `ManageMessages`
+ * in the channel. It is checked first; when missing, the original is left
+ * intact and the fact is logged at debug level, so the feature degrades to
+ * reply-only rather than failing. Every Discord call is wrapped so a
+ * permission or race failure can never throw out of the event handler.
  *
- * Note on timing: Discord generates the auto-embed asynchronously, often
- * after `messageCreate` fires, but setting the SUPPRESS_EMBEDS flag also
- * hides embeds that load afterward — so suppressing immediately is
- * correct and we need not wait for a later `messageUpdate`.
+ * Timing: Discord generates the auto-embed asynchronously, often after
+ * `messageCreate` fires, but the SUPPRESS_EMBEDS flag also hides embeds that
+ * load afterward, so suppressing immediately is correct.
  */
 import { PermissionFlagsBits, type Message } from 'discord.js';
 

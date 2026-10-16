@@ -171,8 +171,11 @@ describe('file-router stream', () => {
     const guildDir = join(rootDir, 'bot-A', 'g1');
     const files = readdirSync(guildDir).sort();
     expect(files).toEqual([`${dateKey(day1)}.log`, `${dateKey(day2)}.log`]);
-    expect(readFileSync(join(guildDir, files[0]!), 'utf8')).toContain('"before"');
-    expect(readFileSync(join(guildDir, files[1]!), 'utf8')).toContain('"after"');
+    // Rotated streams close independently of the current file's final flush.
+    await vi.waitFor(() => {
+      expect(readFileSync(join(guildDir, files[0]!), 'utf8')).toContain('"before"');
+      expect(readFileSync(join(guildDir, files[1]!), 'utf8')).toContain('"after"');
+    });
   });
 
   it('rejects an empty rootDir option', () => {
@@ -197,6 +200,57 @@ describe('file-router stream', () => {
     }
 
     expect(stderr.text()).toContain('log sink');
+  });
+});
+
+describe('file-router retention', () => {
+  const oldName = '2000-01-01.log';
+  const waitGone = async (path: string): Promise<void> => {
+    await vi.waitFor(() => {
+      expect(existsSync(path)).toBe(false);
+    });
+  };
+
+  it('prunes expired files at start and clears its timer when the stream ends', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const stale = join(rootDir, 'bot1', oldName);
+    mkdirSync(join(rootDir, 'bot1'));
+    writeFileSync(stale, 'x');
+
+    const sink = createFileRouterStream({ rootDir, retentionDays: 60 });
+    await waitGone(stale);
+    expect(vi.getTimerCount()).toBe(1);
+
+    await new Promise<void>((resolve) => sink.end(() => resolve()));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears its timer when the stream is destroyed without ending', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const sink = createFileRouterStream({ rootDir, retentionDays: 60 });
+    expect(vi.getTimerCount()).toBe(1);
+
+    await new Promise<void>((resolve) => {
+      sink.once('close', () => resolve());
+      sink.destroy();
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does nothing when retention is omitted or 0', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const stale = join(rootDir, 'bot1', oldName);
+    mkdirSync(join(rootDir, 'bot1'));
+    writeFileSync(stale, 'x');
+
+    const plain = createFileRouterStream({ rootDir });
+    const zero = createFileRouterStream({ rootDir, retentionDays: 0 });
+    await new Promise<void>((r) => setImmediate(r));
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(existsSync(stale)).toBe(true);
+    plain.destroy();
+    zero.destroy();
   });
 });
 
@@ -238,14 +292,14 @@ describe('fixed-path file stream', () => {
     try {
       const sink = createFixedPathFileStream(targetPath);
       sink.write('record\n');
-      // Let the failed open surface. Without the 'error' listener Node
-      // rethrows it as an uncaughtException and the process-level net
-      // treats that as fatal.
-      await new Promise<void>((r) => setTimeout(r, 20));
+      // Wait for the failed open to surface. Without the 'error' listener
+      // Node rethrows it as an uncaughtException and the process-level
+      // net treats that as fatal.
+      await vi.waitFor(() => {
+        expect(stderr.text()).toContain('log sink');
+      });
     } finally {
       stderr.restore();
     }
-
-    expect(stderr.text()).toContain('log sink');
   });
 });

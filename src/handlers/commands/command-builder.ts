@@ -1,16 +1,13 @@
-import {
-  ApplicationCommandType,
-  ChannelType,
-  type RESTPostAPIApplicationCommandsJSONBody,
-} from 'discord.js';
+import { ApplicationCommandType, type RESTPostAPIApplicationCommandsJSONBody } from 'discord.js';
 import { ContextMenuCommandBuilder, SlashCommandBuilder } from '@discordjs/builders';
-import type { LocalizedCommandConfig, LocalizedCommandOption } from './command';
+import type { LocalizedCommandConfig } from './command';
+import { addCommandOptions } from './command-options';
 
 /**
  * Translates a {@link LocalizedCommandConfig} into the Discord REST JSON
  * payload for command registration.
  *
- * Consumed both at deploy time (`src/deploy.ts`) and at runtime command
+ * Consumed both at deploy time (`src/register.ts`) and at runtime command
  * registration (`getCommandJsonBody`). It lives next to `command.ts`
  * because it operates purely on the localised command-metadata contract.
  */
@@ -29,81 +26,38 @@ export const buildCommandJsonBody = (
     .setName(config.name)
     .setDescription(config.description);
 
-  if (!config.options) return slashCommand.toJSON();
-
-  const channelTypes = [
-    ChannelType.GuildText,
-    ChannelType.GuildVoice,
-    ChannelType.GuildAnnouncement,
-    ChannelType.AnnouncementThread,
-    ChannelType.PublicThread,
-    ChannelType.PrivateThread,
-    ChannelType.GuildStageVoice,
-    ChannelType.GuildForum,
-  ] as const;
-
-  const optionHandlers = {
-    user: (e: LocalizedCommandOption) =>
-      slashCommand.addUserOption((o) =>
-        o.setName(e.name).setDescription(e.description).setRequired(e.required),
-      ),
-
-    channel: (e: LocalizedCommandOption) =>
-      slashCommand.addChannelOption((o) =>
-        o
-          .setName(e.name)
-          .setDescription(e.description)
-          .setRequired(e.required)
-          .addChannelTypes(...channelTypes),
-      ),
-
-    string: (e: LocalizedCommandOption) =>
-      slashCommand.addStringOption((o) => {
-        o.setName(e.name).setDescription(e.description).setRequired(e.required);
-        if (e.choices) {
-          o.addChoices(...e.choices);
-        }
-        return o;
-      }),
-
-    number: (e: LocalizedCommandOption) =>
-      slashCommand.addIntegerOption((o) => {
-        o.setName(e.name).setDescription(e.description).setRequired(e.required);
-        if (typeof e.min === 'number') o.setMinValue(e.min);
-        if (typeof e.max === 'number') o.setMaxValue(e.max);
-        return o;
-      }),
-
-    float: (e: LocalizedCommandOption) =>
-      slashCommand.addNumberOption((o) => {
-        o.setName(e.name).setDescription(e.description).setRequired(e.required);
-        if (typeof e.min === 'number') o.setMinValue(e.min);
-        if (typeof e.max === 'number') o.setMaxValue(e.max);
-        return o;
-      }),
-
-    attachment: (e: LocalizedCommandOption) =>
-      slashCommand.addAttachmentOption((o) =>
-        o.setName(e.name).setDescription(e.description).setRequired(e.required),
-      ),
-  } as const;
-
-  // Discord requires required options to precede optional ones.
-  const allOptions: { type: keyof typeof optionHandlers; data: LocalizedCommandOption }[] = [];
-  for (const [type, options] of Object.entries(config.options)) {
-    const handler = optionHandlers[type as keyof typeof optionHandlers];
-    if (!handler) continue;
-
-    options.forEach((opt) =>
-      allOptions.push({ type: type as keyof typeof optionHandlers, data: opt }),
-    );
+  if (config.defaultMemberPermissions !== undefined) {
+    slashCommand.setDefaultMemberPermissions(config.defaultMemberPermissions);
   }
-
-  allOptions
-    .sort((a, b) => Number(b.data.required) - Number(a.data.required))
-    .forEach(({ type, data }) => {
-      optionHandlers[type](data);
-    });
-
+  if (config.guildOnly === true) slashCommand.setDMPermission(false);
+  if (config.subcommandGroups !== undefined || config.subcommands !== undefined) {
+    if (config.options !== undefined) {
+      throw new TypeError(
+        `command "${config.name}": subcommands cannot be combined with root options.`,
+      );
+    }
+    for (const group of config.subcommandGroups ?? []) {
+      slashCommand.addSubcommandGroup((builder) => {
+        builder.setName(group.name).setDescription(group.description);
+        for (const subcommand of group.subcommands) {
+          builder.addSubcommand((subcommandBuilder) => {
+            subcommandBuilder.setName(subcommand.name).setDescription(subcommand.description);
+            addCommandOptions(subcommandBuilder, subcommand.options, config.name);
+            return subcommandBuilder;
+          });
+        }
+        return builder;
+      });
+    }
+    for (const subcommand of config.subcommands ?? []) {
+      slashCommand.addSubcommand((builder) => {
+        builder.setName(subcommand.name).setDescription(subcommand.description);
+        addCommandOptions(builder, subcommand.options, config.name);
+        return builder;
+      });
+    }
+  } else {
+    addCommandOptions(slashCommand, config.options, config.name);
+  }
   return slashCommand.toJSON();
 };

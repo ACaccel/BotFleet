@@ -1,8 +1,0 @@
-{
-  "mongo_uri": "mongodb://user:pass@host:port/?authSource=admin",
-  "discord_token": "<bot token>",
-  "start_date": "",
-  "guilds": ["<guild id>"],
-  "delete_bot_messages": true,
-  "batch_size": 500
-}

@@ -1,0 +1,5 @@
+# Verified false positives, one exact gitleaks fingerprint per line.
+
+# Synthetic test credentials interpolated from template variables;
+# aaf1c72 rewrote the line, but the commit stays in history.
+1205a7f5caab9cbaf890e1cb8f4bf4e947f55a39:tools/migration/mongo.integration.test.ts:mongodb-connection-uri:171

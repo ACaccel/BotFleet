@@ -1,14 +1,27 @@
 {
   "admin": ["YOUR_ADMIN_USER_ID"],
   "language": "zh-TW",
+  "timeZone": "Asia/Taipei",
+  "guild_settings": {
+    "maxRandomProbability": 0.05,
+    "minCooldownSeconds": 1
+  },
+  "thread_moderation": {
+    "enabled": true
+  },
+  "earthquake_alert": {
+    "ping_min_local_intensity": "4"
+  },
   "guilds": {
     "YOUR_GUILD_ID": {
       "channels": {
         "debug": "YOUR_DEBUG_CHANNEL_ID",
-        "x_feed": "YOUR_X_FEED_CHANNEL_ID"
+        "event": "YOUR_EVENT_CHANNEL_ID",
+        "giveaway": "YOUR_GIVEAWAY_CHANNEL_ID",
+        "earthquake": "YOUR_EARTHQUAKE_CHANNEL_ID"
       },
       "roles": {
-        "ban_user": "YOUR_BAN_USER_ROLE_ID"
+        "earthquake": "YOUR_EARTHQUAKE_ROLE_ID"
       },
       "permission_rank": {
         "channels": {
@@ -18,29 +31,98 @@
           "YOUR_STAFF_ROLE_ID": 2
         },
         "features": {
-          "guild_events": { "maxChannelRank": 0 },
-          "channel_logging": { "maxChannelRank": 0 },
-          "social_preview": { "maxChannelRank": null }
+          "guild_events": {
+            "maxChannelRank": 0
+          },
+          "channel_logging": {
+            "maxChannelRank": 0
+          },
+          "social_preview": {
+            "maxChannelRank": null
+          }
         }
       }
     }
   },
-  "commands": ["help", "weather_forecast", "random_restaurant", "update_role", "COMMAND_NAME"],
+  "bug_report": {
+    "hub": { "guildId": "YOUR_HUB_GUILD_ID", "channelId": "YOUR_HUB_FORUM_CHANNEL_ID" },
+    "tags": {
+      "bug": "Bug",
+      "suggestion": "Suggestion",
+      "other": "Other",
+      "open": "Open",
+      "in_progress": "In progress",
+      "closed": "Closed"
+    }
+  },
+  "commands": [
+    "settings",
+    "help",
+    "activity",
+    "ban_user",
+    "bug_report",
+    "change_avatar",
+    "feed",
+    "gay",
+    "give_score",
+    "giveaway",
+    "level_detail",
+    "menu_author_avatar",
+    "menu_get_avatar",
+    "menu_get_sticker",
+    "menu_give_score",
+    "random_restaurant",
+    "reply",
+    "role",
+    "roll_call",
+    "talk",
+    "thread",
+    "traffic"
+  ],
   "level_roles": {
-    "level_1": "YOUR_LEVEL_1_ROLE_NAME"
+    "level_1": "YOUR_LEVEL_1_ROLE_ID",
+    "level_10": "YOUR_LEVEL_10_ROLE_ID",
+    "level_20": "YOUR_LEVEL_20_ROLE_ID"
+  },
+  "guild_events": {
+    "attachment_cache": {
+      "enabled": true,
+      "ttlHours": 24,
+      "minFreeDiskMb": 5120
+    }
   },
   "social_link_preview": {
     "enabled": false,
+    "allowedBotIds": [],
     "originalMessageStrategy": "suppress",
-    "providers": ["twitter", "instagram", "threads", "facebook", "reddit", "bahamut", "bilibili"],
+    "providers": [
+      "twitter",
+      "instagram",
+      "threads",
+      "facebook",
+      "reddit",
+      "bahamut",
+      "bilibili",
+      "nhentai",
+      "wnacg"
+    ],
     "timeoutMs": 4000,
-    "validationBudgetMs": 8000,
+    "maxVideoBytes": 8388608,
+    "videoTimeoutMs": 15000,
     "maxUrlsPerMessage": 1,
-    "twitterProxyHosts": ["vxtwitter.com", "fxtwitter.com", "fixupx.com"],
-    "instagramProxyHosts": ["uuinstagram.com", "mbdinstagram.com", "kkinstagram.com"],
-    "threadsProxyHosts": ["viewthreads.com", "fzthreads.com", "fixthreads.seria.moe"],
-    "facebookProxyHosts": ["facebed.com"],
-    "redditProxyHosts": ["vxreddit.com", "redditez.com"],
+    "gallery": {
+      "prefetchPages": 5,
+      "cacheMaxBytes": 67108864,
+      "maxImageBytes": 8388608,
+      "imageTimeoutMs": 15000,
+      "stagingChannelId": null
+    },
+    "twitterProxyHosts": ["vxtwitter.com", "fixvx.com", "fxtwitter.com", "fixupx.com"],
+    "twitterApiBaseUrls": ["https://api.fxtwitter.com"],
+    "instagramProxyHosts": ["oginstagram.com", "zzinstagram.com", "fxig.seria.moe"],
+    "threadsProxyHosts": ["fzthreads.com", "viewthreads.com"],
+    "facebookProxyHosts": ["facebed.seria.moe", "facebed.com"],
+    "redditProxyHosts": ["vxreddit.com", "fxreddit.seria.moe", "redditez.com"],
     "bilibiliProxyHosts": [
       "vxbilibili.com",
       "fxbilibili.seria.moe",
@@ -48,31 +130,26 @@
       "bembedfix.vercel.app"
     ]
   },
-  "x_media_feed": {
+  "social_feed": {
     "enabled": false,
-    "accounts": [{ "handle": "YOUR_X_HANDLE" }, { "handle": "SECOND_HANDLE", "channel": "x_feed" }],
-    "defaultChannel": "x_feed",
     "pollIntervalMs": 300000,
     "fullSweepEveryPolls": 12,
-    "apiBaseUrl": "https://api.fxtwitter.com",
-    "timeoutMs": 8000,
     "maxPostsPerPoll": 5,
-    "embedProxyHost": "fxtwitter.com"
+    "platforms": {
+      "x": {
+        "apiBaseUrl": "https://api.fxtwitter.com",
+        "timeoutMs": 8000,
+        "embedProxyHost": "fxtwitter.com"
+      }
+    }
   },
   "auto_reply": {
-    "luckyReplies": [
-      {
-        "userId": "YOUR_LUCKY_REPLY_USER_ID",
-        "probability": 0.01,
-        "reply": "YOUR_LUCKY_REPLY_TEXT"
-      }
-    ],
     "globalLuckyProbability": 0.005
-  },
-  "weather_forecast": {
-    "locationKey": "315078"
   },
   "random_restaurant": {
     "apiUrl": "https://food-api-kappa-hazel.vercel.app/recommend"
+  },
+  "temp_role": {
+    "maxActivePerMember": 3
   }
 }

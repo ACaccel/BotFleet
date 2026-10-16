@@ -1,17 +1,9 @@
 /**
- * Builds `GuildInfo` records for a bot from the live Discord cache +
- * the bot's static config.
- *
- * Single responsibility: pure assembly. The registrar does not open
- * Mongo connections, does not perform Discord I/O beyond reading the
- * local guild / channel / role caches, and never sends a message. It
- * is one of the three collaborators BaseBot composes.
- *
- * Pattern: this is a domain Builder / Assembler — it takes the wide
- * raw cache surface and reduces it to the narrow `GuildInfo` value the
- * handler layer reads. Encapsulating the assembly here keeps BaseBot
- * thin and lets the build rules evolve (missing-channel handling,
- * partial config tolerance) without touching lifecycle code.
+ * Builds `GuildInfo` records for a bot from the live Discord cache and the
+ * bot's static config. Pure assembly: it opens no Mongo connections,
+ * performs no Discord I/O beyond reading the local caches, and never sends a
+ * message, so the build rules can change without touching BaseBot's
+ * lifecycle code.
  */
 import type { Channel, Client, Guild, Role } from 'discord.js';
 
@@ -46,7 +38,7 @@ export class GuildRegistrar {
    */
   public register(guild: Guild, config: Config): GuildInfo {
     const guildConfig = config.guilds?.[guild.id];
-    const channels = this.resolveChannels(guildConfig?.channels);
+    const channels = this.resolveChannels(guild, guildConfig?.channels);
     const roles = this.resolveRoles(guild, guildConfig?.roles);
     return {
       bot_name: guild.members.cache.get(this.clientId)?.displayName ?? '',
@@ -84,12 +76,15 @@ export class GuildRegistrar {
    * map by reading the client's channel cache. Missing ids drop out
    * of the result.
    */
-  private resolveChannels(channelMap: Record<string, string> | undefined): Record<string, Channel> {
+  private resolveChannels(
+    guild: Guild,
+    channelMap: Record<string, string> | undefined,
+  ): Record<string, Channel> {
     const out: Record<string, Channel> = {};
     if (channelMap === undefined) return out;
     for (const [name, id] of Object.entries(channelMap)) {
       const channel = this.client.channels.cache.get(id);
-      if (channel !== undefined) {
+      if (channel !== undefined && 'guildId' in channel && channel.guildId === guild.id) {
         out[name] = channel;
       }
     }
@@ -99,9 +94,7 @@ export class GuildRegistrar {
   /**
    * Translate a `name → roleId` config map into a `name → Role` map
    * by reading the guild's role cache. Missing ids drop out of the
-   * result (the prior implementation stored `undefined` casts, which
-   * surfaced as runtime crashes when handlers dereferenced them — the
-   * new behaviour is strictly safer).
+   * result so a handler never dereferences an `undefined` role.
    */
   private resolveRoles(
     guild: Guild,

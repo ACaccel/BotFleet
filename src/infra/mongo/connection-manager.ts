@@ -1,54 +1,31 @@
 /**
- * Per-guild MongoDB connection lifecycle.
+ * Per-guild MongoDB connection lifecycle: opens, closes, and tracks one
+ * `Connection` per guild id. Repositories receive a `Connection` via
+ * {@link ConnectionManager.getConnection} and never call
+ * `mongoose.createConnection` themselves.
  *
- * Owns the SDK boundary to mongoose: opening, closing, and tracking
- * one `Connection` per guild id. Repositories receive a `Connection`
- * (via {@link ConnectionManager.getConnection}) and never touch
- * `mongoose.createConnection` themselves — that keeps `persistence/`
- * free of SDK lifecycle concerns and makes test substitution trivial.
+ * A failed open is classified by the `persistence/` error translator. A
+ * transient failure (`DATABASE_TIMEOUT` / `DATABASE_NETWORK`) is retried with
+ * bounded exponential backoff; a persistent failure, or exhausted retries,
+ * marks the guild disabled. Transiently disabled guilds get another bounded
+ * attempt after a configurable cooldown; persistent ones stay disabled until
+ * {@link close} / {@link closeAll}. Each marker carries a `traceId` so the
+ * user-facing `errors:db.guild_disabled` message correlates with the boot
+ * log.
  *
- * Why `infra/mongo/` and not `persistence/`:
- *   `persistence/` owns the mapping from domain to storage (schemas +
- *   repositories). Connection acquisition is the SDK boundary, the same
- *   category as a Discord client or LLM HTTP client, per the layer
- *   rules that keep SDK boundaries out of `persistence/`.
- *
- * Resilience:
- *   `getConnection` classifies a failed open via the `persistence/`
- *   error-translator. A *transient* failure (`DATABASE_TIMEOUT` /
- *   `DATABASE_NETWORK`) is retried with bounded exponential backoff; a
- *   *persistent* failure — or a transient one whose retries are
- *   exhausted — marks the guild **disabled**. Once disabled, every
- *   subsequent `getConnection(guildId)` short-circuits with the same
- *   `DatabaseError` (no further cluster traffic) until {@link close} /
- *   {@link closeAll} clears the marker. Each disabled marker carries a
- *   generated `traceId` so the user-facing `errors:db.guild_disabled`
- *   message can be grep-correlated to the structured boot log.
- *
- *   Per-URI sharing: `MongoConnectionManager` instances are pooled by
- *   base URI in the composition root (`BaseBot.sharedConnectionManagers`).
- *   Because the disabled set is now manager-internal state, two bots
- *   that share one base URI also share one disabled set — a guild
- *   disabled for one is disabled for the other. This is intentional:
- *   they target the same physical database, so the failure is the
- *   same failure.
+ * Managers are pooled per base URI (`BaseBot.sharedConnectionManagers`), so
+ * bots sharing a URI share one disabled set. This is intentional: same
+ * database, same failure.
  */
-import mongoose, { type Connection, type Model } from 'mongoose';
+import mongoose, { type Connection } from 'mongoose';
+import { ARCHIVE_PROCESS_ID } from '../archive/owner';
 import type { GuildId } from '../../core/ids';
-import { SCHEMAS, type DocByName, type SchemaName } from '../../persistence/schemas';
+import { SCHEMAS, type SchemaName } from '../../persistence/schemas';
+import type { ArchiveOwner, GuildConnection, GuildModels } from '../../persistence/connection';
 import { DatabaseError } from '../../core/errors/external-service-error';
 import { databaseErrorFrom, isTransient } from '../../persistence/error-translator';
 
-/** Typed model registry for one guild connection. */
-export type Models = {
-  readonly [K in SchemaName]: Model<DocByName[K]>;
-};
-
-export interface GuildConnection {
-  readonly guildId: GuildId;
-  readonly connection: Connection;
-  readonly models: Models;
-}
+export type { GuildConnection } from '../../persistence/connection';
 
 /**
  * Disabled-guild marker. Returned by {@link ConnectionManager.isDisabled}
@@ -93,6 +70,17 @@ const DEFAULT_RETRY_POLICY: RetryPolicy = Object.freeze({
  * to abandon the drain than to have the whole graceful path force-exit.
  */
 const CLOSE_DRAIN_TIMEOUT_MS = 1_500;
+const DEFAULT_RECOVERY_INTERVAL_MS = 60_000;
+
+interface RecoveryState extends DisabledGuildState {
+  readonly retryAt: number;
+}
+
+const validateRecoveryInterval = (intervalMs: number): void => {
+  if (!Number.isSafeInteger(intervalMs) || intervalMs <= 0) {
+    throw new TypeError('recoveryIntervalMs must be a positive safe integer');
+  }
+};
 
 /** Injectable sleep so tests advance backoff without real wall time. */
 type SleepFn = (ms: number) => Promise<void>;
@@ -122,25 +110,30 @@ export const buildGuildMongoUri = (baseUri: string, guildId: string): string => 
   return `${baseUri}${guildId}?authSource=admin`;
 };
 
-const buildModels = (connection: Connection): Models => ({
-  Fetch: connection.model<DocByName['Fetch']>('Fetch', SCHEMAS.Fetch),
-  Message: connection.model<DocByName['Message']>('Message', SCHEMAS.Message),
-  Reply: connection.model<DocByName['Reply']>('Reply', SCHEMAS.Reply),
-  Giveaway: connection.model<DocByName['Giveaway']>('Giveaway', SCHEMAS.Giveaway),
-  Activity: connection.model<DocByName['Activity']>('Activity', SCHEMAS.Activity),
-  TempRole: connection.model<DocByName['TempRole']>('TempRole', SCHEMAS.TempRole),
-  UserApiSetting: connection.model<DocByName['UserApiSetting']>(
-    'UserApiSetting',
-    SCHEMAS.UserApiSetting,
-  ),
-  XFeedCursor: connection.model<DocByName['XFeedCursor']>('XFeedCursor', SCHEMAS.XFeedCursor),
-});
+const isArchiveModel = (name: string): boolean =>
+  name === 'Message' || name === 'Fetch' || name.startsWith('Archive');
+
+const buildModels = (connection: Connection): GuildModels => {
+  // Each model's document type comes from `DocByName`; the loop sees only the union of schemas.
+  const models: Partial<Record<SchemaName, unknown>> = {};
+  for (const name of Object.keys(SCHEMAS) as SchemaName[]) {
+    const schema = SCHEMAS[name].clone();
+    // Archive schema maintenance belongs to the worker after ownership and
+    // structural checks. Merely opening a reader must never mutate indexes.
+    if (isArchiveModel(name)) {
+      schema.set('autoCreate', false);
+      schema.set('autoIndex', false);
+    }
+    models[name] = connection.model(name, schema);
+  }
+  return models as GuildModels;
+};
 
 /**
  * Run every model's index build, tolerating per-model rejections.
  *
- * Awaiting `m.init()` closes a startup race between
- * `insertManyIgnoringDuplicates` and the auto-built unique index.
+ * Awaiting `m.init()` closes a startup race between the first write and
+ * the auto-built unique indexes.
  *
  * Treating an init failure as fatal would be strictly worse for the
  * operator: a single permission gap or one collection with pre-existing
@@ -151,20 +144,22 @@ const buildModels = (connection: Connection): Models => ({
  * the per-model `name` stays in scope on rejection. Stderr keeps this
  * layer free of cross-imports into core/logger.
  */
-const initModelsBestEffort = async (models: Models, guildId: GuildId): Promise<void> => {
+const initModelsBestEffort = async (models: GuildModels, guildId: GuildId): Promise<void> => {
   await Promise.allSettled(
-    Object.entries(models).map(async ([name, model]) => {
-      try {
-        await model.init();
-      } catch (err: unknown) {
-        const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-        process.stderr.write(
-          `[mongo] model.init() failed for ${name} on guild ${guildId}: ${reason}. ` +
-            `Connection kept open; indexes may be missing.\n`,
-        );
-        throw err;
-      }
-    }),
+    Object.entries(models)
+      .filter(([name]) => !isArchiveModel(name))
+      .map(async ([name, model]) => {
+        try {
+          await model.init();
+        } catch (err: unknown) {
+          const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+          process.stderr.write(
+            `[mongo] model.init() failed for ${name} on guild ${guildId}: ${reason}. ` +
+              `Connection kept open; indexes may be missing.\n`,
+          );
+          throw err;
+        }
+      }),
   );
 };
 
@@ -290,12 +285,13 @@ const retryOpen = async (params: {
 export interface ConnectionManager {
   /**
    * Open (or return the cached) connection for `guildId`. The returned
-   * `GuildConnection` carries the strongly-typed `Models` map.
+   * `GuildConnection` carries the strongly-typed `GuildModels` map.
    *
    * Throws a {@link DatabaseError} if the open fails. Transient
    * failures are retried internally before the throw; a guild that
    * fails persistently (or exhausts its retries) is marked disabled —
-   * see {@link isDisabled}.
+   * see {@link isDisabled}. Later calls retry transient failures after
+   * the recovery cooldown; the disabled marker remains until success.
    */
   getConnection(guildId: GuildId): Promise<GuildConnection>;
   /**
@@ -326,7 +322,7 @@ export interface ConnectionManager {
 export class MongoConnectionManager implements ConnectionManager {
   private readonly cache = new Map<GuildId, GuildConnection>();
   private readonly pending = new Map<GuildId, Promise<GuildConnection>>();
-  private readonly disabled = new Map<GuildId, DisabledGuildState>();
+  private readonly disabled = new Map<GuildId, RecoveryState>();
   private readonly retryPolicy: RetryPolicy;
   private readonly sleep: SleepFn;
   /**
@@ -352,12 +348,16 @@ export class MongoConnectionManager implements ConnectionManager {
    *                   Defaults to {@link DEFAULT_RETRY_POLICY}.
    * @param sleep      Injectable delay primitive — tests pass a no-op
    *                   to keep backoff retries instantaneous.
+   * @param recoveryIntervalMs Cooldown before retrying a transiently disabled guild.
    */
   constructor(
     private readonly baseUri: string,
     retryPolicy: RetryPolicy = DEFAULT_RETRY_POLICY,
     sleep: SleepFn = realSleep,
+    private readonly recoveryIntervalMs: number = DEFAULT_RECOVERY_INTERVAL_MS,
+    private readonly archiveOwner?: ArchiveOwner,
   ) {
+    validateRecoveryInterval(recoveryIntervalMs);
     this.retryPolicy = retryPolicy;
     this.sleep = sleep;
   }
@@ -368,11 +368,11 @@ export class MongoConnectionManager implements ConnectionManager {
     const cached = this.cache.get(guildId);
     if (cached !== undefined) return cached;
 
-    // A disabled guild short-circuits without touching the cluster.
-    // The marker is cleared by close()/closeAll() so a recovered guild
-    // can be retried on the next process boot.
     const disabledState = this.disabled.get(guildId);
-    if (disabledState !== undefined) {
+    if (
+      disabledState !== undefined &&
+      (!isTransient(disabledState.error) || Date.now() < disabledState.retryAt)
+    ) {
       throw disabledState.error;
     }
 
@@ -427,25 +427,43 @@ export class MongoConnectionManager implements ConnectionManager {
 
   /** Open with bounded-backoff retry for transient failures (see {@link retryOpen}). */
   private openWithRetry(guildId: GuildId): Promise<GuildConnection> {
+    const generation = this.generation;
     return retryOpen({
       guildId,
       operation: 'MongoConnectionManager.open',
       policy: this.retryPolicy,
       sleep: this.sleep,
-      open: (id) => this.open(id),
+      open: async (id) => {
+        assertSameGeneration(generation, this.generation, id);
+        try {
+          return await this.open(id);
+        } catch (error: unknown) {
+          assertSameGeneration(generation, this.generation, id);
+          throw error;
+        }
+      },
       onDisable: (id, error) => this.markDisabled(id, error),
+    }).then((entry) => {
+      assertSameGeneration(generation, this.generation, guildId);
+      this.disabled.delete(guildId);
+      this.cache.set(guildId, entry);
+      return entry;
     });
   }
 
   /**
    * Record a guild as disabled, generating the correlation `traceId`
-   * and writing one operator-facing stderr line. Idempotent: the first
-   * marker wins so the `traceId` stays stable across repeated failures.
+   * and writing one operator-facing stderr line. Repeated failures keep
+   * the trace id but refresh the error and cooldown for the next attempt.
    */
   private markDisabled(guildId: GuildId, error: DatabaseError): void {
-    if (this.disabled.has(guildId)) return;
-    const traceId = generateTraceId();
-    this.disabled.set(guildId, { traceId, error });
+    const previous = this.disabled.get(guildId);
+    const traceId = previous?.traceId ?? generateTraceId();
+    this.disabled.set(guildId, {
+      traceId,
+      error,
+      retryAt: Date.now() + this.recoveryIntervalMs,
+    });
     process.stderr.write(
       `[mongo] guild ${guildId} disabled after connection failure ` +
         `(code=${error.code}, traceId=${traceId}): ${error.message}\n`,
@@ -455,7 +473,14 @@ export class MongoConnectionManager implements ConnectionManager {
   private async open(guildId: GuildId): Promise<GuildConnection> {
     const generation = this.generation;
     const uri = buildGuildMongoUri(this.baseUri, guildId);
-    const connection = await mongoose.createConnection(uri).asPromise();
+    const connection = await mongoose
+      .createConnection(
+        uri,
+        this.archiveOwner === 'msg-archive'
+          ? { appName: ARCHIVE_PROCESS_ID, writeConcern: { w: 'majority', j: true } }
+          : {},
+      )
+      .asPromise();
     try {
       const models = buildModels(connection);
       // Best-effort index initialization — see initModelsBestEffort.
@@ -464,7 +489,12 @@ export class MongoConnectionManager implements ConnectionManager {
       // "MongoDB for guild ... connected".
       await initModelsBestEffort(models, guildId);
       assertSameGeneration(generation, this.generation, guildId);
-      const entry: GuildConnection = { guildId, connection, models };
+      const entry: GuildConnection = {
+        guildId,
+        connection,
+        models,
+        ...(this.archiveOwner === undefined ? {} : { archiveOwner: this.archiveOwner }),
+      };
       this.cache.set(guildId, entry);
       return entry;
     } catch (err: unknown) {
@@ -496,9 +526,10 @@ export class MongoConnectionManager implements ConnectionManager {
 export class StaticConnectionManager implements ConnectionManager {
   private readonly cache = new Map<GuildId, GuildConnection>();
   private readonly pending = new Map<GuildId, Promise<GuildConnection>>();
-  private readonly disabled = new Map<GuildId, DisabledGuildState>();
+  private readonly disabled = new Map<GuildId, RecoveryState>();
   private readonly retryPolicy: RetryPolicy;
   private readonly sleep: SleepFn;
+  private readonly recoveryIntervalMs: number;
   private readonly openOverride?: (guildId: GuildId) => Promise<GuildConnection>;
   /** See {@link MongoConnectionManager}'s generation counter and closing flag. */
   private generation = 0;
@@ -514,9 +545,12 @@ export class StaticConnectionManager implements ConnectionManager {
     options: {
       readonly retryPolicy?: RetryPolicy;
       readonly sleep?: SleepFn;
+      readonly recoveryIntervalMs?: number;
       readonly openOverride?: (guildId: GuildId) => Promise<GuildConnection>;
     } = {},
   ) {
+    this.recoveryIntervalMs = options.recoveryIntervalMs ?? DEFAULT_RECOVERY_INTERVAL_MS;
+    validateRecoveryInterval(this.recoveryIntervalMs);
     this.retryPolicy = options.retryPolicy ?? DEFAULT_RETRY_POLICY;
     this.sleep = options.sleep ?? realSleep;
     this.openOverride = options.openOverride;
@@ -529,7 +563,10 @@ export class StaticConnectionManager implements ConnectionManager {
     if (cached !== undefined) return cached;
 
     const disabledState = this.disabled.get(guildId);
-    if (disabledState !== undefined) {
+    if (
+      disabledState !== undefined &&
+      (!isTransient(disabledState.error) || Date.now() < disabledState.retryAt)
+    ) {
       throw disabledState.error;
     }
 
@@ -573,31 +610,47 @@ export class StaticConnectionManager implements ConnectionManager {
    * `ConnectionManager` contract.
    */
   private openWithRetry(guildId: GuildId): Promise<GuildConnection> {
+    const generation = this.generation;
     return retryOpen({
       guildId,
       operation: 'StaticConnectionManager.open',
       policy: this.retryPolicy,
       sleep: this.sleep,
-      open: (id) => this.open(id),
+      open: async (id) => {
+        assertSameGeneration(generation, this.generation, id);
+        try {
+          return await this.open(id);
+        } catch (error: unknown) {
+          assertSameGeneration(generation, this.generation, id);
+          throw error;
+        }
+      },
       onDisable: (id, error) => this.markDisabled(id, error),
+    }).then((entry) => {
+      assertSameGeneration(generation, this.generation, guildId);
+      this.disabled.delete(guildId);
+      this.cache.set(guildId, entry);
+      return entry;
     });
   }
 
   private markDisabled(guildId: GuildId, error: DatabaseError): void {
-    if (this.disabled.has(guildId)) return;
-    const traceId = generateTraceId();
-    this.disabled.set(guildId, { traceId, error });
+    const previous = this.disabled.get(guildId);
+    const traceId = previous?.traceId ?? generateTraceId();
+    this.disabled.set(guildId, {
+      traceId,
+      error,
+      retryAt: Date.now() + this.recoveryIntervalMs,
+    });
   }
 
   /**
    * Build the guild connection from the externally-managed connection,
    * or delegate to the injected `openOverride` failure hook.
    *
-   * Blocks until every model's declared indexes are present (notably
-   * the unique index on `Message.messageId` that
-   * `insertManyIgnoringDuplicates` depends on). Without this, the first
-   * insert of a suite races the auto-index build and unique constraints
-   * silently do not enforce.
+   * Blocks until every model's declared indexes are present. Without
+   * this, the first insert of a suite races the auto-index build and
+   * unique constraints silently do not enforce.
    */
   private async open(guildId: GuildId): Promise<GuildConnection> {
     const generation = this.generation;
@@ -607,10 +660,17 @@ export class StaticConnectionManager implements ConnectionManager {
       return overridden;
     }
     const models = buildModels(this.underlying);
-    await Promise.all(Object.values(models).map((m) => m.init()));
+    await Promise.all(
+      Object.values(models).map(async (m) => {
+        await m.createCollection();
+        await m.createIndexes();
+      }),
+    );
     assertSameGeneration(generation, this.generation, guildId);
     const entry: GuildConnection = {
       guildId,
+      // This adapter is exclusively for isolated integration databases.
+      archiveOwner: 'msg-archive',
       connection: this.underlying,
       models,
     };

@@ -1,57 +1,57 @@
 [
   {
     "name": "高松燈",
-    "avatar_url": "https://i.meee.com.tw/aclTiqG.jpg",
-    "color_role": "淺紫"
+    "color_role": "淺紫",
+    "avatar_file": "aclTiqG.jpg"
   },
   {
     "name": "千早愛音",
-    "avatar_url": "https://i.meee.com.tw/UI8Kefy.jpg",
-    "color_role": "粉紅"
+    "color_role": "粉紅",
+    "avatar_file": "UI8Kefy.jpg"
   },
   {
     "name": "長崎爽世",
-    "avatar_url": "https://i.meee.com.tw/RoqOKNc.jpg",
-    "color_role": "黃橘"
+    "color_role": "黃橘",
+    "avatar_file": "RoqOKNc.jpg"
   },
   {
     "name": "要樂奈",
-    "avatar_url": "https://i.meee.com.tw/wsfUOu3.jpg",
-    "color_role": "檸檬綢色"
+    "color_role": "檸檬綢色",
+    "avatar_file": "wsfUOu3.jpg"
   },
   {
     "name": "椎名立希",
-    "avatar_url": "https://i.meee.com.tw/JssQD65.jpg",
-    "color_role": "紅褐"
+    "color_role": "紅褐",
+    "avatar_file": "JssQD65.jpg"
   },
   {
     "name": "三角初音",
-    "avatar_url": "https://i.meee.com.tw/nEBp9uk.jpg",
-    "color_role": "黃"
+    "color_role": "黃",
+    "avatar_file": "nEBp9uk.jpg"
   },
   {
     "name": "若葉睦",
-    "avatar_url": "https://i.meee.com.tw/PWBptBU.jpg",
-    "color_role": "香檳粉紅色"
+    "color_role": "香檳粉紅色",
+    "avatar_file": "PWBptBU.jpg"
   },
   {
     "name": "祐天寺にゃむ",
-    "avatar_url": "https://i.meee.com.tw/45x4GDy.jpg",
-    "color_role": "深紫"
+    "color_role": "深紫",
+    "avatar_file": "45x4GDy.jpg"
   },
   {
     "name": "豐川祥子",
-    "avatar_url": "https://i.meee.com.tw/nEBp9uk.png",
-    "color_role": "淺藍"
+    "color_role": "淺藍",
+    "avatar_file": "nEBp9uk.png"
   },
   {
     "name": "八幡海鈴",
-    "avatar_url": "https://i.meee.com.tw/Ng9XaZQ.jpg",
-    "color_role": "紅褐"
+    "color_role": "紅褐",
+    "avatar_file": "Ng9XaZQ.jpg"
   },
   {
     "name": "純田真奈",
-    "avatar_url": "https://i.meee.com.tw/mXMcpEC.jpg",
-    "color_role": "紅褐"
+    "color_role": "紅褐",
+    "avatar_file": "mXMcpEC.jpg"
   }
 ]

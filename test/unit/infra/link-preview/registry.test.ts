@@ -44,6 +44,13 @@ const rewriteOf = async (
   source: string,
 ): Promise<string> => {
   const result = await registry.findProvider(u(source))?.build(u(source), { timeoutMs: 1_000 });
+  if (result?.ok === true && result.value?.kind === 'card' && result.value.media !== undefined) {
+    expect(result.value.card.siteName).toBe(
+      source.includes('threads.net') ? 'Threads' : 'Facebook',
+    );
+    expect(result.value.media.url).toBe('v.mp4');
+    return result.value.media.fallbackUrl;
+  }
   if (result?.ok !== true || result.value?.kind !== 'rewritten-url') {
     throw new Error(`expected a rewritten-url result for ${source}`);
   }
@@ -90,6 +97,10 @@ describe('createDefaultLinkPreviewRegistry', () => {
       'bilibili',
     );
     expect(registry.findProvider(u('https://b23.tv/mHCI3y3'))?.name).toBe('bilibili');
+    expect(registry.findProvider(u('https://nhentai.net/g/123456/'))?.name).toBe('nhentai');
+    expect(registry.findProvider(u('https://www.wnacg.com/photos-index-aid-1.html'))?.name).toBe(
+      'wnacg',
+    );
   });
 
   it('honours the enabledProviders allow-list', () => {

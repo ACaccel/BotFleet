@@ -1,219 +1,78 @@
 {
-  "activity_create": {
-    "description": "Create an activity",
-    "options": {
-      "title": {
-        "description": "Activity title"
-      },
-      "duration": {
-        "description": "Activity duration (1s, 1m, 1h, 1d, 1w)"
-      },
-      "description": {
-        "description": "Activity description (optional)"
-      }
-    }
-  },
-  "activity_delete": {
-    "description": "Delete an activity",
-    "options": {
-      "activity_id": {
-        "description": "Activity ID"
-      }
-    }
-  },
-  "add_reply": {
-    "description": "Add an auto-reply",
-    "options": {
-      "keyword": {
-        "description": "Keyword"
-      },
-      "reply": {
-        "description": "Reply"
-      }
-    }
-  },
-  "ai_settings": {
-    "description": "Edit your AI settings in one go (model / temperature / web search / system prompt)",
-    "options": {
-      "provider": {
-        "description": "Choose an AI provider; model candidates will load dynamically based on it"
-      }
-    }
-  },
-  "ai_status": {
-    "description": "Show your current AI settings"
-  },
-  "ai_whitelist_add": {
-    "description": "[Admin] Add a user to the AI whitelist",
-    "options": {
-      "user": {
-        "description": "The user to add to the whitelist"
-      }
-    }
-  },
-  "ai_whitelist_list": {
-    "description": "List all users currently on the AI whitelist"
-  },
-  "ai_whitelist_remove": {
-    "description": "[Admin] Remove a user from the AI whitelist",
-    "options": {
-      "user": {
-        "description": "The user to remove"
-      }
-    }
-  },
   "ban_user": {
-    "description": "Temporarily time out a user (ban_threshold: 5 votes, judge_time: 1 min)",
+    "description": "Start a server-configured moderation vote for a 1–5 minute timeout",
     "options": {
       "user": {
-        "description": "The user to time out"
+        "description": "Member to vote on"
       },
       "duration": {
-        "description": "Timeout duration (unit: minutes, max: 5)"
-      }
-    }
-  },
-  "bubble_wrap": {
-    "description": "Generate bubble wrap",
-    "options": {
-      "str": {
-        "description": "Hidden text"
+        "description": "Override the default timeout in minutes (1–5)"
       }
     }
   },
   "bug_report": {
-    "description": "Report a bug",
-    "options": {
-      "content": {
-        "description": "Bug description"
-      }
-    }
+    "description": "Report a problem or suggestion to the bot admins"
   },
   "change_avatar": {
-    "description": "Switch persona",
+    "description": "Switch the bot's persona (avatar, nickname and colour)",
     "options": {
       "identity": {
-        "description": "The identity to switch to"
-      }
-    }
-  },
-  "change_nickname": {
-    "description": "Change the bot's nickname",
-    "options": {
-      "nickname": {
-        "description": "New nickname"
-      }
-    }
-  },
-  "db_list_message": {
-    "description": "List message records for a specific channel, date, and hour",
-    "options": {
-      "channel": {
-        "description": "The channel/thread to query"
-      },
-      "date": {
-        "description": "Date (YYYY-MM-DD)"
-      },
-      "print": {
-        "description": "Whether to post directly as messages (yes: messages, no: text file, default no)",
-        "choices": {
-          "no": "Text file (default)",
-          "yes": "Messages"
-        }
-      },
-      "hour": {
-        "description": "Hour (0-23)"
-      }
-    }
-  },
-  "delete_reply": {
-    "description": "Delete an auto-reply",
-    "options": {
-      "keyword": {
-        "description": "Keyword"
-      }
-    }
-  },
-  "emoji_frequency": {
-    "description": "Show emoji usage frequency",
-    "options": {
-      "frequency": {
-        "description": "Frequency order (optional)",
-        "choices": {
-          "asc": "Lowest-N frequency",
-          "desc": "Highest-N frequency"
-        }
-      },
-      "type": {
-        "description": "Animated or static (optional)",
-        "choices": {
-          "animated": "Animated",
-          "static": "Static"
-        }
-      },
-      "top_n": {
-        "description": "Top n (optional, max: 30)"
-      },
-      "last_n_months": {
-        "description": "Search the past n months (optional, max: 24)"
+        "description": "Persona to switch to"
       }
     }
   },
   "gay": {
-    "description": "Are they gay",
+    "description": "Read a member's gay meter, or two members' ship meter (just for fun)",
     "options": {
       "user": {
-        "description": "Choose a target"
+        "description": "Member to read"
+      },
+      "user2": {
+        "description": "A second member, to read the pair instead"
       }
     }
-  },
-  "get_avatar": {
-    "description": "Get a user's avatar",
-    "options": {
-      "user": {
-        "description": "Choose a target"
-      }
-    }
-  },
-  "giveaway_create": {
-    "description": "Create a giveaway"
-  },
-  "giveaway_delete": {
-    "description": "Delete a giveaway"
   },
   "give_score": {
-    "description": "Give a score"
-  },
-  "help": {
-    "description": "Show the command list and help"
-  },
-  "level_detail": {
-    "description": "View detailed level information",
+    "description": "Score anything from 0 to 10; the result holds all day",
     "options": {
-      "left": {
-        "description": "Left bound"
+      "subject": {
+        "description": "What to score (omit to score yourself)"
       },
-      "right": {
-        "description": "Right bound"
+      "user": {
+        "description": "Member to score"
       }
     }
   },
-  "list_guild_members": {
-    "description": "List all members in the current server (including bots)"
-  },
-  "list_reply": {
-    "description": "List auto-replies",
+  "help": {
+    "description": "List commands, or show how to use one",
     "options": {
-      "keyword": {
-        "description": "Keyword"
+      "command": {
+        "description": "Command to look up"
+      }
+    }
+  },
+  "level_detail": {
+    "description": "Show the MEE6 level leaderboard, or one member's level card",
+    "options": {
+      "rank": {
+        "description": "Open the page holding this rank and mark it"
+      },
+      "member": {
+        "description": "Show this member's level card (takes priority over rank)"
       }
     }
   },
   "menu_get_avatar": {
     "name": "Get user avatar URL"
   },
+  "menu_author_avatar": {
+    "name": "Get author avatar URL"
+  },
   "menu_get_sticker": {
     "name": "Get emoji/sticker URL"
+  },
+  "menu_give_score": {
+    "name": "Score this message"
   },
   "random_restaurant": {
     "description": "Random restaurant picker (Taipei / parts of New Taipei)",
@@ -228,186 +87,630 @@
         "description": "Restaurant address keyword"
       },
       "budget": {
-        "description": "Budget (integer)"
+        "description": "Maximum budget (TWD)"
       },
       "min_rating": {
-        "description": "Minimum rating"
+        "description": "Minimum rating (0-5, decimals allowed)"
       },
       "max_rating": {
-        "description": "Maximum rating"
-      }
-    }
-  },
-  "record": {
-    "description": "Record audio",
-    "options": {
-      "action": {
-        "description": "Start or stop recording",
-        "choices": {
-          "start": "Start",
-          "stop": "Stop",
-          "save": "Save audio (last n minutes)"
-        }
-      },
-      "duration": {
-        "description": "Recording length (last n minutes) (optional)"
-      }
-    }
-  },
-  "role_message": {
-    "description": "Send a role-claim message",
-    "options": {
-      "roles": {
-        "description": "Claimable role IDs (ex: @role1 @role2...)"
+        "description": "Maximum rating (0-5, decimals allowed)"
       }
     }
   },
   "roll_call": {
-    "description": "Roll call",
+    "description": "Call members, a role or an activity's participants; called members check in with a button",
     "options": {
+      "role": {
+        "description": "Role to call"
+      },
       "users": {
-        "description": "Users or roles to call (ex: @user1 @role1 @user2...)"
+        "description": "Members to call; mention one or more"
       },
-      "activity_id": {
-        "description": "Activity ID (used to roll-call activity participants)"
-      }
-    }
-  },
-  "search_anime_scene": {
-    "description": "Search for the source of an anime screenshot",
-    "options": {
-      "image": {
-        "description": "Anime screenshot"
+      "activity": {
+        "description": "Call this activity's participants"
       },
-      "display_num": {
-        "description": "How many search results to display (optional)"
-      }
-    }
-  },
-  "sticker_frequency": {
-    "description": "Show sticker usage frequency",
-    "options": {
-      "frequency": {
-        "description": "Frequency order (optional)",
-        "choices": {
-          "asc": "Lowest-N frequency",
-          "desc": "Highest-N frequency"
-        }
-      },
-      "top_n": {
-        "description": "Top n (optional, max: 30)"
-      },
-      "last_n_months": {
-        "description": "Search the past n months (optional, max: 24)"
+      "deadline": {
+        "description": "Close automatically after (e.g. 10m, 2h; at most 1d)"
       }
     }
   },
   "talk": {
-    "description": "Make the bot speak",
+    "description": "Have the bot speak for you (signed by default)",
     "options": {
+      "content": {
+        "description": "What to say (up to 1900 characters)"
+      },
       "channel": {
-        "description": "Choose a channel"
+        "description": "Channel to post in (defaults to this channel)"
       },
-      "content": {
-        "description": "The content"
+      "anonymous": {
+        "description": "Post without your signature (bot admins only)"
       }
     }
   },
-  "talk_signed": {
-    "description": "Make the bot speak (signed)",
-    "options": {
-      "content": {
-        "description": "The content"
+  "archive": {
+    "description": "Manage msg-archive's full backup and periodic backup",
+    "subcommands": {
+      "backup": {
+        "description": "Start, resume or stop the full backup"
+      },
+      "status": {
+        "description": "Show archive status in one panel"
+      },
+      "schedule": {
+        "description": "Show or change the periodic backup schedule",
+        "options": {
+          "enabled": {
+            "description": "Enable or disable periodic backup (unchanged when omitted)"
+          },
+          "minutes": {
+            "description": "Minutes between passes, 1–10080 (unchanged when omitted)"
+          }
+        }
       }
     }
   },
-  "temp_role": {
-    "description": "Create a temporary notification role that anyone can claim; it is deleted automatically when it expires",
-    "options": {
-      "name": {
-        "description": "Role name"
+  "feed": {
+    "description": "Manage social feed subscriptions",
+    "subcommands": {
+      "subscribe": {
+        "description": "Forward a social account's new posts into a channel",
+        "options": {
+          "platform": {
+            "description": "Social platform the account is on",
+            "choices": {
+              "x": "X (Twitter)"
+            }
+          },
+          "account": {
+            "description": "Account handles, comma-separated; the leading @ is optional"
+          },
+          "channel": {
+            "description": "Channel to forward into (default: this channel)"
+          },
+          "media": {
+            "description": "Which posts to forward, by attached media",
+            "choices": {
+              "media_only": "Only posts with a photo or video, no text-only posts",
+              "photo_only": "Only posts with a photo",
+              "video_only": "Only posts with a video",
+              "any": "Every post: text-only, photo and video"
+            }
+          },
+          "keyword": {
+            "description": "Only forward posts whose text contains this (max 100 characters)"
+          }
+        }
       },
-      "days": {
-        "description": "Lifetime in days (1-30, default 30)"
+      "unsubscribe": {
+        "description": "Stop forwarding social posts into a channel",
+        "options": {
+          "channel": {
+            "description": "Channel to unsubscribe (default: this channel)"
+          },
+          "platform": {
+            "description": "Only remove subscriptions on this platform",
+            "choices": {
+              "x": "X (Twitter)"
+            }
+          },
+          "account": {
+            "description": "Only remove subscriptions to these accounts, comma-separated"
+          }
+        }
+      },
+      "list": {
+        "description": "List this server's social feed subscriptions"
+      }
+    }
+  },
+  "reply": {
+    "description": "Manage automatic replies",
+    "subcommands": {
+      "add": {
+        "description": "Add an auto-reply: the bot answers messages that exactly match the keyword",
+        "options": {
+          "keyword": {
+            "description": "The exact message that triggers it; [*] means a random interjection"
+          },
+          "reply": {
+            "description": "What the bot replies with"
+          }
+        }
+      },
+      "delete": {
+        "description": "Delete a keyword's auto-replies",
+        "options": {
+          "keyword": {
+            "description": "Keyword"
+          }
+        }
+      },
+      "list": {
+        "description": "List auto-replies",
+        "options": {
+          "keyword": {
+            "description": "Only this keyword (omit to list every keyword)"
+          }
+        }
+      }
+    }
+  },
+  "activity": {
+    "description": "Start and manage activities",
+    "subcommands": {
+      "create": {
+        "description": "Start an activity in this channel; only members who can see it can join",
+        "options": {
+          "role": {
+            "description": "Only this role may join (optional)"
+          }
+        }
+      },
+      "list": {
+        "description": "List open activities you can see"
+      },
+      "cancel": {
+        "description": "Cancel an activity (organizer or moderators)",
+        "options": {
+          "activity": {
+            "description": "Activity to cancel"
+          }
+        }
+      }
+    }
+  },
+  "giveaway": {
+    "description": "Manage giveaways",
+    "subcommands": {
+      "create": {
+        "description": "Create a giveaway (opens a form for the prize, winners and duration)",
+        "options": {
+          "destination": {
+            "description": "Where to publish the giveaway (default: current channel)",
+            "choices": {
+              "current": "Current channel",
+              "configured": "Configured giveaway channel"
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "Cancel an active giveaway"
+      }
+    }
+  },
+  "ai": {
+    "description": "Manage AI settings and access",
+    "subcommands": {
+      "settings": {
+        "description": "Edit your AI settings in one go (model / temperature / web search / system prompt)",
+        "options": {
+          "provider": {
+            "description": "Choose an AI provider; model candidates will load dynamically based on it"
+          }
+        }
+      },
+      "status": {
+        "description": "Show your current AI settings"
+      }
+    },
+    "groups": {
+      "whitelist": {
+        "subcommands": {
+          "add": {
+            "description": "[Admin] Add a user to the AI whitelist",
+            "options": {
+              "user": {
+                "description": "The user to add to the whitelist"
+              }
+            }
+          },
+          "remove": {
+            "description": "[Admin] Remove a user from the AI whitelist",
+            "options": {
+              "user": {
+                "description": "The user to remove"
+              }
+            }
+          },
+          "list": {
+            "description": "[Admin] List all users currently on the AI whitelist"
+          }
+        },
+        "description": "Manage AI allowlist"
+      }
+    }
+  },
+  "thread": {
+    "description": "Manage threads",
+    "subcommands": {
+      "ban": {
+        "description": "Restrict users in this thread for this bot",
+        "options": {
+          "users": {
+            "description": "1–20 user mentions or IDs, separated by spaces or commas"
+          }
+        }
+      },
+      "allow": {
+        "description": "Restore users’ rights in this thread for this bot",
+        "options": {
+          "users": {
+            "description": "1–20 user mentions or IDs, separated by spaces or commas"
+          }
+        }
+      },
+      "list": {
+        "description": "List users this bot restricts in the current thread"
+      },
+      "claim": {
+        "description": "Request delegated management of a thread",
+        "options": {
+          "thread": {
+            "description": "Thread to manage (defaults to the current thread)"
+          },
+          "reason": {
+            "description": "Reason for the request (1–1000 characters)"
+          }
+        }
+      }
+    },
+    "groups": {
+      "manager": {
+        "description": "Manage delegated thread managers (bot admins only)",
+        "subcommands": {
+          "add": {
+            "description": "Grant thread management",
+            "options": {
+              "thread": {
+                "description": "Target thread (defaults to the current thread)"
+              },
+              "user": {
+                "description": "Target user"
+              }
+            }
+          },
+          "remove": {
+            "description": "Revoke thread management",
+            "options": {
+              "thread": {
+                "description": "Target thread (defaults to the current thread)"
+              },
+              "user": {
+                "description": "Target user"
+              }
+            }
+          },
+          "list": {
+            "description": "List delegated managers (defaults to the whole server)",
+            "options": {
+              "thread": {
+                "description": "Only list this thread (omit for the whole server)"
+              },
+              "page": {
+                "description": "Page number (20 assignments per page)"
+              }
+            }
+          }
+        }
       }
     }
   },
   "traffic": {
-    "description": "Show guild message-traffic charts and statistics",
-    "options": {
-      "visibility": {
-        "description": "Who can see the reply (optional, default: ephemeral)",
-        "choices": {
-          "ephemeral": "Only you",
-          "public": "Everyone"
+    "description": "View message activity statistics",
+    "subcommands": {
+      "overview": {
+        "description": "Show server activity: counts, trend, rankings, heat map and top messages",
+        "options": {
+          "range": {
+            "description": "Look-back window (optional, default: 7d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: public)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
+            }
+          }
         }
       },
-      "range": {
-        "description": "Look-back window (optional, default: 7d)",
-        "choices": {
-          "24h": "Last 24 hours",
-          "7d": "Last 7 days",
-          "30d": "Last 30 days"
+      "channel": {
+        "description": "Show one channel's activity",
+        "options": {
+          "channel": {
+            "description": "Channel, forum or thread to look up"
+          },
+          "include_threads": {
+            "description": "Include the threads under the channel (optional, default: true)"
+          },
+          "range": {
+            "description": "Look-back window (optional, default: 7d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: public)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
+            }
+          }
         }
       },
-      "top_n": {
-        "description": "How many top channels / users to rank (optional, 1-25, default: 10)"
-      }
-    }
-  },
-  "traffic_me": {
-    "description": "Show your own message-activity stats",
-    "options": {
-      "visibility": {
-        "description": "Who can see the reply (optional, default: ephemeral)",
-        "choices": {
-          "ephemeral": "Only you",
-          "public": "Everyone"
+      "me": {
+        "description": "Show your own activity",
+        "options": {
+          "range": {
+            "description": "Look-back window (optional, default: 7d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: public)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
+            }
+          }
         }
       },
-      "range": {
-        "description": "Look-back window (optional, default: 7d)",
-        "choices": {
-          "24h": "Last 24 hours",
-          "7d": "Last 7 days",
-          "30d": "Last 30 days"
-        }
-      },
-      "top_n": {
-        "description": "How many top channels to rank (optional, 1-25, default: 10)"
-      }
-    }
-  },
-  "traffic_user": {
-    "description": "Show a specified user's message-activity stats",
-    "options": {
       "user": {
-        "description": "User to look up"
-      },
-      "visibility": {
-        "description": "Who can see the reply (optional, default: ephemeral)",
-        "choices": {
-          "ephemeral": "Only you",
-          "public": "Everyone"
+        "description": "Show a member's activity",
+        "options": {
+          "user": {
+            "description": "Member to look up"
+          },
+          "range": {
+            "description": "Look-back window (optional, default: 7d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: ephemeral)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
+            }
+          }
         }
       },
-      "range": {
-        "description": "Look-back window (optional, default: 7d)",
-        "choices": {
-          "24h": "Last 24 hours",
-          "7d": "Last 7 days",
-          "30d": "Last 30 days"
+      "apps": {
+        "description": "Show command and app usage",
+        "options": {
+          "app": {
+            "description": "Only this bot (optional)"
+          },
+          "range": {
+            "description": "Look-back window (optional, default: 7d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: public)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
+            }
+          }
         }
       },
-      "top_n": {
-        "description": "How many top channels to rank (optional, 1-25, default: 10)"
+      "emoji": {
+        "description": "Show use of this server's custom emoji",
+        "options": {
+          "order": {
+            "description": "Order of the ranking (optional, default: most)",
+            "choices": {
+              "most": "Most used first",
+              "least": "Least used first"
+            }
+          },
+          "kind": {
+            "description": "Static or animated emoji (optional, default: all)",
+            "choices": {
+              "all": "All",
+              "static": "Static",
+              "animated": "Animated"
+            }
+          },
+          "source": {
+            "description": "Count message text, reactions or both (optional, default: all)",
+            "choices": {
+              "all": "Both",
+              "message": "Message text",
+              "reaction": "Reactions"
+            }
+          },
+          "range": {
+            "description": "Look-back window (optional, default: 30d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: public)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
+            }
+          },
+          "top_n": {
+            "description": "How many entries to rank (optional, 1-20, default: 20)"
+          }
+        }
+      },
+      "sticker": {
+        "description": "Show use of this server's stickers",
+        "options": {
+          "order": {
+            "description": "Order of the ranking (optional, default: most)",
+            "choices": {
+              "most": "Most used first",
+              "least": "Least used first"
+            }
+          },
+          "range": {
+            "description": "Look-back window (optional, default: 30d)",
+            "choices": {
+              "24h": "Last 24 hours",
+              "7d": "Last 7 days",
+              "30d": "Last 30 days",
+              "90d": "Last 90 days",
+              "365d": "Last 365 days"
+            }
+          },
+          "visibility": {
+            "description": "Who can see the reply (optional, default: public)",
+            "choices": {
+              "ephemeral": "Only you",
+              "public": "Everyone"
+            }
+          },
+          "top_n": {
+            "description": "How many entries to rank (optional, 1-12, default: 12)"
+          }
+        }
       }
     }
   },
-  "update_role": {
-    "description": "Update Mee6 level roles"
+  "role": {
+    "description": "Get or manage roles",
+    "subcommands": {
+      "panel": {
+        "description": "Post a role-claim panel (requires Manage Roles)",
+        "options": {
+          "roles": {
+            "description": "Roles to offer; mention one or more"
+          }
+        }
+      },
+      "sync": {
+        "description": "Sync level roles from MEE6 now"
+      }
+    },
+    "groups": {
+      "temp": {
+        "description": "Temporary notification roles",
+        "subcommands": {
+          "create": {
+            "description": "Create a temporary role anyone can claim; it is deleted when it expires",
+            "options": {
+              "name": {
+                "description": "Role name (🔔 is added)"
+              },
+              "days": {
+                "description": "Days it lasts (1-30, default 30)"
+              }
+            }
+          },
+          "list": {
+            "description": "List active temporary roles"
+          },
+          "delete": {
+            "description": "Delete a temporary role early (its creator or a moderator)",
+            "options": {
+              "role": {
+                "description": "Temporary role to delete"
+              }
+            }
+          }
+        }
+      }
+    }
   },
-  "weather_forecast": {
-    "description": "Weather forecast (Taipei)"
+  "db": {
+    "description": "Inspect the bot's databases read-only (bot admins only)",
+    "subcommands": {
+      "stats": {
+        "description": "Show each collection's document count and size",
+        "options": {
+          "guild": {
+            "description": "Guild database to inspect (defaults to this server; required in DMs)"
+          }
+        }
+      },
+      "schema": {
+        "description": "Show a collection's fields and its newest document",
+        "options": {
+          "collection": {
+            "description": "Collection to describe"
+          },
+          "guild": {
+            "description": "Guild database to inspect (defaults to this server; required in DMs)"
+          }
+        }
+      },
+      "list": {
+        "description": "Browse a collection's documents, optionally filtered",
+        "options": {
+          "collection": {
+            "description": "Collection to browse"
+          },
+          "guild": {
+            "description": "Guild database to inspect (defaults to this server; required in DMs)"
+          },
+          "field": {
+            "description": "Field to filter on"
+          },
+          "operator": {
+            "description": "How to compare the field"
+          },
+          "value": {
+            "description": "Value to compare with (dates accept YYYY-MM-DD)"
+          },
+          "sort": {
+            "description": "Sort order (newest first by default)"
+          }
+        }
+      },
+      "get": {
+        "description": "Show one document in full",
+        "options": {
+          "collection": {
+            "description": "Collection holding the document"
+          },
+          "id": {
+            "description": "Document ID"
+          },
+          "guild": {
+            "description": "Guild database to inspect (defaults to this server; required in DMs)"
+          }
+        }
+      }
+    }
+  },
+  "settings": {
+    "description": "Configure bot preferences for this server"
   }
 }

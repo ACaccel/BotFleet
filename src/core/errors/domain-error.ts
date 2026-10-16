@@ -1,35 +1,22 @@
 /**
- * Abstract base for every recoverable, business-meaningful error in the
- * codebase. All concrete subclasses live in this directory and the
- * subset shape is asserted by the structural contract here:
+ * Abstract base for every recoverable, business-meaningful error.
  *
- *   - `code`: stable machine-readable identifier (e.g. `'LLM_RATE_LIMITED'`).
- *     Consumers may switch on `code` for compensation logic; it is part
- *     of the public API and changes follow SemVer.
- *   - `messageKey`: i18n catalog key for the user-facing translation.
- *     **Required** — the interaction outermost-catch must always be able
- *     to render a string without a fallback branch. Use real keys even
- *     for internal-only errors (e.g. `'errors.config.missing_env'`);
- *     they cost nothing and let the translator stay simple.
- *   - `messageParams`: ICU/i18next interpolation values for `messageKey`.
- *   - `context`: see {@link ErrorContext}. `operation` field required.
- *   - `cause`: the original Error preserved via ES2022 `Error.cause`.
- *     Pino serialises it natively.
+ *   - `code`: stable machine-readable identifier; part of the public API,
+ *     so changes follow SemVer.
+ *   - `messageKey`: required i18n key, so the outermost interaction catch
+ *     can always render a string without a fallback branch. Use real keys
+ *     even for internal-only errors.
+ *   - `context`: see {@link ErrorContext}; `operation` is required.
+ *   - `cause`: the original error, preserved via ES2022 `Error.cause`.
  *
- * Dispatch: callers narrow with `instanceof`. That is the contract —
- * there is no discriminant string field to switch on.
+ * Callers narrow with `instanceof`; there is no discriminant field.
  *
- * Subclass rules:
- *   - Hand-pick a default `messageKey` per subclass; allow override.
- *   - Never add ad-hoc fields outside `context` — every additional
- *     attribute weakens the redactor's job. If a field deserves
- *     first-class typing, promote it to a typed subclass.
+ * Subclasses pick a default `messageKey` (overridable) and never add fields
+ * outside `context`, since every extra attribute weakens the redactor.
+ * Promote a field that deserves typing to a typed subclass instead.
  *
- * Programmer-error rules:
- *   - Throw a native `TypeError` / `RangeError` etc. for invariant
- *     violations the user cannot recover from. `DomainError` is for
- *     expected failure modes only; do not subclass it for
- *     "this should never happen".
+ * Invariant violations throw native `TypeError` / `RangeError`;
+ * `DomainError` covers expected failure modes only.
  */
 import type { ErrorContext } from './error-context';
 
@@ -43,6 +30,21 @@ export interface DomainErrorInit<
   readonly cause?: unknown;
   readonly messageParams?: Params;
 }
+
+/**
+ * The honest type of a value narrowed by `instanceof DomainError`.
+ *
+ * `instanceof` on a generic class narrows to `DomainError<any, any>`, so
+ * `code` and `messageParams` arrive as `any` and slip past every check
+ * the strict profile makes — a rendering boundary can pass an array
+ * where the translator expects params, and nothing complains. Anchoring
+ * the narrowed value to this alias restores `string` and the catalog
+ * params shape at the one place it matters.
+ */
+export type AnyDomainError = DomainError<
+  string,
+  Readonly<Record<string, string | number>> | undefined
+>;
 
 export abstract class DomainError<
   Code extends string = string,

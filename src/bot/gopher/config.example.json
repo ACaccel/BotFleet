@@ -3,8 +3,16 @@
   "language": "zh-TW",
   "guilds": {
     "YOUR_GUILD_ID": {
-      "channels": {
-        "debug": "YOUR_DEBUG_CHANNEL_ID"
+      "channels": { "debug": "YOUR_DEBUG_CHANNEL_ID" },
+      "permission_rank": {
+        "channels": {
+          "YOUR_PRIVATE_CHANNEL_ID": 1
+        },
+        "features": {
+          "channel_logging": {
+            "maxChannelRank": 0
+          }
+        }
       }
     }
   },
@@ -17,11 +25,6 @@
     "cooldownSeconds": 30,
     "endpoint": "https://YOUR_LLM_HOST/chat",
     "timeoutMs": 10000
-  },
-  "settings_api": {
-    "enabled": false,
-    "host": "127.0.0.1",
-    "basePath": "/settings"
   },
   "identity_sync": {
     "enabled": false,

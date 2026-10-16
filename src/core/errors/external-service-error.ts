@@ -2,7 +2,7 @@
  * Failure originating outside the bot process — Discord API, MongoDB
  * cluster, an LLM provider, etc. Use one of the typed subclasses
  * ({@link DatabaseError}, {@link LlmProviderError}, {@link LinkPreviewError},
- * {@link XFeedError}) so consumers can match on the boundary they care
+ * {@link FeedError}) so consumers can match on the boundary they care
  * about.
  *
  * Direct instantiation of `ExternalServiceError` is allowed but
@@ -29,8 +29,10 @@ export class ExternalServiceError<
 /**
  * MongoDB / Mongoose interaction failed. Sub-code drives retry policy
  * downstream: `DUPLICATE_KEY` is rarely retryable, `TIMEOUT` /
- * `NETWORK` are retryable with backoff, `UNKNOWN` is logged and
- * surfaced to the user as a generic failure.
+ * `NETWORK` are retryable with backoff, `QUERY_TIMEOUT` (a query exceeded
+ * its `maxTimeMS`) is not retried because the same query would run as
+ * long again, `UNKNOWN` is logged and surfaced to the user as a generic
+ * failure.
  *
  * The mongoose-shape → sub-code translation lives in
  * `src/persistence/error-translator.ts`; this class stays free of
@@ -39,6 +41,7 @@ export class ExternalServiceError<
 export type DatabaseErrorCode =
   | 'DATABASE_DUPLICATE_KEY'
   | 'DATABASE_TIMEOUT'
+  | 'DATABASE_QUERY_TIMEOUT'
   | 'DATABASE_NETWORK'
   | 'DATABASE_VALIDATION'
   | 'DATABASE_UNKNOWN';
@@ -97,30 +100,42 @@ export class LinkPreviewError<
 }
 
 /**
- * An X (Twitter) timeline read failed. Like {@link LinkPreviewError}
- * this is a log-only failure — the x-media-feed poller skips the
- * affected account and retries on its next pass rather than reporting
- * to a channel — so the `messageKey` exists for catalog uniformity.
+ * A social-feed operation failed — most often a timeline read against a
+ * platform's upstream API. Like {@link LinkPreviewError} the upstream
+ * failures are log-only: the social-feed poller skips the affected
+ * account and retries on its next pass rather than reporting to a
+ * channel.
  *
  * Sub-code drives diagnostics and the caller's response:
- * `TIMEOUT` / `UPSTREAM_5XX` / `RATE_LIMITED` are transient and worth
- * another pass; `NOT_FOUND` means the handle no longer exists (renamed,
- * suspended, or a typo) and stays broken until an operator edits the
- * config, so it is logged distinctly; `INVALID_RESPONSE` means the body
- * did not match the expected schema; `FETCH_FAILED` covers transport.
+ * `FEED_TIMEOUT` / `FEED_UPSTREAM_5XX` / `FEED_RATE_LIMITED` are
+ * transient and worth another pass; `FEED_NOT_FOUND` means the account
+ * no longer exists (renamed, suspended, or a typo) and stays broken
+ * until the subscription is corrected, so it is logged distinctly;
+ * `FEED_INVALID_RESPONSE` means the body did not match the expected
+ * schema; `FEED_FETCH_FAILED` covers transport.
+ *
+ * `FEED_INVALID_ACCOUNT` and `FEED_PLATFORM_NOT_CONFIGURED` are not
+ * upstream failures at all — the first rejects a user-supplied account
+ * string that no platform could accept, the second names a platform
+ * absent from the registry. They ride on this class deliberately: one
+ * feature keeps one taxonomy and one `errors:feed.*` catalog section,
+ * which is worth more than the semantic purity of a separate class for
+ * two codes that surface through exactly the same call sites.
  */
-export type XFeedErrorCode =
-  | 'X_FEED_FETCH_FAILED'
-  | 'X_FEED_TIMEOUT'
-  | 'X_FEED_UPSTREAM_5XX'
-  | 'X_FEED_RATE_LIMITED'
-  | 'X_FEED_NOT_FOUND'
-  | 'X_FEED_INVALID_RESPONSE';
+export type FeedErrorCode =
+  | 'FEED_FETCH_FAILED'
+  | 'FEED_TIMEOUT'
+  | 'FEED_UPSTREAM_5XX'
+  | 'FEED_RATE_LIMITED'
+  | 'FEED_NOT_FOUND'
+  | 'FEED_INVALID_RESPONSE'
+  | 'FEED_INVALID_ACCOUNT'
+  | 'FEED_PLATFORM_NOT_CONFIGURED';
 
-export class XFeedError<
+export class FeedError<
   P extends Readonly<Record<string, string | number>> | undefined = undefined,
-> extends ExternalServiceError<XFeedErrorCode, P> {
-  public constructor(init: DomainErrorInit<XFeedErrorCode, P>) {
+> extends ExternalServiceError<FeedErrorCode, P> {
+  public constructor(init: DomainErrorInit<FeedErrorCode, P>) {
     super(init);
   }
 }

@@ -11,8 +11,9 @@
  * raw fragment that happens to contain CJK).
  *
  * Scope rationale:
- *   - `src/handlers/**` (commands / buttons / modals / SSMs / reactions)
- *     and `src/plugins/**` reach Discord users directly.
+ *   - `src/handlers/**` (commands / buttons / modals / SSMs / reactions),
+ *     `src/plugins/**` and the feature services in `src/application/**`
+ *     (panels, announcements) reach Discord users directly.
  *   - `src/infra/**` reaches users indirectly: an adapter that formats
  *     a string for a Discord reply (the LLM usage footer) must take the
  *     already-translated text from its caller rather than inline it.
@@ -39,6 +40,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const SCOPED_DIRECTORIES: readonly string[] = [
   'src/handlers',
   'src/plugins',
+  'src/application',
   'src/bot',
   'src/infra',
 ];

@@ -1,32 +1,14 @@
 /**
- * Standard service tokens — the composition root's binding catalog.
+ * Standard service tokens — the composition root's binding catalog. It
+ * names every concrete service type the bot wires, so it lives in `bot/`
+ * rather than `core/ioc`, which provides only the container mechanism.
  *
- * Lives under `src/bot/` (not `src/core/ioc/`) because the catalog is
- * the one place that must name every concrete service type the bot
- * wires: a Mongo connection manager, the repository bundle, the voice
- * controller, the LLM model catalog. Declaring it inside `core/` would
- * force `core` to import from `infra/`, `persistence/`, and `plugins/`
- * — a dependency running the wrong way through the layer stack. The
- * container mechanism itself (`ServiceToken`, `token()`,
- * `ServiceContainer`) stays in `core/ioc`, which knows nothing about
- * what gets bound.
+ * Repository access is a factory token, `(g: GuildId) => Promise<Repos>`,
+ * rather than a scoped registration: one explicit line in the composition
+ * root instead of a scope object threaded through the whole call graph.
  *
- * Centralised so:
- *   - Token naming is reviewed in one place (no `MESSAGE_REPO_FACTORY`
- *     vs `MessageRepoFactory` drift across PRs).
- *   - The full catalog is visible to readers learning the container.
- *   - New service additions land here, not scattered across modules.
- *
- * Repository access is exposed as a **factory token** of shape
- * `(g: GuildId) => Promise<Repos>` rather than scoped registrations:
- * a factory token is one explicit line in the composition root, where
- * a per-request scope object would have to be threaded through the
- * whole call graph.
- *
- * Plugins import `TOKENS` from here directly (`../../bot/tokens`); the
- * ESLint `no-restricted-imports` rule for `src/plugins/**` keeps
- * `core/ioc` — the container's write side — out of reach so this stays
- * the single legal source.
+ * Plugins import `TOKENS` from here; ESLint keeps `core/ioc` (the
+ * container's write side) out of their reach.
  */
 import type { Client } from 'discord.js';
 import type { Job } from 'node-schedule';
@@ -38,11 +20,15 @@ import { token, type ServiceToken } from '../core/ioc';
 import type { Logger } from '../core/logger';
 import type { GuildOnboardingPort, PermissionRankPolicy } from '../core/plugin';
 import type { Clock } from '../core/time';
+import type { ArchiveControlFactory } from '../application/archive/control';
+import type { DbInspectService } from '../application/db-inspect/service';
+import type { GalleryReaderService } from '../application/gallery-reader/service';
+import type { GuildSettingsService } from '../application/guild-settings/service';
 import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
 import type { ModelCatalog } from '../infra/llm/models-catalog';
 import type { ConnectionManager } from '../infra/mongo/connection-manager';
+import type { FeedPlatformRegistry } from '../infra/social-feed';
 import type { Repos } from '../persistence/repositories';
-import type { VoiceController } from '../plugins/voice/internal';
 
 import type { GuildRegistry } from './guild-registry';
 
@@ -50,6 +36,7 @@ import type { GuildRegistry } from './guild-registry';
 export type ReposFactory = (guildId: GuildId) => Promise<Repos>;
 
 interface Tokens {
+  readonly GuildSettings: ServiceToken<GuildSettingsService>;
   readonly ConnectionManager: ServiceToken<ConnectionManager>;
   readonly ReposFactory: ServiceToken<ReposFactory>;
   /**
@@ -103,16 +90,9 @@ interface Tokens {
    */
   readonly PermissionRankPolicy: ServiceToken<PermissionRankPolicy>;
   /**
-   * Voice controller, published by VoicePlugin's `init` hook via
-   * {@link PluginInitContext.registerInstance}. Resolved by BaseBot's
-   * `voice` getter and any handler that needs to drive recording.
-   * Unbound for bots that do not register VoicePlugin.
-   */
-  readonly VoiceController: ServiceToken<VoiceController>;
-  /**
    * LLM model catalog, published by LlmChatPlugin's `init` hook via
    * {@link PluginInitContext.registerInstance}. Provides the live model
-   * list used by `/ai_settings`. Unbound for bots that do not register
+   * list used by `/ai settings`. Unbound for bots that do not register
    * LlmChatPlugin.
    */
   readonly ModelCatalog: ServiceToken<ModelCatalog>;
@@ -123,9 +103,36 @@ interface Tokens {
    * that do not register LlmChatPlugin.
    */
   readonly DefaultModelResolver: ServiceToken<DefaultModelResolver>;
+  /**
+   * Feed platform Strategy lookup, built by each composition root from
+   * its `social_feed.platforms` block. The `social-feed` plugin polls
+   * through it and the `/feed_*` commands validate an account against
+   * it. Unbound for bots that do not configure the feature.
+   */
+  readonly FeedPlatformRegistry: ServiceToken<FeedPlatformRegistry>;
+  /**
+   * Builds one guild's archive control service. Registered only by the
+   * msg-archive composition root, which holds archive ownership; the
+   * `/archive` command and panel buttons read it through
+   * `BaseBot.archiveControlFactory`, and tests substitute a fake.
+   */
+  readonly ArchiveControlFactory: ServiceToken<ArchiveControlFactory>;
+  /**
+   * Read-only database inspection behind `/db`. Published by the
+   * db-inspect plugin, which only nijika registers; the command reads it
+   * through `BaseBot.dbInspectService`.
+   */
+  readonly DbInspectService: ServiceToken<DbInspectService>;
+  /**
+   * Paged nhentai / wnacg reader, published by the social-link-preview
+   * plugin when gallery previews are enabled; the page buttons read it
+   * through `BaseBot.galleryReader`.
+   */
+  readonly GalleryReader: ServiceToken<GalleryReaderService>;
 }
 
 export const TOKENS: Tokens = {
+  GuildSettings: token<GuildSettingsService>('GuildSettings'),
   ConnectionManager: token<ConnectionManager>('ConnectionManager'),
   ReposFactory: token<ReposFactory>('ReposFactory'),
   Logger: token<Logger>('Logger'),
@@ -137,7 +144,10 @@ export const TOKENS: Tokens = {
   JobMap: token<Map<string, Job>>('JobMap'),
   GuildOnboardingPort: token<GuildOnboardingPort>('GuildOnboardingPort'),
   PermissionRankPolicy: token<PermissionRankPolicy>('PermissionRankPolicy'),
-  VoiceController: token<VoiceController>('VoiceController'),
   ModelCatalog: token<ModelCatalog>('ModelCatalog'),
   DefaultModelResolver: token<DefaultModelResolver>('DefaultModelResolver'),
+  FeedPlatformRegistry: token<FeedPlatformRegistry>('FeedPlatformRegistry'),
+  ArchiveControlFactory: token<ArchiveControlFactory>('ArchiveControlFactory'),
+  DbInspectService: token<DbInspectService>('DbInspectService'),
+  GalleryReader: token<GalleryReaderService>('GalleryReader'),
 };

@@ -23,7 +23,7 @@
  * Field-name redaction cannot reach a credential carried *inside* a
  * string — a URL such as `https://api.example/x?apikey=SECRET` is one
  * opaque value to both pino and the name-based walk. Some upstreams
- * (AccuWeather) accept the key only as a query parameter, so
+ * accept the key only as a query parameter, so
  * {@link scrubUrlCredentials} strips those values from every string the
  * scrubber sees, including an `Error`'s message and stack.
  */
@@ -37,10 +37,11 @@ const REPLACEMENT = '[Redacted]';
  * that carry a URL scheme, so ordinary prose containing `key=` is left
  * alone. The longer alternatives come first: the group is anchored
  * immediately after `[?&]`, so `secret` would otherwise shadow
- * `client_secret`.
+ * `client_secret`. `authorization` covers the CWA open-data API, which
+ * takes its key as an `Authorization` query parameter.
  */
 const SENSITIVE_QUERY_PARAM =
-  /([?&])(client[_-]?secret|refresh[_-]?token|access[_-]?token|id[_-]?token|api[_-]?key|credential|signature|password|passwd|secret|token|auth|code|key|pwd|sig)=[^&\s"']*/gi;
+  /([?&])(client[_-]?secret|refresh[_-]?token|access[_-]?token|id[_-]?token|api[_-]?key|authorization|credential|signature|password|passwd|secret|token|auth|code|key|pwd|sig)=[^&\s"']*/gi;
 
 /**
  * `scheme://user:password@host` — the shape `buildGuildMongoUri`

@@ -1,0 +1,6 @@
+{
+  "environment": "/home/OPERATOR/pleiades-fleet/.conda",
+  "databaseEnvironment": "/home/OPERATOR/mongodb-pleiades/.conda",
+  "mongoEnv": "src/bot/tomori/.env",
+  "backupDir": "/home/OPERATOR/pleiades-backups"
+}

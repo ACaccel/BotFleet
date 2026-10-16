@@ -39,6 +39,13 @@ const guarded = new WeakSet<Client>();
  * and shard-lifecycle events. Every handler only logs — none throws and
  * none tears the client down; discord.js owns reconnection.
  *
+ * Connection errors are logged at `warn`, not `error`: a gateway socket
+ * reset, a handshake timeout or a DNS miss is an expected, self-healing
+ * network blip, and an `error` line would read as a defect and trip any
+ * alert keyed on that level. The recovery side (`shardReconnecting`,
+ * `shardResume`, `shardReady`) is logged at `info` so an operator reading
+ * the log can tell that the bot came back, not only that it dropped.
+ *
  * Idempotent per client: a second call for the same client is a no-op.
  */
 export const installClientSafetyListeners = (input: InstallClientSafetyListenersInput): void => {
@@ -47,14 +54,14 @@ export const installClientSafetyListeners = (input: InstallClientSafetyListeners
   guarded.add(client);
 
   client.on(Events.Error, (error) => {
-    logger.error(
+    logger.warn(
       { err: error },
       'discord client error (non-fatal; discord.js handles reconnection)',
     );
   });
 
   client.on(Events.ShardError, (error, shardId) => {
-    logger.error(
+    logger.warn(
       { err: error, shardId },
       'discord shard error (non-fatal; discord.js handles reconnection)',
     );
@@ -64,6 +71,21 @@ export const installClientSafetyListeners = (input: InstallClientSafetyListeners
     logger.warn(
       { shardId, code: closeEvent.code, reason: closeEvent.reason },
       'discord shard disconnected (discord.js will attempt to reconnect)',
+    );
+  });
+
+  client.on(Events.ShardReconnecting, (shardId) => {
+    logger.info({ shardId }, 'discord shard reconnecting');
+  });
+
+  client.on(Events.ShardResume, (shardId, replayedEvents) => {
+    logger.info({ shardId, replayedEvents }, 'discord shard resumed its session');
+  });
+
+  client.on(Events.ShardReady, (shardId, unavailableGuilds) => {
+    logger.info(
+      { shardId, unavailableGuilds: unavailableGuilds?.size ?? 0 },
+      'discord shard ready',
     );
   });
 };

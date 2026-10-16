@@ -8,9 +8,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Channel } from 'discord.js';
 
-import { ancestorChannelIdsOf, parentChannelIdOf } from '../../../../src/infra/discord';
+import {
+  ancestorChannelIdsOf,
+  isAgeRestrictedChannel,
+  parentChannelIdOf,
+} from '../../../../src/infra/discord';
+import { buildTextChannel } from '../../../fixtures/discord/channel-builder';
 
-const ch = (parentId: string | null): Channel => ({ parentId }) as unknown as Channel;
+const ch = (parentId: string | null): Channel => buildTextChannel({ id: 'c', parentId });
 
 describe('parentChannelIdOf', () => {
   it('returns null for null or undefined input', () => {
@@ -19,11 +24,11 @@ describe('parentChannelIdOf', () => {
   });
 
   it("returns a thread's parent id", () => {
-    expect(parentChannelIdOf({ parentId: 'forum-1' } as unknown as Channel)).toBe('forum-1');
+    expect(parentChannelIdOf(ch('forum-1'))).toBe('forum-1');
   });
 
   it('returns null for a top-level channel (parentId null)', () => {
-    expect(parentChannelIdOf({ parentId: null } as unknown as Channel)).toBeNull();
+    expect(parentChannelIdOf(ch(null))).toBeNull();
   });
 
   it('returns null for a channel type that has no parentId property', () => {
@@ -57,5 +62,23 @@ describe('ancestorChannelIdsOf', () => {
     const ancestors = ancestorChannelIdsOf(ch('loop'), { get: () => ch('loop') });
     expect(ancestors).toHaveLength(8);
     expect(ancestors.every((id) => id === 'loop')).toBe(true);
+  });
+});
+
+describe('isAgeRestrictedChannel', () => {
+  const channel = (fields: Record<string, unknown>): Channel => fields as unknown as Channel;
+
+  it('reads the flag of a channel and the parent of a thread', () => {
+    expect(isAgeRestrictedChannel(channel({ isThread: () => false, nsfw: true }))).toBe(true);
+    expect(isAgeRestrictedChannel(channel({ isThread: () => false, nsfw: false }))).toBe(false);
+    expect(isAgeRestrictedChannel(channel({ isThread: () => true, parent: { nsfw: true } }))).toBe(
+      true,
+    );
+  });
+
+  it('fails closed for a missing channel, an uncached parent or a DM', () => {
+    expect(isAgeRestrictedChannel(null)).toBe(false);
+    expect(isAgeRestrictedChannel(channel({ isThread: () => true, parent: null }))).toBe(false);
+    expect(isAgeRestrictedChannel(channel({ isThread: () => false }))).toBe(false);
   });
 });

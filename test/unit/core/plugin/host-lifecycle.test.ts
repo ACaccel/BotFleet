@@ -4,7 +4,6 @@
  * PluginHost wiring required.
  */
 import { describe, expect, it } from 'vitest';
-import { createLogger } from '../../../../src/core/logger';
 import { systemClock } from '../../../../src/core/time';
 import { createContainer } from '../../../../src/core/ioc';
 import { EventDispatcher } from '../../../../src/core/plugin/event-dispatcher';
@@ -14,9 +13,9 @@ import {
   type RegisteredPlugin,
 } from '../../../../src/core/plugin/host/lifecycle';
 import type { DisabledPlugin, Plugin, PluginId } from '../../../../src/core/plugin/types';
+import { echoTranslator, silentLogger } from '../../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
-const fakeTranslator = { t: (k: string) => k } as LifecycleHost['translator'];
+const silent = silentLogger();
 
 const plugin = (p: Partial<Plugin> & { id: string }): Plugin =>
   ({ version: '1.0.0', ...p }) as Plugin;
@@ -33,7 +32,7 @@ const buildHost = (plugins: readonly Plugin[]): LifecycleHost => {
     container: createContainer(),
     dispatcher: new EventDispatcher(silent),
     logger: silent,
-    translator: fakeTranslator,
+    translator: echoTranslator(),
     clock: systemClock,
   };
 };

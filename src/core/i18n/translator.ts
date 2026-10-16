@@ -1,18 +1,16 @@
 /**
  * Translator abstraction.
  *
- * The contract for every user-facing string in the codebase. A
- * default i18next-backed implementation lives in `i18next-translator.ts`;
- * application and interface code receives a `Translator` and never
+ * The contract for every user-facing string in the codebase. The default
+ * i18next-backed implementation lives in `i18next-translator.ts`;
+ * application and interface code receives a `Translator` via constructor
+ * injection (so tests can substitute a deterministic fake) and never
  * embeds literal user-facing text (lint rules enforce this).
  *
  * Adding a new locale requires only:
  *   1. add a value to the `Locale` union below
  *   2. drop a parallel JSON folder under src/i18n/locales/<locale>/
  *   3. the catalog-completeness test will fail until keys match
- *
- * Application/interface code receives a `Translator` via constructor
- * injection so tests can substitute a deterministic fake.
  *
  * Placeholder syntax invariant: catalogs use i18next's `{{name}}` form,
  * NOT single-brace ICU. The two formats are incompatible; do not switch
@@ -63,6 +61,8 @@ export class MissingTranslationError extends Error {
 }
 
 export interface Translator {
+  /** Run a guild operation without changing shared translator defaults. */
+  withGuildContext?<T>(guildId: string | undefined, callback: () => T): T;
   /**
    * Translate a key for the given (or default) locale.
    * Returns the key string itself when missing — never throws — so a

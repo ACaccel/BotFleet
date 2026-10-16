@@ -1,10 +1,4 @@
-/**
- * Discord-channel audit log helper.
- *
- * Lives in `infra/discord/` because it imports `discord.js` types —
- * `core/**` carries only the `Logger` interface and structured-log
- * helpers, with no third-party SDK dependencies.
- */
+/** Discord-channel audit log helper. */
 import type { Channel, EmbedBuilder } from 'discord.js';
 
 import type { Logger } from '../../core/logger';

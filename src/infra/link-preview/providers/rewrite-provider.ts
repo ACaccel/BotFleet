@@ -1,32 +1,28 @@
 /**
- * Template for proxy-rewrite providers (Strategy + Template Method).
+ * Template for proxy-rewrite providers (Twitter/X, Instagram, Threads,
+ * Facebook): a post URL is rewritten onto a third-party embed proxy so
+ * Discord unfurls it. Proxies die and vary per content, so the provider
+ * validates first, probing its priority-ordered `proxyHosts` via
+ * {@link OgClient} with the Discord crawler UA, and picks:
  *
- * Every video-capable source (Twitter/X, Instagram, Threads, Facebook)
- * shares one shape: a post URL is rewritten onto a third-party embed-proxy
- * domain so DISCORD unfurls it into a playable video / rich embed. Because
- * proxy domains die and vary in per-content support, the provider VALIDATES
- * before returning: it probes a priority-ordered list of proxy hosts,
- * fetching each candidate's OpenGraph (via {@link OgClient}, with the Discord
- * crawler UA so it sees exactly what Discord will), and picks the best:
+ *   - the first host with a video — returned immediately;
+ *   - else the first with a post image;
+ *   - else the first whose only images are low-value stand-ins (an author
+ *     avatar some proxies serve when they cannot resolve the post's media),
+ *     which must lose to a real asset but still beat a bare title;
+ *   - else the first with a title;
+ *   - else `ok(null)`, so the orchestrator skips silently and no dead link is
+ *     ever posted.
  *
- *   - first host whose OG has a video  -> return immediately (playable);
- *   - else the first host with a post image (remembered, keep looking for video);
- *   - else the first host whose only images are low-value stand-ins — some
- *     proxies fall back to the author's avatar when they cannot resolve the
- *     post's own media, which is technically an image but carries none of the
- *     post's content, so it must lose to a proxy holding the real asset while
- *     still beating a bare title;
- *   - else the first host with a title  (text-only, weakest fallback);
- *   - else nothing usable -> `ok(null)` so the orchestrator skips silently
- *     and NO bare/dead link is ever posted.
+ * A probe finally served from the source site (`sourceDomains`) is skipped
+ * however good its metadata looks: the proxy punted, and what the source
+ * serves this host (typically a login wall) says nothing about what Discord's
+ * crawler gets.
  *
- * Per-host probe failures are logged at debug (proxy flakiness is expected),
- * never surfaced as `Err`. The whole probe sequence is bounded by
- * `ctx.budgetMs` (cumulative) on top of `ctx.timeoutMs` (per host).
- *
- * The per-source files supply `matches` (pure predicate), the `proxyHosts`
- * list, and `toProxyUrl`. This file performs network I/O but returns only a
- * URL string — it must NOT import discord.js.
+ * Per-host failures are logged at debug and never end the walk, so a dead
+ * host costs only its `ctx.timeoutMs`; worst-case latency is list length
+ * times that timeout, so operators keep the lists short. Results stay
+ * neutral; this boundary must not import discord.js.
  */
 import { ok, type Result } from '../../../core/result';
 
@@ -51,8 +47,14 @@ type CandidateQuality = 'video' | 'image' | 'weak-image' | 'text' | 'none';
  * to get data from Reddit". Threads and its embed proxies serve a login
  * wall — in English or zh-TW depending on the page — that still carries a
  * generic Instagram logo as `og:image`, so without a marker it would score
- * as a usable image card. Scoring any of these as a usable card would post
- * a broken embed.
+ * as a usable image card. An Instagram proxy that cannot resolve a post
+ * answers with its product name as the title and "Post not found" as the
+ * description, or "Failed to get new postID from share URL" for an
+ * unresolvable share link. A Bilibili proxy reports a removed or blocked
+ * video as "Error - Video Not Found". EmbedEZ proxies (redditez,
+ * bilibiliez, ...) that cannot render a post fall back to their own
+ * marketing blurb as the description. Scoring any of these as a usable
+ * card would post a broken embed.
  */
 const JUNK_MARKERS: readonly string[] = [
   'log in or sign up',
@@ -68,9 +70,22 @@ const JUNK_MARKERS: readonly string[] = [
   'threads • log in',
   "this content isn't available",
   'content not found',
+  'post not found',
   'page not found',
+  'video not found',
   'failed to get data from reddit',
+  'failed to get new postid from share url',
+  'learn about the purpose of embedez',
 ];
+
+/**
+ * A title that opens with an HTTP error status (`404: ...`, `500 - ...`).
+ * Some proxies render their upstream failure as the page title in whatever
+ * language the upstream used, so the status prefix is the only stable
+ * signal (bembedfix answers a missing video with `404:` and a Chinese
+ * API error message).
+ */
+const HTTP_ERROR_TITLE = /^\s*[45]\d\d\s*[:\-–]/;
 
 /**
  * Titles that are exactly an embed-proxy's own name — the placeholder it
@@ -89,7 +104,9 @@ const matchesJunkMarker = (text: string): boolean => {
  * placeholder rather than real post content. Pure + exported for unit tests.
  */
 export const isJunkPreviewTitle = (title: string): boolean =>
-  matchesJunkMarker(title) || JUNK_EXACT_TITLES.has(title.trim().toLowerCase());
+  matchesJunkMarker(title) ||
+  JUNK_EXACT_TITLES.has(title.trim().toLowerCase()) ||
+  HTTP_ERROR_TITLE.test(title);
 
 /**
  * A candidate whose only "content" is a junk placeholder (login-wall /
@@ -100,6 +117,25 @@ export const isJunkPreviewTitle = (title: string): boolean =>
 export const isJunkPreview = (meta: OpenGraphMeta): boolean =>
   (meta.title !== undefined && isJunkPreviewTitle(meta.title)) ||
   (meta.description !== undefined && matchesJunkMarker(meta.description));
+
+/**
+ * True when `finalUrl` — where a probe was ultimately served from — sits on
+ * one of the source site's registrable domains: the apex itself or any
+ * subdomain (`www.`, `m.`, ...). An unparseable URL is not a source landing.
+ * Pure + exported for unit tests.
+ */
+export const landsOnSource = (finalUrl: string, sourceDomains: readonly string[]): boolean => {
+  let hostname: string;
+  try {
+    hostname = new URL(finalUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return sourceDomains.some((domain) => {
+    const normalized = domain.toLowerCase();
+    return hostname === normalized || hostname.endsWith(`.${normalized}`);
+  });
+};
 
 /**
  * True when every image the candidate offers matches a low-value pattern,
@@ -145,6 +181,13 @@ interface RewriteSpec {
   readonly name: LinkPreviewProviderName;
   /** Pure predicate: does this URL point at a previewable post on this source? */
   readonly matches: (url: URL) => boolean;
+  /**
+   * Registrable domains of the source site itself (`instagram.com`; both
+   * `twitter.com` and `x.com` for X). A candidate whose probe is finally
+   * served from one of these, apex or subdomain, is a proxy that punted back
+   * to the source and is skipped — see {@link landsOnSource}.
+   */
+  readonly sourceDomains: readonly string[];
   /** Priority-ordered embed-proxy hosts to probe. Assumed non-empty (zod `.nonempty()`). */
   readonly proxyHosts: readonly string[];
   /** Build the candidate proxy URL for one host (e.g. host-swap, keep/drop query). */
@@ -155,28 +198,30 @@ interface RewriteSpec {
    * only such images to `weak-image`. Omit where every image is post media.
    */
   readonly lowValueImagePatterns?: readonly RegExp[];
+  /** Reject source-specific placeholders before they can qualify as text-only cards. */
+  readonly isPlaceholder?: (meta: OpenGraphMeta) => boolean;
   /** Shared validation fetcher. */
   readonly ogClient: OgClient;
+  /** Retain validated metadata when a source renders its own card. */
+  readonly toResult?: (url: URL, candidate: string, meta: OpenGraphMeta) => LinkPreviewResult;
 }
 
-const validate = async (
+/** The chosen candidate and the tier it scored. */
+export interface RewriteProbeResult {
+  readonly preview: LinkPreviewResult;
+  readonly quality: Exclude<CandidateQuality, 'none'>;
+}
+
+const probe = async (
   spec: RewriteSpec,
   url: URL,
   ctx: LinkPreviewBuildContext,
-): Promise<Result<LinkPreviewResult | null, LinkPreviewFailure>> => {
-  const now = ctx.now ?? Date.now;
-  const deadline = ctx.budgetMs !== undefined ? now() + ctx.budgetMs : undefined;
-
-  let bestImage: string | undefined; // candidate whose OG had >=1 post image
-  let bestWeakImage: string | undefined; // candidate whose images were all stand-ins
-  let bestText: string | undefined; // candidate whose OG had only a title
-  let probed = 0;
+): Promise<RewriteProbeResult | null> => {
+  let bestImage: LinkPreviewResult | undefined;
+  let bestWeakImage: LinkPreviewResult | undefined;
+  let bestText: LinkPreviewResult | undefined;
 
   for (const host of spec.proxyHosts) {
-    // Always probe the first host; after that, stop once the cumulative
-    // budget elapses (regardless of whether a fallback was found yet).
-    if (probed > 0 && deadline !== undefined && now() >= deadline) break;
-    probed += 1;
     const candidate = spec.toProxyUrl(url, host);
     const res = await spec.ogClient.fetch(candidate, spec.name, ctx.timeoutMs);
     if (!res.ok) {
@@ -186,29 +231,56 @@ const validate = async (
       );
       continue;
     }
+    if (res.value.finalUrl !== undefined && landsOnSource(res.value.finalUrl, spec.sourceDomains)) {
+      // The proxy redirected back to the source: the metadata read there is
+      // what the source serves to THIS host, not what Discord's crawler will
+      // get (a login wall), so the candidate is unusable whatever it scored.
+      ctx.logger?.debug(
+        { provider: spec.name, host, finalUrl: res.value.finalUrl },
+        'social-link-preview: proxy redirected back to the source site, trying next host',
+      );
+      continue;
+    }
+    if (spec.isPlaceholder?.(res.value) === true) continue;
     const quality = scoreMeta(res.value, spec.lowValueImagePatterns);
+    const preview = spec.toResult?.(url, candidate, res.value) ?? {
+      kind: 'rewritten-url' as const,
+      url: candidate,
+      sourceUrl: url.href,
+    };
     if (quality === 'video') {
       // Best possible — playable video. Short-circuit.
-      return ok({ kind: 'rewritten-url', url: candidate, sourceUrl: url.href });
+      return { preview, quality };
     }
     // Neither image tier short-circuits: a later host may still hold the video.
     if (quality === 'image' && bestImage === undefined) {
-      bestImage = candidate;
+      bestImage = preview;
     } else if (quality === 'weak-image' && bestWeakImage === undefined) {
-      bestWeakImage = candidate; // only worth posting if no real image turns up
+      bestWeakImage = preview;
     } else if (quality === 'text' && bestText === undefined) {
-      bestText = candidate; // weakest fallback
+      bestText = preview;
     }
   }
 
-  const chosen = bestImage ?? bestWeakImage ?? bestText;
-  return ok(
-    chosen === undefined ? null : { kind: 'rewritten-url', url: chosen, sourceUrl: url.href },
-  );
+  if (bestImage !== undefined) return { preview: bestImage, quality: 'image' };
+  if (bestWeakImage !== undefined) return { preview: bestWeakImage, quality: 'weak-image' };
+  if (bestText !== undefined) return { preview: bestText, quality: 'text' };
+  return null;
 };
+
+/**
+ * The probe loop alone, reporting the tier of the candidate it chose. For a
+ * source that decides between the proxy and its own rendering by what the
+ * proxy can offer (X: a playable video or nothing).
+ */
+export const createRewriteProbe =
+  (spec: RewriteSpec) =>
+  (url: URL, ctx: LinkPreviewBuildContext): Promise<RewriteProbeResult | null> =>
+    probe(spec, url, ctx);
 
 export const createRewriteProvider = (spec: RewriteSpec): LinkPreviewProvider => ({
   name: spec.name,
   canHandle: (url) => spec.matches(url),
-  build: (url, ctx) => validate(spec, url, ctx),
+  build: async (url, ctx): Promise<Result<LinkPreviewResult | null, LinkPreviewFailure>> =>
+    ok((await probe(spec, url, ctx))?.preview ?? null),
 });

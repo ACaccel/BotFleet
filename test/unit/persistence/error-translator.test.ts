@@ -26,6 +26,15 @@ describe('classifyMongoError', () => {
     expect(classify({ message: 'operation timed out after 5s' })).toBe('DATABASE_TIMEOUT');
   });
 
+  it('maps an exceeded maxTimeMS to QUERY_TIMEOUT, ahead of the generic timeout patterns', () => {
+    expect(
+      classify({ name: 'MongoServerError', code: 50, message: 'operation exceeded time limit' }),
+    ).toBe('DATABASE_QUERY_TIMEOUT');
+    expect(classify({ codeName: 'MaxTimeMSExpired', message: 'query timeout' })).toBe(
+      'DATABASE_QUERY_TIMEOUT',
+    );
+  });
+
   it('maps non-timeout network failures', () => {
     expect(classify({ name: 'MongoNetworkError' })).toBe('DATABASE_NETWORK');
     expect(classify({ message: 'connect ECONNREFUSED 127.0.0.1:27017' })).toBe('DATABASE_NETWORK');
@@ -66,6 +75,7 @@ describe('databaseErrorFrom', () => {
         'errors:db.duplicate_key',
       ],
       [{ name: 'MongooseServerSelectionError' }, 'errors:db.timeout'],
+      [{ code: 50 }, 'errors:db.query_timeout'],
       [{ name: 'MongoNetworkError' }, 'errors:db.network'],
       [{ name: 'ValidationError', message: 'bad' }, 'errors:db.validation'],
       [{ name: 'SomethingWeird' }, 'errors:db.unavailable'],
@@ -99,11 +109,14 @@ describe('isTransient', () => {
     expect(isTransient(errorWith({ message: 'connect ECONNREFUSED 127.0.0.1:27017' }))).toBe(true);
   });
 
-  it('treats duplicate-key, validation and unknown failures as persistent', () => {
+  it('treats duplicate-key, validation, query-timeout and unknown failures as persistent', () => {
     expect(isTransient(errorWith({ code: 11000 }))).toBe(false);
     expect(isTransient(errorWith({ name: 'ValidationError', message: 'bad' }))).toBe(false);
     expect(isTransient(errorWith({ name: 'CastError', message: 'bad' }))).toBe(false);
     expect(isTransient(errorWith({ name: 'SomethingWeird' }))).toBe(false);
+    expect(isTransient(errorWith({ code: 50, message: 'operation exceeded time limit' }))).toBe(
+      false,
+    );
     expect(isTransient(errorWith(null))).toBe(false);
   });
 });

@@ -51,14 +51,34 @@ describe('isRetryableError', () => {
 
   it.each([
     'ECONNRESET',
-    'ETIMEDOUT',
+    'ECONNREFUSED',
     'ECONNABORTED',
-    'EAI_AGAIN',
+    'ETIMEDOUT',
+    'EPIPE',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'ENETDOWN',
     'ENOTFOUND',
+    'EAI_AGAIN',
     'UND_ERR_SOCKET',
     'UND_ERR_CONNECT_TIMEOUT',
   ])('accepts the socket-level code %s', (code) => {
     expect(isRetryableError({ code })).toBe(true);
+  });
+
+  it('accepts the bare Node socket error a lost route produces', () => {
+    // Exact shape Node throws when the host loses its route to Discord
+    // mid-read: a plain Error with the errno name as `code` and no status.
+    const err = Object.assign(new Error('read EHOSTUNREACH'), {
+      code: 'EHOSTUNREACH',
+      errno: -113,
+      syscall: 'read',
+    });
+    expect(isRetryableError(err)).toBe(true);
+  });
+
+  it('rejects a non-string code', () => {
+    expect(isRetryableError({ code: 113 })).toBe(false);
   });
 
   it('rejects an unrelated transport code', () => {
@@ -170,7 +190,7 @@ describe('retryFetch', () => {
   });
 
   it('honours a caller-supplied predicate that narrows the default', async () => {
-    // The x-feed client uses this to stop retrying a 429: what counts as
+    // The social-feed client uses this to stop retrying a 429: what counts as
     // transient depends on who owns the rate-limit budget.
     const cause = Object.assign(new Error('Too Many Requests'), { response: { status: 429 } });
     const fn = vi.fn(async () => {

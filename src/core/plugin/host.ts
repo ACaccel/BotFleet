@@ -1,28 +1,18 @@
 /**
- * PluginHost — orchestrates plugin registration and lifecycle.
+ * PluginHost — plugin registration and lifecycle.
  *
- * Lifecycle:
- *   register(plugin)*  -- captured immediately; duplicate ids rejected.
- *   initAll()   -- registration order; a throw disables that plugin.
- *   startAll()  -- registration order; same disabled semantics.
- *   readyAll()  -- registration order; failures only logged (already
- *                  past start).
- *   shutdownAll() -- REVERSE registration order; failures only logged.
+ *   register(plugin)*      -- duplicate ids rejected.
+ *   initAll(), startAll()  -- registration order; a throw disables that plugin.
+ *   readyAll()             -- registration order; failures only logged.
+ *   shutdownAll()          -- REVERSE registration order; failures only logged.
  *
- * Error isolation: a plugin failure moves the plugin into the
- * {@link DisabledPlugin} set, logs structured, and the phase continues.
- * The bot keeps running with the remaining plugins — no plugin can
- * abort startup.
+ * A failed plugin moves to the {@link DisabledPlugin} set and the phase
+ * continues, so no plugin can abort startup.
  *
- * Discord client is intentionally NOT a constructor dependency, so the
- * host stays fully unit-testable without discord.js. It emits an
- * {@link EventDispatcher} that BaseBot attaches to the real
- * `client.on(...)` plumbing.
- *
- * Service-locator guard: plugins receive `services.resolve` (typed
- * tokens only), never the raw container. The host itself takes the
- * container only to satisfy `resolve` calls — it never hands the
- * reference out.
+ * The Discord client is not a dependency, keeping the host unit-testable
+ * without discord.js; BaseBot attaches the emitted {@link EventDispatcher}
+ * to the real client. Plugins receive only typed `services.resolve`, never
+ * the raw container.
  */
 import type { Translator } from '../i18n';
 import type { ServiceContainer, ServiceToken } from '../ioc';
@@ -38,10 +28,6 @@ import type { DisabledPlugin, Plugin, PluginId, TypedResolver } from './types';
 // can import them from `core/plugin`.
 export const PluginRegistrationError = PluginRegistrationErrorClass;
 export type PluginRegistrationError = PluginRegistrationErrorClass;
-
-// ---------------------------------------------------------------------------
-// Host
-// ---------------------------------------------------------------------------
 
 export interface PluginHostOptions {
   readonly container: ServiceContainer;
@@ -64,10 +50,6 @@ export class PluginHost {
   constructor(private readonly options: PluginHostOptions) {
     this.dispatcher = new EventDispatcher(options.logger);
   }
-
-  // -------------------------------------------------------------------
-  // Registration
-  // -------------------------------------------------------------------
 
   /**
    * Register a plugin. The only register-time check is id uniqueness;
@@ -100,10 +82,6 @@ export class PluginHost {
     return [...this.registered.keys()];
   }
 
-  // -------------------------------------------------------------------
-  // Lifecycle — thin delegation to PluginLifecycleRunner
-  // -------------------------------------------------------------------
-
   /** Run `init` on every enabled plugin in registration order. */
   public async initAll(): Promise<void> {
     await this.getLifecycleRunner().runInit();
@@ -130,6 +108,11 @@ export class PluginHost {
     await this.getLifecycleRunner().runReady();
   }
 
+  /** Notify enabled plugins that a guild database has become available. */
+  public async guildDatabaseReady(guildId: string): Promise<void> {
+    await this.getLifecycleRunner().runGuildDatabaseReady(guildId);
+  }
+
   /**
    * Run `onShutdown` in **reverse** registration order. Failures are
    * always non-fatal here — the bot is shutting down regardless.
@@ -137,10 +120,6 @@ export class PluginHost {
   public async shutdownAll(): Promise<void> {
     await this.getLifecycleRunner().runShutdown();
   }
-
-  // -------------------------------------------------------------------
-  // Internals
-  // -------------------------------------------------------------------
 
   /**
    * Lazily build the lifecycle runner, exposing the host's state to it

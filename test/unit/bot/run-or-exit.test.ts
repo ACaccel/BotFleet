@@ -6,10 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { createLogger } from '../../../src/core/logger';
 import { runOrExit } from '../../../src/bot/run-or-exit';
-
-const silentLogger = () => createLogger({ level: 'silent', pretty: false });
+import { silentLogger } from '../../fixtures/runtime';
 
 describe('runOrExit', () => {
   it('does not exit when startup succeeds', async () => {

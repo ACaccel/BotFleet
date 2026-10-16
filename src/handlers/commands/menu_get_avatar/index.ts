@@ -1,9 +1,10 @@
 import type { ContextMenuCommandType, UserContextMenuCommandInteraction } from 'discord.js';
-import { EmbedBuilder, ApplicationCommandType } from 'discord.js';
+import { ApplicationCommandType } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
 
-import { replyForError } from '../../../infra/discord/reply-for-error';
+import { replyWithAvatar } from '../avatar-shared/reply-avatar';
+
 export default class menu_get_avatar extends Command {
   constructor() {
     super();
@@ -20,29 +21,6 @@ export default class menu_get_avatar extends Command {
     interaction: UserContextMenuCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    await interaction.deferReply();
-    try {
-      const user = interaction.targetUser;
-      const avatarUrl = user.displayAvatarURL({ extension: 'png', size: 1024 });
-
-      const embed = new EmbedBuilder()
-        .setTitle(bot.translator?.t('replies:menu_get_avatar.title', { user: user.username }) ?? '')
-        .setColor(0x5865f2)
-        .setImage(avatarUrl)
-        .addFields({
-          name: bot.translator?.t('replies:menu_get_avatar.avatar_url_field') ?? '',
-          value: avatarUrl,
-        });
-
-      await interaction.editReply({ embeds: [embed] });
-    } catch (error) {
-      await replyForError(
-        interaction,
-        bot,
-        error,
-        'replies:menu_get_avatar.failed',
-        interaction.guild?.id,
-      );
-    }
+    await replyWithAvatar(interaction, bot, interaction.targetUser);
   }
 }

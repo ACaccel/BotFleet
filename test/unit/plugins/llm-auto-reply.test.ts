@@ -10,6 +10,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Message } from 'discord.js';
+import axios from 'axios';
 
 import { createLlmAutoReplyPlugin } from '../../../src/plugins/llm-auto-reply/plugin';
 import {
@@ -31,7 +32,8 @@ import {
 import { ok, err } from '../../../src/core/result';
 import { ExternalServiceError } from '../../../src/core/errors';
 import type { Logger } from '../../../src/core/logger';
-import type { PluginEventContext } from '../../../src/core/plugin';
+import { buildMessage } from '../../fixtures/discord/message-builder';
+import { buildPluginContext, silentLogger } from '../../fixtures/runtime';
 
 // --- Fakes -----------------------------------------------------------------
 
@@ -40,17 +42,16 @@ const BOT_ID = 'bot-1';
 /** A literal mention of the bot, as it appears in message content. */
 const botMention = `<@${BOT_ID}>`;
 
-const makeLogger = (): Logger => {
-  const logger = {
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-    trace: vi.fn(),
-    fatal: vi.fn(),
-    child: vi.fn(() => logger),
-  };
-  return logger as unknown as Logger;
+/**
+ * Silent logger whose `error` is a spy, for the cases that assert a failure
+ * was logged. `logError` logs through a per-guild child, so `child` returns
+ * the logger itself to keep the spy on the path.
+ */
+const spyLogger = () => {
+  const logger = silentLogger();
+  vi.spyOn(logger, 'child').mockReturnValue(logger);
+  const error = vi.spyOn(logger, 'error');
+  return { logger, error };
 };
 
 interface FakeMsgInput {
@@ -61,14 +62,14 @@ interface FakeMsgInput {
 }
 
 const makeFetchedMessage = (input: FakeMsgInput): Message =>
-  ({
+  buildMessage({
     author: { displayName: input.name, bot: input.bot ?? false },
     // Distinct guild nickname sentinel: the transcript must use the global
     // display name (author.displayName), never this member nickname.
     member: { displayName: `nick-${input.name}` },
     content: input.content,
     createdTimestamp: input.createdTimestamp,
-  }) as unknown as Message;
+  });
 
 /** A channel whose `messages.fetch` resolves the given messages newest-first. */
 const makeChannel = (messages: readonly Message[], name = 'general') => {
@@ -96,7 +97,7 @@ const makeTriggerMessage = (
     mention: boolean;
   }> = {},
 ) =>
-  ({
+  buildMessage({
     author: { bot: overrides.authorBot ?? false, displayName: 'Trigger' },
     content: overrides.content ?? '',
     guildId: overrides.guildId === undefined ? 'g-1' : overrides.guildId,
@@ -105,10 +106,7 @@ const makeTriggerMessage = (
     // discord.js `MessageMentions#has`; the fake reports the override.
     mentions: { has: () => overrides.mention ?? false },
     channel,
-  }) as unknown as Message;
-
-const ctxWith = (logger: Logger): PluginEventContext =>
-  ({ logger }) as unknown as PluginEventContext;
+  });
 
 // --- Pure helpers ----------------------------------------------------------
 
@@ -160,7 +158,7 @@ describe('isWithinWindow', () => {
 
 describe('bot-mention trigger', () => {
   const msgWith = (has: (id: string, opts?: { ignoreRepliedUser?: boolean }) => boolean): Message =>
-    ({ mentions: { has } }) as unknown as Message;
+    buildMessage({ mentions: { has } });
 
   it('detects an @-mention of the bot, ignoring replied-user mentions', () => {
     const has = vi.fn(() => true);
@@ -267,7 +265,7 @@ const ORCH_CONFIG = { messageCount: 5, windowSeconds: 30 } as const;
 /** Orchestrator deps with the injected fake client + bot id. */
 const orchDeps = (
   reply: RunLlmAutoReplyDeps['client']['reply'],
-  logger: Logger = makeLogger(),
+  logger: Logger = silentLogger(),
 ): RunLlmAutoReplyDeps => ({ client: { reply }, logger, config: ORCH_CONFIG, clientId: BOT_ID });
 
 const burst = (): Message[] => [
@@ -334,13 +332,13 @@ describe('runLlmAutoReply', () => {
       send,
     };
     const reply = vi.fn();
-    const logger = makeLogger();
+    const { logger, error } = spyLogger();
     const sent = await runLlmAutoReply(orchDeps(reply, logger), makeTriggerMessage(channel));
 
     expect(sent).toBe(false);
     expect(reply).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
-    expect(logger.error as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledTimes(1);
   });
 
   it('does nothing when a non-mention message spans beyond the window', async () => {
@@ -390,7 +388,7 @@ describe('runLlmAutoReply', () => {
 
   it('stays silent and logs when the client returns an error', async () => {
     const { channel, send } = makeChannel(burst());
-    const logger = makeLogger();
+    const { logger, error } = spyLogger();
     const reply = vi.fn().mockResolvedValue(
       err(
         new ExternalServiceError({
@@ -404,7 +402,7 @@ describe('runLlmAutoReply', () => {
 
     expect(sent).toBe(false);
     expect(send).not.toHaveBeenCalled();
-    expect(logger.error as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledTimes(1);
   });
 
   it("strips the bot's @-mention from transcript content", async () => {
@@ -435,12 +433,49 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
   const dispatch = async (
     plugin: ReturnType<typeof createLlmAutoReplyPlugin>,
     message: Message,
-    logger: Logger,
+    logger: Logger = silentLogger(),
   ): Promise<void> => {
     // The discord.js messageCreate param is `OmitPartialGroupDMChannel<Message>`;
     // the structural fake is widened through `never` for the call site only.
-    await plugin.events?.messageCreate?.(ctxWith(logger), message as never);
+    await plugin.events?.messageCreate?.(buildPluginContext({ logger }), message as never);
   };
+
+  it('keeps the configured endpoint until the plugin is rebuilt after a settings change', async () => {
+    const post = vi
+      .spyOn(axios, 'post')
+      .mockResolvedValue({ data: { status: 'success', response: 'reply' } });
+    try {
+      const config = { enabled: true, endpoint: 'https://first.invalid/chat', timeoutMs: 4321 };
+      const plugin = createLlmAutoReplyPlugin(config, { clientId: BOT_ID });
+      const { channel, send } = makeChannel(burst());
+
+      await dispatch(plugin, makeTriggerMessage(channel, { mention: true }));
+      config.endpoint = 'https://second.invalid/chat';
+      await dispatch(plugin, makeTriggerMessage(channel, { mention: true }));
+
+      const restarted = createLlmAutoReplyPlugin(config, { clientId: BOT_ID });
+      await dispatch(restarted, makeTriggerMessage(channel, { mention: true }));
+
+      expect(post).toHaveBeenCalledTimes(3);
+      for (const call of [1, 2]) {
+        expect(post).toHaveBeenNthCalledWith(
+          call,
+          'https://first.invalid/chat',
+          expect.objectContaining({ messages: [expect.objectContaining({ role: 'user' })] }),
+          expect.objectContaining({ timeout: 4321 }),
+        );
+      }
+      expect(post).toHaveBeenNthCalledWith(
+        3,
+        'https://second.invalid/chat',
+        expect.anything(),
+        expect.objectContaining({ timeout: 4321 }),
+      );
+      expect(send).toHaveBeenCalledTimes(3);
+    } finally {
+      post.mockRestore();
+    }
+  });
 
   it('rolls the probability gate before any fetch (gate fail -> no fetch)', async () => {
     const { channel, fetch } = makeChannel(burst());
@@ -448,7 +483,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
       { enabled: true },
       { clientId: BOT_ID, random: () => 0.9 },
     );
-    await dispatch(plugin, makeTriggerMessage(channel), makeLogger());
+    await dispatch(plugin, makeTriggerMessage(channel));
 
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -462,7 +497,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
       { enabled: true },
       { clientId: BOT_ID, random: () => 0, client: { reply } },
     );
-    await dispatch(plugin, makeTriggerMessage(channel), makeLogger());
+    await dispatch(plugin, makeTriggerMessage(channel));
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(reply).not.toHaveBeenCalled();
@@ -475,7 +510,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
       { enabled: false },
       { clientId: BOT_ID, random: () => 0 },
     );
-    await dispatch(plugin, makeTriggerMessage(channel), makeLogger());
+    await dispatch(plugin, makeTriggerMessage(channel));
 
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -489,18 +524,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
       { enabled: true },
       { clientId: BOT_ID, random: () => 0 },
     );
-    await dispatch(plugin, makeTriggerMessage(channel, overrides), makeLogger());
-
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it('skips channels in the blocked list', async () => {
-    const { channel, fetch } = makeChannel(burst());
-    const plugin = createLlmAutoReplyPlugin(
-      { enabled: true },
-      { clientId: BOT_ID, random: () => 0, blockedChannels: ['c-blocked'] },
-    );
-    await dispatch(plugin, makeTriggerMessage(channel, { channelId: 'c-blocked' }), makeLogger());
+    await dispatch(plugin, makeTriggerMessage(channel, overrides));
 
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -516,7 +540,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
       { enabled: true },
       { clientId: BOT_ID, random: () => 0.9, client: { reply } },
     );
-    await dispatch(plugin, makeTriggerMessage(channel, { mention: true }), makeLogger());
+    await dispatch(plugin, makeTriggerMessage(channel, { mention: true }));
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(reply).not.toHaveBeenCalled();
@@ -532,7 +556,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
       { enabled: true },
       { clientId: BOT_ID, random: () => 0.9, client: { reply } },
     );
-    await dispatch(plugin, makeTriggerMessage(channel, { mention: true }), makeLogger());
+    await dispatch(plugin, makeTriggerMessage(channel, { mention: true }));
 
     expect(reply).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledTimes(1);
@@ -542,19 +566,13 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
   it.each([
     ['disabled', { enabled: false }, {}],
     ['bot author', { enabled: true }, { authorBot: true }],
-    ['blocked channel', { enabled: true }, { channelId: 'c-blocked' }],
   ])('does not let an @-mention override the %s guard', async (_label, rawConfig, overrides) => {
     const { channel, fetch } = makeChannel(burst());
     const plugin = createLlmAutoReplyPlugin(rawConfig, {
       clientId: BOT_ID,
       random: () => 0.9,
-      blockedChannels: ['c-blocked'],
     });
-    await dispatch(
-      plugin,
-      makeTriggerMessage(channel, { ...overrides, mention: true }),
-      makeLogger(),
-    );
+    await dispatch(plugin, makeTriggerMessage(channel, { ...overrides, mention: true }));
 
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -567,30 +585,18 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     );
     // First automatic reply at t=0 sends and records the cooldown.
     const first = makeChannel(burst());
-    await dispatch(
-      plugin,
-      makeTriggerMessage(first.channel, { createdTimestamp: 0 }),
-      makeLogger(),
-    );
+    await dispatch(plugin, makeTriggerMessage(first.channel, { createdTimestamp: 0 }));
     expect(first.send).toHaveBeenCalledTimes(1);
 
     // 30s later (< 60s) in the same channel: blocked before any fetch.
     const within = makeChannel(burst());
-    await dispatch(
-      plugin,
-      makeTriggerMessage(within.channel, { createdTimestamp: 30_000 }),
-      makeLogger(),
-    );
+    await dispatch(plugin, makeTriggerMessage(within.channel, { createdTimestamp: 30_000 }));
     expect(within.fetch).not.toHaveBeenCalled();
     expect(within.send).not.toHaveBeenCalled();
 
     // 60s+ later: the cooldown has elapsed, so it replies again.
     const after = makeChannel(burst());
-    await dispatch(
-      plugin,
-      makeTriggerMessage(after.channel, { createdTimestamp: 61_000 }),
-      makeLogger(),
-    );
+    await dispatch(plugin, makeTriggerMessage(after.channel, { createdTimestamp: 61_000 }));
     expect(after.send).toHaveBeenCalledTimes(1);
   });
 
@@ -602,11 +608,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     );
     // Automatic reply at t=0 records the cooldown.
     const first = makeChannel(burst());
-    await dispatch(
-      plugin,
-      makeTriggerMessage(first.channel, { createdTimestamp: 0 }),
-      makeLogger(),
-    );
+    await dispatch(plugin, makeTriggerMessage(first.channel, { createdTimestamp: 0 }));
     expect(first.send).toHaveBeenCalledTimes(1);
 
     // @-mention at t=1000 (well within the 60s cooldown) still replies.
@@ -614,7 +616,6 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     await dispatch(
       plugin,
       makeTriggerMessage(forced.channel, { createdTimestamp: 1_000, mention: true }),
-      makeLogger(),
     );
     expect(forced.send).toHaveBeenCalledTimes(1);
   });
@@ -627,7 +628,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     );
     // auto@0 records, but will be long-elapsed by the final check.
     const a0 = makeChannel(burst());
-    await dispatch(plugin, makeTriggerMessage(a0.channel, { createdTimestamp: 0 }), makeLogger());
+    await dispatch(plugin, makeTriggerMessage(a0.channel, { createdTimestamp: 0 }));
     expect(a0.send).toHaveBeenCalledTimes(1);
 
     // mention@61000: auto@0 has already elapsed; the mention bypasses the
@@ -636,7 +637,6 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     await dispatch(
       plugin,
       makeTriggerMessage(forced.channel, { createdTimestamp: 61_000, mention: true }),
-      makeLogger(),
     );
     expect(forced.send).toHaveBeenCalledTimes(1);
 
@@ -644,11 +644,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     // (90000 - 61000 < 60000); auto@0 (90000 - 0) is long elapsed, so this
     // would NOT block if the mention reply had not recorded.
     const auto = makeChannel(burst());
-    await dispatch(
-      plugin,
-      makeTriggerMessage(auto.channel, { createdTimestamp: 90_000 }),
-      makeLogger(),
-    );
+    await dispatch(plugin, makeTriggerMessage(auto.channel, { createdTimestamp: 90_000 }));
     expect(auto.fetch).not.toHaveBeenCalled();
     expect(auto.send).not.toHaveBeenCalled();
   });
@@ -662,21 +658,13 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     // First automatic message passes the gate but the orchestrator bails at
     // the count gate (< N), so nothing is sent and the cooldown is NOT recorded.
     const noSend = makeChannel(burst().slice(0, 2));
-    await dispatch(
-      plugin,
-      makeTriggerMessage(noSend.channel, { createdTimestamp: 0 }),
-      makeLogger(),
-    );
+    await dispatch(plugin, makeTriggerMessage(noSend.channel, { createdTimestamp: 0 }));
     expect(noSend.send).not.toHaveBeenCalled();
 
     // A second automatic message 1s later (well within the cooldown) must still
     // reply, because the no-send attempt did not reserve the cooldown.
     const second = makeChannel(burst());
-    await dispatch(
-      plugin,
-      makeTriggerMessage(second.channel, { createdTimestamp: 1_000 }),
-      makeLogger(),
-    );
+    await dispatch(plugin, makeTriggerMessage(second.channel, { createdTimestamp: 1_000 }));
     expect(second.send).toHaveBeenCalledTimes(1);
   });
 
@@ -691,16 +679,8 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     // Start both handlers before awaiting either: the first marks the channel
     // in-flight synchronously (before its first await), so the second bails
     // even though neither has recorded the cooldown yet.
-    const p1 = dispatch(
-      plugin,
-      makeTriggerMessage(a.channel, { createdTimestamp: 0 }),
-      makeLogger(),
-    );
-    const p2 = dispatch(
-      plugin,
-      makeTriggerMessage(b.channel, { createdTimestamp: 100 }),
-      makeLogger(),
-    );
+    const p1 = dispatch(plugin, makeTriggerMessage(a.channel, { createdTimestamp: 0 }));
+    const p2 = dispatch(plugin, makeTriggerMessage(b.channel, { createdTimestamp: 100 }));
     await Promise.all([p1, p2]);
 
     expect(b.fetch).not.toHaveBeenCalled();
@@ -729,15 +709,10 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
 
     // A (automatic) and B (@-mention) both reach client.reply and park there,
     // so both are in flight on the same channel at once.
-    const pA = dispatch(
-      plugin,
-      makeTriggerMessage(a.channel, { createdTimestamp: 0 }),
-      makeLogger(),
-    );
+    const pA = dispatch(plugin, makeTriggerMessage(a.channel, { createdTimestamp: 0 }));
     const pB = dispatch(
       plugin,
       makeTriggerMessage(b.channel, { createdTimestamp: 1, mention: true }),
-      makeLogger(),
     );
     await flush();
     expect(reply).toHaveBeenCalledTimes(2);
@@ -749,7 +724,7 @@ describe('createLlmAutoReplyPlugin messageCreate', () => {
     // C (automatic) arrives while B is STILL in flight: it must be blocked,
     // because the in-flight count is still > 0 (B holds it). A plain Set would
     // have been cleared by A's `finally` and wrongly let C through.
-    await dispatch(plugin, makeTriggerMessage(c.channel, { createdTimestamp: 2 }), makeLogger());
+    await dispatch(plugin, makeTriggerMessage(c.channel, { createdTimestamp: 2 }));
     expect(c.fetch).not.toHaveBeenCalled();
     expect(c.send).not.toHaveBeenCalled();
 

@@ -7,8 +7,8 @@
  *   - {@link GuildRegistrar} — assembles `GuildInfo` from the Discord
  *     cache + bot config (`registerAll`).
  *   - {@link ClientEventBridge} — Adapter from `client.on(...)` raw
- *     events to router dispatch, plugin EventDispatcher, reaction
- *     port, and the GuildCreate fallback.
+ *     events to router dispatch, plugin EventDispatcher, and the
+ *     GuildCreate fallback.
  *   - {@link GuildDbConnector} — owns per-guild Mongo connection
  *     fan-out and failure normalisation.
  *
@@ -24,19 +24,24 @@ import type { Job } from 'node-schedule';
 import type { ButtonHandler } from '@button';
 import { registerButtons } from '@button';
 import type { Command } from '@cmd';
-import { registerCommands } from '@cmd';
+import { getSlashCommandClass, registerCommands } from '@cmd';
+import { assertTimeZone } from '../core/archive/stats';
 import type { ModalHandler } from '@modal';
 import { registerModals } from '@modal';
-import type { ReactionHandler } from '@reaction';
-import { executeReactionAdded, executeReactionRemoved, registerReactions } from '@reaction';
-import type { SSMHandler } from '@select-menu';
+import type { SSMHandler, SelectMenuInteraction } from '@select-menu';
 import { registerSSMs } from '@select-menu';
 
 import { createBootstrapLogger, loadEnv, type Env } from '../core/config';
 import { ConfigurationError } from '../core/errors';
 import type { GuildRegistry } from './guild-registry';
 import type { Translator } from '../core/i18n';
-import { createDefaultTranslator, isLocale } from '../core/i18n';
+import {
+  createDefaultTranslator,
+  isLocale,
+  DEFAULT_LOCALE,
+  GuildLocaleContext,
+  type Locale,
+} from '../core/i18n';
 import type { asGuildId } from '../core/ids';
 import { createContainer, type ServiceContainer } from '../core/ioc';
 import { installProcessHandlers, logError, logSystem, ops, type Logger } from '../core/logger';
@@ -51,22 +56,29 @@ import {
 import { systemClock, type Clock } from '../core/time';
 import { MongoConnectionManager, type ConnectionManager } from '../infra/mongo/connection-manager';
 import { buildRepos, type Repos } from '../persistence/repositories';
+import type { ArchiveOwner } from '../persistence/connection';
 import type { ModelCatalog } from '../infra/llm/models-catalog';
 import type { DefaultModelResolver } from '../infra/llm/default-model-resolver';
-import type { VoiceController } from '../plugins/voice/internal';
+import type { FeedPlatformRegistry } from '../infra/social-feed';
+import type { ArchiveControlFactory } from '../application/archive/control';
+import type { DbInspectService } from '../application/db-inspect/service';
+import type { GalleryReaderService } from '../application/gallery-reader/service';
+import type { GuildSettingsService } from '../application/guild-settings/service';
 
-import {
-  ClientEventBridge,
-  type ClientEventBridgeSuppression,
-  type ReactionHandlerPort,
-} from './client-event-bridge';
+import { ClientEventBridge, type ClientEventBridgeSuppression } from './client-event-bridge';
 import { installClientSafetyListeners } from './client-safety-listeners';
 import { GuildDbConnector } from './guild-db-connector';
 import { BaseBotGuildOnboardingPort } from './guild-onboarding';
 import { GuildRegistrar } from './guild-registrar';
 import { resolveLocalesDir } from './locales-dir';
-import { createChannelLoggingMiddleware, createDispatchMiddleware } from './middlewares';
+import {
+  createChannelLoggingMiddleware,
+  createDispatchMiddleware,
+  createGuildLocaleMiddleware,
+} from './middlewares';
 import { TOKENS, type ReposFactory } from './tokens';
+import { ServiceReadiness } from './service-readiness';
+import { parseThreadModerationConfig, ThreadModeration } from './thread-moderation';
 
 /**
  * Process-wide pool of {@link MongoConnectionManager}s keyed by base
@@ -74,16 +86,32 @@ import { TOKENS, type ReposFactory } from './tokens';
  * the same per-guild connection pool), and tests / multi-cluster
  * setups that pass distinct URIs get distinct managers.
  */
+/** The `/db` command, hosted only by personalities that support it. */
+const DB_INSPECT_COMMAND = 'db';
+
 const sharedConnectionManagers = new Map<string, MongoConnectionManager>();
-const sharedConnectionManagerForUri = (uri: string): MongoConnectionManager => {
-  const existing = sharedConnectionManagers.get(uri);
+const sharedConnectionManagerForUri = (
+  uri: string,
+  recoveryIntervalMs?: number,
+  archiveOwner?: ArchiveOwner,
+): MongoConnectionManager => {
+  const poolKey = `${archiveOwner ?? 'reader'}:${uri}`;
+  const existing = sharedConnectionManagers.get(poolKey);
   if (existing !== undefined) return existing;
-  const created = new MongoConnectionManager(uri);
-  sharedConnectionManagers.set(uri, created);
+  const created = new MongoConnectionManager(
+    uri,
+    undefined,
+    undefined,
+    recoveryIntervalMs,
+    archiveOwner,
+  );
+  sharedConnectionManagers.set(poolKey, created);
   return created;
 };
 
 export interface Config {
+  /** Optional bot-scoped thread moderation, validated during construction. */
+  thread_moderation?: unknown;
   /** Discord user ids granted bot-admin privileges (e.g. `/ai_whitelist_*`). */
   admin?: string[];
   guilds?: Record<string, GuildConfig>;
@@ -97,6 +125,12 @@ export interface Config {
    * value is ignored with a warning and falls back to the default.
    */
   language?: string;
+  /**
+   * IANA time zone for calendar boundaries and local times in reports,
+   * such as `/traffic` day buckets and heat maps. Defaults to `UTC`;
+   * an unknown zone fails construction.
+   */
+  timeZone?: string;
 }
 
 export interface GuildInfo {
@@ -154,6 +188,30 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   public clientId: string;
   /** Discord user ids granted bot-admin privileges; resolved from `config.admin`. */
   public adminIds: string[] = [];
+  public readonly threadModerationEnabled: boolean;
+  /** Validated IANA zone from `config.timeZone`; `UTC` when unset. */
+  private readonly operatorTimeZone: string;
+  private readonly guildLocaleContext = new GuildLocaleContext((guildId) => {
+    const general = guildId ? this.guildSettings?.get(guildId)?.settings.general : undefined;
+    return {
+      language:
+        general?.language && general.language !== 'inherit'
+          ? general.language
+          : isLocale(this.config.language)
+            ? this.config.language
+            : DEFAULT_LOCALE,
+      timeZone: general?.timeZone ?? this.operatorTimeZone,
+    };
+  });
+  public get timeZone(): string {
+    return this.guildLocaleContext.current.timeZone;
+  }
+  public get language(): Locale {
+    return this.guildLocaleContext.current.language;
+  }
+  public withGuildContext<T>(guildId: string | undefined, callback: () => T): T {
+    return this.guildLocaleContext.run(guildId, callback);
+  }
   public config: TConfig;
 
   /**
@@ -167,12 +225,86 @@ export abstract class BaseBot<TConfig extends Config = Config> {
 
   /** Look up one guild's info. Returns undefined when unregistered. */
   public getGuildInfo(guildId: string): Readonly<GuildInfo> | undefined {
-    return this.#guildInfo.get(guildId);
+    const info = this.#guildInfo.get(guildId);
+    if (!info || !this.guildSettings) return info;
+    const snapshot = this.guildSettings.get(guildId);
+    const channels = { ...info.channels };
+    for (const slot of ['debug', 'event', 'giveaway'] as const) {
+      delete channels[slot];
+      const id = snapshot?.settings.channels[slot];
+      const channel = id ? info.guild.channels.cache.get(id) : undefined;
+      if (channel && channel.guildId === guildId) channels[slot] = channel;
+    }
+    return { ...info, channels };
+  }
+
+  public get guildSettings(): GuildSettingsService | undefined {
+    return this.container.tryResolve(TOKENS.GuildSettings);
+  }
+
+  private settingsInitialGuildIds: readonly string[] | undefined;
+  private settingsRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  private startGuildSettingsRecovery(): void {
+    if (!this.guildSettings || this.settingsRecoveryTimer) return;
+    const schedule = (): void => {
+      if (this.shuttingDown) return;
+      this.settingsRecoveryTimer = setTimeout(() => {
+        this.settingsRecoveryTimer = undefined;
+        void (async (): Promise<void> => {
+          try {
+            const settings = this.guildSettings;
+            if (!settings) return;
+            if (!settings.initialized) await this.hydrateGuildSettings();
+            else
+              await Promise.all(
+                [...this.#guildInfo].map(async ([id, info]) => {
+                  if (!info.repos || settings.get(id)) return;
+                  try {
+                    await settings.refreshGuild(id);
+                  } catch (error: unknown) {
+                    logError(this.logger, id, error);
+                  }
+                }),
+              );
+            this.publishServiceReadiness();
+          } finally {
+            schedule();
+          }
+        })().catch((error: unknown) => logError(this.logger, null, error));
+      }, this.env?.MONGO_RECOVERY_INTERVAL_MS ?? 60000);
+      this.settingsRecoveryTimer.unref();
+    };
+    schedule();
+  }
+
+  private async hydrateGuildSettings(guildId?: string): Promise<void> {
+    const settings = this.guildSettings;
+    if (!settings) return;
+    this.settingsInitialGuildIds ??= [...this.#guildInfo.keys()];
+    try {
+      if (!settings.initialized) await settings.initialize(this.settingsInitialGuildIds);
+      if (guildId !== undefined) await settings.ensureGuild(guildId);
+      else {
+        await Promise.all(
+          [...this.#guildInfo.keys()].map(async (id) => {
+            try {
+              await settings.ensureGuild(id);
+            } catch (error: unknown) {
+              logError(this.logger, id, error);
+            }
+          }),
+        );
+      }
+    } catch (error: unknown) {
+      logError(this.logger, guildId ?? null, error);
+    }
   }
 
   /** Readonly view over every registered guild. */
   public getAllGuildInfo(): ReadonlyMap<string, Readonly<GuildInfo>> {
-    return this.#guildInfo;
+    if (!this.guildSettings) return this.#guildInfo;
+    return new Map([...this.#guildInfo.keys()].map((id) => [id, this.getGuildInfo(id)!]));
   }
 
   /** Convenience accessor for the common case of just needing repos. */
@@ -228,9 +360,16 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   public commandHandlers: Map<string, Command> = new Map();
   public buttonHandlers: Map<string, ButtonHandler> = new Map();
   public modalHandlers: Map<string, ModalHandler> = new Map();
-  public ssmHandlers: Map<string, SSMHandler> = new Map();
-  public reactionHandlers: Map<string, ReactionHandler> = new Map();
-  public helpMessage: string = '';
+  public ssmHandlers: Map<string, SSMHandler<SelectMenuInteraction>> = new Map();
+  private defaultHelpMessage = '';
+  public get helpMessage(): string {
+    return this.guildLocaleContext.active && this.helpMessageKey && this.translator
+      ? this.translator.t(this.helpMessageKey)
+      : this.defaultHelpMessage;
+  }
+  public set helpMessage(value: string) {
+    this.defaultHelpMessage = value;
+  }
 
   /**
    * Backing store for the bot's scheduled jobs. Private so the container
@@ -241,25 +380,11 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   readonly #jobs = new Map<string, Job>();
 
   /**
-   * Bot-scoped voice controller. Resolved from the IoC container on
-   * every access: VoicePlugin's `init` hook publishes its
-   * controller under `TOKENS.VoiceController` through
-   * `ctx.registerInstance`, and this getter delegates to the
-   * container's `tryResolve` so a bot that never registered the
-   * plugin (e.g. msg-archive) naturally sees `undefined`. The lookup
-   * is O(1) on the singleton cache; no field-level memoisation is
-   * added because that would hide any future reload path.
-   */
-  public get voice(): VoiceController | undefined {
-    return this.container.tryResolve<VoiceController>(TOKENS.VoiceController);
-  }
-
-  /**
    * Bot-scoped LLM {@link ModelCatalog}. Resolved from the IoC
    * container on every access: `LlmChatPlugin.init` publishes
    * it under `TOKENS.ModelCatalog` through `ctx.registerInstance`,
    * and bots that do not register the plugin see `undefined`. The
-   * `/ai_settings` handler reaches the live model list through this
+   * `/ai settings` handler reaches the live model list through this
    * getter so the prior `listProviderModels` module-global is no
    * longer needed.
    */
@@ -279,6 +404,16 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   }
 
   /**
+   * Bot-scoped {@link FeedPlatformRegistry}, registered by the
+   * composition root from its `social_feed.platforms` block. The
+   * `/feed_*` commands read it through this getter rather than the
+   * container; bots that do not configure the feature see `undefined`.
+   */
+  public get feedPlatformRegistry(): FeedPlatformRegistry | undefined {
+    return this.container.tryResolve<FeedPlatformRegistry>(TOKENS.FeedPlatformRegistry);
+  }
+
+  /**
    * Bot-scoped {@link PermissionRankPolicy}. Built once from static
    * config in the constructor and registered eagerly under
    * `TOKENS.PermissionRankPolicy`; resolved here on demand. Handlers
@@ -290,6 +425,34 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   public get permissionRankPolicy(): PermissionRankPolicy | undefined {
     return this.container.tryResolve<PermissionRankPolicy>(TOKENS.PermissionRankPolicy);
+  }
+
+  /**
+   * Builds a guild's archive control service. Registered under
+   * `TOKENS.ArchiveControlFactory` by the msg-archive composition root only;
+   * other bots see `undefined`. The `/archive` command and panel buttons
+   * build their per-guild service through this getter.
+   */
+  public get archiveControlFactory(): ArchiveControlFactory | undefined {
+    return this.container.tryResolve<ArchiveControlFactory>(TOKENS.ArchiveControlFactory);
+  }
+
+  /**
+   * Read-only database inspection for `/db`, published by the db-inspect
+   * plugin that only nijika registers; `undefined` elsewhere and when the
+   * plugin failed to open its read-only connection.
+   */
+  public get dbInspectService(): DbInspectService | undefined {
+    return this.container.tryResolve<DbInspectService>(TOKENS.DbInspectService);
+  }
+
+  /**
+   * Paged gallery reader behind the nhentai / wnacg previews, published by
+   * the social-link-preview plugin; `undefined` when gallery previews are
+   * off or the bot does not run the plugin.
+   */
+  public get galleryReader(): GalleryReaderService | undefined {
+    return this.container.tryResolve<GalleryReaderService>(TOKENS.GalleryReader);
   }
 
   /** Bot-scoped {@link Translator}. Undefined only in the pre-`run()` window. */
@@ -312,6 +475,46 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   protected helpMessageKey?: string;
 
+  /**
+   * Catalog section (for example `replies:nijika`) holding this bot's
+   * `persona_name` and `vote_flavor`, so shared command text can speak
+   * as the right character. Unset falls back to `replies:persona`.
+   */
+  protected personaSection?: string;
+  /** How shared command text refers to this bot, such as "虹夏大天使". */
+  private defaultPersonaName = '';
+  public get personaName(): string {
+    return this.guildLocaleContext.active && this.translator
+      ? this.translator.t(`${this.personaSection ?? 'replies:persona'}.persona_name`)
+      : this.defaultPersonaName;
+  }
+  public set personaName(value: string) {
+    this.defaultPersonaName = value;
+  }
+  /** The bot's closing line on a `/ban_user` vote call; may be empty. */
+  private defaultVoteFlavor = '';
+  public get voteFlavor(): string {
+    return this.guildLocaleContext.active && this.translator
+      ? this.translator.t(`${this.personaSection ?? 'replies:persona'}.vote_flavor`)
+      : this.defaultVoteFlavor;
+  }
+  public set voteFlavor(value: string) {
+    this.defaultVoteFlavor = value;
+  }
+
+  /**
+   * Whether this personality hosts the read-only `/db` inspection. Read
+   * during construction, so an override must return a constant.
+   */
+  protected supportsDbInspect(): boolean {
+    return false;
+  }
+
+  /** Archive mutation authority is granted only by the worker composition root. */
+  protected archiveOwner(): ArchiveOwner | undefined {
+    return undefined;
+  }
+
   /** Built inside {@link run}; consumed by the {@link ClientEventBridge}. */
   protected interactionRouter: InteractionRouter | undefined;
 
@@ -325,6 +528,13 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   private readonly guildRegistrar: GuildRegistrar;
   private readonly clientEventBridge: ClientEventBridge;
   private readonly guildDbConnector: GuildDbConnector;
+  private shuttingDown = false;
+  private serviceReadiness: ServiceReadiness | undefined;
+  private readyLifecycleSucceeded = false;
+  private readonly retryServiceReadiness = (): void => {
+    // discord.js marks the whole client ready after emitting shardReady.
+    queueMicrotask(() => this.publishServiceReadiness());
+  };
 
   public constructor(
     client: Client,
@@ -340,6 +550,30 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     this.clientId = clientId;
     this.config = config;
     this.adminIds = config.admin ?? [];
+    // A misspelled or retired command name would otherwise be skipped
+    // silently and surface only as "command not found" for members.
+    const unknownCommands = (config.commands ?? []).filter(
+      (name) => getSlashCommandClass(name) === undefined,
+    );
+    if (unknownCommands.length > 0) {
+      throw new Error(`Unknown command(s) in config.commands: ${unknownCommands.join(', ')}`);
+    }
+    if ((config.commands ?? []).includes(DB_INSPECT_COMMAND) && !this.supportsDbInspect()) {
+      throw new Error(`config.commands: ${DB_INSPECT_COMMAND} is available only on nijika`);
+    }
+    if ((config.commands ?? []).includes('settings') && !this.supportsGuildSettings()) {
+      throw new Error('config.commands: settings is available only on tomori and nijika');
+    }
+    this.operatorTimeZone = config.timeZone ?? 'UTC';
+    try {
+      assertTimeZone(this.timeZone);
+    } catch (err) {
+      throw new Error(`Unknown config.timeZone: ${this.timeZone}`, { cause: err });
+    }
+    this.threadModerationEnabled = parseThreadModerationConfig(config.thread_moderation);
+    if (this.threadModerationEnabled && !mongoURI) {
+      throw new Error('thread_moderation.enabled requires MONGO_URI');
+    }
     // The composition root injects the locales path; `core/i18n`
     // does not resolve it from `__dirname`. Subclasses get the
     // canonical monorepo layout for free via the default and can
@@ -366,7 +600,11 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     const uri = this.mongoURI;
     if (uri !== undefined && uri.length > 0) {
       this.container.registerSingleton(TOKENS.ConnectionManager, () =>
-        sharedConnectionManagerForUri(uri),
+        sharedConnectionManagerForUri(
+          uri,
+          this.env?.MONGO_RECOVERY_INTERVAL_MS,
+          this.archiveOwner(),
+        ),
       );
     }
     const reposFactory: ReposFactory = async (guildId: ReturnType<typeof asGuildId>) => {
@@ -380,7 +618,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     // plugins reach guild lookup without holding a BaseBot reference.
     const guildRegistry: GuildRegistry = {
       getRepos: (guildId) => this.#guildInfo.get(guildId)?.repos,
-      getChannel: (guildId, name) => this.#guildInfo.get(guildId)?.channels?.[name],
+      getChannel: (guildId, name) => this.getGuildInfo(guildId)?.channels?.[name],
       getRole: (guildId, name) => this.#guildInfo.get(guildId)?.roles?.[name],
       listGuildIds: () => Array.from(this.#guildInfo.keys()),
     };
@@ -426,10 +664,10 @@ export abstract class BaseBot<TConfig extends Config = Config> {
 
   /**
    * The canonical read-only view over this bot's guild slots — the same
-   * object plugins resolve as `TOKENS.GuildRegistry`. Each plugin's
-   * handler-side `deps-from-bot` bridge reads it here instead of
-   * rebuilding an adapter, so both sides of a plugin observe one lookup
-   * implementation. Registered in the constructor, so it resolves from
+   * object plugins resolve as `TOKENS.GuildRegistry`. Each handler-side
+   * `deps-from-bot` bridge into a shared feature service reads it here
+   * instead of rebuilding an adapter, so the plugin and its commands
+   * observe one lookup implementation. Registered in the constructor, so it resolves from
    * the moment the bot exists.
    */
   public get guildRegistry(): GuildRegistry {
@@ -499,6 +737,11 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   public run = async (callback?: () => Promise<void>): Promise<void> => {
     const rootLogger = this.setupContainer();
+    if (this.env?.PLEIADES_READY_FILE !== undefined) {
+      this.serviceReadiness = new ServiceReadiness(this.env.PLEIADES_READY_FILE);
+      this.client.on(Events.ShardReady, this.retryServiceReadiness);
+      this.client.on(Events.ShardResume, this.retryServiceReadiness);
+    }
     const host = await this.buildHost(rootLogger);
     const releaseReadyLatch = this.armReadyLatch(callback);
     let startupSucceeded = false;
@@ -511,9 +754,19 @@ export abstract class BaseBot<TConfig extends Config = Config> {
         container: this.container,
         host,
         router: this.interactionRouter,
-        reactionPort: this.buildReactionPort(),
-        guildInfo: () => this.#guildInfo,
+        guildInfo: () => this.getAllGuildInfo(),
         suppression: this.eventBridgeSuppression(),
+        ...(this.threadModerationEnabled && this.translator
+          ? {
+              moderation: new ThreadModeration({
+                botId: this.clientId,
+                logger: rootLogger,
+                translator: this.translator,
+                getRepo: (guildId) => this.getRepos(guildId)?.threadModeration,
+                isAdmin: (userId) => this.isAdmin(userId),
+              }),
+            }
+          : {}),
       });
       startupSucceeded = true;
     } finally {
@@ -538,6 +791,16 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    * the rest of the teardown.
    */
   public shutdown = async (): Promise<void> => {
+    this.shuttingDown = true;
+    if (this.settingsRecoveryTimer) clearTimeout(this.settingsRecoveryTimer);
+    this.settingsRecoveryTimer = undefined;
+    this.guildDbConnector.stopRecovery();
+    this.detachServiceReadinessListeners();
+    try {
+      this.serviceReadiness?.stop();
+    } catch (err: unknown) {
+      logError(this.logger, null, err);
+    }
     const log = this.container.tryResolve<Logger>(TOKENS.Logger);
     if (this.pluginHost !== undefined) {
       try {
@@ -578,10 +841,6 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     }
   };
 
-  public reLogin = async (): Promise<void> => {
-    await this.client.login(this.token);
-  };
-
   /**
    * Open (or reuse) the per-guild MongoDB connection and populate
    * `guildInfo[g].repos`. Delegates to the {@link GuildDbConnector}
@@ -595,6 +854,7 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     const repos = await this.guildDbConnector.connectOne(guildId);
     if (repos !== undefined) {
       this.attachRepos(guildId, repos);
+      await this.hydrateGuildSettings(guildId);
     }
   };
 
@@ -606,9 +866,20 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     await this.guildDbConnector.connectAll(this.#guildInfo, (guildId, repos) =>
       this.attachRepos(guildId, repos),
     );
+    await this.hydrateGuildSettings();
   };
 
   // ---- subclass hooks ----
+
+  protected supportsGuildSettings(): boolean {
+    return false;
+  }
+
+  /** Invalidate in-memory drafts/cache only; persistent settings survive rejoin. */
+  protected invalidateGuildRuntime(guildId: string): void {
+    this.guildSettings?.forgetGuild(guildId);
+    this.#guildInfo.delete(guildId);
+  }
 
   /**
    * Subclass hook controlling which {@link ClientEventBridge}
@@ -679,18 +950,24 @@ export abstract class BaseBot<TConfig extends Config = Config> {
         'BaseBot.buildHost: config.language is not a supported locale; falling back to DEFAULT_LOCALE.',
       );
     }
-    const translator = await createDefaultTranslator({
-      localesDir: this.localesDir,
-      fallbackLocale: configuredLocale,
-    });
+    const translator = this.guildLocaleContext.translator(
+      await createDefaultTranslator({
+        localesDir: this.localesDir,
+        fallbackLocale: configuredLocale,
+      }),
+    );
     this.container.registerSingleton(TOKENS.Translator, () => translator);
     this.translator = translator;
     if (this.helpMessageKey !== undefined) {
       this.helpMessage = translator.t(this.helpMessageKey);
     }
+    const personaSection = this.personaSection ?? 'replies:persona';
+    this.personaName = translator.t(`${personaSection}.persona_name`);
+    this.voteFlavor = translator.t(`${personaSection}.vote_flavor`);
     // Assemble the Chain-of-Responsibility interaction router: the
     // terminal dispatch stage followed by the observability stage.
     this.interactionRouter = new InteractionRouter();
+    this.interactionRouter.use(createGuildLocaleMiddleware(this));
     this.interactionRouter.use(createDispatchMiddleware(this));
     this.interactionRouter.use(
       createChannelLoggingMiddleware(this, {
@@ -709,10 +986,6 @@ export abstract class BaseBot<TConfig extends Config = Config> {
     }
     this.pluginHost = host;
     await host.initAll();
-    // VoicePlugin publishes its controller via
-    // `ctx.registerInstance(TOKENS.VoiceController, ...)`; the
-    // `bot.voice` getter resolves it on demand, so no post-init
-    // synchronisation is required here.
     return host;
   }
 
@@ -751,32 +1024,77 @@ export abstract class BaseBot<TConfig extends Config = Config> {
       for (const [guildId, info] of Object.entries(registered)) {
         this.setGuildInfo(guildId, info);
       }
+      this.settingsInitialGuildIds ??= [...this.#guildInfo.keys()];
       await this.guildDbConnector.connectAll(this.#guildInfo, (guildId, repos) =>
         this.attachRepos(guildId, repos),
       );
+      await this.hydrateGuildSettings();
+      if (this.shuttingDown) return;
       await registerCommands(this);
       await registerButtons(this);
       await registerSSMs(this);
       await registerModals(this);
-      await registerReactions(this);
       await this.clientEventBridge.sendRebootMessages(this.translator);
       if (callback !== undefined) {
         await callback();
       }
+      if (this.shuttingDown) return;
       // readyAll runs AFTER clientReady so plugins observe a
       // fully-online client when their `onReady` hook fires.
       // Failures here are logged but never fatal — the bot is
       // already serving, mirroring the host docstring policy.
+      let pluginsReady = true;
       if (this.pluginHost !== undefined) {
         try {
           await this.pluginHost.readyAll();
         } catch (readyErr: unknown) {
+          pluginsReady = false;
           logError(this.logger, null, readyErr);
         }
       }
+      if (this.shuttingDown) return;
+      this.readyLifecycleSucceeded = pluginsReady;
+      this.startGuildSettingsRecovery();
+      this.publishServiceReadiness();
+      this.guildDbConnector.startRecovery(
+        this.#guildInfo,
+        (guildId, repos) => this.attachRepos(guildId, repos),
+        async (guildId) => {
+          await this.hydrateGuildSettings(guildId);
+          await this.pluginHost?.guildDatabaseReady(guildId);
+          this.publishServiceReadiness();
+        },
+        this.env?.MONGO_RECOVERY_INTERVAL_MS ?? 60_000,
+      );
     } catch (err) {
       logError(this.logger, null, err);
     }
+  }
+
+  /** Publish startup readiness only after every joined guild has its required repos. */
+  private publishServiceReadiness(): void {
+    if (this.serviceReadiness === undefined || this.shuttingDown || !this.readyLifecycleSucceeded)
+      return;
+    if (!this.client.isReady() || (this.pluginHost?.getDisabledPlugins().length ?? 0) > 0) return;
+    for (const guildId of this.client.guilds.cache.keys()) {
+      const info = this.#guildInfo.get(guildId);
+      if (info === undefined || (this.mongoURI && info.repos === undefined)) return;
+      if (this.mongoURI && this.guildDbConnector.isDisabled(guildId) !== undefined) return;
+      if (this.guildSettings && !this.guildSettings.get(guildId)) return;
+    }
+    try {
+      this.serviceReadiness.publish();
+      this.detachServiceReadinessListeners();
+    } catch (err: unknown) {
+      // A marker write failure must not prevent database recovery from starting.
+      logError(this.logger, null, err);
+    }
+  }
+
+  private detachServiceReadinessListeners(): void {
+    if (this.serviceReadiness === undefined) return;
+    this.client.off(Events.ShardReady, this.retryServiceReadiness);
+    this.client.off(Events.ShardResume, this.retryServiceReadiness);
   }
 
   /**
@@ -818,18 +1136,5 @@ export abstract class BaseBot<TConfig extends Config = Config> {
   /** True when `userId` is one of this bot's configured admins. */
   public isAdmin(userId: string): boolean {
     return this.adminIds.includes(userId);
-  }
-
-  /**
-   * Build the `ReactionHandlerPort` the bridge consumes. The reaction
-   * codegen entry points (`executeReactionAdded` / `executeReactionRemoved`)
-   * accept a `BaseBot` reference; the port adapts them so the bridge
-   * itself stays decoupled from the bot.
-   */
-  private buildReactionPort(): ReactionHandlerPort {
-    return {
-      handleAdded: (reaction, user) => executeReactionAdded(reaction, user, this),
-      handleRemoved: (reaction, user) => executeReactionRemoved(reaction, user, this),
-    };
   }
 }

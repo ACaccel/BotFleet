@@ -1,3 +1,4 @@
+import { MongoGuildSettingsRepo, type GuildSettingsRepo } from './guild-settings.repo';
 /**
  * Repository barrel.
  *
@@ -8,45 +9,94 @@
  * Adding a new repo means: write the file, append to the exports
  * below, add a key to `Repos`, and add one line to `buildRepos`.
  */
-import type { GuildConnection } from '../../infra/mongo/connection-manager';
+import type { GuildConnection } from '../connection';
 
 import { MongoActivityRepo, type ActivityRepo } from './activity.repo';
-import { MongoFetchRepo, type FetchRepo } from './fetch.repo';
+import { MongoAiUsageRepo, type AiUsageRepo } from './ai-usage.repo';
+import { MongoArchiveStatsRepo } from './archive-stats.repo';
+import type { ArchiveStatsRepo } from './archive-stats.types';
+import { MongoFeedSubscriptionRepo, type FeedSubscriptionRepo } from './feed-subscription.repo';
 import { MongoGiveawayRepo, type GiveawayRepo } from './giveaway.repo';
-import { MongoMessageRepo, type MessageRepo } from './message.repo';
+import { MongoGayReadingRepo, type GayReadingRepo } from './gay-reading.repo';
+import { MongoGayStatsRepo } from './gay-stats.repo';
+import type { GayStatsRepo } from './gay-stats.types';
 import { MongoReplyRepo, type ReplyRepo } from './reply.repo';
+import { MongoRollCallRepo, type RollCallRepo } from './roll-call.repo';
 import { MongoTempRoleRepo, type TempRoleRepo } from './temp-role.repo';
+import { MongoThreadModerationRepo, type ThreadModerationRepo } from './thread-moderation.repo';
 import { MongoUserApiSettingRepo, type UserApiSettingRepo } from './user-api-setting.repo';
-import { MongoXFeedCursorRepo, type XFeedCursorRepo } from './x-feed-cursor.repo';
+export {
+  MongoArchiveRepo,
+  type ArchiveRepo,
+  type ArchiveMutationInterceptor,
+} from './archive.repo';
 
 export { MongoActivityRepo, type ActivityRepo, type ActivityInput } from './activity.repo';
-export { MongoFetchRepo, type FetchRepo } from './fetch.repo';
+export { MongoAiUsageRepo, type AiUsageRepo, type UsageWindow } from './ai-usage.repo';
+export { MongoArchiveStatsRepo } from './archive-stats.repo';
+export type {
+  ArchiveStatsRepo,
+  ArchiveStatsScope,
+  ActivitySections,
+  ActivityReport,
+  ComparedActivityReport,
+  ActivitySummary,
+  ActivityHeatmap,
+  AppUsageStats,
+  AuthorRanking,
+  ChannelRanking,
+  EmojiUsage,
+  ReactionSummary,
+  ReactionsGivenStats,
+  ReplyPartnersStats,
+  RetentionStats,
+  StickerUsage,
+  TopReactedMessage,
+  TrendBucket,
+} from './archive-stats.types';
+export {
+  MongoFeedSubscriptionRepo,
+  type FeedSubscriptionRepo,
+  type FeedSubscriptionFilterInput,
+  type FeedSubscriptionUpsertInput,
+  type FeedSubscriptionUpsertResult,
+  type FeedSubscriptionDeleteWhere,
+} from './feed-subscription.repo';
 export { MongoGiveawayRepo, type GiveawayRepo, type GiveawayInput } from './giveaway.repo';
-export { MongoMessageRepo, type MessageRepo, type InsertResult } from './message.repo';
+export { MongoGayReadingRepo, type GayReadingRepo } from './gay-reading.repo';
 export { MongoReplyRepo, type ReplyRepo } from './reply.repo';
+export { MongoRollCallRepo, type RollCallRepo, type RollCallInput } from './roll-call.repo';
 export { MongoTempRoleRepo, type TempRoleRepo, type TempRoleInput } from './temp-role.repo';
+export { MongoThreadModerationRepo, type ThreadModerationRepo } from './thread-moderation.repo';
 export {
   MongoUserApiSettingRepo,
   type UserApiSettingRepo,
   type UserApiSettingDefaults,
   type UserApiSettingPatch,
 } from './user-api-setting.repo';
-export { MongoXFeedCursorRepo, type XFeedCursorRepo } from './x-feed-cursor.repo';
 
 /**
  * Per-guild repository bag. Composition roots build one of these per
  * guild from the guild's {@link GuildConnection} and stash it where
  * handlers can read it.
  */
+export { MongoGuildSettingsRepo, type GuildSettingsRepo } from './guild-settings.repo';
+
 export interface Repos {
+  readonly guildSettings: GuildSettingsRepo;
   readonly activity: ActivityRepo;
-  readonly fetch: FetchRepo;
+  readonly aiUsage: AiUsageRepo;
+  /** Read-only archive statistics; every bot may read through its reader connection. */
+  readonly archiveStats: ArchiveStatsRepo;
   readonly giveaway: GiveawayRepo;
-  readonly message: MessageRepo;
+  readonly gayReading: GayReadingRepo;
+  readonly gayStats: GayStatsRepo;
   readonly reply: ReplyRepo;
+  readonly rollCall: RollCallRepo;
   readonly tempRole: TempRoleRepo;
+  readonly threadModeration: ThreadModerationRepo;
   readonly userApiSetting: UserApiSettingRepo;
-  readonly xFeedCursor: XFeedCursorRepo;
+  readonly feedSubscription: FeedSubscriptionRepo;
 }
 
 /**
@@ -56,12 +106,17 @@ export interface Repos {
  * the implementation of every `*RepoFactory` token.
  */
 export const buildRepos = (conn: GuildConnection): Repos => ({
+  guildSettings: new MongoGuildSettingsRepo(conn),
   activity: new MongoActivityRepo(conn),
-  fetch: new MongoFetchRepo(conn),
+  aiUsage: new MongoAiUsageRepo(conn),
+  archiveStats: new MongoArchiveStatsRepo(conn),
   giveaway: new MongoGiveawayRepo(conn),
-  message: new MongoMessageRepo(conn),
+  gayReading: new MongoGayReadingRepo(conn),
+  gayStats: new MongoGayStatsRepo(conn),
   reply: new MongoReplyRepo(conn),
+  rollCall: new MongoRollCallRepo(conn),
   tempRole: new MongoTempRoleRepo(conn),
+  threadModeration: new MongoThreadModerationRepo(conn),
   userApiSetting: new MongoUserApiSettingRepo(conn),
-  xFeedCursor: new MongoXFeedCursorRepo(conn),
+  feedSubscription: new MongoFeedSubscriptionRepo(conn),
 });

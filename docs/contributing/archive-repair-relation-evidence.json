@@ -1,0 +1,1894 @@
+{
+  "version": 1,
+  "scope": "Synthetic excluded-source planning comparison; not production or end-to-end backup throughput",
+  "before": {
+    "version": 1,
+    "startedAt": "2026-10-06T14:48:40.625Z",
+    "dataset": {
+      "version": 1,
+      "count": 10000,
+      "scenario": "bot-heavy",
+      "identity": "a7393effcbbe8024ccf605d9074a8f8964257feb4d3e05553d6d44f805ace577",
+      "seedBsonBytes": 2564000,
+      "maxSeedBatchBytes": 128200,
+      "seedMs": 109.7075890000001
+    },
+    "implementation": {
+      "repairServiceSha256": "098f703bc19a3ea14fade6b91aa6e9ca6493eb2f5fc3d7c5f032cba7d0bc8b86",
+      "moduleSha256": {
+        "service.ts": "098f703bc19a3ea14fade6b91aa6e9ca6493eb2f5fc3d7c5f032cba7d0bc8b86",
+        "images.ts": "59fcf206d146611a93881061fb99a9077ffb8376dbd13c3b3afb49e421594e7e",
+        "cancellation.ts": "9fe2b7a6d415cf5d9c09316eca00b82d0dfe093af1d5790a2b9b90c14671cf99",
+        "planning-journal.ts": "88838d85dcfe9b4c19966478217299a89564e609f4ea37b949a9eadc0dbeacda",
+        "apply-batch.ts": "4940376301ea96950287fc97b963b1ee28020a501dc37f0b9df6d8964346f04c"
+      }
+    },
+    "environment": {
+      "node": "v22.13.0",
+      "mongo": "8.2.6",
+      "logicalCpus": 12,
+      "availableParallelism": 12,
+      "hostRamBytes": 33537269760,
+      "cgroupCpuMax": null,
+      "cgroupMemoryMax": null,
+      "writeConcern": {
+        "w": "majority",
+        "j": true
+      },
+      "maxPoolSize": 4,
+      "concurrency": 1,
+      "mongoCacheGiB": 0.25,
+      "indexVersion": 1,
+      "batchDocuments": 500,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": {
+            "_id": 1
+          },
+          "unique": false
+        },
+        {
+          "name": "benchmark_message_order_v1",
+          "key": {
+            "messageId": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ],
+      "cache": "after-seed",
+      "cacheDefinition": "After-seed follows insertion/index preparation; warm adds an audit; mongo-cold restarts only the disposable mongod before each phase to clear its WiredTiger cache. No OS cache eviction is performed."
+    },
+    "storage": {
+      "budgetBytes": 1073741824,
+      "dataBytes": 8540542,
+      "allocatedBytes": 1486848,
+      "indexBytes": 1384448,
+      "temporaryFilesRemovedOnExit": true
+    },
+    "syntheticSortExplain": {
+      "docsExamined": 10000,
+      "keysExamined": 10000,
+      "executionTimeMs": 10
+    },
+    "summary": {
+      "audit": {
+        "elapsedMs": {
+          "median": 84.99623299999985,
+          "min": 84.5674799999997,
+          "max": 140.73935200000005
+        },
+        "messagesPerSecond": {
+          "median": 117652.27289543547,
+          "min": 71053.33268835853,
+          "max": 118248.76418216593
+        }
+      },
+      "plan": {
+        "elapsedMs": {
+          "median": 3280.8024539999997,
+          "min": 3266.5159239999994,
+          "max": 3559.8590529999997
+        },
+        "messagesPerSecond": {
+          "median": 3048.034784236357,
+          "min": 2809.0999815210944,
+          "max": 3061.3657587055445
+        }
+      },
+      "verify": {
+        "elapsedMs": {
+          "median": 270.18652999999904,
+          "min": 265.4510769999997,
+          "max": 280.00678100000005
+        },
+        "messagesPerSecond": {
+          "median": 37011.46759610864,
+          "min": 35713.42081176241,
+          "max": 37671.72509908487
+        }
+      }
+    },
+    "measurements": [
+      {
+        "run": 1,
+        "phase": "audit",
+        "elapsedMs": 140.73935200000005,
+        "messagesPerSecond": 71053.33268835853,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 140.73935200000005,
+          "cpuUserMs": 366.523,
+          "cpuSystemMs": 8.191,
+          "sampledPeakRssBytes": 320811008,
+          "sampledPeakHeapBytes": 204507728,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 5,
+            "meanMs": 22.3133696,
+            "maxMs": 26.214399
+          },
+          "gc": {
+            "count": 10,
+            "durationMs": 10.443108797073364
+          }
+        },
+        "db": {
+          "find": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 9,
+            "requestBsonBytes": 432,
+            "responseBsonBytes": 130994
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 36,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 2,
+            "failures": 0,
+            "durationMs": 15,
+            "requestBsonBytes": 531,
+            "responseBsonBytes": 171
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 20,
+          "sampledPeakRssBytes": 222035968,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 1,
+        "phase": "plan",
+        "elapsedMs": 3559.8590529999997,
+        "messagesPerSecond": 2809.0999815210944,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "operations": 8000,
+            "unresolved": 0,
+            "journalBytes": 5976000
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 3559.8590529999997,
+          "cpuUserMs": 3199.641,
+          "cpuSystemMs": 364.592,
+          "sampledPeakRssBytes": 332869632,
+          "sampledPeakHeapBytes": 210983912,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 176,
+            "meanMs": 20.032698181818184,
+            "maxMs": 22.233087
+          },
+          "gc": {
+            "count": 79,
+            "durationMs": 57.046775817871094
+          }
+        },
+        "db": {
+          "find": {
+            "count": 16034,
+            "failures": 0,
+            "durationMs": 2106,
+            "requestBsonBytes": 3435851,
+            "responseBsonBytes": 1654719
+          },
+          "createIndexes": {
+            "count": 4,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 849,
+            "responseBsonBytes": 368
+          },
+          "insert": {
+            "count": 17,
+            "failures": 0,
+            "durationMs": 108,
+            "requestBsonBytes": 6017507,
+            "responseBsonBytes": 340
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 31,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 304,
+            "responseBsonBytes": 103
+          },
+          "update": {
+            "count": 33,
+            "failures": 0,
+            "durationMs": 9,
+            "requestBsonBytes": 10297,
+            "responseBsonBytes": 1155
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 1220,
+          "sampledPeakRssBytes": 251265024,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 1,
+        "phase": "verify",
+        "elapsedMs": 280.00678100000005,
+        "messagesPerSecond": 35713.42081176241,
+        "result": {
+          "status": "partial",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0,
+            "pending": 8000,
+            "unresolvedEvidence": 0,
+            "inserted": 0,
+            "deleted": 0,
+            "modified": 0,
+            "invalidManifestOperations": 0,
+            "missingDependencies": 0
+          },
+          "issueCount": 4
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 280.00678100000005,
+          "cpuUserMs": 287.407,
+          "cpuSystemMs": 13.453,
+          "sampledPeakRssBytes": 336277504,
+          "sampledPeakHeapBytes": 214048984,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 12,
+            "meanMs": 21.602986666666666,
+            "maxMs": 34.406399
+          },
+          "gc": {
+            "count": 19,
+            "durationMs": 12.87350869178772
+          }
+        },
+        "db": {
+          "find": {
+            "count": 7,
+            "failures": 0,
+            "durationMs": 5,
+            "requestBsonBytes": 1185,
+            "responseBsonBytes": 507717
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 36,
+            "failures": 0,
+            "durationMs": 76,
+            "requestBsonBytes": 4772,
+            "responseBsonBytes": 8123028
+          },
+          "aggregate": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 26,
+            "requestBsonBytes": 1612,
+            "responseBsonBytes": 352
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          },
+          "update": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 284,
+            "responseBsonBytes": 35
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 40,
+          "sampledPeakRssBytes": 251527168,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 2,
+        "phase": "audit",
+        "elapsedMs": 84.99623299999985,
+        "messagesPerSecond": 117652.27289543547,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 84.99623299999985,
+          "cpuUserMs": 64.846,
+          "cpuSystemMs": 5.844,
+          "sampledPeakRssBytes": 336670720,
+          "sampledPeakHeapBytes": 216900184,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 3,
+            "meanMs": 20.23150933333333,
+            "maxMs": 20.381695
+          },
+          "gc": {
+            "count": 9,
+            "durationMs": 5.06524133682251
+          }
+        },
+        "db": {
+          "find": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 3,
+            "requestBsonBytes": 432,
+            "responseBsonBytes": 130994
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 26,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 2,
+            "failures": 0,
+            "durationMs": 15,
+            "requestBsonBytes": 531,
+            "responseBsonBytes": 171
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 20,
+          "sampledPeakRssBytes": 252444672,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 2,
+        "phase": "plan",
+        "elapsedMs": 3280.8024539999997,
+        "messagesPerSecond": 3048.034784236357,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "operations": 8000,
+            "unresolved": 0,
+            "journalBytes": 5976000
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 3280.8024539999997,
+          "cpuUserMs": 2693.451,
+          "cpuSystemMs": 372.646,
+          "sampledPeakRssBytes": 340471808,
+          "sampledPeakHeapBytes": 215873528,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 162,
+            "meanMs": 20.018213925925924,
+            "maxMs": 21.872639
+          },
+          "gc": {
+            "count": 79,
+            "durationMs": 58.71885561943054
+          }
+        },
+        "db": {
+          "find": {
+            "count": 16033,
+            "failures": 0,
+            "durationMs": 1972,
+            "requestBsonBytes": 3435699,
+            "responseBsonBytes": 1654578
+          },
+          "createIndexes": {
+            "count": 4,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 849,
+            "responseBsonBytes": 368
+          },
+          "insert": {
+            "count": 17,
+            "failures": 0,
+            "durationMs": 105,
+            "requestBsonBytes": 6017507,
+            "responseBsonBytes": 340
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 28,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 304,
+            "responseBsonBytes": 103
+          },
+          "update": {
+            "count": 33,
+            "failures": 0,
+            "durationMs": 10,
+            "requestBsonBytes": 10297,
+            "responseBsonBytes": 1155
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 1180,
+          "sampledPeakRssBytes": 254541824,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 2,
+        "phase": "verify",
+        "elapsedMs": 270.18652999999904,
+        "messagesPerSecond": 37011.46759610864,
+        "result": {
+          "status": "partial",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0,
+            "pending": 8000,
+            "unresolvedEvidence": 0,
+            "inserted": 0,
+            "deleted": 0,
+            "modified": 0,
+            "invalidManifestOperations": 0,
+            "missingDependencies": 0
+          },
+          "issueCount": 4
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 270.18652999999904,
+          "cpuUserMs": 251.572,
+          "cpuSystemMs": 9.986,
+          "sampledPeakRssBytes": 340733952,
+          "sampledPeakHeapBytes": 206004048,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 12,
+            "meanMs": 20.605610666666667,
+            "maxMs": 21.839871
+          },
+          "gc": {
+            "count": 19,
+            "durationMs": 12.105198621749878
+          }
+        },
+        "db": {
+          "find": {
+            "count": 7,
+            "failures": 0,
+            "durationMs": 8,
+            "requestBsonBytes": 1185,
+            "responseBsonBytes": 507717
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 36,
+            "failures": 0,
+            "durationMs": 70,
+            "requestBsonBytes": 4772,
+            "responseBsonBytes": 8123028
+          },
+          "aggregate": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 27,
+            "requestBsonBytes": 1612,
+            "responseBsonBytes": 352
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          },
+          "update": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 284,
+            "responseBsonBytes": 35
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 50,
+          "sampledPeakRssBytes": 254541824,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 3,
+        "phase": "audit",
+        "elapsedMs": 84.5674799999997,
+        "messagesPerSecond": 118248.76418216593,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 84.5674799999997,
+          "cpuUserMs": 69.832,
+          "cpuSystemMs": 1.259,
+          "sampledPeakRssBytes": 340733952,
+          "sampledPeakHeapBytes": 208861536,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 3,
+            "meanMs": 20.051285333333333,
+            "maxMs": 20.250623
+          },
+          "gc": {
+            "count": 8,
+            "durationMs": 3.85805606842041
+          }
+        },
+        "db": {
+          "find": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 3,
+            "requestBsonBytes": 432,
+            "responseBsonBytes": 130994
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 24,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 2,
+            "failures": 0,
+            "durationMs": 14,
+            "requestBsonBytes": 531,
+            "responseBsonBytes": 171
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 20,
+          "sampledPeakRssBytes": 255459328,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 3,
+        "phase": "plan",
+        "elapsedMs": 3266.5159239999994,
+        "messagesPerSecond": 3061.3657587055445,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "operations": 8000,
+            "unresolved": 0,
+            "journalBytes": 5976000
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 3266.5159239999994,
+          "cpuUserMs": 2716.776,
+          "cpuSystemMs": 332.669,
+          "sampledPeakRssBytes": 342568960,
+          "sampledPeakHeapBytes": 215513416,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 162,
+            "meanMs": 20.019225283950615,
+            "maxMs": 21.725183
+          },
+          "gc": {
+            "count": 79,
+            "durationMs": 58.58556008338928
+          }
+        },
+        "db": {
+          "find": {
+            "count": 16033,
+            "failures": 0,
+            "durationMs": 1878,
+            "requestBsonBytes": 3435699,
+            "responseBsonBytes": 1654578
+          },
+          "createIndexes": {
+            "count": 4,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 849,
+            "responseBsonBytes": 368
+          },
+          "insert": {
+            "count": 17,
+            "failures": 0,
+            "durationMs": 105,
+            "requestBsonBytes": 6017507,
+            "responseBsonBytes": 340
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 32,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 304,
+            "responseBsonBytes": 103
+          },
+          "update": {
+            "count": 33,
+            "failures": 0,
+            "durationMs": 8,
+            "requestBsonBytes": 10297,
+            "responseBsonBytes": 1155
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 1150,
+          "sampledPeakRssBytes": 258473984,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 3,
+        "phase": "verify",
+        "elapsedMs": 265.4510769999997,
+        "messagesPerSecond": 37671.72509908487,
+        "result": {
+          "status": "partial",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0,
+            "pending": 8000,
+            "unresolvedEvidence": 0,
+            "inserted": 0,
+            "deleted": 0,
+            "modified": 0,
+            "invalidManifestOperations": 0,
+            "missingDependencies": 0
+          },
+          "issueCount": 4
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 265.4510769999997,
+          "cpuUserMs": 272.28,
+          "cpuSystemMs": 9.233,
+          "sampledPeakRssBytes": 343343104,
+          "sampledPeakHeapBytes": 202182640,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 12,
+            "meanMs": 20.44450133333333,
+            "maxMs": 21.741567
+          },
+          "gc": {
+            "count": 19,
+            "durationMs": 12.866999626159668
+          }
+        },
+        "db": {
+          "find": {
+            "count": 7,
+            "failures": 0,
+            "durationMs": 8,
+            "requestBsonBytes": 1185,
+            "responseBsonBytes": 507717
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 36,
+            "failures": 0,
+            "durationMs": 71,
+            "requestBsonBytes": 4772,
+            "responseBsonBytes": 8123028
+          },
+          "aggregate": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 27,
+            "requestBsonBytes": 1612,
+            "responseBsonBytes": 352
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          },
+          "update": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 284,
+            "responseBsonBytes": 35
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 40,
+          "sampledPeakRssBytes": 258736128,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      }
+    ],
+    "limitations": [
+      "Only actual repair audit/plan/verify database paths execute; no Discord requests, permission discovery, history fetch, reaction membership fetch, worker inbox or shutdown drain are measured.",
+      "Reaction-heavy data measures BSON/repair costs, not normal/burst REST completeness.",
+      "Many-threads data changes synthetic channel cardinality; permission discovery is not measured.",
+      "Node and disposable mongod CPU/RSS are separate process samples; other services and whole-host load are not attributed. Sampling can miss short peaks.",
+      "BSON bytes estimate logical command/reply payloads, not wire bytes; instrumentation overhead is included.",
+      "No OS cache eviction occurs. Synthetic indexed-sort execution stats do not describe every repair aggregation; journal command latency includes but does not isolate filesystem fsync latency."
+    ]
+  },
+  "after": {
+    "version": 1,
+    "startedAt": "2026-10-06T14:50:39.825Z",
+    "dataset": {
+      "version": 1,
+      "count": 10000,
+      "scenario": "bot-heavy",
+      "identity": "a7393effcbbe8024ccf605d9074a8f8964257feb4d3e05553d6d44f805ace577",
+      "seedBsonBytes": 2564000,
+      "maxSeedBatchBytes": 128200,
+      "seedMs": 121.76455699999997
+    },
+    "implementation": {
+      "repairServiceSha256": "c3e17083642a75d922096c2b61938fff5c60bfb2324abef441de393e8548d03e",
+      "moduleSha256": {
+        "service.ts": "c3e17083642a75d922096c2b61938fff5c60bfb2324abef441de393e8548d03e",
+        "images.ts": "59fcf206d146611a93881061fb99a9077ffb8376dbd13c3b3afb49e421594e7e",
+        "cancellation.ts": "9fe2b7a6d415cf5d9c09316eca00b82d0dfe093af1d5790a2b9b90c14671cf99",
+        "planning-journal.ts": "88838d85dcfe9b4c19966478217299a89564e609f4ea37b949a9eadc0dbeacda",
+        "apply-batch.ts": "4940376301ea96950287fc97b963b1ee28020a501dc37f0b9df6d8964346f04c"
+      }
+    },
+    "environment": {
+      "node": "v22.13.0",
+      "mongo": "8.2.6",
+      "logicalCpus": 12,
+      "availableParallelism": 12,
+      "hostRamBytes": 33537269760,
+      "cgroupCpuMax": null,
+      "cgroupMemoryMax": null,
+      "writeConcern": {
+        "w": "majority",
+        "j": true
+      },
+      "maxPoolSize": 4,
+      "concurrency": 1,
+      "mongoCacheGiB": 0.25,
+      "indexVersion": 1,
+      "batchDocuments": 500,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": {
+            "_id": 1
+          },
+          "unique": false
+        },
+        {
+          "name": "benchmark_message_order_v1",
+          "key": {
+            "messageId": 1,
+            "_id": 1
+          },
+          "unique": false
+        }
+      ],
+      "cache": "after-seed",
+      "cacheDefinition": "After-seed follows insertion/index preparation; warm adds an audit; mongo-cold restarts only the disposable mongod before each phase to clear its WiredTiger cache. No OS cache eviction is performed."
+    },
+    "storage": {
+      "budgetBytes": 1073741824,
+      "dataBytes": 8540542,
+      "allocatedBytes": 1482752,
+      "indexBytes": 1392640,
+      "temporaryFilesRemovedOnExit": true
+    },
+    "syntheticSortExplain": {
+      "docsExamined": 10000,
+      "keysExamined": 10000,
+      "executionTimeMs": 6
+    },
+    "summary": {
+      "audit": {
+        "elapsedMs": {
+          "median": 87.91198299999996,
+          "min": 84.66035300000021,
+          "max": 118.71403400000008
+        },
+        "messagesPerSecond": {
+          "median": 113750.1357465683,
+          "min": 84236.03901793105,
+          "max": 118119.04445992535
+        }
+      },
+      "plan": {
+        "elapsedMs": {
+          "median": 370.8738370000001,
+          "min": 367.16502999999966,
+          "max": 407.2447049999996
+        },
+        "messagesPerSecond": {
+          "median": 26963.34710717272,
+          "min": 24555.2609456273,
+          "max": 27235.70923952101
+        }
+      },
+      "verify": {
+        "elapsedMs": {
+          "median": 284.2061190000004,
+          "min": 271.6236659999995,
+          "max": 303.11109199999964
+        },
+        "messagesPerSecond": {
+          "median": 35185.73081813198,
+          "min": 32991.2044261317,
+          "max": 36815.64330259801
+        }
+      }
+    },
+    "measurements": [
+      {
+        "run": 1,
+        "phase": "audit",
+        "elapsedMs": 118.71403400000008,
+        "messagesPerSecond": 84236.03901793105,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 118.71403400000008,
+          "cpuUserMs": 175.157,
+          "cpuSystemMs": 3.21,
+          "sampledPeakRssBytes": 322281472,
+          "sampledPeakHeapBytes": 191710168,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 4,
+            "meanMs": 20.652032,
+            "maxMs": 21.577727
+          },
+          "gc": {
+            "count": 8,
+            "durationMs": 4.4378743171691895
+          }
+        },
+        "db": {
+          "find": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 5,
+            "requestBsonBytes": 432,
+            "responseBsonBytes": 130994
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 30,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 2,
+            "failures": 0,
+            "durationMs": 15,
+            "requestBsonBytes": 531,
+            "responseBsonBytes": 171
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 20,
+          "sampledPeakRssBytes": 230162432,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 1,
+        "phase": "plan",
+        "elapsedMs": 407.2447049999996,
+        "messagesPerSecond": 24555.2609456273,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "operations": 8000,
+            "unresolved": 0,
+            "journalBytes": 5976000
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 407.2447049999996,
+          "cpuUserMs": 480.87,
+          "cpuSystemMs": 14.589,
+          "sampledPeakRssBytes": 326606848,
+          "sampledPeakHeapBytes": 205367568,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 17,
+            "meanMs": 21.563753411764708,
+            "maxMs": 24.002559
+          },
+          "gc": {
+            "count": 14,
+            "durationMs": 15.394197702407837
+          }
+        },
+        "db": {
+          "find": {
+            "count": 53,
+            "failures": 0,
+            "durationMs": 34,
+            "requestBsonBytes": 1355155,
+            "responseBsonBytes": 135926
+          },
+          "createIndexes": {
+            "count": 4,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 849,
+            "responseBsonBytes": 368
+          },
+          "insert": {
+            "count": 17,
+            "failures": 0,
+            "durationMs": 114,
+            "requestBsonBytes": 6017507,
+            "responseBsonBytes": 340
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 32,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 304,
+            "responseBsonBytes": 103
+          },
+          "update": {
+            "count": 33,
+            "failures": 0,
+            "durationMs": 5,
+            "requestBsonBytes": 10297,
+            "responseBsonBytes": 1155
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 130,
+          "sampledPeakRssBytes": 253100032,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 1,
+        "phase": "verify",
+        "elapsedMs": 284.2061190000004,
+        "messagesPerSecond": 35185.73081813198,
+        "result": {
+          "status": "partial",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0,
+            "pending": 8000,
+            "unresolvedEvidence": 0,
+            "inserted": 0,
+            "deleted": 0,
+            "modified": 0,
+            "invalidManifestOperations": 0,
+            "missingDependencies": 0
+          },
+          "issueCount": 4
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 284.2061190000004,
+          "cpuUserMs": 292.713,
+          "cpuSystemMs": 8.857,
+          "sampledPeakRssBytes": 328835072,
+          "sampledPeakHeapBytes": 208181488,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 12,
+            "meanMs": 21.766144,
+            "maxMs": 28.753919
+          },
+          "gc": {
+            "count": 20,
+            "durationMs": 13.483091354370117
+          }
+        },
+        "db": {
+          "find": {
+            "count": 7,
+            "failures": 0,
+            "durationMs": 11,
+            "requestBsonBytes": 1185,
+            "responseBsonBytes": 507717
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 36,
+            "failures": 0,
+            "durationMs": 75,
+            "requestBsonBytes": 4772,
+            "responseBsonBytes": 8123028
+          },
+          "aggregate": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 28,
+            "requestBsonBytes": 1612,
+            "responseBsonBytes": 352
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          },
+          "update": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 284,
+            "responseBsonBytes": 35
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 40,
+          "sampledPeakRssBytes": 253624320,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 2,
+        "phase": "audit",
+        "elapsedMs": 87.91198299999996,
+        "messagesPerSecond": 113750.1357465683,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 87.91198299999996,
+          "cpuUserMs": 72.3,
+          "cpuSystemMs": 2.92,
+          "sampledPeakRssBytes": 328966144,
+          "sampledPeakHeapBytes": 198561232,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 3,
+            "meanMs": 20.48273066666667,
+            "maxMs": 20.889599
+          },
+          "gc": {
+            "count": 8,
+            "durationMs": 3.7178664207458496
+          }
+        },
+        "db": {
+          "find": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 3,
+            "requestBsonBytes": 432,
+            "responseBsonBytes": 130994
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 26,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 2,
+            "failures": 0,
+            "durationMs": 14,
+            "requestBsonBytes": 531,
+            "responseBsonBytes": 171
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 20,
+          "sampledPeakRssBytes": 254541824,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 2,
+        "phase": "plan",
+        "elapsedMs": 370.8738370000001,
+        "messagesPerSecond": 26963.34710717272,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "operations": 8000,
+            "unresolved": 0,
+            "journalBytes": 5976000
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 370.8738370000001,
+          "cpuUserMs": 347.67,
+          "cpuSystemMs": 14.846,
+          "sampledPeakRssBytes": 339058688,
+          "sampledPeakHeapBytes": 213827952,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 16,
+            "meanMs": 21.48352,
+            "maxMs": 23.199743
+          },
+          "gc": {
+            "count": 13,
+            "durationMs": 13.9580237865448
+          }
+        },
+        "db": {
+          "find": {
+            "count": 53,
+            "failures": 0,
+            "durationMs": 28,
+            "requestBsonBytes": 1355155,
+            "responseBsonBytes": 135926
+          },
+          "createIndexes": {
+            "count": 4,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 849,
+            "responseBsonBytes": 368
+          },
+          "insert": {
+            "count": 17,
+            "failures": 0,
+            "durationMs": 109,
+            "requestBsonBytes": 6017507,
+            "responseBsonBytes": 340
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 32,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 304,
+            "responseBsonBytes": 103
+          },
+          "update": {
+            "count": 33,
+            "failures": 0,
+            "durationMs": 11,
+            "requestBsonBytes": 10297,
+            "responseBsonBytes": 1155
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 110,
+          "sampledPeakRssBytes": 257425408,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 2,
+        "phase": "verify",
+        "elapsedMs": 303.11109199999964,
+        "messagesPerSecond": 32991.2044261317,
+        "result": {
+          "status": "partial",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0,
+            "pending": 8000,
+            "unresolvedEvidence": 0,
+            "inserted": 0,
+            "deleted": 0,
+            "modified": 0,
+            "invalidManifestOperations": 0,
+            "missingDependencies": 0
+          },
+          "issueCount": 4
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 303.11109199999964,
+          "cpuUserMs": 268.63,
+          "cpuSystemMs": 6.153,
+          "sampledPeakRssBytes": 340107264,
+          "sampledPeakHeapBytes": 216622344,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 12,
+            "meanMs": 23.40727466666667,
+            "maxMs": 30.212095
+          },
+          "gc": {
+            "count": 20,
+            "durationMs": 16.335861206054688
+          }
+        },
+        "db": {
+          "find": {
+            "count": 7,
+            "failures": 0,
+            "durationMs": 7,
+            "requestBsonBytes": 1185,
+            "responseBsonBytes": 507717
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 36,
+            "failures": 0,
+            "durationMs": 81,
+            "requestBsonBytes": 4772,
+            "responseBsonBytes": 8123028
+          },
+          "aggregate": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 32,
+            "requestBsonBytes": 1612,
+            "responseBsonBytes": 352
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          },
+          "update": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 284,
+            "responseBsonBytes": 35
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 70,
+          "sampledPeakRssBytes": 258211840,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 3,
+        "phase": "audit",
+        "elapsedMs": 84.66035300000021,
+        "messagesPerSecond": 118119.04445992535,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 84.66035300000021,
+          "cpuUserMs": 75.492,
+          "cpuSystemMs": 2.881,
+          "sampledPeakRssBytes": 340369408,
+          "sampledPeakHeapBytes": 206937048,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 3,
+            "meanMs": 20.897792,
+            "maxMs": 21.282815
+          },
+          "gc": {
+            "count": 8,
+            "durationMs": 4.633930444717407
+          }
+        },
+        "db": {
+          "find": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 432,
+            "responseBsonBytes": 130994
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 24,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 2,
+            "failures": 0,
+            "durationMs": 10,
+            "requestBsonBytes": 531,
+            "responseBsonBytes": 171
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 20,
+          "sampledPeakRssBytes": 259260416,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 3,
+        "phase": "plan",
+        "elapsedMs": 367.16502999999966,
+        "messagesPerSecond": 27235.70923952101,
+        "result": {
+          "status": "complete",
+          "counts": {
+            "operations": 8000,
+            "unresolved": 0,
+            "journalBytes": 5976000
+          },
+          "issueCount": 0
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 367.16502999999966,
+          "cpuUserMs": 502.707,
+          "cpuSystemMs": 9.04,
+          "sampledPeakRssBytes": 348889088,
+          "sampledPeakHeapBytes": 212977928,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 16,
+            "meanMs": 21.209088,
+            "maxMs": 24.952831
+          },
+          "gc": {
+            "count": 15,
+            "durationMs": 19.23047375679016
+          }
+        },
+        "db": {
+          "find": {
+            "count": 53,
+            "failures": 0,
+            "durationMs": 41,
+            "requestBsonBytes": 1355155,
+            "responseBsonBytes": 135926
+          },
+          "createIndexes": {
+            "count": 4,
+            "failures": 0,
+            "durationMs": 2,
+            "requestBsonBytes": 849,
+            "responseBsonBytes": 368
+          },
+          "insert": {
+            "count": 17,
+            "failures": 0,
+            "durationMs": 99,
+            "requestBsonBytes": 6017507,
+            "responseBsonBytes": 340
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 20,
+            "failures": 0,
+            "durationMs": 34,
+            "requestBsonBytes": 2500,
+            "responseBsonBytes": 2482986
+          },
+          "aggregate": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 304,
+            "responseBsonBytes": 103
+          },
+          "update": {
+            "count": 33,
+            "failures": 0,
+            "durationMs": 7,
+            "requestBsonBytes": 10297,
+            "responseBsonBytes": 1155
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 100,
+          "sampledPeakRssBytes": 260571136,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      },
+      {
+        "run": 3,
+        "phase": "verify",
+        "elapsedMs": 271.6236659999995,
+        "messagesPerSecond": 36815.64330259801,
+        "result": {
+          "status": "partial",
+          "counts": {
+            "total": 10000,
+            "convertible": 0,
+            "invalid": 0,
+            "unknownAuthors": 0,
+            "excluded": 8000,
+            "invalidCursors": 0,
+            "duplicateCursors": 0,
+            "duplicateGroups": 0,
+            "pending": 8000,
+            "unresolvedEvidence": 0,
+            "inserted": 0,
+            "deleted": 0,
+            "modified": 0,
+            "invalidManifestOperations": 0,
+            "missingDependencies": 0
+          },
+          "issueCount": 4
+        },
+        "process": {
+          "version": 1,
+          "scope": "current-node-process",
+          "elapsedMs": 271.6236659999995,
+          "cpuUserMs": 277.478,
+          "cpuSystemMs": 4.053,
+          "sampledPeakRssBytes": 350724096,
+          "sampledPeakHeapBytes": 196896064,
+          "memorySampleIntervalMs": 100,
+          "eventLoop": {
+            "samples": 11,
+            "meanMs": 21.644008727272727,
+            "maxMs": 25.444351
+          },
+          "gc": {
+            "count": 19,
+            "durationMs": 14.23797607421875
+          }
+        },
+        "db": {
+          "find": {
+            "count": 7,
+            "failures": 0,
+            "durationMs": 7,
+            "requestBsonBytes": 1185,
+            "responseBsonBytes": 507717
+          },
+          "count": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 88,
+            "responseBsonBytes": 20
+          },
+          "getMore": {
+            "count": 36,
+            "failures": 0,
+            "durationMs": 76,
+            "requestBsonBytes": 4772,
+            "responseBsonBytes": 8123028
+          },
+          "aggregate": {
+            "count": 3,
+            "failures": 0,
+            "durationMs": 23,
+            "requestBsonBytes": 1612,
+            "responseBsonBytes": 352
+          },
+          "listIndexes": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 0,
+            "requestBsonBytes": 107,
+            "responseBsonBytes": 221
+          },
+          "update": {
+            "count": 1,
+            "failures": 0,
+            "durationMs": 1,
+            "requestBsonBytes": 284,
+            "responseBsonBytes": 35
+          }
+        },
+        "liveUpdates": 0,
+        "mongoProcess": {
+          "scope": "disposable-mongod-process",
+          "cpuMs": 50,
+          "sampledPeakRssBytes": 260833280,
+          "sampleIntervalMs": 100,
+          "complete": true
+        }
+      }
+    ],
+    "limitations": [
+      "Only actual repair audit/plan/verify database paths execute; no Discord requests, permission discovery, history fetch, reaction membership fetch, worker inbox or shutdown drain are measured.",
+      "Reaction-heavy data measures BSON/repair costs, not normal/burst REST completeness.",
+      "Many-threads data changes synthetic channel cardinality; permission discovery is not measured.",
+      "Node and disposable mongod CPU/RSS are separate process samples; other services and whole-host load are not attributed. Sampling can miss short peaks.",
+      "BSON bytes estimate logical command/reply payloads, not wire bytes; instrumentation overhead is included.",
+      "No OS cache eviction occurs. Synthetic indexed-sort execution stats do not describe every repair aggregation; journal command latency includes but does not isolate filesystem fsync latency."
+    ]
+  }
+}

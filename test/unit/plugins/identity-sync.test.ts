@@ -15,13 +15,9 @@ import {
   type IdentitySyncState,
 } from '../../../src/plugins/identity-sync/internal/sync';
 import { TOKENS } from '../../../src/bot/tokens';
-import { createLogger } from '../../../src/core/logger';
-import { systemClock } from '../../../src/core/time';
-import type { Translator } from '../../../src/core/i18n';
-import type { PluginRuntimeContext } from '../../../src/core/plugin';
+import { buildPluginContext, silentLogger } from '../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
-const fakeTranslator = { t: (key: string) => key } as unknown as Translator;
+const silent = silentLogger();
 
 const freshState = (): IdentitySyncState => ({
   lastSourceAvatarHash: null,
@@ -255,10 +251,8 @@ describe('runIdentitySync (resilience + toggles)', () => {
   });
 
   it('survives a setAvatar failure and does not advance the recorded hash', async () => {
-    const { client } = makeClient({ avatar: 'hash-2' });
-    (client.user as unknown as { setAvatar: ReturnType<typeof vi.fn> }).setAvatar.mockRejectedValue(
-      new Error('rate limited'),
-    );
+    const { client, setAvatar } = makeClient({ avatar: 'hash-2' });
+    setAvatar.mockRejectedValue(new Error('rate limited'));
     const state: IdentitySyncState = { lastSourceAvatarHash: 'hash-1', fallbackApplied: false };
     await expect(
       runIdentitySync({ client, config: SYNC_CONFIG, logger: silent }, state),
@@ -331,17 +325,14 @@ describe('runIdentitySync (resilience + toggles)', () => {
 });
 
 describe('createIdentitySyncPlugin lifecycle', () => {
-  const makeCtx = (client: Client, jobMap: Map<string, unknown>): PluginRuntimeContext =>
-    ({
+  const makeCtx = (client: Client, jobMap: Map<string, unknown>) =>
+    buildPluginContext({
       logger: silent,
-      translator: fakeTranslator,
-      clock: systemClock,
-      resolve: (token: unknown) => {
-        if (token === TOKENS.DiscordClient) return client;
-        if (token === TOKENS.JobMap) return jobMap;
-        throw new Error('unexpected token');
-      },
-    }) as unknown as PluginRuntimeContext;
+      services: [
+        [TOKENS.DiscordClient, client],
+        [TOKENS.JobMap, jobMap],
+      ],
+    });
 
   it('does not schedule a job when disabled', async () => {
     const jobMap = new Map<string, unknown>();

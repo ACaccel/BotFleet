@@ -1,12 +1,11 @@
 /node_modules
 /dist
 /logs
-/errors
 /data
 *.log
 
 # Personal Claude Code settings (machine-specific allowlists, paths).
-# `.claude/agents/` IS tracked — those are shared dev tooling.
+# Shared agent instructions live in AGENTS.md.
 .claude/settings.json
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
@@ -28,9 +27,19 @@ docs/proposal.md
 # Ops tools — operator-supplied configs and per-run log output.
 # `config.json` is already matched by the global rule above; the
 # explicit entries below keep the tool-specific layout self-documenting.
-tools/msg_backup/config.json
-tools/msg_backup/logs/
-tools/msg_backup/tmp/
-tools/db/config.json
+# Archive exports from the removed `tools/db` CLI may remain on operator hosts.
 tools/db/backups/
+tools/migration/config.*.json
+!tools/migration/config.example.json
+tools/migration/*.local.*
+tools/migration/runs/
+tools/migration/.state/
+tools/migration/backups/
+tools/migration/dump/
+tools/migration/*.tar.gz
+tools/migration/*.archive.gz
 
+# Project runtime and operator-owned deployment state.
+/.conda/
+/.deploy/
+/deployment.json

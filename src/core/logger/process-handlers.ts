@@ -1,46 +1,27 @@
 /**
- * Process-level safety net.
+ * Process-level safety net, installed once per process (see
+ * {@link installed}) even when several BaseBots share it.
  *
- * `SIGINT` / `SIGTERM`: the operator's (or the supervisor's) request to
- * stop. Both run the injected `gracefulShutdown` under the same
- * re-entrancy guard and hard timeout as the fatal-exception path, then
- * exit 0 — so a supervisor configured `restart: on-failure` treats an
- * intentional stop as one. Installing them is what makes the graceful
- * path reachable at all: without a listener Node terminates the process
- * immediately on the signal, leaving Mongo connections open, a
- * half-written backup transcript, and a bound HTTP port.
+ * `SIGINT` / `SIGTERM` run the injected `gracefulShutdown` under the same
+ * re-entrancy guard and hard timeout as the fatal path, then exit 0, so a
+ * `restart: on-failure` supervisor treats an intentional stop as one. Without
+ * these listeners Node exits immediately, leaving Mongo connections, a
+ * half-written backup transcript and a bound HTTP port behind. A second
+ * signal during shutdown means the caller will not wait: exit 1 at once.
  *
- * A *second* signal while a shutdown is already running is treated as
- * "stop waiting" and exits at once with status 1. That branch cannot
- * distinguish an impatient operator from a supervisor escalating
- * `SIGINT` to `SIGTERM`; both mean the same thing here — the caller is
- * no longer willing to wait, and the teardown did not finish.
+ * The exit status only escalates: a fatal exception during a clean teardown,
+ * or a throwing `gracefulShutdown`, raises it to 1.
  *
- * The exit status only ever escalates. A fatal `uncaughtException` that
- * lands during a clean `SIGTERM` teardown, or a `gracefulShutdown` that
- * throws, raises the eventual status to 1 rather than letting the
- * first-writer's 0 stand.
+ * `uncaughtException`: a transient outbound-socket failure (see the
+ * deliberately narrow {@link isTransientNetworkError}) is logged, counted
+ * ({@link getTransientNetworkErrorCount}) and tolerated, because the owning
+ * client reconnects on its own. Anything else leaves the process in an
+ * indeterminate state, so it is fatal: best-effort graceful shutdown with a
+ * 5-second hard timeout, then exit 1.
  *
- * `uncaughtException`: a transient outbound-socket failure (e.g. a
- * gateway `ECONNRESET` / "socket hang up") is downgraded — logged at
- * error level, counted, and tolerated, because a connectivity blip does
- * not corrupt process state and the owning client reconnects on its own.
- * Every other uncaught exception is treated as fatal: log + best-effort
- * graceful shutdown with a hard 5-second timeout, then `process.exit(1)`.
- * Letting Node continue past a genuine fault is footgun territory — the
- * process is in an indeterminate state. The transient whitelist is kept
- * deliberately narrow (see {@link isTransientNetworkError}) so real
- * defects still crash loudly. The count is surfaced via
- * {@link getTransientNetworkErrorCount} for /health.
- *
- * `unhandledRejection`: log + counter increment. Do NOT exit; many
- * libraries fire-and-forget promises that reject benignly during
- * teardown. The count is surfaced via {@link getUnhandledRejectionCount}
- * so a /health endpoint can read it.
- *
- * Installation is idempotent at the module level via {@link installed}.
- * Multi-bot processes (one node process running >1 BaseBot) get a
- * single shared installation.
+ * `unhandledRejection` is logged and counted ({@link getUnhandledRejectionCount})
+ * but never exits: many libraries reject fire-and-forget promises benignly
+ * during teardown.
  */
 import { isTransientNetworkError } from '../errors';
 

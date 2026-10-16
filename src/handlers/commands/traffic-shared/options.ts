@@ -1,54 +1,94 @@
 /**
- * Parse and clamp the `visibility` / `range` / `top_n` options shared by
- * the whole `/traffic` family (`/traffic`, `/traffic_me`,
- * `/traffic_user`). Typed against the narrow `options` accessor so unit
- * tests can drive it without a full interaction fixture.
+ * The `visibility` / `range` / `top_n` options the `/traffic` subcommands
+ * share: their declaration and their parsing. Each subcommand picks its range
+ * and visibility defaults and its row count, which is the most rows its
+ * dashboard draws; only subcommands with long rankings let members lower it
+ * through `top_n`. Subcommand-specific options are declared and read by the
+ * subcommand.
  *
- * `visibility` sets both the reply audience and — through the shared
- * visibility filter — the channel-rank ceiling: `public` is capped by
- * the invoker's clearance AND the command channel's rank, so a public
- * reply never reveals activity in restricted channels; `ephemeral`
- * (the default) is capped by the invoker's clearance alone.
- *
- * Discord enforces the choice / min / max bounds at the API layer; the
- * clamp here is a defence against direct API calls that bypass them. A
- * command-specific option (e.g. `/traffic_user`'s required `user`) is
- * read in the handler, not here, so this stays focused on the common trio.
+ * `visibility` sets both the reply audience and the channel-rank ceiling of the
+ * visibility filter: `public` is capped by the invoker's clearance AND the
+ * command channel's rank, `ephemeral` by the invoker's clearance alone. Discord
+ * enforces the choice and bound limits; the parsing here is a defence against
+ * direct API calls that bypass them.
  */
 import type { ChatInputCommandInteraction } from 'discord.js';
 
+import type { CommandConfig } from '../command';
+
 import type { TrafficOptions, TrafficRange, Visibility } from './types';
 
-const DEFAULT_VISIBILITY: Visibility = 'ephemeral';
-const DEFAULT_RANGE: TrafficRange = '7d';
-const DEFAULT_TOP_N = 10;
-const MIN_TOP_N = 1;
-const MAX_TOP_N = 25;
+const VISIBILITIES: readonly Visibility[] = ['ephemeral', 'public'];
+const RANGES: readonly TrafficRange[] = ['24h', '7d', '30d', '90d', '365d'];
 
-const VISIBILITIES: ReadonlySet<string> = new Set<Visibility>(['ephemeral', 'public']);
-const RANGES: ReadonlySet<string> = new Set<TrafficRange>(['24h', '7d', '30d']);
+export interface TrafficOptionSpec {
+  readonly defaultRange: TrafficRange;
+  /** Who sees the reply when `visibility` is omitted; `public` by default. */
+  readonly defaultVisibility?: Visibility;
+  /** Largest and default row count: the most rows the subcommand's dashboard draws. */
+  readonly maxTopN: number;
+  /** Offer `top_n` so members can show fewer rows; only worth it for long rankings. */
+  readonly adjustableTopN?: boolean;
+}
 
-const clampTopN = (value: number): number => {
-  if (!Number.isFinite(value)) return DEFAULT_TOP_N;
-  return Math.min(MAX_TOP_N, Math.max(MIN_TOP_N, Math.floor(value)));
-};
+type Options = NonNullable<CommandConfig['options']>;
+
+/** The shared option declarations merged with the subcommand's own. */
+export const trafficCommandOptions = (spec: TrafficOptionSpec, extra: Options = {}): Options => ({
+  ...extra,
+  string: [
+    ...(extra.string ?? []),
+    {
+      name: 'range',
+      required: false,
+      choices: RANGES.map((value) => ({ value })),
+    },
+    {
+      name: 'visibility',
+      required: false,
+      choices: VISIBILITIES.map((value) => ({ value })),
+    },
+  ],
+  ...(spec.adjustableTopN === true
+    ? {
+        integer: [
+          ...(extra.integer ?? []),
+          { name: 'top_n', required: false, min: 1, max: spec.maxTopN },
+        ],
+      }
+    : {}),
+});
+
+const isOneOf = <T extends string>(raw: unknown, values: readonly T[]): raw is T =>
+  values.some((value) => value === raw);
+
+const pick = <T extends string>(raw: unknown, values: readonly T[], fallback: T): T =>
+  isOneOf(raw, values) ? raw : fallback;
 
 export const readTrafficOptions = (
   interaction: Pick<ChatInputCommandInteraction, 'options'>,
+  spec: TrafficOptionSpec,
 ): TrafficOptions => {
-  const rawVisibility = interaction.options.get('visibility')?.value;
-  const rawRange = interaction.options.get('range')?.value;
-  const rawTopN = interaction.options.get('top_n')?.value;
-
-  const visibility =
-    typeof rawVisibility === 'string' && VISIBILITIES.has(rawVisibility)
-      ? (rawVisibility as Visibility)
-      : DEFAULT_VISIBILITY;
-  const range =
-    typeof rawRange === 'string' && RANGES.has(rawRange)
-      ? (rawRange as TrafficRange)
-      : DEFAULT_RANGE;
-  const topN = clampTopN(typeof rawTopN === 'number' ? rawTopN : DEFAULT_TOP_N);
-
-  return { visibility, range, topN };
+  const rawTopN = spec.adjustableTopN === true ? interaction.options.get('top_n')?.value : null;
+  const topN =
+    typeof rawTopN === 'number' && Number.isFinite(rawTopN)
+      ? Math.min(spec.maxTopN, Math.max(1, Math.floor(rawTopN)))
+      : spec.maxTopN;
+  return {
+    visibility: pick(
+      interaction.options.get('visibility')?.value,
+      VISIBILITIES,
+      spec.defaultVisibility ?? 'public',
+    ),
+    range: pick(interaction.options.get('range')?.value, RANGES, spec.defaultRange),
+    topN,
+  };
 };
+
+/** A string choice option of the subcommand, or `fallback` when absent or unknown. */
+export const readChoice = <T extends string>(
+  interaction: Pick<ChatInputCommandInteraction, 'options'>,
+  name: string,
+  values: readonly T[],
+  fallback: T,
+): T => pick(interaction.options.get(name)?.value, values, fallback);

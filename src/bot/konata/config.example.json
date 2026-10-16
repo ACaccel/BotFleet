@@ -6,8 +6,39 @@
       "channels": {
         "debug": "YOUR_DEBUG_CHANNEL_ID"
       },
-      "roles": {}
+      "permission_rank": {
+        "channels": {
+          "YOUR_PRIVATE_CHANNEL_ID": 1
+        },
+        "features": {
+          "channel_logging": {
+            "maxChannelRank": 0
+          }
+        }
+      }
     }
   },
-  "commands": ["help", "COMMAND_NAME"]
+  "commands": ["help", "ai"],
+  "ai": {
+    "models": {
+      "default": {
+        "provider": "xai",
+        "model": "grok-4.20-0309-non-reasoning"
+      },
+      "allowed": {
+        "xai": ["grok-4.20-0309-non-reasoning"]
+      }
+    },
+    "rateLimit": {
+      "perUserPerHour": 30,
+      "perUserPerDay": 200,
+      "concurrent": 1
+    }
+  },
+  "notificationRoutes": {
+    "card-together-deploy": {
+      "guildId": "YOUR_GUILD_ID",
+      "channelId": "YOUR_NOTIFICATION_CHANNEL_ID"
+    }
+  }
 }

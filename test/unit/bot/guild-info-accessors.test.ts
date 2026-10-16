@@ -10,23 +10,26 @@
  */
 /* eslint-disable import/first */
 import { describe, expect, it, vi } from 'vitest';
-import type { Channel, Guild } from 'discord.js';
+import type { Guild } from 'discord.js';
 import type { Job } from 'node-schedule';
 
+import { buildTextChannel } from '../../fixtures/discord/channel-builder';
 import { buildInertClient } from '../../fixtures/discord/client-builder';
+import { buildGuild } from '../../fixtures/discord/guild-builder';
 import { barrelStubs } from '../../fixtures/handler-barrel-stubs';
 
 vi.mock('@cmd', () => barrelStubs.cmd);
 vi.mock('@button', () => barrelStubs.button);
 vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
-vi.mock('@reaction', () => barrelStubs.reaction);
 
 import { BaseBot, type Config, type GuildInfo } from '../../../src/bot/index';
 import type { Repos } from '../../../src/persistence/repositories';
 import { TOKENS } from '../../../src/bot/tokens';
+import { archiveControlFactory } from '../../../src/application/archive/control';
+import { buildArchiveRepos } from '../../../src/persistence/repositories/archive-repos';
 
-const fakeGuild = (id: string): Guild => ({ id, name: `Guild ${id}` }) as unknown as Guild;
+const fakeGuild = (id: string): Guild => buildGuild({ id, name: `Guild ${id}` });
 
 const fakeRepos = (): Repos => ({}) as unknown as Repos;
 
@@ -118,7 +121,7 @@ describe('BaseBot guildInfo accessors', () => {
 });
 
 /**
- * The accessors the plugin-side `deps-from-bot` bridges read. Each must
+ * The accessors the handler-side `deps-from-bot` bridges read. Each must
  * hand back the very object the container binds under the matching
  * token, because that identity is what keeps a plugin's own
  * `ctx.resolve` path and its handler path pointed at one instance.
@@ -131,7 +134,7 @@ describe('BaseBot container-backed accessors', () => {
 
   it('guildRegistry reads through to the live guild slots', () => {
     const bot = buildBot();
-    const channel = { id: 'c-1' } as unknown as Channel;
+    const channel = buildTextChannel({ id: 'c-1' });
     bot.registerGuildSlotInternal('g-1', {
       bot_name: 'A',
       guild: fakeGuild('g-1'),
@@ -150,6 +153,14 @@ describe('BaseBot container-backed accessors', () => {
 
     bot.jobMap.set('job-1', {} as unknown as Job);
     expect(bot.container.resolve(TOKENS.JobMap).get('job-1')).toBeDefined();
+  });
+
+  it('archiveControlFactory is unbound until a composition root registers it', () => {
+    const bot = buildBot();
+    expect(bot.archiveControlFactory).toBeUndefined();
+    const factory = archiveControlFactory(buildArchiveRepos);
+    bot.container.registerSingleton(TOKENS.ArchiveControlFactory, () => factory);
+    expect(bot.archiveControlFactory).toBe(factory);
   });
 
   it('requireLogger throws before run() binds the logger', () => {

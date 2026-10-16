@@ -1,48 +1,27 @@
 /**
- * In-process file-routing sink for pino.
+ * In-process file-routing sink for pino: each JSON Lines record goes to a
+ * file chosen from its `bot` / `guildId` bindings, rotating at local
+ * midnight.
  *
- * Each JSON Lines record written here is dispatched to a file chosen
- * from its `bot` / `guildId` bindings, rotating on the local-time day
- * boundary. The sink runs in the same Node process as the bot (as a
- * `Writable` consumed by {@link import('pino').multistream}) — no
- * worker thread, no `require.resolve` dance for TypeScript source vs.
- * compiled output, and a clean `close` that flushes every cached file
- * descriptor synchronously enough for graceful shutdown.
+ * The sink is a `Writable` in a {@link import('pino').multistream}, not a
+ * worker-thread transport, and that is deliberate: it shares the bot's event
+ * loop so `installProcessHandlers` can close every cached fd on the same tick
+ * during shutdown, and `pino-abstract-transport` needs a JS worker entry point
+ * that is awkward under `ts-node`.
  *
- * The in-process multistream design is final, not a stopgap. The
- * routing rules are pure record-content branching plus a write-stream
- * cache, the sink shares the bot's event loop (so `installProcessHandlers`
- * can close every cached fd on the same tick during shutdown), and
- * `pino-abstract-transport` would require a JS worker entry point that
- * is awkward under `ts-node`. Do not switch to a worker-thread transport.
+ * Routing: records with `guildId` go to
+ * `<rootDir>/<bot>/<guildId>/<YYYY-MM-DD>.log`; others to
+ * `<rootDir>/<bot>/<YYYY-MM-DD>.log`.
  *
- * Routing rules:
- *   - records carrying `guildId` →
- *     `<rootDir>/<bot>/<guildId>/<YYYY-MM-DD>.log`
- *   - records without `guildId` (system / bot-level lines) →
- *     `<rootDir>/<bot>/<YYYY-MM-DD>.log`
+ * Every record MUST carry `bot` (the composition root binds it). A record
+ * without it throws synchronously; there is deliberately no fallback file,
+ * which would hide the mis-binding. `bot` is stripped from the record because
+ * the directory already names it; `guildId` stays as a join key for
+ * downstream aggregators that never see the file path.
  *
- * Every record MUST carry a `bot` binding — the composition root
- * attaches `{ bot: clientId }` at logger construction so this is an
- * invariant, not a hope. A record without `bot` is a contract bug and
- * the sink throws synchronously inside the write path; there is
- * deliberately no `_unbound` fallback file because silently shuttling
- * mis-bound lines into a junk directory hides the underlying mistake.
- *
- * `bot` is path-encoded only, not field-encoded: the routing step
- * extracts `bot` to choose the file path, then strips it from the
- * record before serialising. Every line under `logs/<bot>/...` already
- * names the owning bot via its parent directory, so re-stating it
- * inside each JSON object is dead weight that bloats both disk usage
- * and `jq` output. `guildId` is left in the record on purpose —
- * downstream aggregators (cross-guild dashboards, archival pipelines)
- * use it as a join key without access to the originating file path.
- *
- * Layer purity: only Node built-ins (`fs`, `path`, `stream`). No
- * discord.js / mongoose / our own infra — `core/**` stays clean. The
- * `time` field on each record is left as pino's UTC ISO so the file
- * is unambiguous to read across timezones; only *file selection* uses
- * local time so rotation happens at the operator's midnight.
+ * `time` stays pino's UTC ISO so files read unambiguously across time zones;
+ * only file selection uses local time. When `retentionDays` is set the stream
+ * also runs {@link startLogRetention} over `rootDir`.
  */
 import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -50,9 +29,17 @@ import { Writable } from 'node:stream';
 
 import type { StreamEntry } from 'pino';
 
+import { startLogRetention, type LogRetention } from './log-retention';
+
 interface FileRouterOptions {
   /** Root directory under which `<botId>[/<guildId>]/<date>.log` lives. */
   readonly rootDir: string;
+  /**
+   * Delete dated log files older than this many local days, once at
+   * start and then daily, for as long as the stream is open. Omitted or
+   * `0` disables retention.
+   */
+  readonly retentionDays?: number;
 }
 
 interface CachedStream {
@@ -119,6 +106,14 @@ const reportSinkFailure = (filePath: string, err: unknown): void => {
  * fatal — a full disk would take the whole bot down. Attaching a
  * listener is what turns that into a degraded file sink.
  */
+const reportRetentionFailure = (path: string, err: unknown, failures: number): void => {
+  const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  process.stderr.write(
+    `file-router-transport: log retention failed at ${path} (${reason}); ` +
+      `${failures} failure(s) this pass. Retrying at the next scheduled pass.\n`,
+  );
+};
+
 const openStream = (filePath: string, onError: (err: Error) => void): WriteStream => {
   mkdirSync(dirname(filePath), { recursive: true });
   const stream = createWriteStream(filePath, { flags: 'a', encoding: 'utf8' });
@@ -165,6 +160,16 @@ export const createFileRouterStream = (options: FileRouterOptions): Writable => 
   const retryAfter = new Map<string, number>();
   // Buffer for partial lines (defensive; pino writes complete lines).
   let pending = '';
+  // Owned by the stream so closing the sink also stops the schedule; the
+  // timer is unref'd and must never outlive `final` / `destroy`.
+  const retention: LogRetention | undefined =
+    options.retentionDays !== undefined && options.retentionDays > 0
+      ? startLogRetention({
+          rootDir,
+          retentionDays: options.retentionDays,
+          onFailure: reportRetentionFailure,
+        })
+      : undefined;
 
   const writeRecord = (line: string): void => {
     if (line.length === 0) return;
@@ -281,10 +286,16 @@ export const createFileRouterStream = (options: FileRouterOptions): Writable => 
       }
       cb();
     },
+    destroy(err, cb): void {
+      // `destroy` skips `final`, so stop the schedule here too.
+      retention?.stop();
+      cb(err);
+    },
     final(cb): void {
       // Drain any trailing partial line, then close every cached
       // stream. `Promise.all` is awaited inline so the pino flush path
       // sees a clean shutdown.
+      retention?.stop();
       if (pending.length > 0) {
         writeRecord(pending);
         pending = '';
@@ -316,9 +327,13 @@ export const createFileRouterStream = (options: FileRouterOptions): Writable => 
 export const createFileSink = (options: {
   readonly rootDir: string;
   readonly level: StreamEntry['level'];
+  readonly retentionDays?: number;
 }): StreamEntry => ({
   level: options.level,
-  stream: createFileRouterStream({ rootDir: options.rootDir }),
+  stream: createFileRouterStream({
+    rootDir: options.rootDir,
+    ...(options.retentionDays !== undefined ? { retentionDays: options.retentionDays } : {}),
+  }),
 });
 
 /**

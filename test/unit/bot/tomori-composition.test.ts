@@ -22,9 +22,9 @@ vi.mock('@cmd', () => barrelStubs.cmd);
 vi.mock('@button', () => barrelStubs.button);
 vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
-vi.mock('@reaction', () => barrelStubs.reaction);
 
 import { BaseBot, type Config } from '../../../src/bot/index';
+import { echoTranslator } from '../../fixtures/runtime';
 import { Tomori } from '../../../src/bot/tomori/tomori';
 import type { Plugin } from '../../../src/core/plugin';
 
@@ -46,6 +46,15 @@ const collectRegisteredPluginIds = (): string[] => {
 };
 
 describe('Tomori composition', () => {
+  it('refuses the nijika-only db command', () => {
+    expect(
+      () =>
+        new Tomori(buildInertClient(), 'token', '', 'bot-client', {
+          commands: ['db'],
+        } satisfies Config),
+    ).toThrow(/available only on nijika/);
+  });
+
   it('registers the full interactive plugin set including guild-events', () => {
     const ids = collectRegisteredPluginIds();
     expect(new Set(ids)).toEqual(
@@ -55,8 +64,10 @@ describe('Tomori composition', () => {
         'social-link-preview',
         'giveaway',
         'temp-role',
+        'bug-report',
         'activity',
-        'voice',
+        'social-feed',
+        'earthquake',
       ]),
     );
   });
@@ -66,15 +77,41 @@ describe('Tomori composition', () => {
     // messageUpdate / messageDelete, so no audit log is produced.
     expect(collectRegisteredPluginIds()).toContain('guild-events');
   });
+  it('shares configured feed platforms with commands and keeps earthquake capabilities operator-controlled', () => {
+    const bot = new Tomori(
+      buildInertClient(),
+      'token',
+      '',
+      'bot-client',
+      {
+        commands: ['feed'],
+        social_feed: { enabled: true, platforms: { x: {} } },
+      },
+      { cwaApiKey: 'test-cwa-key' },
+    );
+    expect(bot.feedPlatformRegistry?.get('x')?.id).toBe('x');
+    expect(bot.guildSettings?.capabilities.earthquake).toEqual({ alerts: false, reports: true });
+  });
+  it('validates the early-warning key and threshold at composition time', () => {
+    expect(
+      () => new Tomori(buildInertClient(), 'token', '', 'bot-client', {}, { alertPort: 4001 }),
+    ).toThrow(/needs a key/);
+    expect(
+      () =>
+        new Tomori(buildInertClient(), 'token', '', 'bot-client', {
+          earthquake_alert: { ping_min_local_intensity: '8' },
+        }),
+    ).toThrow(/Invalid earthquake_alert/);
+  });
 });
 
 describe('Tomori presence', () => {
   const PRESENCE_TEXT = 'presence-status';
 
-  const fakeTranslator = (text: string): NonNullable<Tomori['translator']> =>
-    ({
-      t: (key: string) => (key === 'replies:tomori.presence_text' ? text : ''),
-    }) as unknown as NonNullable<Tomori['translator']>;
+  const fakeTranslator = (text: string): NonNullable<Tomori['translator']> => ({
+    ...echoTranslator(),
+    t: (key) => (key === 'replies:tomori.presence_text' ? text : ''),
+  });
 
   const buildPresenceHarness = (
     options: { nullUser?: boolean } = {},
@@ -85,23 +122,17 @@ describe('Tomori presence', () => {
   } => {
     let readyHandler: (() => void) | undefined;
     const setPresence = vi.fn();
-    const client = {
+    const client = Object.assign(buildInertClient(), {
       user: options.nullUser ? null : { setPresence },
-      guilds: { cache: new Map() },
-      channels: { cache: new Map() },
-      application: null,
-      on: () => undefined,
       once: (event: unknown, handler: () => void) => {
         if (event === Events.ClientReady) readyHandler = handler;
         return undefined;
       },
-      off: () => undefined,
-      destroy: () => undefined,
-    } as unknown as Client;
+    });
     return { client, fireReady: () => readyHandler?.(), setPresence };
   };
 
-  it('sets a custom online presence from the translated key on ClientReady', () => {
+  it('sets a Playing online presence from the translated key on ClientReady', () => {
     const { client, fireReady, setPresence } = buildPresenceHarness();
     const bot = new Tomori(client, 'token', '', 'bot-client', { commands: [] } satisfies Config);
     bot.translator = fakeTranslator(PRESENCE_TEXT);
@@ -111,7 +142,7 @@ describe('Tomori presence', () => {
     expect(setPresence).toHaveBeenCalledTimes(1);
     expect(setPresence).toHaveBeenCalledWith({
       status: 'online',
-      activities: [{ name: PRESENCE_TEXT, type: ActivityType.Custom, state: PRESENCE_TEXT }],
+      activities: [{ name: PRESENCE_TEXT, type: ActivityType.Playing }],
     });
   });
 

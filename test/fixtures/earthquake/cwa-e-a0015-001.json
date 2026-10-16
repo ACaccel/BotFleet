@@ -1,0 +1,207 @@
+{
+  "success": "true",
+  "result": {
+    "resource_id": "E-A0015-001"
+  },
+  "records": {
+    "datasetDescription": "地震報告",
+    "Earthquake": [
+      {
+        "IssueTime": "2026-09-22T05:19:16+08:00",
+        "ValidTime": {
+          "EndTime": "2026-09-22T13:19:16+08:00"
+        },
+        "EarthquakeNo": 115064,
+        "ReportType": "地震報告",
+        "ReportColor": "綠色",
+        "ReportContent": "09/22-05:16臺南市楠西區發生規模4.2有感地震，最大震度臺南市曾文4級。",
+        "ReportImageURI": "https://scweb.cwa.gov.tw/webdata/OLDEQ/202609/2026092205161342064_H.png",
+        "ReportRemark": "本報告係中央氣象署地震觀測網即時地震資料地震速報之結果。",
+        "Web": "https://scweb.cwa.gov.tw/zh-tw/earthquake/details/2026064",
+        "ShakemapImageURI": "https://scweb.cwa.gov.tw/webdata/drawTrace/plotContour/2026/2026064i.png",
+        "EarthquakeInfo": {
+          "OriginTime": "2026-09-22T05:16:13+08:00",
+          "Source": "中央氣象署",
+          "FocalDepth": 7.5,
+          "Epicenter": {
+            "Location": "臺南市政府東北東方  43.9  公里 (位於臺南市楠西區)",
+            "EpicenterLatitude": 23.21,
+            "EpicenterLongitude": 120.54
+          },
+          "EarthquakeMagnitude": {
+            "MagnitudeType": "芮氏規模",
+            "MagnitudeValue": 4.2
+          }
+        },
+        "Intensity": {
+          "ShakingArea": [
+            {
+              "AreaDesc": "臺南市地區",
+              "CountyName": "臺南市",
+              "InfoStatus": "observe",
+              "AreaIntensity": "4級",
+              "EqStation": [
+                {
+                  "StationName": "曾文",
+                  "StationID": "SNS",
+                  "InfoStatus": "observe",
+                  "BackAzimuth": 102.22,
+                  "EpicenterDistance": 4.79,
+                  "SeismicIntensity": "4級",
+                  "StationLatitude": 23.22,
+                  "StationLongitude": 120.497
+                }
+              ]
+            },
+            {
+              "AreaDesc": "嘉義縣地區",
+              "CountyName": "嘉義縣",
+              "InfoStatus": "observe",
+              "AreaIntensity": "3級",
+              "EqStation": [
+                {
+                  "StationName": "大埔",
+                  "StationID": "WTP",
+                  "InfoStatus": "observe",
+                  "BackAzimuth": 245.63,
+                  "EpicenterDistance": 8.91,
+                  "SeismicIntensity": "3級",
+                  "StationLatitude": 23.244,
+                  "StationLongitude": 120.622
+                }
+              ]
+            },
+            {
+              "AreaDesc": "高雄市地區",
+              "CountyName": "高雄市",
+              "InfoStatus": "observe",
+              "AreaIntensity": "1級",
+              "EqStation": [
+                {
+                  "StationName": "甲仙",
+                  "StationID": "SGS",
+                  "InfoStatus": "observe",
+                  "BackAzimuth": 341.29,
+                  "EpicenterDistance": 15.26,
+                  "SeismicIntensity": "1級",
+                  "StationLatitude": 23.08,
+                  "StationLongitude": 120.591
+                }
+              ]
+            },
+            {
+              "AreaDesc": "最大震度4級地區",
+              "CountyName": "臺南市",
+              "AreaIntensity": "4級",
+              "EqStation": []
+            },
+            {
+              "AreaDesc": "最大震度3級地區",
+              "CountyName": "嘉義縣",
+              "AreaIntensity": "3級",
+              "EqStation": []
+            },
+            {
+              "AreaDesc": "最大震度1級地區",
+              "CountyName": "高雄市、嘉義市、雲林縣、臺東縣、南投縣、花蓮縣、彰化縣",
+              "AreaIntensity": "1級",
+              "EqStation": []
+            }
+          ]
+        }
+      },
+      {
+        "IssueTime": "2026-09-14T06:49:45+08:00",
+        "ValidTime": {
+          "EndTime": "2026-09-14T14:49:45+08:00"
+        },
+        "EarthquakeNo": 115063,
+        "ReportType": "地震報告",
+        "ReportColor": "綠色",
+        "ReportContent": "09/14-06:44臺灣東南部海域發生規模4.9有感地震，最大震度臺東縣綠島4級。",
+        "ReportImageURI": "https://scweb.cwa.gov.tw/webdata/OLDEQ/202609/2026091406444149063_H.png",
+        "ReportRemark": "本報告係中央氣象署地震觀測網即時地震資料地震速報之結果。",
+        "Web": "https://scweb.cwa.gov.tw/zh-tw/earthquake/details/2026063",
+        "ShakemapImageURI": "https://scweb.cwa.gov.tw/webdata/drawTrace/plotContour/2026/2026063i.png",
+        "EarthquakeInfo": {
+          "OriginTime": "2026-09-14T06:44:41+08:00",
+          "Source": "中央氣象署",
+          "FocalDepth": 10.1,
+          "Epicenter": {
+            "Location": "臺東縣政府東南東方  43.0  公里 (位於臺灣東南部海域)",
+            "EpicenterLatitude": 22.63,
+            "EpicenterLongitude": 121.55
+          },
+          "EarthquakeMagnitude": {
+            "MagnitudeType": "芮氏規模",
+            "MagnitudeValue": 4.9
+          }
+        },
+        "Intensity": {
+          "ShakingArea": [
+            {
+              "AreaDesc": "臺東縣地區",
+              "CountyName": "臺東縣",
+              "InfoStatus": "observe",
+              "AreaIntensity": "4級",
+              "EqStation": [
+                {
+                  "StationName": "綠島",
+                  "StationID": "LDU",
+                  "InfoStatus": "observe",
+                  "BackAzimuth": 119.23,
+                  "EpicenterDistance": 9.31,
+                  "SeismicIntensity": "4級",
+                  "StationLatitude": 22.673,
+                  "StationLongitude": 121.469
+                }
+              ]
+            },
+            {
+              "AreaDesc": "花蓮縣地區",
+              "CountyName": "花蓮縣",
+              "InfoStatus": "observe",
+              "AreaIntensity": "3級",
+              "EqStation": [
+                {
+                  "StationName": "富里",
+                  "StationID": "FULB",
+                  "InfoStatus": "observe",
+                  "BackAzimuth": 157.45,
+                  "EpicenterDistance": 68.04,
+                  "SeismicIntensity": "3級",
+                  "StationLatitude": 23.199,
+                  "StationLongitude": 121.294
+                }
+              ]
+            },
+            {
+              "AreaDesc": "最大震度4級地區",
+              "CountyName": "臺東縣",
+              "AreaIntensity": "4級",
+              "EqStation": []
+            },
+            {
+              "AreaDesc": "最大震度3級地區",
+              "CountyName": "花蓮縣",
+              "AreaIntensity": "3級",
+              "EqStation": []
+            },
+            {
+              "AreaDesc": "最大震度2級地區",
+              "CountyName": "雲林縣",
+              "AreaIntensity": "2級",
+              "EqStation": []
+            },
+            {
+              "AreaDesc": "最大震度1級地區",
+              "CountyName": "屏東縣、高雄市、南投縣、嘉義縣、臺南市、嘉義市、臺中市、彰化縣",
+              "AreaIntensity": "1級",
+              "EqStation": []
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

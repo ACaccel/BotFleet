@@ -11,11 +11,8 @@
  * disambiguate. No helper takes a `clientId` parameter, so there is no
  * way to reintroduce the duplicate.
  *
- * Layer purity: this module deliberately depends only on the
- * {@link Logger} interface. Helpers that touch discord.js / axios / fs
- * (Discord-channel mirror, attachment archival) live under
- * `src/infra/discord/` so `core/**` stays free of third-party SDK
- * imports per the architecture contract.
+ * Depends only on the {@link Logger} interface; helpers that touch
+ * discord.js / axios / fs live under `src/infra/discord/`.
  */
 import type { Logger } from './logger';
 

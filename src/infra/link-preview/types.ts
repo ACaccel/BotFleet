@@ -1,45 +1,30 @@
 /**
- * Link-preview provider types and Strategy interface.
+ * Link-preview provider types and Strategy interface. Providers return
+ * neutral data only; Discord message assembly belongs to the infra/discord
+ * renderer and the consuming plugin.
  *
- * The link-preview Strategy lives in the infra layer (`src/infra/link-preview/`,
- * alongside `infra/llm/` and `infra/discord/`) because it is an outbound
- * boundary: providers either rewrite a URL to a third-party embed-proxy
- * domain or fetch a page's OpenGraph metadata. Discord-specific assembly
- * (building the embed, replying, suppressing the original) is the
- * consuming plugin's job — providers return neutral data only, so this
- * layer stays free of discord.js message I/O.
+ * Three preview mechanisms, one discriminated union:
+ *   - `rewritten-url`: reply with a proxy-domain URL and let Discord unfurl it,
+ *     because a bot-authored embed cannot render playable video. Rewrite
+ *     providers probe their proxy hosts with the Discord crawler UA first and
+ *     return the first that yields media, so a dead proxy is never posted.
+ *   - `card`: OpenGraph data rendered with `EmbedBuilder`, or a Components V2
+ *     card with an uploaded video below the metadata (Facebook and Threads).
+ *   - `post`: a structured post from a JSON API (X), used for a video post only
+ *     when no proxy yields playable video, so the renderer uploads it.
+ *   - `gallery`: a multi-page work (nhentai, wnacg) the consumer turns into
+ *     a paged reader; see `./gallery/`.
  *
- * Two preview mechanisms, one uniform result (discriminated union):
- *   - `rewritten-url`: reply with a proxy-domain URL and let DISCORD
- *     unfurl it into a playable video embed. A bot-authored embed cannot
- *     render playable video, so this is the only path that yields one.
- *     Rewrite providers VALIDATE before returning: they probe a priority
- *     list of proxy hosts (fetching each candidate's OpenGraph with the
- *     Discord crawler UA) and return the first that yields media — so a
- *     dead/empty proxy is never posted as a bare link.
- *   - `card`: neutral OpenGraph data the plugin renders into a static
- *     `EmbedBuilder` (used for sources without a public proxy, e.g.
- *     Bahamut).
+ * Adding a provider: implement {@link LinkPreviewProvider} (or reuse
+ * `createRewriteProvider`) under `providers/`, append its name to
+ * {@link LinkPreviewProviderName}, and register it in
+ * `createDefaultLinkPreviewRegistry` with its proxy-host dependency, the
+ * plugin config's `<source>ProxyHosts` key, and a recommended list in each
+ * bot's `config.example.json` — proxy hosts are operator configuration.
  *
- * Adding a new provider:
- *   1. Implement {@link LinkPreviewProvider} (or reuse `createRewriteProvider`
- *      for a proxy-rewrite source — it needs an `OgClient` for validation)
- *      in `src/infra/link-preview/providers/`.
- *   2. Append the name to {@link LinkPreviewProviderName} below.
- *   3. Add one line to `createDefaultLinkPreviewRegistry`
- *      (`src/infra/link-preview/default-registry.ts`) plus its required
- *      proxy-host field on `LinkPreviewRegistryDeps`, the matching
- *      `<source>ProxyHosts` key on the plugin's config schema, and a
- *      recommended list in each bot's `config.example.json` — proxy hosts
- *      are operator configuration, so a rewrite source is not usable until
- *      an operator can supply them.
- * The plugin's orchestrator does not branch on provider names internally.
- *
- * Error contract: a fetching provider's `build()` MUST translate
- * transport / HTTP / parse failures into a {@link LinkPreviewError} on
- * the Result's Err rail before returning. It never throws a
- * `DomainError`: a preview failure is logged and swallowed so the user's
- * message is never broken by an unavailable upstream.
+ * Error contract: a fetching provider's `build()` returns transport / HTTP /
+ * parse failures as a {@link LinkPreviewError} and never throws, so an
+ * unavailable upstream never breaks the user's message.
  */
 import type { Logger } from '../../core/logger';
 import type { LinkPreviewError } from '../../core/errors';
@@ -58,6 +43,8 @@ export const LINK_PREVIEW_PROVIDER_NAMES = [
   'reddit',
   'bahamut',
   'bilibili',
+  'nhentai',
+  'wnacg',
 ] as const;
 
 export type LinkPreviewProviderName = (typeof LINK_PREVIEW_PROVIDER_NAMES)[number];
@@ -82,31 +69,146 @@ export interface PreviewCard {
   readonly description?: string;
   /** Absolute image URL shown in the embed. */
   readonly imageUrl?: string;
+  /** Complete image list in source order, when the card has multiple images. */
+  readonly imageUrls?: readonly string[];
   /** Human-readable source label (e.g. `Bahamut`) for the embed footer. */
   readonly siteName?: string;
+  /** Source-provided author details; omitted when unavailable. */
+  readonly authorName?: string;
+  readonly authorUrl?: string;
+  /** Source-provided totals; compact strings preserve upstream rounding. */
+  readonly engagement?: {
+    readonly likes?: number | string;
+    readonly comments?: number | string;
+    readonly shares?: number | string;
+  };
+}
+
+/** One downloadable encoding of a post's video. */
+export interface PostVideoVariant {
+  readonly url: string;
+  /** Bits per second; with the duration it estimates the file size before download. */
+  readonly bitrate: number;
 }
 
 /**
- * The two preview mechanisms, unified. `sourceUrl` is the original link
+ * Neutral, Discord-agnostic social post. Counts are the upstream totals at
+ * fetch time; an absent count was not reported and is not shown.
+ */
+export interface SocialPost {
+  /** Canonical post link. */
+  readonly url: string;
+  readonly text: string;
+  /** Creation time, epoch milliseconds. */
+  readonly createdAt: number;
+  readonly author: {
+    readonly name: string;
+    readonly handle: string;
+    readonly url: string;
+    readonly avatarUrl?: string;
+  };
+  /** Photo URLs in post order. */
+  readonly images: readonly string[];
+  readonly stats: {
+    readonly replies?: number;
+    readonly reposts?: number;
+    readonly likes?: number;
+    readonly views?: number;
+  };
+  readonly quote?: {
+    readonly url: string;
+    readonly text: string;
+    readonly authorName: string;
+    readonly authorHandle: string;
+  };
+  /** The post's first video, when it has one. */
+  readonly video?: {
+    readonly thumbnailUrl?: string;
+    readonly durationSeconds: number;
+    /** MP4 encodings, highest bitrate first. */
+    readonly variants: readonly PostVideoVariant[];
+  };
+}
+
+/** One page of a gallery, with its download candidates in preference order. */
+export interface GalleryPage {
+  /** Absolute HTTPS image URLs; later entries are mirrors tried after a failure. */
+  readonly urls: readonly string[];
+}
+
+/** One tag group of a gallery (`artist`, `parody`, `tag`, ...), names in source order. */
+export interface GalleryTagGroup {
+  readonly type: string;
+  readonly names: readonly string[];
+}
+
+/**
+ * Neutral, Discord-agnostic multi-page gallery. Page URLs may carry
+ * expiring signatures, so a consumer refetches the gallery rather than
+ * keeping it indefinitely.
+ */
+export interface Gallery {
+  readonly source: GallerySourceName;
+  /** Source-local identifier, digits only. */
+  readonly id: string;
+  /** Canonical gallery link. */
+  readonly url: string;
+  readonly title: string;
+  /** Secondary title (e.g. the original-language one), when it differs. */
+  readonly subtitle?: string;
+  readonly tags: readonly GalleryTagGroup[];
+  readonly pages: readonly GalleryPage[];
+  readonly favorites?: number;
+  /** Upload time, epoch milliseconds. */
+  readonly uploadedAt?: number;
+}
+
+/** The providers that yield a {@link Gallery} instead of a static preview. */
+export const GALLERY_SOURCE_NAMES = [
+  'nhentai',
+  'wnacg',
+] as const satisfies readonly LinkPreviewProviderName[];
+
+export type GallerySourceName = (typeof GALLERY_SOURCE_NAMES)[number];
+
+export const isGallerySourceName = (name: string): name is GallerySourceName =>
+  (GALLERY_SOURCE_NAMES as readonly string[]).includes(name);
+
+/**
+ * The preview mechanisms, unified. `sourceUrl` is the original link
  * that matched, carried for logging / de-duplication.
  */
 export type LinkPreviewResult =
   | { readonly kind: 'rewritten-url'; readonly url: string; readonly sourceUrl: string }
-  | { readonly kind: 'card'; readonly card: PreviewCard; readonly sourceUrl: string };
+  | {
+      readonly kind: 'card';
+      readonly card: PreviewCard;
+      readonly sourceUrl: string;
+      readonly media?: { readonly url: string; readonly fallbackUrl: string };
+    }
+  | { readonly kind: 'post'; readonly post: SocialPost; readonly sourceUrl: string }
+  | {
+      readonly kind: 'gallery';
+      readonly gallery: Gallery;
+      /** 1-based page the link pointed at, already clamped to the gallery. */
+      readonly startPage: number;
+      readonly sourceUrl: string;
+    };
+
+/**
+ * The results a single static reply can render. A gallery is interactive:
+ * its consumer owns the paging message, so the shared renderer never sees one.
+ */
+export type RenderablePreviewResult = Exclude<LinkPreviewResult, { readonly kind: 'gallery' }>;
 
 /** Per-call collaborators handed to {@link LinkPreviewProvider.build}. */
 export interface LinkPreviewBuildContext {
-  /** Per-host hard timeout for any network the provider performs, in milliseconds. */
-  readonly timeoutMs: number;
   /**
-   * Cumulative validation budget across all proxy-host probes for this one
-   * URL, in milliseconds. A rewrite provider stops probing further hosts
-   * once this elapses and falls back to its best candidate so far. When
-   * omitted, providers probe their whole list bounded only by `timeoutMs`.
+   * Per-host hard timeout for any network the provider performs, in
+   * milliseconds. A rewrite provider probes its whole host list, so this
+   * times the list length is the worst case for one URL.
    */
-  readonly budgetMs?: number;
-  /** Optional injectable clock (ms) for deterministic budget tests. Default `Date.now`. */
-  readonly now?: () => number;
+  readonly timeoutMs: number;
   /** Optional scoped logger for provider-internal diagnostics. */
   readonly logger?: Logger;
 }

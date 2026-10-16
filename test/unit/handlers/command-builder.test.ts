@@ -1,10 +1,157 @@
 import { describe, expect, it } from 'vitest';
-import { ApplicationCommandType } from 'discord.js';
+import {
+  ApplicationCommandOptionType,
+  ApplicationCommandType,
+  ChannelType,
+  PermissionFlagsBits,
+} from 'discord.js';
 
 import { buildCommandJsonBody } from '../../../src/handlers/commands/command-builder';
 import type { LocalizedCommandConfig } from '../../../src/handlers/commands/command';
 
 describe('buildCommandJsonBody', () => {
+  it('combines root subcommands with a group and preserves autocomplete', () => {
+    const json = buildCommandJsonBody({
+      name: 'archive',
+      description: 'Archive controls',
+      subcommandGroups: [
+        {
+          name: 'schedule',
+          description: 'Schedule',
+          subcommands: [{ name: 'status', description: 'Status' }],
+        },
+      ],
+      subcommands: [
+        {
+          name: 'apply',
+          description: 'Apply plan',
+          options: {
+            string: [{ name: 'run_id', description: 'Run ID', required: true, autocomplete: true }],
+          },
+        },
+      ],
+    });
+    expect(json.options).toMatchObject([
+      { name: 'schedule', type: ApplicationCommandOptionType.SubcommandGroup },
+      {
+        name: 'apply',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [{ name: 'run_id', autocomplete: true }],
+      },
+    ]);
+  });
+  it('rejects root value options beside root subcommands', () => {
+    expect(() =>
+      buildCommandJsonBody({
+        name: 'archive',
+        description: 'Archive controls',
+        options: { string: [{ name: 'note', description: 'Note', required: false }] },
+        subcommands: [{ name: 'audit', description: 'Audit' }],
+      }),
+    ).toThrow(/subcommands cannot be combined/);
+  });
+
+  it('builds guild-only nested subcommands with permissions and numeric bounds', () => {
+    const json = buildCommandJsonBody({
+      name: 'archive',
+      description: 'Manage archive schedules',
+      guildOnly: true,
+      defaultMemberPermissions: PermissionFlagsBits.ManageGuild,
+      subcommandGroups: [
+        {
+          name: 'schedule',
+          description: 'Schedule settings',
+          subcommands: [
+            { name: 'status', description: 'Show status' },
+            {
+              name: 'interval',
+              description: 'Set interval',
+              options: {
+                integer: [
+                  {
+                    name: 'minutes',
+                    description: 'Interval in minutes',
+                    required: true,
+                    min: 1,
+                    max: 10_080,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(json).toMatchObject({
+      dm_permission: false,
+      default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
+      options: [
+        {
+          type: ApplicationCommandOptionType.SubcommandGroup,
+          name: 'schedule',
+          options: [
+            { type: ApplicationCommandOptionType.Subcommand, name: 'status' },
+            {
+              type: ApplicationCommandOptionType.Subcommand,
+              name: 'interval',
+              options: [
+                {
+                  type: ApplicationCommandOptionType.Integer,
+                  name: 'minutes',
+                  required: true,
+                  min_value: 1,
+                  max_value: 10_080,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('rejects combining root options with a subcommand group', () => {
+    expect(() =>
+      buildCommandJsonBody({
+        name: 'archive',
+        description: 'Manage archive schedules',
+        options: { string: [{ name: 'note', description: 'A note', required: false }] },
+        subcommandGroups: [
+          {
+            name: 'schedule',
+            description: 'Settings',
+            subcommands: [{ name: 'status', description: 'Show status' }],
+          },
+        ],
+      }),
+    ).toThrow(/subcommands cannot be combined/);
+  });
+
+  it('validates autocomplete within nested subcommands', () => {
+    expect(() =>
+      buildCommandJsonBody({
+        name: 'archive',
+        description: 'Manage archive schedules',
+        subcommandGroups: [
+          {
+            name: 'schedule',
+            description: 'Settings',
+            subcommands: [
+              {
+                name: 'interval',
+                description: 'Set interval',
+                options: {
+                  integer: [
+                    { name: 'minutes', description: 'Minutes', required: true, autocomplete: true },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/string options only/);
+  });
   it('builds a bare chat-input command with name and description', () => {
     const config: LocalizedCommandConfig = {
       name: 'ping',
@@ -61,11 +208,12 @@ describe('buildCommandJsonBody', () => {
             choices: [{ name: 'Fast', value: 'fast' }],
           },
         ],
-        number: [{ name: 'count', description: 'Count', required: true, min: 1, max: 9 }],
+        integer: [{ name: 'count', description: 'Count', required: true, min: 1, max: 9 }],
         float: [{ name: 'ratio', description: 'Ratio', required: false, min: 0, max: 1 }],
         user: [{ name: 'target', description: 'Target user', required: true }],
         channel: [{ name: 'where', description: 'Target channel', required: false }],
         attachment: [{ name: 'file', description: 'A file', required: false }],
+        boolean: [{ name: 'enabled', description: 'On or off', required: false }],
       },
     };
 
@@ -73,7 +221,154 @@ describe('buildCommandJsonBody', () => {
     const options = 'options' in json ? (json.options ?? []) : [];
 
     expect(options.map((o) => o.name).sort()).toEqual(
-      ['count', 'file', 'mode', 'ratio', 'target', 'where'].sort(),
+      ['count', 'enabled', 'file', 'mode', 'ratio', 'target', 'where'].sort(),
     );
+    // Discord's BOOLEAN option type.
+    expect(options.find((o) => o.name === 'enabled')?.type).toBe(5);
+  });
+
+  it('limits a channel option to its declared types, or the text-capable defaults', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'inspect',
+      description: 'Inspect a channel',
+      options: {
+        channel: [
+          {
+            name: 'forum',
+            description: 'Forum or media channel',
+            required: true,
+            channelTypes: [ChannelType.GuildForum, ChannelType.GuildMedia],
+          },
+          { name: 'any', description: 'Any text channel', required: false },
+        ],
+      },
+    };
+
+    const json = buildCommandJsonBody(config);
+    const options = ('options' in json ? (json.options ?? []) : []) as {
+      name: string;
+      channel_types?: number[];
+    }[];
+
+    expect(options.find((o) => o.name === 'forum')?.channel_types).toEqual([
+      ChannelType.GuildForum,
+      ChannelType.GuildMedia,
+    ]);
+    expect(options.find((o) => o.name === 'any')?.channel_types).not.toContain(
+      ChannelType.GuildMedia,
+    );
+  });
+
+  it('marks a string option autocomplete so Discord queries the handler hook', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'feed_unsubscribe',
+      description: 'Stop forwarding posts',
+      options: {
+        string: [{ name: 'account', description: 'Account', required: false, autocomplete: true }],
+      },
+    };
+
+    const json = buildCommandJsonBody(config);
+    const options = 'options' in json ? (json.options ?? []) : [];
+
+    // Read off the REST payload rather than the config: `setAutocomplete`
+    // is the only thing that makes Discord send the interaction at all,
+    // and a builder that dropped the call would look identical upstream.
+    expect(options[0]).toMatchObject({ name: 'account', autocomplete: true });
+  });
+
+  it('leaves autocomplete off an option that did not ask for it', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'remind',
+      description: 'Set a reminder',
+      options: { string: [{ name: 'note', description: 'Note', required: false }] },
+    };
+
+    const json = buildCommandJsonBody(config);
+    const options = 'options' in json ? (json.options ?? []) : [];
+
+    expect(options[0]).not.toHaveProperty('autocomplete', true);
+  });
+
+  it('rejects a string option carrying both choices and autocomplete', () => {
+    // Discord answers this combination with an opaque 400 at deploy
+    // time, naming neither the command nor the option.
+    const config: LocalizedCommandConfig = {
+      name: 'feed_unsubscribe',
+      description: 'Stop forwarding posts',
+      options: {
+        string: [
+          {
+            name: 'account',
+            description: 'Account',
+            required: false,
+            autocomplete: true,
+            choices: [{ name: 'One', value: 'one' }],
+          },
+        ],
+      },
+    };
+
+    expect(() => buildCommandJsonBody(config)).toThrow(TypeError);
+    expect(() => buildCommandJsonBody(config)).toThrow(/mutually exclusive/);
+  });
+
+  it('rejects autocomplete on an option kind Discord does not support it on', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'remind',
+      description: 'Set a reminder',
+      options: {
+        integer: [{ name: 'count', description: 'Count', required: false, autocomplete: true }],
+      },
+    };
+
+    expect(() => buildCommandJsonBody(config)).toThrow(/string options only/);
+  });
+
+  it('renders string length bounds and an integer type for integer options', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'note',
+      description: 'Take a note',
+      options: {
+        string: [
+          { name: 'text', description: 'Text', required: true, minLength: 1, maxLength: 100 },
+        ],
+        integer: [{ name: 'count', description: 'Count', required: false }],
+      },
+    };
+
+    const json = buildCommandJsonBody(config);
+    const options = 'options' in json ? (json.options ?? []) : [];
+
+    expect(options.find((o) => o.name === 'text')).toMatchObject({
+      min_length: 1,
+      max_length: 100,
+    });
+    // Discord's INTEGER option type.
+    expect(options.find((o) => o.name === 'count')?.type).toBe(4);
+  });
+
+  it('rejects length bounds on a non-string option', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'note',
+      description: 'Take a note',
+      options: {
+        integer: [{ name: 'count', description: 'Count', required: false, maxLength: 5 }],
+      },
+    };
+
+    expect(() => buildCommandJsonBody(config)).toThrow(/string options only/);
+  });
+
+  it('rejects value bounds on a non-numeric option', () => {
+    const config: LocalizedCommandConfig = {
+      name: 'note',
+      description: 'Take a note',
+      options: {
+        string: [{ name: 'text', description: 'Text', required: false, max: 5 }],
+      },
+    };
+
+    expect(() => buildCommandJsonBody(config)).toThrow(/integer and float options only/);
   });
 });

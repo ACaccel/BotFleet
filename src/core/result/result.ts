@@ -1,16 +1,14 @@
 /**
  * Minimal Result sum type.
  *
- * Roll-your-own (≈80 lines, no dep) rather than `neverthrow` so we can
- * constrain `E` to our `DomainError` taxonomy at the call site without
- * fighting a third-party shape. Async chaining lives at the use-case
- * layer (`Promise<Result<T, DomainError>>`) — no library helpers
- * required for that pattern.
+ * Roll-your-own rather than `neverthrow` so `E` can be constrained to our
+ * `DomainError` taxonomy at the call site. Async chaining lives at the
+ * use-case layer (`Promise<Result<T, DomainError>>`).
  *
  * Contract (enforced by review, not by the type system):
  *   - A function whose return type is `Result<T, E>` MUST NOT throw a
  *     `DomainError`. Programmer errors (TypeError, assertion failures)
- *     may escape — they are not part of the Result channel.
+ *     may escape; they are not part of the Result channel.
  *   - `unwrap()` exists only for tests. Production code matches on
  *     `isOk` / `isErr` (or uses `unwrapOr`).
  */

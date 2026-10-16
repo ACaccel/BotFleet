@@ -1,18 +1,17 @@
 /**
  * Owns per-guild MongoDB connection lifecycle on behalf of BaseBot.
  *
- * Single responsibility: orchestrate the per-guild fan-out that opens
- * each guild's connection through {@link ReposFactory} and surfaces the
- * shared {@link ConnectionManager}'s `traceId` on the boot log so
- * support can correlate the user-facing `errors:db.guild_disabled`
- * message back to the structured log line.
+ * Orchestrates the per-guild fan-out that opens each guild's connection
+ * through {@link ReposFactory} and surfaces the shared
+ * {@link ConnectionManager}'s `traceId` on the boot log so support can
+ * correlate the user-facing `errors:db.guild_disabled` message back to the
+ * structured log line.
  *
- * The shared {@link ConnectionManager} (resolved via the IoC container)
- * still owns the actual classification + disabling logic; this class
- * is a thin orchestration layer. It is one of the three
- * collaborators BaseBot composes; it is intentionally NOT registered
- * as an IoC token (no plugin needs to reach it).
+ * The {@link ConnectionManager} (resolved via the IoC container) still owns
+ * the classification and disabling logic. This class is intentionally NOT
+ * registered as an IoC token (no plugin needs to reach it).
  */
+import { isTransient } from '../persistence/error-translator';
 import type { ServiceContainer } from '../core/ioc';
 import { asGuildId } from '../core/ids';
 import { logSystem, ops, type Logger } from '../core/logger';
@@ -31,6 +30,58 @@ import type { Repos } from '../persistence/repositories';
 type AttachReposFn = (guildId: string, repos: Repos) => void;
 
 export class GuildDbConnector {
+  private recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+  private recoveryGeneration = 0;
+
+  /** Retry missing repositories without overlapping passes or replaying healthy guild hooks. */
+  public startRecovery(
+    guildInfo: ReadonlyMap<string, GuildInfo>,
+    attachRepos: AttachReposFn,
+    onRecovered: (guildId: string) => Promise<void>,
+    intervalMs: number,
+  ): void {
+    this.stopRecovery();
+    if (!this.mongoURI) return;
+    const generation = this.recoveryGeneration;
+    const schedule = (): void => {
+      if (generation !== this.recoveryGeneration) return;
+      this.recoveryTimer = setTimeout(() => {
+        void recover();
+      }, intervalMs);
+      this.recoveryTimer.unref();
+    };
+    const recover = async (): Promise<void> => {
+      try {
+        for (const [guildId, slot] of guildInfo) {
+          if (generation !== this.recoveryGeneration) return;
+          if (slot.repos !== undefined) continue;
+          const disabled = this.isDisabled(guildId);
+          if (disabled !== undefined && !isTransient(disabled.error)) continue;
+          try {
+            const repos = await this.connectOne(guildId);
+            if (generation !== this.recoveryGeneration) return;
+            if (repos === undefined || !guildInfo.has(guildId)) continue;
+            attachRepos(guildId, repos);
+            await onRecovered(guildId);
+            this.logger.info({ guildId }, 'guild database recovered');
+          } catch (err: unknown) {
+            this.logger.warn({ guildId, err }, 'guild database recovery failed');
+          }
+        }
+      } finally {
+        schedule();
+      }
+    };
+    schedule();
+  }
+
+  /** In-flight opens may settle, but cannot publish repos or restart the timer. */
+  public stopRecovery(): void {
+    this.recoveryGeneration += 1;
+    if (this.recoveryTimer !== undefined) clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = undefined;
+  }
+
   /**
    * @param container - the bot's IoC container; resolved per call so
    *   a future hot-swap of `TOKENS.ReposFactory` is observable.

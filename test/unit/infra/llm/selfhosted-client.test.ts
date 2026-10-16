@@ -41,28 +41,6 @@ describe('SelfHostedLlmClient.reply', () => {
     );
   });
 
-  it('resolves a function endpoint on every call so a runtime swap takes effect', async () => {
-    const post = setPost(async () => ({ data: { status: 'success', response: 'ok' } }));
-    let endpoint = 'https://first.invalid/chat';
-    const client = new SelfHostedLlmClient({ endpoint: () => endpoint, timeoutMs: TIMEOUT_MS });
-
-    await client.reply('a');
-    expect(post).toHaveBeenLastCalledWith(
-      'https://first.invalid/chat',
-      expect.anything(),
-      expect.anything(),
-    );
-
-    // Swap the endpoint between calls; the next request must hit the new URL.
-    endpoint = 'https://second.invalid/chat';
-    await client.reply('b');
-    expect(post).toHaveBeenLastCalledWith(
-      'https://second.invalid/chat',
-      expect.anything(),
-      expect.anything(),
-    );
-  });
-
   it('returns EXTERNAL_SERVICE_FAILURE when status is not "success"', async () => {
     setPost(async () => ({ data: { status: 'error', response: '' } }));
     const result = await makeClient().reply('t');

@@ -1,51 +1,27 @@
 /**
  * Archive a deleted Discord attachment to disk for forensics.
  *
- * Lives in `infra/discord/` because it imports `discord.js`, `axios`,
- * and `fs` — third-party SDK dependencies that the `core/` layer
- * deliberately excludes.
+ * This is the fallback path. Discord purges the CDN object for an attachment
+ * nearly synchronously with the message deletion, so a download started from
+ * `messageDelete` frequently 404s even though the signed URL is still valid.
+ * The reliable path is the pre-delete cache in `attachment-cache.ts`; what
+ * remains here is a best-effort attempt for messages the cache never saw,
+ * hardened with one retry against `media.discordapp.net`, whose cache often
+ * still holds recently displayed media.
  */
 import type { Attachment } from 'discord.js';
-import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
-import { pipeline } from 'node:stream/promises';
 
 import type { Logger } from '../../core/logger';
 
-/**
- * Wall-clock budget for one CDN download. Discord's attachment CDN can
- * accept a connection and then stall, or trickle bytes indefinitely;
- * without a deadline the transfer promise never settles and the open
- * file descriptor leaks for the lifetime of the process.
- *
- * Enforced with `AbortSignal.timeout`, not axios's `timeout` option:
- * the latter maps to socket *inactivity*, which a slow trickle resets
- * forever.
- */
-const DOWNLOAD_TIMEOUT_MS = 30_000;
+import { archiveFilePath, downloadToFile, runBounded } from './attachment-io';
 
-/**
- * Upper bound on a single archived attachment. Matches the largest
- * upload Discord accepts from a boosted guild, so nothing that could
- * legitimately have been posted is refused, while a malformed or
- * hostile `Content-Length` cannot fill the disk.
- */
-const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
-
-/**
- * Simultaneous downloads across one archive batch. A bulk delete can
- * carry 100 messages; without a bound every attachment starts at once
- * and the process holds 100 sockets and 100 file descriptors open.
- */
-const MAX_CONCURRENT_DOWNLOADS = 4;
-
-const tzDate = (): string => `${new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })} `;
+/** HTTP status Discord returns once the CDN object has been purged. */
+const HTTP_NOT_FOUND = 404;
 
 /**
  * Download `attachment` and save it under
- * `./data/deleted_attachments/<guildId>/`. Used by the guild-events
- * plugin's `messageDelete` audit path.
+ * `./data/deleted_attachments/<guildId>/<messageId>/`. Used by the guild-events
+ * plugin's `messageDelete` audit path when the pre-delete cache missed.
  *
  * Attachments are binary, not text, so this is genuine file I/O —
  * structured logging cannot stand in for it.
@@ -56,55 +32,75 @@ const tzDate = (): string => `${new Date().toLocaleString('zh-TW', { timeZone: '
 export const archiveDeletedAttachment = async (
   logger: Logger | undefined,
   guildId: string,
+  messageId: string,
   attachment: Attachment,
 ): Promise<void> => {
-  const safeName = `${tzDate().replaceAll('/', '_').replaceAll(':', '_')}${attachment.name}`;
-  const filePath = `./data/deleted_attachments/${guildId}/${safeName}`;
+  const filePath = archiveFilePath(guildId, messageId, attachment.name);
 
-  try {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  } catch (e) {
+  const primary = await downloadToFile(attachment.url, filePath);
+  if (primary === undefined) return;
+
+  if (primary.stage === 'mkdir') {
     logger?.error(
-      { err: e instanceof Error ? e : new Error(String(e)), guildId },
+      { err: primary.error, guildId, messageId },
       'archiveDeletedAttachment: could not create the archive directory',
     );
     return;
   }
 
-  let response;
-  try {
-    response = await axios.get<NodeJS.ReadableStream>(attachment.url, {
-      responseType: 'stream',
-      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-      maxContentLength: MAX_ATTACHMENT_BYTES,
-      maxRedirects: 3,
-    });
-  } catch (err) {
-    logger?.warn(
-      {
-        err: err instanceof Error ? err : new Error(String(err)),
-        guildId,
-        name: attachment.name,
-      },
-      'archiveDeletedAttachment: fetch failed',
+  if (primary.stage === 'write') {
+    // The body was already in hand, so the fault is local; a second
+    // fetch would fail the same way and only waste the CDN round trip.
+    logger?.error(
+      { err: primary.error, guildId, messageId, name: attachment.name },
+      'archiveDeletedAttachment: write failed',
     );
     return;
   }
 
-  try {
-    // `pipeline` propagates a failure from either end and destroys both
-    // streams. The hand-rolled `pipe` + `finish` listener it replaces
-    // ignored source errors entirely, so an interrupted CDN transfer
-    // left a promise pending forever and the write handle open.
-    await pipeline(response.data, fs.createWriteStream(filePath));
-  } catch (e) {
-    logger?.error(
-      { err: e instanceof Error ? e : new Error(String(e)), guildId, name: attachment.name },
-      'archiveDeletedAttachment: write failed',
+  const context = {
+    err: primary.error,
+    guildId,
+    messageId,
+    name: attachment.name,
+    status: primary.status,
+  };
+  // 404 on the primary URL is the expected purge race, not an incident.
+  const purgeRace = primary.status === HTTP_NOT_FOUND;
+
+  // `proxyURL` is typed non-optional, but it arrives from a raw gateway
+  // payload; treat an absent or duplicate value as "no second chance".
+  const proxyUrl: string | undefined = attachment.proxyURL;
+  if (proxyUrl === undefined || proxyUrl.length === 0 || proxyUrl === attachment.url) {
+    logger?.warn(
+      context,
+      'archiveDeletedAttachment: fetch failed and no distinct proxy URL was available to retry',
     );
-    // A truncated file is worse than no file: it reads as a complete
-    // archive later. Remove it and let the log carry the failure.
-    await fs.promises.unlink(filePath).catch(() => undefined);
+    return;
+  }
+
+  const fallback = await downloadToFile(proxyUrl, filePath);
+  if (fallback === undefined) {
+    const line = 'archiveDeletedAttachment: primary CDN fetch failed; proxyURL fallback succeeded';
+    if (purgeRace) logger?.info(context, line);
+    else logger?.warn(context, line);
+    return;
+  }
+
+  const line = 'archiveDeletedAttachment: primary CDN fetch failed; proxyURL fallback failed';
+  const fallbackContext = {
+    ...context,
+    fallbackStage: fallback.stage,
+    fallbackStatus: fallback.status,
+    fallbackErr: fallback.error,
+  };
+  // Both ends 404 means the object is simply gone — Discord purged the
+  // CDN copy and the proxy had already evicted its own. Any other
+  // outcome is a transport or disk problem an operator should see.
+  if (purgeRace && fallback.stage === 'fetch' && fallback.status === HTTP_NOT_FOUND) {
+    logger?.info(fallbackContext, line);
+  } else {
+    logger?.warn(fallbackContext, line);
   }
 };
 
@@ -116,15 +112,9 @@ export const archiveDeletedAttachment = async (
 export const archiveDeletedAttachments = async (
   logger: Logger | undefined,
   guildId: string,
+  messageId: string,
   attachments: Iterable<Attachment>,
-): Promise<void> => {
-  const queue = [...attachments];
-  const workerCount = Math.min(MAX_CONCURRENT_DOWNLOADS, queue.length);
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
-        await archiveDeletedAttachment(logger, guildId, next);
-      }
-    }),
+): Promise<void> =>
+  runBounded(attachments, (attachment) =>
+    archiveDeletedAttachment(logger, guildId, messageId, attachment),
   );
-};

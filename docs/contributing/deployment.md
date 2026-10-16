@@ -1,0 +1,157 @@
+# Runtime and systemd deployment
+
+## Runtime setup
+
+Follow [local setup](local-setup.md#prerequisites). `PLEIADES_CONDA_PREFIX` selects
+an absolute prefix instead of `.conda`; services use its Node directly. Keep the
+runtime available while deployed.
+
+For a managed local database, create an independent runtime:
+
+```bash
+CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-mongo.sh "$HOME/mongodb-pleiades/.conda"
+```
+
+Setup does not start MongoDB or create/move data. Both setup scripts reject
+managed deployed runtimes; retain the old environment until cutover is validated.
+
+## Local configuration
+
+Copy [deployment.example.json](../../deployment.example.json) to gitignored
+`deployment.json`. Set `user` to the invoking ordinary OS user and `bots` to unique
+personality names. Run as that user; system operations request sudo. Do not run as root.
+
+Optional `runtimePrefix` overrides the launcher prefix/project `.conda`;
+`readinessTimeoutSeconds` is 15–600 seconds (default 120). For managed MongoDB,
+set its absolute `prefix`, an existing JSON-syntax `configFile`, and a private bot
+`probeEnvFile` containing authenticated `MONGO_URI`. Omit `mongodb` for an external
+database. Keep credentials out of deployment settings and command arguments.
+
+The database must already be initialized. Preparation preserves its absolute
+`storage.dbPath`, authentication, localhost binding, and logs, saving the original
+config and generating a foreground copy for systemd. It does not provision data
+or rotate credentials.
+
+### Read-only inspection account
+
+Nijika's [`/db`](../configuration.md#database-inspection) needs its own MongoDB
+user with only `readAnyDatabase`; startup rejects an account with any write action.
+Create it once as a database administrator, entering the password at the prompt:
+
+```javascript
+use admin
+db.createUser({ user: 'inspector', pwd: passwordPrompt(), roles: [{ role: 'readAnyDatabase', db: 'admin' }] })
+```
+
+Put its URI in `src/bot/nijika/.env` as `MONGO_INSPECT_URI`, never in command
+arguments or deployment settings, then restart nijika.
+
+## Commands
+
+```bash
+npm run mongo:prepare  # Preview database unit
+npm run deploy:prepare # Type-check, snapshot, and preview bot units
+npm run mongo:deploy   # Install/start/enable database unit
+npm run deploy         # Prepare and deploy selected bots
+npm run deploy -t <bot> # Prepare and deploy one bot; others keep running
+npm run undeploy       # Remove managed bot units
+npm run mongo:undeploy # Remove database unit after bots are undeployed
+npm run deploy:recover # Recover an interrupted transaction
+npm run backup:install # Install the daily database backup timer
+```
+
+For code updates, run `npm run deploy` without undeploying. Register
+[Discord commands](local-setup.md#registering-slash-commands) separately.
+
+`-t <bot>` (also `deploy:prepare -t <bot>`) validates and snapshots that bot only, then
+replaces and restarts its unit alone; it must be listed in `deployment.json`. Other bots
+keep their units, so they keep running their previous release until the next full
+`npm run deploy`, which also applies `deployment.json` changes such as `readinessTimeoutSeconds`
+or the MongoDB settings to every unit. Inspect bots with:
+
+```bash
+sudo systemctl restart pleiades@nijika.service
+systemctl status pleiades@nijika.service
+journalctl -u pleiades@nijika.service -f
+```
+
+The database unit is `mongodb-pleiades.service`. Its daily backup runs as
+`pleiades-mongo-backup.service`, outside the deployment transaction; see the
+[backup guide](../../tools/mongo-backup/README.md).
+
+For gopher endpoint changes, follow
+[manual configuration and restart](../configuration.md#gopher-llm-endpoint).
+Deploy code changes with `npm run deploy` first; restarting alone keeps the
+existing release's code.
+
+## Prepared releases and readiness
+
+Preparation validates configuration/runtime, types, Canvas and units, then snapshots
+source/dependencies in `.deploy/releases/<id>` without starting services. Review units
+and `manifest.json` before cutover. Configuration links, `data`, and `logs`
+are shared. Private releases can contain configuration snapshots; retain any release
+referenced by units or recovery journals, including after undeploy.
+
+### Release retention
+
+After `npm run deploy` or `npm run mongo:deploy` commits, the deployer prunes
+`.deploy/releases/`. It keeps the newest 3 directories named `<timestamp>-<uuid>` (numeric
+timestamp order; `RETAINED_RELEASES` in `scripts/deployment/retention.ts`) plus every
+release named by `.deploy/current.json` or `.deploy/mongodb.json` (including older releases
+still used by bots a `-t` deployment left untouched); referenced releases do
+not count toward the 3. Other entries and symlinks are never touched, and symlinks inside
+a removed release are unlinked without following them. Pruning is skipped when a recovery
+journal exists or another process holds the lock, and never runs after failure, rollback,
+`deploy:recover`, undeploy or prepare. A prune failure prints a warning and leaves the
+deployment successful. Releases from
+`deploy:prepare` that are never cut over age out like any other.
+
+Each selected bot's local JSON settings are parsed before release copying or service
+cutover. For msg-archive, preparation uses the same policy and runtime validators as
+plugin startup, including concurrency and notification cadence; for konata, it checks
+`notificationRoutes` with the relay's own schema, and for nijika/tomori, `earthquake_alert`
+with the earthquake plugin's schema. Invalid settings
+abort preparation with the affected field path; existing units keep running.
+
+Readiness checks MongoDB and the active process after Discord, repositories and
+plugins initialize; enabled archive history scans continue in the background. It verifies
+startup only. Systemd restarts crashed processes.
+
+For msg-archive, a full backup interrupted by the deployment continues on its own
+after readiness with its original cutoff and checkpoints; a stopped one needs
+**Resume** in [archive controls](../message-archive.md#discord-controls).
+
+## Initial cutover
+
+1. Verify a recoverable database backup; retain the old runtime/configuration.
+2. Prepare both unit types, review paths/user/bots/database settings, and validate in isolation.
+3. Stop old bots gracefully in a maintenance window; stop every database writer before MongoDB.
+4. Confirm old MongoDB exited, deploy its unit, verify authenticated readiness, then deploy and check bots.
+5. Check `systemctl is-enabled` and schedule a reboot test.
+
+Unmanaged bot/MongoDB processes block deployment. First cutover failures may require
+manually restarting old processes; automatic rollback covers managed services only.
+
+## Recovery and removal
+
+Only owned units are managed; unmanaged units, symlinks and drop-ins are rejected.
+Failures restore prior units and enabled/active state. After interruption, run
+`npm run deploy:recover` before retrying; preserve the journal and inspect logs if
+rollback fails. Committed transactions are finalized without reverting.
+
+Rollback restores code/dependencies/units, but not shared configuration, database
+writes or external actions. Runtime updates require undeploying first; releases do
+not restore runtimes. Bot undeploy leaves MongoDB running; database undeploy preserves
+data, settings, environments and releases. For host transfer, follow
+[migration](../../tools/migration/README.md); exports exclude runtimes and deployment state.
+
+## Message archive worker upgrades
+
+Follow the [archive upgrade notes](../upgrading.md#message-archive-worker-and-tools)
+and [ownership/recovery procedure](../message-archive.md#capacity-and-recovery).
+Code deployment does not authorize starting a production full backup.
+
+Configure the guild debug channel and register `/archive` with
+`npm run register -t msg-archive`; msg-archive always registers exactly `/archive`. See
+[archive control setup](../message-archive.md#discord-controls); existing installations
+without saved schedule settings start with periodic scans disabled.

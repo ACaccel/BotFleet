@@ -1,7 +1,6 @@
 node_modules
 dist
 coverage
-yarn.lock
 package-lock.json
 *.generated.ts
 
@@ -17,3 +16,8 @@ src/bot/**/.env
 tools/**/config.json
 tools/msg_backup/tmp/
 .vitest-*.json
+
+# Project runtime and operator-owned deployment state.
+/.conda/
+/.deploy/
+/deployment.json

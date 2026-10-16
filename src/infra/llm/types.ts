@@ -1,11 +1,6 @@
 /**
  * LLM provider types and Strategy interface.
  *
- * The LLM Strategy lives in the infra layer (`src/infra/llm/`,
- * alongside `infra/mongo/` and `infra/discord/`) because it is an SDK
- * boundary; domain-level concerns (session manager, pricing) belong to
- * the consuming plugin.
- *
  * Adding a new provider means: write `src/infra/llm/<name>-provider.ts`,
  * register it in {@link defaultProviderRegistry} (`src/infra/llm/registry.ts`),
  * append the name to {@link LLMProviderName}, and the rest of the bot

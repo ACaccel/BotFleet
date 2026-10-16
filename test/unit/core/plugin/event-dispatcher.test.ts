@@ -1,23 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EventDispatcher } from '../../../../src/core/plugin/event-dispatcher';
-import { createLogger } from '../../../../src/core/logger';
-import { systemClock } from '../../../../src/core/time';
 import { createContainer } from '../../../../src/core/ioc';
 import type { PluginRuntimeServices } from '../../../../src/core/plugin';
+import { buildPluginContext, silentLogger } from '../../../fixtures/runtime';
 
-const silent = createLogger({ level: 'silent', pretty: false });
+const silent = silentLogger();
 
 const services = (): PluginRuntimeServices => {
   // One container per call — `bind` target must match the method
   // owner. Tests never exercise resolve, but the wiring is still
   // shape-correct.
   const container = createContainer();
-  return {
-    logger: silent,
-    translator: { t: (k: string) => k } as PluginRuntimeServices['translator'],
-    clock: systemClock,
-    resolve: container.resolve.bind(container) as PluginRuntimeServices['resolve'],
-  };
+  return buildPluginContext({ logger: silent, resolve: container.resolve.bind(container) });
 };
 
 describe('EventDispatcher', () => {

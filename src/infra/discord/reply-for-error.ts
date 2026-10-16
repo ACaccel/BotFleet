@@ -1,38 +1,28 @@
 /**
- * Handler-boundary error reply helper.
+ * Handler-boundary error reply helper. Every handler `catch` routes a
+ * failure to two channels:
  *
- * Every handler's `catch` block routes a failure down two independent
- * channels:
+ *   1. **Operator** — always a structured log line with the full error and
+ *      a `traceId`.
+ *   2. **User** — one localised reply: a {@link DomainError}'s `messageKey`
+ *      and `messageParams`, or for anything else the command's
+ *      `replies:<feature>.failed` copy carrying the `traceId`.
  *
- *   1. **Operator channel** — a structured log line carrying the full
- *      error (stack, `cause`, `context.operation`) plus the `traceId`.
- *      This always fires, regardless of the error's type.
- *   2. **User channel** — a single localised `editReply` / `reply`:
- *      - the error is a {@link DomainError} → use its taxonomy-driven
- *        `messageKey` + `messageParams`; the bot-personality tone for
- *        these lives in the `errors.json` catalog copy.
- *      - the error is **not** a `DomainError` (an unexpected bug, an
- *        unwrapped infra failure) → fall back to the command's own
- *        toned `replies:<feature>.failed` copy, interpolating a
- *        `traceId` so an operator can correlate the user's screenshot
- *        with the structured log line.
+ * Both channels live in one helper so the `traceId` the user sees is
+ * guaranteed to match the logged one.
  *
- * Folding both channels into one boundary helper is deliberate: it is
- * the only way to *guarantee* the `traceId` shown to the user is the
- * same one written to the operator log. A two-call shape
- * (`logError(...)` then a separate reply) would let the two ids drift.
- *
- * The helper swallows expired-interaction Discord errors (codes
- * `10062` / `40060`) the same way {@link requireGuildRepos}'s
- * `replyOrEdit` does — a dead interaction cannot be replied to and
- * re-throwing would only walk into the dispatcher's outer catch.
+ * Expired-interaction errors (see `isExpiredInteractionError`) are
+ * swallowed, as in {@link requireGuildRepos}: a dead interaction cannot be
+ * replied to, and re-throwing would only reach the dispatcher's outer catch.
  */
 import type { ContextMenuCommandInteraction, RepliableInteraction } from 'discord.js';
-import { DiscordAPIError, MessageFlags } from 'discord.js';
+import { MessageFlags } from 'discord.js';
 
 import { DomainError } from '../../core/errors';
 import type { Translator } from '../../core/i18n';
 import { logError, logSystem, ops, type Logger } from '../../core/logger';
+
+import { isExpiredInteractionError } from './expired-interaction';
 
 /**
  * Same widening rationale as `reply-translated.ts`: `executeCommand`
@@ -43,13 +33,6 @@ import { logError, logSystem, ops, type Logger } from '../../core/logger';
 type HandlerInteraction = RepliableInteraction | ContextMenuCommandInteraction;
 
 /**
- * Discord error codes that mean the interaction is already dead — the
- * same set `require-guild-repos.ts` guards against. Re-replying just
- * rejection-spams, so we log once and swallow.
- */
-const EXPIRED_INTERACTION_CODES: ReadonlySet<number> = new Set([10062, 40060]);
-
-/**
  * Short, stable correlation id minted for the non-`DomainError`
  * fallback path. Six lowercase base-36 chars is enough entropy for a
  * support-ticket lookup and stays readable inside a user-facing
@@ -58,21 +41,37 @@ const EXPIRED_INTERACTION_CODES: ReadonlySet<number> = new Set([10062, 40060]);
  */
 const generateTraceId = (): string => Math.random().toString(36).slice(2, 8).padStart(6, '0');
 
+/** How the user-facing error reply is delivered. */
+export interface ErrorReplyOptions {
+  /**
+   * The interaction was acknowledged publicly but the error must reach only
+   * the invoker: the public reply is deleted and the error sent as an
+   * ephemeral follow-up instead of edited into it.
+   */
+  readonly privateAfterPublicReply?: boolean;
+}
+
 /** Reply or edit depending on the interaction's acknowledged state. */
 const sendUserChannel = async (
   bot: { logger: Logger | undefined },
   interaction: HandlerInteraction,
   content: string,
+  options: ErrorReplyOptions,
 ): Promise<void> => {
   if (content.length === 0) return;
   try {
+    if ((interaction.deferred || interaction.replied) && options.privateAfterPublicReply === true) {
+      await interaction.deleteReply();
+      await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+      return;
+    }
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply({ content });
       return;
     }
     await interaction.reply({ content, flags: MessageFlags.Ephemeral });
   } catch (err) {
-    if (err instanceof DiscordAPIError && EXPIRED_INTERACTION_CODES.has(Number(err.code))) {
+    if (isExpiredInteractionError(err)) {
       logSystem(bot.logger, ops.router.replySkipped(err.code));
       return;
     }
@@ -135,6 +134,7 @@ interface ErrorReplyBot {
  * @param fallbackKey the command's `replies:<feature>.failed` key, used
  *   only when `error` is not a `DomainError`.
  * @param guildId optional guild id for the structured log scope.
+ * @param options delivery of the user-facing reply; see {@link ErrorReplyOptions}.
  */
 export const replyForError = async (
   interaction: HandlerInteraction,
@@ -142,6 +142,7 @@ export const replyForError = async (
   error: unknown,
   fallbackKey: string,
   guildId?: string | null,
+  options: ErrorReplyOptions = {},
 ): Promise<void> => {
   const traceId = generateTraceId();
   // Operator channel: always log the full error. The `traceId` is
@@ -152,5 +153,5 @@ export const replyForError = async (
   logSystem(bot.logger, ops.router.handlerError(traceId));
   // User channel.
   const content = resolveErrorReply(bot.translator, error, fallbackKey, traceId);
-  await sendUserChannel(bot, interaction, content);
+  await sendUserChannel(bot, interaction, content, options);
 };

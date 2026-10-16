@@ -85,7 +85,7 @@ describe('createBilibiliProvider.build proxy URL', () => {
     const seen: string[] = [];
     const result = await provider(recordingClient(seen)).build(
       u('https://www.bilibili.com/video/BV1xx411c7mD?p=2&spm_id_from=333&vd_source=abc'),
-      { timeoutMs: 1000, budgetMs: 8000 },
+      { timeoutMs: 1000 },
     );
 
     expect(seen[0]).toBe('https://vxbilibili.com/video/BV1xx411c7mD?p=2');
@@ -100,7 +100,7 @@ describe('createBilibiliProvider.build proxy URL', () => {
     const seen: string[] = [];
     await provider(recordingClient(seen)).build(
       u('https://m.bilibili.com/video/BV1xx411c7mD?spm_id_from=333'),
-      { timeoutMs: 1000, budgetMs: 8000 },
+      { timeoutMs: 1000 },
     );
 
     expect(seen[0]).toBe('https://vxbilibili.com/video/BV1xx411c7mD');
@@ -113,7 +113,6 @@ describe('createBilibiliProvider.build proxy URL', () => {
     const seen: string[] = [];
     await provider(recordingClient(seen)).build(u('https://www.bilibili.com/video/BV1xx411c7mD/'), {
       timeoutMs: 1000,
-      budgetMs: 8000,
     });
 
     expect(seen[0]).toBe('https://vxbilibili.com/video/BV1xx411c7mD');
@@ -123,7 +122,7 @@ describe('createBilibiliProvider.build proxy URL', () => {
     const seen: string[] = [];
     await provider(recordingClient(seen)).build(
       u('https://www.bilibili.com/video/BV1xx411c7mD/?p=2'),
-      { timeoutMs: 1000, budgetMs: 8000 },
+      { timeoutMs: 1000 },
     );
 
     expect(seen[0]).toBe('https://vxbilibili.com/video/BV1xx411c7mD?p=2');
@@ -139,7 +138,7 @@ describe('createBilibiliProvider.build b23.tv resolution', () => {
       resolve: { [B23]: ok('https://www.bilibili.com/video/BV1xx411c7mD') },
       seen,
     });
-    const result = await provider(client).build(u(B23), { timeoutMs: 1000, budgetMs: 8000 });
+    const result = await provider(client).build(u(B23), { timeoutMs: 1000 });
 
     expect(resolveCanonical).toHaveBeenCalledWith(B23, 1000, 'bilibili');
     expect(seen[0]).toBe('https://vxbilibili.com/video/BV1xx411c7mD'); // probes the canonical, never the b23 token
@@ -157,7 +156,7 @@ describe('createBilibiliProvider.build b23.tv resolution', () => {
       resolve: { [B23]: ok('https://www.bilibili.com/video/BV1xx411c7mD?p=3&spm_id_from=x') },
       seen,
     });
-    await provider(client).build(u(B23), { timeoutMs: 1000, budgetMs: 8000 });
+    await provider(client).build(u(B23), { timeoutMs: 1000 });
 
     expect(seen[0]).toBe('https://vxbilibili.com/video/BV1xx411c7mD?p=3');
   });
@@ -166,7 +165,7 @@ describe('createBilibiliProvider.build b23.tv resolution', () => {
     const { client, fetch } = makeB23Client({
       resolve: { [B23]: ok('https://live.bilibili.com/123') },
     });
-    const result = await provider(client).build(u(B23), { timeoutMs: 1000, budgetMs: 8000 });
+    const result = await provider(client).build(u(B23), { timeoutMs: 1000 });
 
     if (!result.ok) throw new Error('expected ok(null)');
     expect(result.value).toBeNull();
@@ -175,7 +174,7 @@ describe('createBilibiliProvider.build b23.tv resolution', () => {
 
   it('skips silently when b23.tv resolution fails', async () => {
     const { client, fetch } = makeB23Client({ resolve: {} }); // default: resolution error
-    const result = await provider(client).build(u(B23), { timeoutMs: 1000, budgetMs: 8000 });
+    const result = await provider(client).build(u(B23), { timeoutMs: 1000 });
 
     if (!result.ok) throw new Error('expected ok(null)');
     expect(result.value).toBeNull();
@@ -187,7 +186,6 @@ describe('createBilibiliProvider.build b23.tv resolution', () => {
     const { client, resolveCanonical } = makeB23Client({ seen });
     await provider(client).build(u('https://www.bilibili.com/video/BV1xx411c7mD'), {
       timeoutMs: 1000,
-      budgetMs: 8000,
     });
 
     expect(resolveCanonical).not.toHaveBeenCalled();

@@ -6,7 +6,7 @@ import {
   ExternalServiceError,
   LinkPreviewError,
   LlmProviderError,
-  XFeedError,
+  FeedError,
 } from '../../../../src/core/errors';
 
 describe('DomainError subclasses', () => {
@@ -45,12 +45,12 @@ describe('DomainError subclasses', () => {
         'LinkPreviewError',
       ],
       [
-        new XFeedError({
-          code: 'X_FEED_FETCH_FAILED',
-          messageKey: 'errors:x_feed.fetch_failed',
+        new FeedError({
+          code: 'FEED_FETCH_FAILED',
+          messageKey: 'errors:feed.fetch_failed',
           context: { operation: 'test' },
         }),
-        'XFeedError',
+        'FeedError',
       ],
     ];
     for (const [e, name] of cases) {

@@ -1,23 +1,22 @@
 /**
  * Filesystem-backed catalog loader.
  *
- * Reads the JSON files under `<localesDir>/<locale>/<namespace>.json`
- * and assembles a {@link CatalogResources} blob that
- * {@link I18NextTranslator.create} accepts.
+ * Reads `<localesDir>/<locale>/<namespace>.json` and assembles a
+ * {@link CatalogResources} blob that {@link I18NextTranslator.create}
+ * accepts.
  *
- * Why filesystem and not bundler import: the bot is run via `ts-node` /
+ * Why filesystem and not bundler import: the bot runs via `ts-node` /
  * compiled JS without a bundler, so static `import xx from "*.json"`
- * paths would require a custom resolver. Sync `readFileSync` at bot
- * startup is one-off.
+ * paths would need a custom resolver. A sync `readFileSync` at startup is
+ * one-off.
  *
- * `localesDir` is REQUIRED: the composition root owns the
- * deployment-layout knowledge ("locales live at `<src>/i18n/locales`")
- * and injects the path explicitly, so this loader never resolves
- * downstream layout via `__dirname` tricks.
+ * `localesDir` is REQUIRED: the composition root owns the deployment
+ * layout and injects the path, so this loader never resolves it via
+ * `__dirname` tricks.
  *
- * Resilience: missing namespace files for a locale degrade to an empty
- * object rather than throwing — the catalog-completeness test owns the
- * strict cross-locale parity check, this loader stays lenient at runtime.
+ * Missing namespace files for a locale degrade to an empty object rather
+ * than throwing — the catalog-completeness test owns the strict
+ * cross-locale parity check; this loader stays lenient at runtime.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';

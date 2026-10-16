@@ -3,16 +3,14 @@
  * guards have passed and either the probability gate fired or the message
  * @-mentioned the bot.
  *
- * Sequence: fetch the latest N messages -> require exactly N (enough
- * recent context) -> require they form a tight burst within the window
- * (skipped for an @-mention) -> build the transcript (bot/blank lines
- * dropped, the bot's mention stripped) -> call the self-hosted LLM ->
- * post one reply. Any short-circuit returns silently; an LLM failure is
- * logged but never surfaced to the channel.
+ * Sequence: fetch the latest N messages -> require exactly N -> require they
+ * form a tight burst within the window (skipped for an @-mention) -> build
+ * the transcript (bot/blank lines dropped, the bot's mention stripped) ->
+ * call the self-hosted LLM -> post one reply. Any short-circuit returns
+ * silently; an LLM failure is logged but never surfaced to the channel.
  *
  * Returns `true` iff a reply was actually posted, so the caller records the
- * per-channel cooldown only when a message really went out (every
- * short-circuit returns `false`).
+ * per-channel cooldown only when a message really went out.
  */
 import type { Message } from 'discord.js';
 

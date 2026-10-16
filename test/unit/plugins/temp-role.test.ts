@@ -10,23 +10,24 @@ import { DiscordAPIError } from 'discord.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { err, ok } from '../../../src/core/result';
-import { createLogger } from '../../../src/core/logger';
-import { systemClock, createFakeClock } from '../../../src/core/time';
+import { createFakeClock } from '../../../src/core/time';
 import { createContainer } from '../../../src/core/ioc';
 import { TOKENS } from '../../../src/bot/tokens';
 import { databaseErrorFrom } from '../../../src/persistence/error-translator';
-import type { PluginRuntimeContext } from '../../../src/core/plugin';
 import { createTempRolePlugin } from '../../../src/plugins/temp-role';
 import {
+  cancelTempRole,
   createTempRole,
   expireTempRole,
   rebootTempRoleJobs,
   tempRoleJobKey,
   MAX_GUILD_ROLES,
   type TempRoleDeps,
-} from '../../../src/plugins/temp-role/internal/temp-role';
+} from '../../../src/application/temp-role/temp-role';
 import { buildGuild, buildGuildRoles } from '../../fixtures/discord/guild-builder';
 import { buildSendableChannel } from '../../fixtures/discord/channel-builder';
+import type { GuildRegistry } from '../../../src/bot/guild-registry';
+import { buildPluginContext, echoTranslator, silentLogger } from '../../fixtures/runtime';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // A fixed point well in the real future so node-schedule (which runs on
@@ -34,8 +35,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // cancellable Job rather than null for a past date.
 const BASE_NOW = 4_102_444_800_000; // 2100-01-01T00:00:00Z
 
-const silent = createLogger({ level: 'silent', pretty: false });
-const translator = { t: (k: string) => k } as unknown as TempRoleDeps['translator'];
+const silent = silentLogger();
+const translator = echoTranslator();
+
+/** A scheduled job reduced to the one method the plugin calls on it. */
+const makeFakeJob = (): Job => ({ cancel: vi.fn() }) as unknown as Job;
 
 const dbErr = () => err(databaseErrorFrom(new Error('boom'), { operation: 'test' }));
 
@@ -123,6 +127,7 @@ describe('createTempRole', () => {
       creatorId: 'u1',
       roleName: 'Notify',
       days: 7,
+      maxActivePerMember: 3,
     });
 
     expect(outcome.status).toBe('role_limit');
@@ -140,10 +145,137 @@ describe('createTempRole', () => {
       creatorId: 'u1',
       roleName: 'Notify',
       days: 7,
+      maxActivePerMember: 3,
     });
 
     expect(outcome.status).toBe('no_db');
     expect(roles.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a member who already has the most active temp roles', async () => {
+    const repos = makeRepos({
+      listAll: vi.fn().mockResolvedValue(
+        ok([
+          { creator_id: 'u1', role_name: '🔔 Existing one' },
+          { creator_id: 'u1', role_name: '🔔 Existing two' },
+        ]),
+      ),
+    });
+    const { guild, roles } = makeGuild(10);
+    const { channel } = makeChannel(true);
+
+    const outcome = await createTempRole(makeDeps({ repos }), {
+      guild,
+      channel,
+      creatorId: 'u1',
+      roleName: 'Notify',
+      days: 7,
+      maxActivePerMember: 2,
+    });
+
+    expect(outcome).toEqual({ status: 'too_many', max: 2 });
+    expect(roles.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a name an existing role already uses', async () => {
+    const roles = buildGuildRoles({ roles: [{ id: 'r-mod', name: 'Moderator' }] });
+    const guild = buildGuild({ id: 'g1', roles });
+    const { channel } = makeChannel(true);
+
+    const outcome = await createTempRole(makeDeps({ repos: makeRepos() }), {
+      guild,
+      channel,
+      creatorId: 'u1',
+      roleName: 'moderator',
+      days: 7,
+      maxActivePerMember: 3,
+    });
+
+    expect(outcome).toEqual({ status: 'name_taken' });
+    expect(roles.create).not.toHaveBeenCalled();
+  });
+
+  it('enforces the member cap across concurrent creates', async () => {
+    const stored: { creator_id: string; role_name: string }[] = [];
+    const repos = makeRepos({
+      listAll: vi.fn(async () => ok([...stored])),
+      create: vi.fn(async (doc: { creator_id: string; role_name: string }) => {
+        stored.push(doc);
+        return ok(doc);
+      }),
+    });
+    const deps = makeDeps({ repos });
+    const { guild, roles } = makeGuild(10);
+    const { channel } = makeChannel(true);
+    const request = { guild, channel, creatorId: 'u1', days: 7, maxActivePerMember: 1 };
+
+    const outcomes = await Promise.all([
+      createTempRole(deps, { ...request, roleName: 'First' }),
+      createTempRole(deps, { ...request, roleName: 'Second' }),
+    ]);
+
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['created', 'too_many']);
+    expect(roles.create).toHaveBeenCalledTimes(1);
+    expect(stored).toHaveLength(1);
+  });
+
+  it('rejects concurrent duplicate names even before a client cache catches up', async () => {
+    const stored: { creator_id: string; role_name: string }[] = [];
+    const repos = makeRepos({
+      listAll: vi.fn(async () => ok([...stored])),
+      create: vi.fn(async (doc: { creator_id: string; role_name: string }) => {
+        stored.push(doc);
+        return ok(doc);
+      }),
+    });
+    const deps = makeDeps({ repos });
+    const first = makeGuild(10);
+    const second = makeGuild(10);
+    const { channel } = makeChannel(true);
+    const request = { channel, days: 7, maxActivePerMember: 3 };
+
+    const outcomes = await Promise.all([
+      createTempRole(deps, { ...request, guild: first.guild, creatorId: 'u1', roleName: 'Notify' }),
+      createTempRole(deps, {
+        ...request,
+        guild: second.guild,
+        creatorId: 'u2',
+        roleName: 'notify',
+      }),
+    ]);
+
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['created', 'name_taken']);
+    expect(first.roles.create).toHaveBeenCalledTimes(1);
+    expect(second.roles.create).not.toHaveBeenCalled();
+  });
+
+  it('releases the guild creation queue after a failed request', async () => {
+    const deps = makeDeps({ repos: makeRepos() });
+    const { guild, roles } = makeGuild(10);
+    const { channel } = makeChannel(true);
+    roles.create.mockRejectedValueOnce(new Error('Discord unavailable'));
+    const request = {
+      guild,
+      channel,
+      creatorId: 'u1',
+      roleName: 'Notify',
+      days: 7,
+      maxActivePerMember: 3,
+    };
+
+    const outcomes = await Promise.allSettled([
+      createTempRole(deps, request),
+      createTempRole(deps, request),
+    ]);
+
+    expect(outcomes[0]?.status).toBe('rejected');
+    expect(outcomes[1]).toEqual(
+      expect.objectContaining({
+        status: 'fulfilled',
+        value: expect.objectContaining({ status: 'created' }),
+      }),
+    );
+    expect(roles.create).toHaveBeenCalledTimes(2);
   });
 
   it('creates a permission-less mentionable role, persists it, and schedules expiry', async () => {
@@ -158,12 +290,18 @@ describe('createTempRole', () => {
       creatorId: 'u1',
       roleName: 'Notify',
       days: 7,
+      maxActivePerMember: 3,
     });
 
     const expectedExpiry = BASE_NOW + 7 * MS_PER_DAY;
     expect(outcome).toEqual({ status: 'created', roleId: 'role-1', expiresAt: expectedExpiry });
     expect(roles.create).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Notify', mentionable: true, permissions: [] }),
+      expect.objectContaining({
+        name: '🔔 Notify',
+        mentionable: true,
+        permissions: [],
+        reason: 'Temporary notification role created via /role temp create by u1',
+      }),
     );
     expect(send).toHaveBeenCalledTimes(1);
     expect(repos.tempRole.create).toHaveBeenCalledWith(
@@ -172,7 +310,7 @@ describe('createTempRole', () => {
         channel_id: 'chan-1',
         message_id: 'msg-1',
         creator_id: 'u1',
-        role_name: 'Notify',
+        role_name: '🔔 Notify',
         expires_at: expectedExpiry,
       }),
     );
@@ -191,6 +329,7 @@ describe('createTempRole', () => {
       creatorId: 'u1',
       roleName: 'Notify',
       days: 7,
+      maxActivePerMember: 3,
     });
 
     expect(outcome.status).toBe('announce_failed');
@@ -211,6 +350,7 @@ describe('createTempRole', () => {
         creatorId: 'u1',
         roleName: 'Notify',
         days: 7,
+        maxActivePerMember: 3,
       }),
     ).rejects.toBeDefined();
 
@@ -235,6 +375,7 @@ describe('createTempRole', () => {
       creatorId: 'u1',
       roleName: 'Notify',
       days: 7,
+      maxActivePerMember: 3,
     });
 
     expect(outcome.status).toBe('role_limit');
@@ -275,7 +416,7 @@ describe('expireTempRole', () => {
     const { deps, repos, guild, editableMessage } = makeExpiringDeps({
       findByRoleId: vi.fn().mockResolvedValue(ok(doc)),
     });
-    const fakeJob = { cancel: vi.fn() } as unknown as Job;
+    const fakeJob = makeFakeJob();
     deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
 
     await expireTempRole(deps, 'g1', 'role-1');
@@ -307,14 +448,30 @@ describe('expireTempRole', () => {
     await expect(expireTempRole(deps, 'g1', 'role-1')).rejects.toBeDefined();
   });
 
-  it('tolerates a Discord role-delete failure and still removes the row', async () => {
+  it('preserves the row and job when Discord refuses role deletion', async () => {
     const { deps, repos, guild } = makeExpiringDeps({
       findByRoleId: vi.fn().mockResolvedValue(ok(undefined)),
     });
-    guild.roles.delete.mockRejectedValue(new Error('role gone'));
+    guild.roles.delete.mockRejectedValue(new Error('missing permissions'));
+    const fakeJob = makeFakeJob();
+    deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
 
-    await expect(expireTempRole(deps, 'g1', 'role-1')).resolves.toBeUndefined();
-    expect(repos.tempRole.deleteByRoleId).toHaveBeenCalledWith('role-1');
+    await expect(expireTempRole(deps, 'g1', 'role-1')).resolves.toBe(false);
+    expect(repos.tempRole.deleteByRoleId).not.toHaveBeenCalled();
+    expect(fakeJob.cancel).not.toHaveBeenCalled();
+    expect(deps.jobMap.get(tempRoleJobKey('role-1'))).toBe(fakeJob);
+  });
+
+  it('keeps tracking when the guild is unavailable', async () => {
+    const repos = makeRepos();
+    const deps = makeDeps({ repos, guilds: new Map() });
+    const fakeJob = makeFakeJob();
+    deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
+
+    await expect(expireTempRole(deps, 'g1', 'role-1')).resolves.toBe(false);
+    expect(repos.tempRole.deleteByRoleId).not.toHaveBeenCalled();
+    expect(fakeJob.cancel).not.toHaveBeenCalled();
+    expect(deps.jobMap.get(tempRoleJobKey('role-1'))).toBe(fakeJob);
   });
 
   it('tolerates a missing claim channel and still removes the row', async () => {
@@ -332,13 +489,37 @@ describe('expireTempRole', () => {
     const repos = makeRepos({ findByRoleId: vi.fn().mockResolvedValue(ok(doc)) });
     const deps = makeDeps({ repos, guilds: new Map([['g1', guild]]) });
 
-    await expect(expireTempRole(deps, 'g1', 'role-1')).resolves.toBeUndefined();
+    await expect(expireTempRole(deps, 'g1', 'role-1')).resolves.toBe(true);
     expect(guild.roles.delete).toHaveBeenCalledWith('role-1', expect.any(String));
     expect(repos.tempRole.deleteByRoleId).toHaveBeenCalledWith('role-1');
   });
 });
 
 describe('rebootTempRoleJobs', () => {
+  it('rebuilds expiry jobs only for the recovered guild', async () => {
+    const repos = makeRepos({
+      listAll: vi
+        .fn()
+        .mockResolvedValue(ok([{ role_id: 'recovered-role', expires_at: BASE_NOW + MS_PER_DAY }])),
+    });
+    const deps = makeDeps({ repos, listGuildIds: ['healthy', 'recovered'] });
+    const getRepos = vi.spyOn(deps.registry, 'getRepos');
+    const container = createContainer();
+    container.registerSingleton(TOKENS.DiscordClient, () => deps.client);
+    container.registerSingleton(TOKENS.GuildRegistry, () => deps.registry as GuildRegistry);
+    container.registerSingleton(TOKENS.JobMap, () => deps.jobMap);
+    const ctx = buildPluginContext({
+      logger: deps.logger,
+      clock: deps.clock,
+      resolve: container.resolve.bind(container),
+    });
+
+    await createTempRolePlugin().onGuildDatabaseReady?.(ctx, 'recovered');
+
+    expect(getRepos).toHaveBeenCalledExactlyOnceWith('recovered');
+    expect(deps.jobMap.has(tempRoleJobKey('recovered-role'))).toBe(true);
+  });
+
   it('reschedules a still-pending role and immediately expires a past-due one', async () => {
     const future = {
       role_id: 'future',
@@ -399,7 +580,7 @@ describe('rebootTempRoleJobs', () => {
 });
 
 describe('createTempRolePlugin', () => {
-  const buildCtx = (): PluginRuntimeContext => {
+  const buildCtx = () => {
     const container = createContainer();
     container.registerSingleton(TOKENS.GuildRegistry, () => ({
       getRepos: () => undefined,
@@ -412,12 +593,7 @@ describe('createTempRolePlugin', () => {
       () => ({ user: { id: 'bot-1' }, guilds: { cache: new Map() } }) as never,
     );
     container.registerSingleton(TOKENS.JobMap, () => new Map());
-    return {
-      logger: silent,
-      translator: { t: (k: string) => k } as PluginRuntimeContext['translator'],
-      clock: systemClock,
-      resolve: container.resolve.bind(container) as PluginRuntimeContext['resolve'],
-    };
+    return buildPluginContext({ resolve: container.resolve.bind(container) });
   };
 
   it('onReady runs to completion with an empty registry', async () => {
@@ -426,20 +602,101 @@ describe('createTempRolePlugin', () => {
   });
 
   it('onReady swallows a reboot failure and logs it', async () => {
-    const errorSpy = vi.fn();
+    const logger = silentLogger();
+    const errorSpy = vi.spyOn(logger, 'error');
     const container = createContainer();
     // The first dependency resolution throws, exercising onReady's catch.
     container.registerSingleton(TOKENS.DiscordClient, () => {
       throw new Error('resolve boom');
     });
-    const ctx = {
-      logger: { error: errorSpy } as unknown as PluginRuntimeContext['logger'],
-      translator: { t: (k: string) => k } as PluginRuntimeContext['translator'],
-      clock: systemClock,
-      resolve: container.resolve.bind(container) as PluginRuntimeContext['resolve'],
-    };
+    const ctx = buildPluginContext({ logger, resolve: container.resolve.bind(container) });
 
     await expect(createTempRolePlugin().onReady?.(ctx)).resolves.toBeUndefined();
     expect(errorSpy).toHaveBeenCalled();
+  });
+});
+
+describe('cancelTempRole', () => {
+  const doc = { role_id: 'role-1', creator_id: 'creator', channel_id: 'c', message_id: 'm' };
+
+  it('lets the authority check refuse the requester', async () => {
+    const repos = makeRepos({ findByRoleId: vi.fn().mockResolvedValue(ok(doc)) });
+
+    const outcome = await cancelTempRole(makeDeps({ repos }), 'g1', 'role-1', () => false);
+
+    expect(outcome).toEqual({ status: 'forbidden' });
+    expect(repos.tempRole.deleteByRoleId).not.toHaveBeenCalled();
+  });
+
+  it('reports a role that is not a temp role', async () => {
+    const outcome = await cancelTempRole(makeDeps({ repos: makeRepos() }), 'g1', 'x', () => true);
+
+    expect(outcome).toEqual({ status: 'not_temp_role' });
+  });
+
+  it('retains the row and expiry job when Discord rejects cancellation', async () => {
+    const repos = makeRepos({ findByRoleId: vi.fn().mockResolvedValue(ok(doc)) });
+    const { guild, roles } = makeGuild(10);
+    const deps = makeDeps({ repos, guilds: new Map([['g1', guild]]) });
+    const fakeJob = makeFakeJob();
+    deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
+    const error = new Error('Missing Permissions');
+    roles.delete.mockRejectedValueOnce(error);
+
+    await expect(cancelTempRole(deps, 'g1', 'role-1', () => true)).rejects.toBe(error);
+
+    expect(repos.tempRole.deleteByRoleId).not.toHaveBeenCalled();
+    expect(fakeJob.cancel).not.toHaveBeenCalled();
+    expect(deps.jobMap.get(tempRoleJobKey('role-1'))).toBe(fakeJob);
+    expect(deps.client.channels.fetch).not.toHaveBeenCalled();
+  });
+
+  it('retains tracking state when the guild is unavailable', async () => {
+    const repos = makeRepos({ findByRoleId: vi.fn().mockResolvedValue(ok(doc)) });
+    const deps = makeDeps({ repos });
+    const fakeJob = makeFakeJob();
+    deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
+
+    await expect(cancelTempRole(deps, 'g1', 'role-1', () => true)).rejects.toThrow(
+      'unavailable guild',
+    );
+
+    expect(repos.tempRole.deleteByRoleId).not.toHaveBeenCalled();
+    expect(fakeJob.cancel).not.toHaveBeenCalled();
+  });
+
+  it('finishes cancellation when Discord reports the role already removed', async () => {
+    const repos = makeRepos({ findByRoleId: vi.fn().mockResolvedValue(ok(doc)) });
+    const { guild, roles } = makeGuild(10);
+    const deps = makeDeps({ repos, guilds: new Map([['g1', guild]]) });
+    const fakeJob = makeFakeJob();
+    deps.jobMap.set(tempRoleJobKey('role-1'), fakeJob);
+    const error = Object.create(DiscordAPIError.prototype) as DiscordAPIError;
+    (error as { code: number }).code = 10011;
+    roles.delete.mockRejectedValueOnce(error);
+
+    await expect(cancelTempRole(deps, 'g1', 'role-1', () => true)).resolves.toEqual({
+      status: 'cancelled',
+    });
+
+    expect(repos.tempRole.deleteByRoleId).toHaveBeenCalledWith('role-1');
+    expect(fakeJob.cancel).toHaveBeenCalledOnce();
+    expect(deps.jobMap.has(tempRoleJobKey('role-1'))).toBe(false);
+  });
+
+  it('expires the role when the requester may cancel it', async () => {
+    const repos = makeRepos({ findByRoleId: vi.fn().mockResolvedValue(ok(doc)) });
+
+    const { guild, roles } = makeGuild(10);
+    const outcome = await cancelTempRole(
+      makeDeps({ repos, guilds: new Map([['g1', guild]]) }),
+      'g1',
+      'role-1',
+      (creatorId) => creatorId === 'creator',
+    );
+
+    expect(outcome).toEqual({ status: 'cancelled' });
+    expect(roles.delete).toHaveBeenCalledWith('role-1', expect.any(String));
+    expect(repos.tempRole.deleteByRoleId).toHaveBeenCalledWith('role-1');
   });
 });

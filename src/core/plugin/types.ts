@@ -1,36 +1,20 @@
 /**
- * Plugin contract — types only.
- *
- * This file declares the interfaces every plugin and the
- * {@link PluginHost} agree on. No runtime logic here — see `host.ts`,
- * `event-dispatcher.ts`, `interaction-router.ts`.
- *
- * Design pillars (the host enforces every one):
- *   - **id + version** identify the plugin. Ids are unique per host;
- *     a duplicate fails at register time (cheap, clearest diagnostic,
- *     lifecycle has not yet started).
- *   - **Lifecycle hooks** are all optional `async () => void` and run
- *     in registration order: `init` -> `start` -> `onReady` ->
- *     ... runtime ... -> `onShutdown` (reverse registration order).
- *   - **events** are a typed subscription map over `discord.js`'s
- *     `ClientEvents`. The {@link EventDispatcher} fans events out with
- *     per-subscription `Promise.allSettled` isolation.
- *   - **Failure isolation**: a hook that throws marks the plugin
+ * Plugin contract — types only; the runtime lives in `host.ts`,
+ * `event-dispatcher.ts` and `interaction-router.ts`. The host enforces:
+ *   - **id** is unique per host; a duplicate fails at register time, before
+ *     the lifecycle starts.
+ *   - **Lifecycle hooks** are optional and run in registration order:
+ *     `init` -> `start` -> `onReady`, then `onShutdown` in reverse.
+ *   - **events** are a typed map over `ClientEvents`; the
+ *     {@link EventDispatcher} isolates each subscription.
+ *   - **Failure isolation**: a throwing hook marks the plugin
  *     {@link DisabledPlugin} and the rest of the bot keeps running.
  *
- * Configuration is *not* part of this contract. Each plugin factory
- * parses its own raw config (`parse<X>Config`) at composition time and
- * captures the result in the returned object's closure, so a malformed
- * block fails the boot rather than the first event.
- *
- * Handler registration is *not* part of this contract either. The
- * codegen registries under `src/handlers/<type>/registry.generated.ts`
- * are the single registration mechanism.
- *
- * Service-locator guard: plugins do **not** receive the raw IoC
- * container. {@link PluginInitContext.resolve} is a typed-token
- * accessor; combined with eslint's `no-restricted-imports` blocking
- * `core/ioc` from layered code, plugins cannot bypass DI.
+ * Configuration is not part of the contract: each factory parses its own
+ * block at composition time, so a malformed block fails the boot rather than
+ * the first event. Handlers register through the codegen registries, not
+ * plugins. Plugins never receive the raw IoC container, only the typed
+ * {@link PluginInitContext.resolve}.
  */
 import type { ClientEvents, Interaction } from 'discord.js';
 
@@ -39,19 +23,11 @@ import type { Translator } from '../i18n';
 import type { Clock } from '../time';
 import type { ServiceToken } from '../ioc';
 
-// ---------------------------------------------------------------------------
-// Identity
-// ---------------------------------------------------------------------------
-
 /** Globally unique plugin identifier. Snake-case or kebab-case by convention. */
 export type PluginId = string;
 
 /** Semver string. Major bumps for breaking contract changes. */
 export type PluginVersion = string;
-
-// ---------------------------------------------------------------------------
-// Lifecycle contexts
-// ---------------------------------------------------------------------------
 
 /** Typed token-based resolve. Tighter than handing out the full container. */
 export type TypedResolver = <T>(token: ServiceToken<T>) => T;
@@ -110,7 +86,7 @@ export interface PluginInitContext extends PluginRuntimeServices {
 /** Context handed to `Plugin.start` (Discord login done, ready event pending). */
 export type PluginStartContext = PluginRuntimeServices;
 
-/** Context handed to `Plugin.onReady` and `Plugin.onShutdown`. */
+/** Context handed to runtime lifecycle hooks. */
 export type PluginRuntimeContext = PluginRuntimeServices;
 
 /** Context handed to event subscriptions per dispatch. */
@@ -118,10 +94,6 @@ export interface PluginEventContext extends PluginRuntimeServices {
   /** Discord event name being dispatched. */
   readonly eventName: keyof ClientEvents;
 }
-
-// ---------------------------------------------------------------------------
-// Event subscriptions (typed over discord.js ClientEvents)
-// ---------------------------------------------------------------------------
 
 /**
  * Subscription map keyed by `discord.js` event names. Each subscription
@@ -134,10 +106,6 @@ export type PluginEventSubscriptions = {
     ...args: ClientEvents[K]
   ) => Promise<void> | void;
 };
-
-// ---------------------------------------------------------------------------
-// Plugin contract
-// ---------------------------------------------------------------------------
 
 export interface Plugin {
   readonly id: PluginId;
@@ -167,6 +135,9 @@ export interface Plugin {
   /** Runs once after the Discord `ready` event. */
   onReady?(ctx: PluginRuntimeContext): Promise<void>;
 
+  /** Rebuild guild-scoped state after a previously unavailable database connects. */
+  onGuildDatabaseReady?(ctx: PluginRuntimeContext, guildId: string): Promise<void>;
+
   /**
    * Runs during graceful shutdown — in **reverse** registration order,
    * so a plugin registered later stops before the ones it was layered
@@ -185,10 +156,6 @@ export interface Plugin {
   /** Discord event subscriptions, fanned out by {@link EventDispatcher}. */
   readonly events?: PluginEventSubscriptions;
 }
-
-// ---------------------------------------------------------------------------
-// InteractionRouter middleware
-// ---------------------------------------------------------------------------
 
 /**
  * Context threaded through the InteractionRouter middleware chain.
@@ -215,10 +182,6 @@ export interface InteractionMiddleware {
   readonly name: string;
   run(ctx: InteractionContext, next: () => Promise<void>): Promise<void>;
 }
-
-// ---------------------------------------------------------------------------
-// Host-side reporting
-// ---------------------------------------------------------------------------
 
 /**
  * Reason a plugin entered the disabled set. Captures everything an

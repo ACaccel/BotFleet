@@ -1,10 +1,16 @@
-import type { ChatInputCommandInteraction } from 'discord.js';
+import { GuildMember, type ChatInputCommandInteraction, type User } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { Command } from '@cmd';
 
-import { getRequiredString } from '../../../infra/discord/options';
+import { meterBar, pairReading, singleReading } from './meter';
+import { dailyReading } from './daily-reading';
+import { lookupGuildRepos } from '../../require-guild-repos';
+import { buildAllowedChannelSet } from '../traffic-shared/allowed-channels';
 
-const IS_GAY_PROBABILITY = 0.95;
+const nameOf = (user: User, member: unknown): string =>
+  member !== null && typeof member === 'object' && 'displayName' in member
+    ? (member as GuildMember).displayName
+    : user.displayName;
 
 export default class gay extends Command {
   constructor() {
@@ -12,12 +18,11 @@ export default class gay extends Command {
     this.setConfig({
       name: 'gay',
       category: 'fun',
+      guildOnly: true,
       options: {
         user: [
-          {
-            name: 'user',
-            required: true,
-          },
+          { name: 'user', required: true },
+          { name: 'user2', required: false },
         ],
       },
     });
@@ -27,16 +32,65 @@ export default class gay extends Command {
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    const userId = getRequiredString(interaction, 'user');
-    const target = interaction.guild?.members.cache.get(userId);
-    const t = bot.translator;
-    // Defensive guard for the pre-run() window: the translator field is
-    // only set once `run()` resolves. The early-return keeps the strict
-    // typecheck honest and silently no-ops when the target is unknown.
-    if (t === undefined || target === undefined) return;
+    const t = (key: string, params?: Record<string, string | number>): string =>
+      bot.translator?.t(key, params) ?? '';
+    const first = interaction.options.getUser('user', true);
+    const second = interaction.options.getUser('user2') ?? undefined;
+    const name = nameOf(first, interaction.options.getMember('user'));
+    const userIds =
+      second === undefined || second.id === first.id ? [first.id] : [first.id, second.id];
+    const now = Date.now();
+    let reading =
+      second === undefined || second.id === first.id
+        ? singleReading(first.id, bot.timeZone, now)
+        : pairReading(first.id, second.id, bot.timeZone, now);
+    const guild = interaction.guild;
+    const policy = bot.permissionRankPolicy;
+    if (guild !== null && policy !== undefined) {
+      const member =
+        interaction.member instanceof GuildMember
+          ? interaction.member
+          : guild.members.cache.get(interaction.user.id);
+      const lookup = lookupGuildRepos(bot, guild.id);
+      if (member !== undefined && lookup.kind === 'ready') {
+        await interaction.deferReply();
+        const repos = lookup.repos;
+        const records = await repos.gayStats.listChannels();
+        if (records.ok) {
+          const channelIds = buildAllowedChannelSet({
+            guild,
+            member,
+            policy,
+            mode: 'public',
+            commandChannelId: interaction.channelId,
+            records: records.value,
+          });
+          reading = await dailyReading({
+            userIds,
+            channelIds: [...channelIds],
+            timeZone: bot.timeZone,
+            now,
+            stats: repos.gayStats,
+            snapshots: repos.gayReading,
+          });
+        }
+      }
+    }
 
-    const key =
-      Math.random() < IS_GAY_PROBABILITY ? 'replies:gay.is_gay' : 'replies:gay.is_not_gay';
-    await interaction.reply({ content: t.t(key, { name: target.displayName }) });
+    let content: string;
+    if (second === undefined || second.id === first.id) {
+      const { percent, commentKey } = reading;
+      content = t('replies:gay.single', { name, percent, bar: meterBar(percent) });
+      content += `\n> ${t(commentKey)}`;
+    } else {
+      const { percent, commentKey } = reading;
+      const other = nameOf(second, interaction.options.getMember('user2'));
+      content = t('replies:gay.pair', { name, other, percent, bar: meterBar(percent) });
+      content += `\n> ${t(commentKey)}`;
+    }
+    // Names are member-chosen text; nothing in the reading may ping.
+    const reply = { content, allowedMentions: { parse: [] } };
+    if (interaction.deferred) await interaction.editReply(reply);
+    else await interaction.reply(reply);
   }
 }

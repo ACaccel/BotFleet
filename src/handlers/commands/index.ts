@@ -17,15 +17,15 @@ import { replyTranslated } from '../reply-translated';
 // statement (which would place it after the registry require call).
 import { Command, localizeCommandConfig } from './command';
 import { buildCommandJsonBody } from './command-builder';
+import { executeAutocomplete } from './autocomplete';
 import { COMMAND_REGISTRY } from './registry.generated';
 
-export { Command, localizeCommandConfig, buildCommandJsonBody };
+export { Command, localizeCommandConfig, buildCommandJsonBody, executeAutocomplete };
 export type {
   CommandConfig,
-  CommandOption,
+  CommandSuggestions,
   LocalizedCommandConfig,
   LocalizedCommandOption,
-  LocalizedCommandChoice,
 } from './command';
 
 export const getCommandJsonBody = (

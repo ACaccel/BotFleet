@@ -1,5 +1,5 @@
 {
-  // Strict type-check project (`yarn typecheck`). Everything about
+  // Strict type-check project (`npm run typecheck`). Everything about
   // module resolution — target, `baseUrl`, the path-alias table — is
   // inherited from `tsconfig.json`, which stays the single place an
   // alias is declared. This file adds only the strictness flags and

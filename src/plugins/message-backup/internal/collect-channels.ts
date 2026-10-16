@@ -1,111 +1,158 @@
-/**
- * Walk every text-like channel + thread in `guild` and return the
- * union as a flat `TextBasedChannel[]`. Active threads come from
- * `fetchActive`; archived public + private threads drain through
- * `fetchArchived` until `hasMore === false`.
- *
- * The result feeds `backupChannel`. Errors on individual thread-page
- * fetches log + continue rather than aborting the whole walk —
- * partial coverage is better than zero coverage when one channel is
- * misbehaving.
- */
-import { ChannelType, type Guild, type TextBasedChannel } from 'discord.js';
+import { ChannelType, Routes, type Guild, type TextBasedChannel } from 'discord.js';
 
 import { logError, type Logger } from '../../../core/logger';
-import { retryFetch } from '../../../core/retry';
+import {
+  discoverGuild,
+  historyPermissionGap,
+  type DiscoveryGap,
+  type DiscoveryLocation,
+  type DiscoveryResult,
+} from '../flow/discovery';
 
-const ALLOWED_CHANNEL_TYPES = new Set<ChannelType>([
-  ChannelType.GuildText,
-  ChannelType.GuildVoice,
-  ChannelType.GuildAnnouncement,
-  ChannelType.AnnouncementThread,
-  ChannelType.PublicThread,
-  ChannelType.PrivateThread,
-  ChannelType.GuildStageVoice,
-  ChannelType.GuildForum,
-  ChannelType.GuildMedia,
-]);
+interface CollectedChannels extends DiscoveryResult {
+  channels: TextBasedChannel[];
+  liveChannelIds: Set<string>;
+}
 
-export const collectChannels = async (
+function describe(channel: unknown): DiscoveryLocation {
+  const value = channel as {
+    id: string;
+    type: number;
+    parentId?: string;
+    name?: string;
+    archivedAt?: Date | null;
+  };
+  return {
+    id: value.id,
+    type: value.type,
+    parentId: value.parentId,
+    name: value.name,
+    archivedAt: value.archivedAt?.toISOString(),
+    source: channel,
+  };
+}
+
+/** Fresh SDK objects serve history; raw inventory also exposes unsupported types omitted by the SDK. */
+export async function collectChannels(
   guild: Guild,
   logger: Logger,
-): Promise<{ channels: TextBasedChannel[]; liveChannelIds: Set<string> }> => {
-  await guild.channels.fetch();
-  const channels: TextBasedChannel[] = [];
-  const liveChannelIds = new Set<string>();
-  const seen = new Set<string>();
-
-  const addChannel = (ch: unknown): void => {
-    const anyCh = ch as { id?: string; type?: number; messages?: { fetch?: unknown } };
-    if (anyCh === null || anyCh === undefined) return;
-    if (anyCh.id === undefined || seen.has(anyCh.id)) return;
-    if (typeof anyCh.type !== 'number' || !ALLOWED_CHANNEL_TYPES.has(anyCh.type)) return;
-    seen.add(anyCh.id);
-    liveChannelIds.add(anyCh.id);
-    if (anyCh.messages !== undefined && typeof anyCh.messages.fetch === 'function') {
-      channels.push(ch as TextBasedChannel);
-    }
+  options: {
+    request?<T>(key: string, operation: () => Promise<T>): Promise<T>;
+    concurrency?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<CollectedChannels> {
+  const request = async <T>(key: string, operation: () => Promise<T>): Promise<T> => {
+    if (options.signal?.aborted) throw new Error('archive-discovery-cancelled');
+    const result = await (options.request === undefined
+      ? operation()
+      : options.request(key, operation));
+    if (options.signal?.aborted) throw new Error('archive-discovery-cancelled');
+    return result;
   };
-
-  for (const channel of guild.channels.cache.values()) {
-    addChannel(channel);
-    const anyChannel = channel as unknown as {
-      threads?: {
-        fetchActive?: () => Promise<{ threads: Map<string, unknown> }>;
-        fetchArchived?: (opts: unknown) => Promise<{
-          threads: Map<string, { archivedAt: Date | null }>;
-          hasMore: boolean;
-        }>;
-      };
-      name?: string;
-    };
-    if (anyChannel.threads === undefined || typeof anyChannel.threads.fetchActive !== 'function') {
+  const inventoryGaps: DiscoveryGap[] = [];
+  const discovery = await discoverGuild(
+    {
+      async channels(): Promise<DiscoveryLocation[]> {
+        let locations: DiscoveryLocation[] = [];
+        let rawNeeded = false;
+        try {
+          const fresh = await request(`discovery:${guild.id}:sdk-channels`, () =>
+            guild.channels.fetch(),
+          );
+          locations = [...fresh.values()].filter((channel) => channel !== null).map(describe);
+          // The SDK keeps null entries for unsupported raw channel types in its fresh collection.
+          rawNeeded = [...fresh.values()].some((channel) => channel === null);
+        } catch (error) {
+          inventoryGaps.push({ pass: 'channels', reason: `sdk-inventory:${String(error)}` });
+          rawNeeded = true;
+        }
+        if (!rawNeeded) return locations;
+        let raw: { id: string; type: number; parent_id?: string; name?: string }[] = [];
+        try {
+          raw = (await request(`discovery:${guild.id}:raw-channels`, () =>
+            guild.client.rest.get(Routes.guildChannels(guild.id), { signal: options.signal }),
+          )) as typeof raw;
+        } catch (error) {
+          inventoryGaps.push({ pass: 'channels', reason: `raw-inventory:${String(error)}` });
+        }
+        const seen = new Set(locations.map((item) => item.id));
+        for (const item of raw) {
+          if (!seen.has(item.id))
+            locations.push({
+              id: item.id,
+              type: item.type,
+              parentId: item.parent_id,
+              name: item.name,
+              source: guild.channels.cache.get(item.id),
+            });
+        }
+        return locations;
+      },
+      async active(): Promise<DiscoveryLocation[]> {
+        const result = await request(`discovery:${guild.id}:active`, () =>
+          guild.channels.fetchActiveThreads(),
+        );
+        return [...result.threads.values()].map(describe);
+      },
+      async archived(parentId, pass, before) {
+        const parent = guild.channels.cache.get(parentId);
+        if (parent === undefined || !('threads' in parent))
+          throw new Error('thread-parent-not-materialized');
+        const result = await request(`discovery:${parentId}:${pass}:${before ?? ''}`, () =>
+          parent.threads.fetchArchived({
+            type: pass === 'public' ? 'public' : 'private',
+            fetchAll: pass === 'private',
+            limit: 100,
+            ...(before === undefined
+              ? {}
+              : { before: pass === 'joined-private' ? before : new Date(before) }),
+          }),
+        );
+        return {
+          locations: [...result.threads.values()].map(describe),
+          hasMore: result.hasMore ?? false,
+        };
+      },
+    },
+    options,
+  );
+  discovery.gaps.push(...inventoryGaps);
+  const channels: TextBasedChannel[] = [];
+  for (const location of discovery.messageLocations) {
+    const channel = location.source as TextBasedChannel | undefined;
+    if (channel === undefined || !('messages' in channel)) {
+      discovery.gaps.push({
+        pass: 'history',
+        channelId: location.id,
+        reason: 'message-channel-not-materialized',
+      });
       continue;
     }
-    try {
-      const active = await retryFetch(() => anyChannel.threads!.fetchActive!());
-      active.threads.forEach((t) => addChannel(t));
-    } catch (err) {
-      logError(
-        logger,
-        guild.id,
-        `fetchActive threads failed for ${anyChannel.name ?? channel.id}: ${String(err)}`,
-      );
-    }
-    for (const type of ['public', 'private'] as const) {
-      try {
-        let before: Date | undefined;
-        // fetchArchived is paginated — drain both visibility classes.
-        for (;;) {
-          const opts: {
-            type: 'public' | 'private';
-            limit: number;
-            fetchAll: boolean;
-            before?: Date;
-          } = {
-            type,
-            limit: 100,
-            fetchAll: type === 'private',
-          };
-          if (before !== undefined) opts.before = before;
-          const archived = await retryFetch(() => anyChannel.threads!.fetchArchived!(opts));
-          archived.threads.forEach((t) => {
-            addChannel(t);
-            const archivedAt = (t as { archivedAt: Date | null }).archivedAt;
-            if (archivedAt !== null && (before === undefined || archivedAt < before)) {
-              before = archivedAt;
-            }
-          });
-          if (!archived.hasMore) break;
-        }
-      } catch (err) {
-        logError(
-          logger,
-          guild.id,
-          `fetchArchived ${type} threads failed for ${anyChannel.name ?? channel.id}: ${String(err)}`,
-        );
+    if ('guild' in channel) {
+      const reason = historyPermissionGap(channel);
+      if (reason !== undefined) {
+        discovery.gaps.push({ pass: 'history', channelId: location.id, reason });
+        continue;
       }
     }
+    channels.push(channel);
   }
-  return { channels, liveChannelIds };
-};
+  for (const gap of discovery.gaps)
+    logError(logger, guild.id, `Discovery ${gap.pass} ${gap.channelId ?? guild.id}: ${gap.reason}`);
+  discovery.complete = discovery.gaps.length === 0;
+  return {
+    ...discovery,
+    channels,
+    liveChannelIds: new Set(
+      discovery.locations
+        .filter(
+          (item) =>
+            item.type !== ChannelType.DM &&
+            item.type !== ChannelType.GroupDM &&
+            item.type !== ChannelType.GuildCategory,
+        )
+        .map((item) => item.id),
+    ),
+  };
+}

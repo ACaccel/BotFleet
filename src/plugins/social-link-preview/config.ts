@@ -2,18 +2,16 @@
  * Configuration schema and defaults for the social-link-preview plugin.
  *
  * Scalars (the master switch, the original-message strategy, timeouts and
- * caps) default here in code, so a bot may omit the `social_link_preview`
- * block entirely — or declare an empty one — and still boot with a
- * fully-formed, safe (disabled) configuration.
+ * caps) default in code, so a bot may omit the `social_link_preview`
+ * block entirely and still boot with a safe (disabled) configuration.
  *
  * The six embed-proxy host lists are deliberately not defaulted: they name
  * third-party services whose uptime and policies change far faster than a
- * release ships, so they are operator configuration rather than code. Once
- * `enabled` is true every list is mandatory, and a missing one fails
- * startup with an issue naming the key — better than silently probing a
- * built-in host that went dark months ago. While the feature is disabled
- * the lists stay optional, so an operator can park it without discarding
- * the configuration.
+ * release ships. Once `enabled` is true every list is mandatory, and a
+ * missing one fails startup with an issue naming the key — better than
+ * silently probing a built-in host that went dark. While the feature is
+ * disabled the lists stay optional, so an operator can park it without
+ * discarding the configuration.
  *
  * `.strict()` surfaces a mistyped key at startup rather than silently
  * ignoring it.
@@ -24,8 +22,6 @@ import { LINK_PREVIEW_PROVIDER_NAMES } from '../../infra/link-preview';
 
 /** Hard cap so a typo cannot hold a single host probe open for minutes. */
 const MAX_TIMEOUT_MS = 15_000;
-/** Hard cap on the cumulative validation budget across all host probes. */
-const MAX_VALIDATION_BUDGET_MS = 30_000;
 /** Hard cap on previews per message, bounding reply fan-out / spam. */
 const MAX_URLS_PER_MESSAGE = 5;
 
@@ -42,8 +38,62 @@ const proxyHostList = (key: string): z.ZodArray<z.ZodString, 'atleastone'> =>
     })
     .nonempty(`${key} must list at least one embed-proxy host`);
 
+/**
+ * The nhentai / wnacg paged reader. Images are downloaded and re-uploaded,
+ * so these bound the host's memory and bandwidth: `prefetchPages` pages
+ * after the one shown are fetched ahead into a byte-bounded cache, and
+ * uploaded ahead to `stagingChannelId` when one is set.
+ * `maxImageBytes` stays under Discord's default 10 MiB upload limit.
+ */
+const GallerySchema = z
+  .object({
+    prefetchPages: z.number().int().min(0).max(10).default(5),
+    cacheMaxBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(512 * 1024 * 1024)
+      .default(64 * 1024 * 1024),
+    maxImageBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(10 * 1024 * 1024)
+      .default(8 * 1024 * 1024),
+    imageTimeoutMs: z.number().int().positive().max(60_000).default(15_000),
+    /**
+     * Age-restricted channel the bot uploads prefetched pages to, so a page
+     * turn only swaps a URL. `null` uploads each page with its turn instead.
+     */
+    stagingChannelId: z
+      .string()
+      .regex(/^\d{17,20}$/, 'gallery.stagingChannelId must be a Discord channel ID (17-20 digits)')
+      .nullable()
+      .default(null),
+  })
+  .strict()
+  .refine((gallery) => gallery.cacheMaxBytes >= gallery.maxImageBytes, {
+    message: 'gallery.cacheMaxBytes must be at least gallery.maxImageBytes',
+    path: ['cacheMaxBytes'],
+  })
+  .default({});
+
 /** Fields shared by both branches; all defaulted, none operator-mandatory. */
 const commonShape = {
+  /** Attachment downloads are bounded independently of metadata probes. */
+  maxVideoBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(25 * 1024 * 1024)
+    .default(8 * 1024 * 1024),
+  videoTimeoutMs: z.number().int().positive().max(60_000).default(15_000),
+  /** Other bots whose messages may trigger previews; self messages are always ignored. */
+  allowedBotIds: z
+    .array(
+      z.string().regex(/^\d{17,20}$/, 'allowedBotIds must contain Discord user IDs (17-20 digits)'),
+    )
+    .default([]),
   /**
    * What to do with the user's original message once a preview is posted:
    *   - `suppress`: hide its auto-generated embed (needs ManageMessages);
@@ -52,23 +102,38 @@ const commonShape = {
    */
   originalMessageStrategy: z.enum(['suppress', 'delete', 'leave']).default('suppress'),
   /**
+   * FxTwitter-compatible JSON API bases (e.g. `https://api.fxtwitter.com`),
+   * tried in order. Set to render X posts as custom cards; omit to rewrite
+   * every tweet onto an embed proxy. Like the proxy lists, these name
+   * third-party services and so are operator configuration with no default.
+   */
+  twitterApiBaseUrls: z
+    .array(
+      z
+        .string()
+        .url()
+        .refine((value) => value.startsWith('https://'), 'twitterApiBaseUrls must use https'),
+    )
+    .nonempty('twitterApiBaseUrls must list at least one API base when set')
+    .optional(),
+  /**
    * Allow-list of enabled providers. Omitted = all providers. Acts as a
    * per-source kill-switch when a proxy service is misbehaving.
    */
   providers: z.array(z.enum(LINK_PREVIEW_PROVIDER_NAMES)).optional(),
-  /** Per-host OpenGraph probe / scrape timeout, in milliseconds. */
-  timeoutMs: z.number().int().positive().max(MAX_TIMEOUT_MS).default(4_000),
   /**
-   * Cumulative budget for probing a single URL's proxy-host list, in
-   * milliseconds. Caps worst-case latency (per-host timeout × list length).
+   * Per-host OpenGraph probe / scrape timeout, in milliseconds. A rewrite
+   * provider walks its whole host list, so this times the list length is
+   * the worst case for one URL.
    */
-  validationBudgetMs: z.number().int().positive().max(MAX_VALIDATION_BUDGET_MS).default(8_000),
+  timeoutMs: z.number().int().positive().max(MAX_TIMEOUT_MS).default(4_000),
   /**
    * Maximum number of previews to post for a single message. Probing is
    * sequential, so worst-case per-message latency scales as
-   * `maxUrlsPerMessage × (validationBudgetMs + timeoutMs)`; keep this small.
+   * `maxUrlsPerMessage × hosts per list × timeoutMs`; keep this small.
    */
   maxUrlsPerMessage: z.number().int().positive().max(MAX_URLS_PER_MESSAGE).default(1),
+  gallery: GallerySchema,
 };
 
 /** The operator-supplied embed-proxy host lists, one per rewrite provider. */
@@ -123,13 +188,10 @@ const ConfigSchema = z.discriminatedUnion('enabled', [DisabledSchema, EnabledSch
 export type SocialLinkPreviewPluginConfig = z.infer<typeof ConfigSchema>;
 
 /**
- * Parse a raw `social_link_preview` config block into a validated config.
- * Passing `undefined` (the block is absent) yields the all-defaults,
- * disabled configuration rather than throwing.
+ * An absent block yields the disabled defaults.
  *
- * @throws {z.ZodError} when a provided value is the wrong type, an unknown
- *   key is present, or the feature is enabled without a complete set of
- *   embed-proxy host lists (fail-fast at composition time).
+ * @throws {z.ZodError} on an invalid block, including an enabled feature
+ *   without a complete set of embed-proxy host lists.
  */
 export const parseSocialLinkPreviewConfig = (raw: unknown): SocialLinkPreviewPluginConfig =>
   ConfigSchema.parse(raw ?? {});

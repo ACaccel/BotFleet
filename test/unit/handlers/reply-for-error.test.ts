@@ -8,10 +8,17 @@
  *     `replies:<feature>.failed` copy (with a `traceId`) otherwise.
  */
 import { describe, expect, it } from 'vitest';
+import { MessageFlags } from 'discord.js';
 
 import { DatabaseError } from '../../../src/core/errors';
 import type { Translator } from '../../../src/core/i18n';
 import { replyForError, resolveErrorReply } from '../../../src/infra/discord/reply-for-error';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
+import { echoTranslator } from '../../fixtures/runtime';
 
 /**
  * A translator stub that returns a `T(<key>)` marker (plus a JSON of
@@ -19,64 +26,35 @@ import { replyForError, resolveErrorReply } from '../../../src/infra/discord/rep
  * resolution is always distinguishable from the bare key — mirroring
  * real i18next, which returns the key verbatim only on a catalog miss.
  */
-const stubTranslator = (): Translator =>
-  ({
-    t: (key: string, params?: Record<string, unknown>) =>
-      params === undefined ? `T(${key})` : `T(${key})|${JSON.stringify(params)}`,
-    tStrict: (key: string) => `T(${key})`,
-  }) as unknown as Translator;
-
-/** A translator stub whose `t` always misses (echoes the key back). */
-const missTranslator = (): Translator =>
-  ({
-    t: (key: string) => key,
-    tStrict: (key: string) => key,
-  }) as unknown as Translator;
+const stubTranslator = (): Translator => ({
+  t: (key, params) => (params === undefined ? `T(${key})` : `T(${key})|${JSON.stringify(params)}`),
+  tStrict: (key) => `T(${key})`,
+  listMissingKeys: () => ({ en: [], 'zh-TW': [] }),
+});
 
 /**
- * A logger stub recording every `error` / `info` call. The helpers
- * now rely on the ambient `bot` base binding (created via
- * `createBootstrapLogger`) rather than re-`child({ bot })`-ing on every
- * call, so the outer logger must expose `info` directly for `logSystem`
- * and `child(...)` for `logError`'s `guildId` scope.
+ * A bot whose spy logger records every `error` / `info` call. The
+ * helpers rely on the ambient `bot` base binding rather than
+ * re-`child({ bot })`-ing on every call, so the logger must expose
+ * `info` directly for `logSystem` and `child(...)` for `logError`'s
+ * `guildId` scope; the fake's `child()` returns itself, so every call
+ * lands on the same two spies.
  */
-const stubLogger = () => {
-  const errorCalls: unknown[] = [];
-  const infoCalls: unknown[] = [];
-  const child = {
-    error: (obj: unknown) => errorCalls.push(obj),
-    info: (obj: unknown) => infoCalls.push(obj),
-    child: () => child,
-  };
-  const logger = {
-    error: (obj: unknown) => errorCalls.push(obj),
-    info: (obj: unknown) => infoCalls.push(obj),
-    child: () => child,
-  };
-  return { logger: logger as never, errorCalls, infoCalls };
-};
+const stubBot = (translatorBound = true) =>
+  buildFakeBot({ translator: translatorBound ? stubTranslator() : undefined });
 
-/** A minimal interaction fake capturing reply / editReply payloads. */
+/** An interaction recording its replies, with the acknowledged state the test starts in. */
 const stubInteraction = (state: { deferred: boolean; replied: boolean }) => {
-  const replies: Array<{ content?: string }> = [];
-  const editReplies: Array<{ content?: string }> = [];
+  const sink = newInteractionSink();
+  sink.acknowledged.deferred = state.deferred;
+  sink.acknowledged.replied = state.replied;
+  const interaction = buildChatInputInteraction({ sink });
   return {
-    interaction: {
-      get deferred() {
-        return state.deferred;
-      },
-      get replied() {
-        return state.replied;
-      },
-      reply: async (opts: { content?: string }) => {
-        replies.push(opts);
-      },
-      editReply: async (opts: { content?: string }) => {
-        editReplies.push(opts);
-      },
-    } as never,
-    replies,
-    editReplies,
+    interaction,
+    replies: sink.replies,
+    editReplies: sink.editReplies,
+    followUps: sink.followUps,
+    deleted: sink.deletes,
   };
 };
 
@@ -119,7 +97,7 @@ describe('resolveErrorReply — channel selection', () => {
       messageKey: 'errors:db.nonexistent_key',
       context: { operation: 'ReplyRepo.create' },
     });
-    const text = resolveErrorReply(missTranslator(), error, 'replies:add_reply.failed', 'tr4ce1');
+    const text = resolveErrorReply(echoTranslator(), error, 'replies:add_reply.failed', 'tr4ce1');
     // missTranslator echoes every key, so the fallback also echoes —
     // the assertion confirms the fallback *key* (not the error key)
     // was the one looked up.
@@ -129,7 +107,7 @@ describe('resolveErrorReply — channel selection', () => {
 
 describe('replyForError — dual-channel boundary', () => {
   it('logs the operator channel and replies with the messageKey for a DomainError', async () => {
-    const { logger, errorCalls } = stubLogger();
+    const { bot, logger } = stubBot();
     const { interaction, editReplies } = stubInteraction({ deferred: true, replied: false });
     const error = new DatabaseError({
       code: 'DATABASE_DUPLICATE_KEY',
@@ -137,36 +115,24 @@ describe('replyForError — dual-channel boundary', () => {
       context: { operation: 'ReplyRepo.create' },
     });
 
-    await replyForError(
-      interaction,
-      { logger, translator: stubTranslator() },
-      error,
-      'replies:add_reply.failed',
-      'g-1',
-    );
+    await replyForError(interaction, bot, error, 'replies:add_reply.failed', 'g-1');
 
     // Operator channel always fires with the full error.
-    expect(errorCalls).toHaveLength(1);
-    expect(errorCalls[0]).toMatchObject({ err: error });
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error.mock.calls[0]?.[0]).toMatchObject({ err: error });
     // User channel: taxonomy-driven messageKey (deferred -> editReply).
     expect(editReplies).toEqual([{ content: 'T(errors:db.duplicate_key)' }]);
   });
 
   it('logs the operator channel and replies with the per-feature fallback for a raw error', async () => {
-    const { logger, errorCalls } = stubLogger();
+    const { bot, logger } = stubBot();
     const { interaction, editReplies } = stubInteraction({ deferred: true, replied: false });
     const raw = new Error('connection reset by peer');
 
-    await replyForError(
-      interaction,
-      { logger, translator: stubTranslator() },
-      raw,
-      'replies:add_reply.failed',
-      'g-1',
-    );
+    await replyForError(interaction, bot, raw, 'replies:add_reply.failed', 'g-1');
 
-    expect(errorCalls).toHaveLength(1);
-    expect(errorCalls[0]).toMatchObject({ err: raw });
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error.mock.calls[0]?.[0]).toMatchObject({ err: raw });
     // User channel: fallback key carrying a generated 6-char traceId.
     expect(editReplies).toHaveLength(1);
     const content = editReplies[0]?.content ?? '';
@@ -174,38 +140,47 @@ describe('replyForError — dual-channel boundary', () => {
   });
 
   it('replies (ephemeral) rather than edits when the interaction is not acknowledged', async () => {
-    const { logger } = stubLogger();
+    const { bot } = stubBot();
     const { interaction, replies, editReplies } = stubInteraction({
       deferred: false,
       replied: false,
     });
 
-    await replyForError(
-      interaction,
-      { logger, translator: stubTranslator() },
-      new Error('boom'),
-      'replies:help.failed',
-    );
+    await replyForError(interaction, bot, new Error('boom'), 'replies:help.failed');
 
     expect(editReplies).toHaveLength(0);
     expect(replies).toHaveLength(1);
+    expect(replies[0]?.flags).toBe(MessageFlags.Ephemeral);
+  });
+
+  it('replaces a public reply with an ephemeral follow-up when asked', async () => {
+    const { bot } = stubBot();
+    const { interaction, editReplies, followUps, deleted } = stubInteraction({
+      deferred: true,
+      replied: false,
+    });
+
+    await replyForError(interaction, bot, new Error('boom'), 'replies:help.failed', 'g1', {
+      privateAfterPublicReply: true,
+    });
+
+    expect(editReplies).toHaveLength(0);
+    expect(deleted).toEqual(['@original']);
+    expect(followUps).toHaveLength(1);
+    expect(followUps[0]?.flags).toBe(MessageFlags.Ephemeral);
+    expect(followUps[0]?.content).toContain('T(replies:help.failed)');
   });
 
   it('still logs the operator channel when the translator is unbound', async () => {
-    const { logger, errorCalls } = stubLogger();
+    const { bot, logger } = stubBot(false);
     const { interaction, replies, editReplies } = stubInteraction({
       deferred: true,
       replied: false,
     });
 
-    await replyForError(
-      interaction,
-      { logger, translator: undefined },
-      new Error('boom'),
-      'replies:help.failed',
-    );
+    await replyForError(interaction, bot, new Error('boom'), 'replies:help.failed');
 
-    expect(errorCalls).toHaveLength(1);
+    expect(logger.error).toHaveBeenCalledTimes(1);
     // Empty resolved content -> no user-facing reply attempted.
     expect(replies).toHaveLength(0);
     expect(editReplies).toHaveLength(0);
@@ -214,15 +189,10 @@ describe('replyForError — dual-channel boundary', () => {
   it('does not throw when the interaction errors are unrelated', async () => {
     // A non-expired Discord error must propagate, but a generic stub
     // here simply verifies the happy path does not swallow real bugs.
-    const { logger } = stubLogger();
+    const { bot } = stubBot();
     const { interaction } = stubInteraction({ deferred: true, replied: false });
     await expect(
-      replyForError(
-        interaction,
-        { logger, translator: stubTranslator() },
-        new Error('boom'),
-        'replies:help.failed',
-      ),
+      replyForError(interaction, bot, new Error('boom'), 'replies:help.failed'),
     ).resolves.toBeUndefined();
   });
 });

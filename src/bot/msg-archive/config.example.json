@@ -1,15 +1,43 @@
 {
   "admin": ["YOUR_ADMIN_USER_ID"],
   "language": "zh-TW",
+  "commands": ["archive"],
   "guilds": {
     "YOUR_GUILD_ID": {
       "channels": {
         "debug": "YOUR_DEBUG_CHANNEL_ID"
       },
-      "roles": {}
+      "permission_rank": {
+        "channels": {
+          "YOUR_PRIVATE_CHANNEL_ID": 1
+        },
+        "features": {
+          "channel_logging": {
+            "maxChannelRank": 0
+          }
+        }
+      }
     }
   },
   "backup_log_enabled": false,
   "backup_server": ["YOUR_GUILD_ID"],
-  "backup_interval_minutes": 60
+  "backup_interval_minutes": 60,
+  "archive_policy": {
+    "version": "1",
+    "bots": [],
+    "webhooks": []
+  },
+  "archive_runtime": {
+    "concurrency": 2,
+    "overlap_minutes": 60,
+    "job_poll_seconds": 5,
+    "max_pending_events": 1000,
+    "max_inbox_bytes": 1000000000,
+    "storage": {
+      "budget_bytes": 100000000000,
+      "background_limit_bytes": 85000000000,
+      "reserve_bytes": 5000000000,
+      "additional_roots": []
+    }
+  }
 }

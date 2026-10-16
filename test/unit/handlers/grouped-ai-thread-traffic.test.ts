@@ -1,0 +1,92 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import Ai from '../../../src/handlers/commands/ai';
+import AiSettings from '../../../src/handlers/commands/ai_settings/action';
+import AiStatus from '../../../src/handlers/commands/ai_status/action';
+import AiWhitelistAdd from '../../../src/handlers/commands/ai_whitelist_add/action';
+import AiWhitelistRemove from '../../../src/handlers/commands/ai_whitelist_remove/action';
+import AiWhitelistList from '../../../src/handlers/commands/ai_whitelist_list/action';
+import Thread from '../../../src/handlers/commands/thread';
+import ThreadBan from '../../../src/handlers/commands/thread_ban/action';
+import ThreadAllow from '../../../src/handlers/commands/thread_allow/action';
+import ThreadList from '../../../src/handlers/commands/thread_list/action';
+import ThreadClaim from '../../../src/handlers/commands/thread_claim/action';
+import ThreadManager from '../../../src/handlers/commands/thread_manager/action';
+import Traffic from '../../../src/handlers/commands/traffic';
+import TrafficOverview from '../../../src/handlers/commands/traffic/action';
+import TrafficApps from '../../../src/handlers/commands/traffic_apps/action';
+import TrafficChannel from '../../../src/handlers/commands/traffic_channel/action';
+import TrafficEmoji from '../../../src/handlers/commands/traffic_emoji/action';
+import TrafficMe from '../../../src/handlers/commands/traffic_me/action';
+import TrafficSticker from '../../../src/handlers/commands/traffic_sticker/action';
+import TrafficUser from '../../../src/handlers/commands/traffic_user/action';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import {
+  buildChatInputInteraction,
+  newInteractionSink,
+} from '../../fixtures/discord/interaction-builder';
+
+const interactionFor = (name: string, group: string | null = null) => {
+  const sink = newInteractionSink();
+  const interaction = buildChatInputInteraction({
+    userId: 'member',
+    subcommand: name,
+    subcommandGroup: group,
+    sink,
+  });
+  return { interaction, sink };
+};
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('AI, thread, and traffic command groups', () => {
+  it.each([
+    [Ai, 'settings', null, AiSettings],
+    [Ai, 'status', null, AiStatus],
+    [Ai, 'add', 'whitelist', AiWhitelistAdd],
+    [Ai, 'remove', 'whitelist', AiWhitelistRemove],
+    [Ai, 'list', 'whitelist', AiWhitelistList],
+    [Thread, 'ban', null, ThreadBan],
+    [Thread, 'allow', null, ThreadAllow],
+    [Thread, 'list', null, ThreadList],
+    [Thread, 'claim', null, ThreadClaim],
+    [Thread, 'add', 'manager', ThreadManager],
+    [Thread, 'remove', 'manager', ThreadManager],
+    [Thread, 'list', 'manager', ThreadManager],
+    [Traffic, 'overview', null, TrafficOverview],
+    [Traffic, 'me', null, TrafficMe],
+    [Traffic, 'user', null, TrafficUser],
+    [Traffic, 'channel', null, TrafficChannel],
+    [Traffic, 'apps', null, TrafficApps],
+    [Traffic, 'emoji', null, TrafficEmoji],
+    [Traffic, 'sticker', null, TrafficSticker],
+  ] as const)('routes %p %s in group %s to its action', async (Root, name, group, Action) => {
+    const execute = vi.spyOn(Action.prototype, 'execute').mockResolvedValue(undefined);
+    const { interaction } = interactionFor(name, group);
+    const { bot } = buildFakeBot();
+    await new Root().execute(interaction, bot);
+    expect(execute).toHaveBeenCalledExactlyOnceWith(interaction, bot);
+  });
+
+  it.each(['add', 'remove'])('retains admin authorization for AI whitelist %s', async (name) => {
+    const { interaction, sink } = interactionFor(name, 'whitelist');
+    const getRepos = vi.fn();
+    const { bot } = buildFakeBot({ isAdmin: () => false, getRepos });
+    await new Ai().execute(interaction, bot);
+    expect(sink.editReplies).toEqual([{ content: 'errors:permission.admin_only_short' }]);
+    expect(getRepos).not.toHaveBeenCalled();
+  });
+
+  it('preserves manager options under the nested group without restricting the entire root', () => {
+    const root = new Thread();
+    const manager = root.config.subcommandGroups?.find((group) => group.name === 'manager');
+    expect(root.config.guildOnly).toBe(true);
+    expect(root.config.defaultMemberPermissions).toBeUndefined();
+    expect(manager?.subcommands).toEqual(
+      new ThreadManager().config.subcommands?.map((subcommand) => ({
+        ...subcommand,
+        adminOnly: true,
+      })),
+    );
+    expect(new Ai().config.defaultMemberPermissions).toBeUndefined();
+  });
+});

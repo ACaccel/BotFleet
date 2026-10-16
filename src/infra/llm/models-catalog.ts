@@ -2,7 +2,7 @@
  * Live model-catalog cache for the LLM Strategy.
  *
  * Wraps each provider's SDK list-models call and caches the result
- * with a TTL so `/ai_settings` can build a Discord StringSelectMenu
+ * with a TTL so `/ai settings` can build a Discord StringSelectMenu
  * synchronously (the interaction has a ~3-second window before
  * Discord auto-acks). Cache misses return `[]` immediately and kick
  * off a background fetch that fills the cache for the next caller —
@@ -13,7 +13,7 @@
  * class (not a module-scope holder), so the catalog carries no
  * ambient global state. It is published by `LlmChatPlugin.init`
  * through `ctx.registerInstance(TOKENS.ModelCatalog, ...)` and
- * consumers (the `/ai_settings` handler) reach it via
+ * consumers (the `/ai settings` handler) reach it via
  * `bot.modelCatalog`.
  */
 import OpenAI from 'openai';
@@ -32,7 +32,7 @@ const SELECT_MENU_MAX_OPTIONS = 25;
  * Wall-clock budget for one provider's list-models round trip. Every
  * fetch path is bounded by it: an SDK pagination loop that stalls
  * mid-stream would otherwise leave the provider permanently marked
- * in-flight, and `/ai_settings` would show an empty model list for the
+ * in-flight, and `/ai settings` would show an empty model list for the
  * lifetime of the process.
  */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -66,7 +66,7 @@ export class ModelCatalog {
    * @param apiKeys Per-provider API keys, derived from the typed Env.
    * @param logger  Optional sink for background-fetch failures. Without
    *   it a provider that never lists models is silent, and the operator
-   *   sees only an empty `/ai_settings` menu with no explanation.
+   *   sees only an empty `/ai settings` menu with no explanation.
    */
   public constructor(
     private readonly apiKeys: LlmProviderApiKeys,

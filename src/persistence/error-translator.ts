@@ -2,25 +2,18 @@
  * Translate raw mongoose / MongoDB driver errors into typed
  * {@link DatabaseError} instances.
  *
- * Lives in `persistence/` so that `core/` stays free of mongoose
- * imports and the repositories can reach the translator without an
- * upward import into `infra/mongo`. The translation here is pure
- * string-shape inspection and carries no mongoose import itself; the
- * boundary is upheld at the type level by the layer contract.
- *
  * Sub-code mapping:
  *   - `DATABASE_DUPLICATE_KEY` — MongoServerError code 11000.
- *   - `DATABASE_TIMEOUT`        — MongooseError name `MongooseServerSelectionError`,
- *     MongoNetworkTimeoutError, or any err whose message contains
- *     `'timeout'` (case-insensitive).
- *   - `DATABASE_NETWORK`        — MongoNetworkError (non-timeout).
- *   - `DATABASE_VALIDATION`     — mongoose `ValidationError` / `CastError`.
- *   - `DATABASE_UNKNOWN`        — anything else; do not swallow, surface
- *     so logs carry the original `cause`.
+ *   - `DATABASE_QUERY_TIMEOUT` — code 50 (`MaxTimeMSExpired`): the query
+ *     exceeded its own `maxTimeMS`, so the work is too large.
+ *   - `DATABASE_TIMEOUT` — `MongooseServerSelectionError`,
+ *     MongoNetworkTimeoutError, or a message containing `timeout`.
+ *   - `DATABASE_NETWORK` — MongoNetworkError (non-timeout).
+ *   - `DATABASE_VALIDATION` — mongoose `ValidationError` / `CastError`.
+ *   - `DATABASE_UNKNOWN` — anything else, surfaced with its `cause`.
  *
- * The translation is intentionally string-shape-based (duck-typed) so
- * mongoose version bumps don't require a coordinated upgrade — we
- * inspect `name` + `code` + `message` rather than `instanceof`.
+ * Matching inspects `name`, `code`, and `message` rather than `instanceof`,
+ * so the module needs no mongoose import and survives mongoose upgrades.
  */
 import { DatabaseError, type DatabaseErrorCode } from '../core/errors/external-service-error';
 import type { ErrorContext } from '../core/errors/error-context';
@@ -29,6 +22,7 @@ interface MongoLikeError {
   readonly name?: string;
   readonly message?: string;
   readonly code?: number | string;
+  readonly codeName?: string;
 }
 
 const classify = (raw: unknown): DatabaseErrorCode => {
@@ -41,6 +35,10 @@ const classify = (raw: unknown): DatabaseErrorCode => {
   // on the wrapped error.
   if (code === 11000 || code === '11000') return 'DATABASE_DUPLICATE_KEY';
   if (name === 'ValidationError' || name === 'CastError') return 'DATABASE_VALIDATION';
+  // Checked before the generic timeout patterns: a query that exceeded its own
+  // time limit is too large, not a connectivity problem worth retrying.
+  if (code === 50 || code === '50' || e.codeName === 'MaxTimeMSExpired')
+    return 'DATABASE_QUERY_TIMEOUT';
   // ServerSelection covers "could not pick a primary in time" — the
   // most common timeout shape from the driver.
   if (
@@ -77,6 +75,8 @@ const i18nKeyFor = (code: DatabaseErrorCode): string => {
       return 'errors:db.duplicate_key';
     case 'DATABASE_TIMEOUT':
       return 'errors:db.timeout';
+    case 'DATABASE_QUERY_TIMEOUT':
+      return 'errors:db.query_timeout';
     case 'DATABASE_NETWORK':
       return 'errors:db.network';
     case 'DATABASE_VALIDATION':

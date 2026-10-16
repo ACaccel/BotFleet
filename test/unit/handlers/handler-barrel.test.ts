@@ -7,7 +7,7 @@
  * segment, ignoring a component another bot owns.
  */
 import type { ButtonInteraction } from 'discord.js';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   createCustomIdDispatcher,
@@ -16,6 +16,8 @@ import {
   type HandlerBarrelSpec,
 } from '../../../src/handlers';
 import type { BaseBot } from '../../../src/bot';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import { buildButtonInteraction } from '../../fixtures/discord/interaction-builder';
 
 const executions: string[] = [];
 
@@ -64,14 +66,10 @@ const barrelFor = (registry: Record<string, new () => FakeHandler>): Barrel => {
   };
 };
 
-const makeBot = (): BaseBot =>
-  ({
-    logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-    translator: { t: (key: string) => key },
-  }) as unknown as BaseBot;
+const makeBot = (): BaseBot => buildFakeBot().bot;
 
 const interactionWith = (customId: string): ButtonInteraction =>
-  ({ customId }) as unknown as ButtonInteraction;
+  buildButtonInteraction({ customId });
 
 describe('createHandlerRegistrar', () => {
   it('publishes one instance per registry entry', async () => {

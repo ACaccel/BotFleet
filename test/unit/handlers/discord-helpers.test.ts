@@ -3,22 +3,14 @@ import type { Message } from 'discord.js';
 
 import {
   buildButtonRows,
-  listInOneImage,
   msgReact,
   scheduleJob,
 } from '../../../src/handlers/commands/discord-helpers';
+import { buildFakeBot } from '../../fixtures/discord/bot-fake';
+import { buildMessage } from '../../fixtures/discord/message-builder';
 
 const scheduleJobMock = vi.fn();
 
-// `discord-helpers` fetches through the shared bounded instance
-// (`boundedHttp`), so the mock has to provide `axios.create`.
-const axiosGetMock = vi.fn();
-vi.mock('axios', () => ({
-  default: {
-    create: () => ({ get: (...args: unknown[]) => axiosGetMock(...args) }),
-    get: (...args: unknown[]) => axiosGetMock(...args),
-  },
-}));
 vi.mock('node-schedule', () => ({
   default: {
     scheduleJob: (...args: unknown[]) => scheduleJobMock(...args),
@@ -57,7 +49,7 @@ describe('buildButtonRows', () => {
 describe('msgReact', () => {
   /** Build a fake `Message` whose `react()` behaviour the test controls. */
   const fakeMessage = (react: () => Promise<unknown>): Message =>
-    ({ id: 'm1', guildId: 'g1', react }) as unknown as Message;
+    buildMessage({ id: 'm1', guildId: 'g1', react });
 
   it('reacts with every emoji in order', async () => {
     const react = vi.fn().mockResolvedValue(undefined);
@@ -78,59 +70,22 @@ describe('msgReact', () => {
       .fn()
       .mockRejectedValueOnce(new Error('rate limited'))
       .mockResolvedValueOnce(undefined);
-    const errorFn = vi.fn();
-    const logger = { child: vi.fn().mockReturnValue({ error: errorFn }) };
+    const { bot, logger } = buildFakeBot();
+    const child = vi.spyOn(logger, 'child');
 
-    await msgReact(
-      fakeMessage(react),
-      ['bad', 'good'],
-      logger as unknown as Parameters<typeof msgReact>[2],
-      'bot-1',
-    );
+    await msgReact(fakeMessage(react), ['bad', 'good'], bot.logger, 'bot-1');
 
     // Both reactions are still attempted despite the first rejecting.
     expect(react).toHaveBeenCalledTimes(2);
-    expect(errorFn).toHaveBeenCalledTimes(1);
-    expect(logger.child).toHaveBeenCalledWith({ bot: 'bot-1', guildId: 'g1' });
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error.mock.calls[0]?.[0]).toMatchObject({ messageId: 'm1', reaction: 'bad' });
+    expect(child).toHaveBeenCalledWith({ bot: 'bot-1', guildId: 'g1' });
   });
 
   it('does not throw when a reaction fails and no logger is supplied', async () => {
     const react = vi.fn().mockRejectedValue(new Error('boom'));
 
     await expect(msgReact(fakeMessage(react), ['x'])).resolves.toBeUndefined();
-  });
-});
-
-describe('listInOneImage', () => {
-  it('returns null when there is no content', async () => {
-    await expect(listInOneImage([])).resolves.toBeNull();
-  });
-
-  it('renders an attachment for downloaded images', async () => {
-    // A 1x1 transparent PNG is enough for `canvas.loadImage` to succeed.
-    const onePixelPng = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-      'base64',
-    );
-    axiosGetMock.mockResolvedValue({ data: onePixelPng });
-
-    const attachment = await listInOneImage([{ url: 'https://example.test/a.png', text: 'tile' }], {
-      itemsPerRow: 1,
-    });
-
-    expect(attachment).not.toBeNull();
-    expect(attachment?.name).toBe('listInOneImage.png');
-  });
-
-  it('draws a placeholder when an image download fails', async () => {
-    axiosGetMock.mockRejectedValue(new Error('404'));
-
-    const attachment = await listInOneImage([
-      { url: 'https://example.test/missing.png', text: 'missing' },
-    ]);
-
-    // A bad URL must not fail the whole grid.
-    expect(attachment).not.toBeNull();
   });
 });
 

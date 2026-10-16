@@ -2,15 +2,11 @@ import type { Job } from 'node-schedule';
 import schedule from 'node-schedule';
 
 import type { Logger } from '../logger';
+import { bindGuildContext } from '../i18n';
 
 /**
  * Keyed wrapper around `node-schedule` that owns the lifecycle of a set
  * of scheduled jobs.
- *
- * Lives in `core/` because it is pure infrastructure: it depends only on
- * `node-schedule` and has no Discord / Mongo coupling. Both the giveaway
- * and activity plugins schedule deferred work, so the wrapper is shared
- * here rather than living inside a single plugin's `internal/`.
  *
  * The job `Map` is supplied by the caller so the plugin can keep its own
  * persistent job registry; `JobManager` is a thin stateless view over it.
@@ -62,9 +58,10 @@ export class JobManager {
    * promise escapes into the scheduler.
    */
   private guard(key: string, callback: () => void | Promise<unknown>): () => void {
+    const execute = bindGuildContext(callback);
     return () => {
       try {
-        const result = callback();
+        const result = execute();
         if (result instanceof Promise) {
           void result.catch((err: unknown) => {
             this.report(key, err);

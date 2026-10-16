@@ -6,20 +6,83 @@ minimum the SUT reads — no third-party mock libraries.
 
 ## Files
 
-- `guild-builder.ts` — `buildGuild({ id, name, channels, members, roles })`
+- `guild-builder.ts` — `buildGuild({ id, name, ownerId, channels, members, emojis, stickers, me, roles })`
   and `buildGuildRoles({ roleCount, roles, createdRoleId })`, whose
   `create` / `delete` mocks drive the role-creation failure branches.
-- `member-builder.ts` — `buildGuildMember({ id, displayName, voiceChannelId, roleIds, roles })`
+  A role spec may set `position`, `permissions` and `managed` for the
+  self-service role checks; `buildGuild` fills in each role's `guild`.
+  `emojis` and `stickers` are `{ id }` lists backing `emojis.cache` and
+  `stickers.cache`; both are empty by default.
+- `member-builder.ts` — `buildGuildMember({ id, displayName, username, bot, permissions, roleIds, roles, highestRolePosition })`
   and `buildMemberRoles()` for the `roles.add` / `roles.remove` spies.
-- `channel-builder.ts` — `buildTextChannel({ id, name, viewableBy })` for
-  the `/traffic` visibility filter, and `buildSendableChannel({ sendable })`
-  for any path that posts a message and later deletes it.
-- `interaction-builder.ts` — `buildChatInputInteraction({ commandName, userId, guildId, options, sink })`
+  `bot` sets `user.bot` (human by default); `permissions` is the flag
+  list `permissions.has` answers from (none by default).
+- `channel-builder.ts` — `buildTextChannel({ id, name, type, parent, viewableBy, permissionsBySubject })`
+  for the `/traffic` visibility filter and for the `/feed_*` permission
+  checks (it answers `isTextBased()`, `isSendable()` and `isThread()`
+  from `type`), and `buildSendableChannel({ sendable })` for any path
+  that posts a message and later deletes it.
+- `interaction-builder.ts` — `buildChatInputInteraction({ commandName, userId, username, guildId, guild, member, options, channels, users, channel, memberPermissions, subcommand, subcommandGroup, sink })`,
+  `buildButtonInteraction({ customId, userId, guildId, guild, message, channel, member, memberPermissions, sink })`,
+  `buildAutocompleteInteraction({ commandName, userId, guild, options, channel, subcommand, subcommandGroup, focusedOption, focused, respondError, sink })`,
+  `buildModalSubmitInteraction({ customId, userId, guildId, guild, channel, textInputs, selectValues, sink })`,
+  `buildStringSelectInteraction({ customId, values, userId, guildId, guild, memberPermissions, channelMessages, sink })`
+  and `buildUserContextMenuInteraction({ commandName, targetUser, targetMember, guildId, sink })`.
+  The sink records `defers`, `replies`, `editReplies`, `updates`,
+  `followUps` and `responses`, each with the `flags` it was sent with —
+  that is how a test asserts a reply stayed ephemeral — `modals`, the
+  builders passed to `showModal`, and `deletes`, the message each
+  `deleteReply` targeted (`@original` unless named). Every builder
+  except the autocomplete one shares one reply surface (`deferReply`,
+  `reply`, `editReply`, `followUp`, `deleteReply`), so none needs a
+  per-test patch for them.
+  `memberPermissions` is a flag list `memberPermissions.has` answers
+  from; omitted, it is `null`, as outside a guild; the button builder
+  takes it too. `users` backs `options.getUser` (entries carry `id` plus
+  optional `displayName` / `username`), which throws for a missing
+  required option as discord.js does; modal `fields` likewise throw for
+  an absent field. `options` also backs `getBoolean`. `subcommand` and
+  `subcommandGroup` drive `options.getSubcommand` (required unless
+  called with `false`, so it throws when none is set) and
+  `getSubcommandGroup` on the chat-input and autocomplete builders.
+  `member` is the invoker's `GuildMember` (`null` by default); `username`
+  sets `user.username`. `channel` takes an id plus whichever of
+  `isSendable` / `send` / `isThread` / `fetch` the handler calls. On the
+  button builder, `message` is the message the button sits on and
+  `channel` also backs `channelId`.
+  `channelMessages` gives a select interaction a channel whose
+  `messages.fetch` rejects any other id. The user-menu builder's
+  `targetMember` is what `guild.members.fetch` resolves (`null`
+  rejects, as for a non-member); both avatar URLs append the requested
+  `?size=`, so a test can see the size asked for.
+  `interaction.deferred` and `.replied` are live getters over the sink,
+  so an error boundary picks `editReply` over `reply` exactly as it
+  would at runtime. The autocomplete builder records `respond` calls in
+  `responses` and answers `isRepliable()` with `false`, because an
+  autocomplete interaction has no reply channel at all. `focusedOption`
+  names the option `getFocused(true)` reports, and `respondError` drives
+  the refused-response branch — pass a `DiscordAPIError` with code
+  `10062` for the closed window specifically. Its `options` exposes
+  `get` but no entity resolvers, mirroring discord.js v14, where
+  `AutocompleteInteraction.options` omits `getChannel` / `getUser` /
+  `getRole` and friends: Discord resolves entities only once the command
+  is submitted, so an unsubmitted channel option carries its raw
+  snowflake as the option value.
+- `message-builder.ts` — `buildMessage(fields)`, a guild `Message` with
+  ids, a human author, an empty attachment `Collection` and
+  `partial: false`; `fields` overrides or extends them.
 - `client-builder.ts` — `buildInertClient()`, the pre-login `Client` a
   composition-root test constructs a personality around.
 - `bot-fake.ts` — `buildFakeBot(fields)` plus
   `echoTranslatorWithParams()`. Not a Discord type: a `BaseBot`
   stand-in for handler tests.
+
+The sibling `test/fixtures/runtime.ts` holds the core runtime stand-ins
+every layer receives: `echoTranslator()`, `silentLogger()` (a real
+logger at `silent`; use a spy when logs are asserted) and
+`buildPluginContext({ services, resolve, logger, translator, clock, eventName, registerInstance })`,
+one object satisfying every plugin lifecycle context. Unbound tokens and
+unexpected `registerInstance` calls throw.
 
 The sibling `test/fixtures/handler-barrel-stubs.ts` holds the five
 handler-barrel module stubs every test that boots a real `BaseBot`

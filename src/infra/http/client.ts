@@ -1,27 +1,18 @@
 /**
  * Shared bounded HTTP client for outbound third-party calls.
  *
- * Lives in `infra/` because it is an axios adapter — an SDK boundary,
- * the same category as the Mongo connection manager or a provider
- * client. Both `handlers/` and `plugins/` may import it.
+ * A bare `axios.get` has no timeout, so a stalled upstream leaves the promise
+ * pending forever — inside an interaction, a deferred reply never edited and
+ * a socket never released. Response size and redirect count are capped too:
+ * responses are rendered into Discord messages, so nothing legitimate is
+ * large, and an unbounded redirect chain amplifies server-side request
+ * forgery.
  *
- * A bare `axios.get` has **no** timeout by default, so an upstream that
- * accepts the connection and then stalls leaves the caller's promise
- * pending for the lifetime of the process — inside a Discord
- * interaction that means a deferred reply that is never edited and a
- * socket that is never released. The instance also caps the response
- * size and the redirect chain: a handler renders the response into a
- * Discord message, so nothing it could legitimately receive is large,
- * and an unbounded redirect chain is a server-side-request-forgery
- * amplifier.
- *
- * {@link getJson} / {@link postJson} are the preferred entry points:
- * axios types `response.data` as `any`, and validating against a zod
- * schema at the boundary is what stops that `any` leaking into a
- * handler, where a shape change becomes a `TypeError` mistaken for a
- * domain outcome. The generic is bound to the schema (not to its output
- * type) so `z.infer` resolves the parsed shape rather than the input
- * shape — the two differ wherever a field carries `.default()`.
+ * Prefer {@link getJson} / {@link postJson}: zod validation at the boundary
+ * stops axios's `any` reaching handlers, where a shape change would surface
+ * as a `TypeError` mistaken for a domain outcome. The generic binds to the
+ * schema, not its output, so `z.infer` yields the parsed shape (which
+ * differs from the input wherever a field has `.default()`).
  */
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import type { z } from 'zod';

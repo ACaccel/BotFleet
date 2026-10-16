@@ -1,36 +1,16 @@
 /**
- * Facebook provider. Rewrites a post / photo / video / reel URL onto an
- * embed-proxy domain so Discord renders a richer embed. The proxy hosts are
- * operator configuration, probed in priority order, and each candidate is
- * validated before posting.
- *
- * Three Facebook-specific wrinkles this provider handles on top of the generic
- * rewrite template:
- *
- *   1. Share short links (`/share/<type>/<token>/`, e.g. `/share/r/<token>`)
- *      carry an opaque share token, NOT a content id, so the embed proxies
- *      cannot resolve them and serve a login wall instead. We first expand
- *      the share link to its canonical permalink via
- *      {@link OgClient.resolveCanonical} (a browser-UA redirect chase) and
- *      probe the proxies with THAT — the only form that yields a playable
- *      video.
- *   2. A legacy album-photo permalink is normalised to the `/photo/?fbid=&set=`
- *      query form before the probe, because the proxies mis-resolve the path
- *      form (see {@link normalizeAlbumPhotoUrl}).
- *   3. When no proxy can preview a Facebook link (the probe returns `null`),
- *      we fall back to a static card built from Facebook's OWN OpenGraph,
- *      which Facebook reliably serves to the Discord crawler UA (title /
- *      description / thumbnail). A login-wall / removed-post placeholder is
- *      rejected (same junk filter) so a broken card is never posted.
- *
- * Unlike the other rewrite providers, the query string is preserved for the
- * proxy probe — several Facebook permalink shapes (`/watch/?v=`,
- * `permalink.php`, `story.php`) carry the post id in the query, not the path.
+ * Facebook custom-card provider. Validated proxy metadata supplies post text,
+ * images and optional video URLs; Facebook's own OpenGraph is the fallback.
+ * Share links are expanded before probing because their tokens are not post
+ * IDs. Legacy album photos use the id-addressed query form so a proxy cannot
+ * resolve the path to an unrelated post. Queries carrying content IDs are
+ * preserved. Media downloads and Discord delivery belong to the renderer.
  */
 import { ok, type Result } from '../../../core/result';
 
 import { createRewriteProvider, isJunkPreview } from './rewrite-provider';
-import type { OgClient } from '../og-client';
+import { parseFacebookEngagement } from './facebook-engagement';
+import type { OgClient, OpenGraphMeta } from '../og-client';
 import type {
   LinkPreviewBuildContext,
   LinkPreviewFailure,
@@ -39,7 +19,7 @@ import type {
 } from '../types';
 
 const PROVIDER_NAME = 'facebook';
-/** Human-readable label for the embed footer of a fallback card. */
+/** Source label used by the Facebook card renderer. */
 const SITE_LABEL = 'Facebook';
 
 const FACEBOOK_HOSTS: ReadonlySet<string> = new Set([
@@ -50,7 +30,14 @@ const FACEBOOK_HOSTS: ReadonlySet<string> = new Set([
 ]);
 
 /** Path shapes that carry a previewable post/video/reel. */
-const POST_PATH = /\/(?:posts|videos|reel|reels|share|watch|permalink\.php|story\.php)\b/i;
+const POST_PATH =
+  /\/(?:posts|videos|reel|reels|share|watch|permalink\.php|story\.php)\b|^\/groups\/[^/]+\/permalink\/\d+/i;
+
+/**
+ * Single-photo viewer (`/photo/?fbid=<id>` or `/photo.php?fbid=<id>`). The
+ * photo id lives in the query, so the path alone does not identify content.
+ */
+const PHOTO_PATH = /^\/photo(?:\.php)?\/?$/i;
 
 /**
  * Legacy album-photo permalink: `/<owner>/photos/<album>/<photoId>/`, where the
@@ -61,9 +48,11 @@ const POST_PATH = /\/(?:posts|videos|reel|reels|share|watch|permalink\.php|story
  */
 const LEGACY_ALBUM_PHOTO_PATH = /^\/[^/]+\/photos\/(a\.\d+(?:\.\d+)*)\/(\d+)\/?$/i;
 
-/** A path that points at one previewable piece of content, not a listing or profile. */
-const isContentPath = (pathname: string): boolean =>
-  POST_PATH.test(pathname) || LEGACY_ALBUM_PHOTO_PATH.test(pathname);
+/** A URL that points at one previewable piece of content, not a listing or profile. */
+const isContentUrl = (url: URL): boolean =>
+  POST_PATH.test(url.pathname) ||
+  LEGACY_ALBUM_PHOTO_PATH.test(url.pathname) ||
+  (PHOTO_PATH.test(url.pathname) && /^\d+$/.test(url.searchParams.get('fbid') ?? ''));
 
 /** `fb.watch` short links are always a single video, regardless of path. */
 const isFbWatch = (host: string): boolean => host === 'fb.watch' || host === 'www.fb.watch';
@@ -71,7 +60,7 @@ const isFbWatch = (host: string): boolean => host === 'fb.watch' || host === 'ww
 const matches = (url: URL): boolean => {
   const host = url.hostname.toLowerCase();
   if (isFbWatch(host)) return true;
-  return FACEBOOK_HOSTS.has(host) && isContentPath(url.pathname);
+  return FACEBOOK_HOSTS.has(host) && isContentUrl(url);
 };
 
 /** A `facebook.com/share/<type>/<token>` short link that proxies cannot resolve. */
@@ -107,6 +96,54 @@ const normalizeAlbumPhotoUrl = (url: URL): URL => {
 const toProxyUrl = (url: URL, host: string): string =>
   `https://${host}${url.pathname}${url.search}`;
 
+/** Only source-owned HTTPS URLs may become clickable card links. */
+const facebookLink = (value: string | undefined): string | undefined => {
+  if (value === undefined) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' &&
+      FACEBOOK_HOSTS.has(url.hostname.toLowerCase()) &&
+      url.username === '' &&
+      url.password === ''
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * A source-owned link that also names one piece of content. facebed can
+ * report a hashtag page as `og:url` when a post's text starts with a tag, and
+ * the card title must not link there instead of to the post.
+ */
+const facebookContentLink = (value: string | undefined): string | undefined => {
+  const link = facebookLink(value);
+  return link !== undefined && isContentUrl(new URL(link)) ? link : undefined;
+};
+
+const facebookPreview = (url: URL, fallbackUrl: string, og: OpenGraphMeta): LinkPreviewResult => {
+  const engagement = parseFacebookEngagement(og.siteName);
+  return {
+    kind: 'card',
+    card: {
+      url: facebookContentLink(og.url) ?? url.href,
+      title: og.title,
+      description: og.description,
+      imageUrl: og.images[0],
+      ...(og.images.length > 1 ? { imageUrls: og.images } : {}),
+      siteName: SITE_LABEL,
+      ...(og.authorName === undefined ? {} : { authorName: og.authorName }),
+      ...(facebookLink(og.authorUrl) === undefined
+        ? {}
+        : { authorUrl: facebookLink(og.authorUrl) }),
+      ...(engagement === undefined ? {} : { engagement }),
+    },
+    sourceUrl: url.href,
+    ...(og.video === undefined ? {} : { media: { url: og.video, fallbackUrl } }),
+  };
+};
+
 /**
  * Expand a Facebook share short link to its canonical permalink so the proxy
  * probe runs against a previewable URL. Returns the canonical URL, or
@@ -135,18 +172,16 @@ const resolveShareLink = async (
   // Only trust a resolution that lands on a real Facebook content permalink
   // (not another /share/ hop, a profile, or an off-site host).
   if (!FACEBOOK_HOSTS.has(canonical.hostname.toLowerCase())) return undefined;
-  if (isShareLink(canonical) || !isContentPath(canonical.pathname)) return undefined;
-  // The resolved id lives in the path; the redirect's `share_url` / `rdid`
-  // query is attribution noise that can only confuse the proxy.
-  canonical.search = '';
+  if (isShareLink(canonical) || !isContentUrl(canonical)) return undefined;
+  // The redirect's `share_url` / `rdid` query is attribution noise that can
+  // only confuse the proxy. A photo viewer is the exception: its id is the query.
+  if (!PHOTO_PATH.test(canonical.pathname)) canonical.search = '';
   return canonical;
 };
 
 /**
- * Fallback when no proxy can preview the link: scrape Facebook's own
- * OpenGraph (served to the Discord crawler UA) and return a static card.
- * Skips gated / removed placeholders and imageless pages so a broken or
- * text-only card is never posted.
+ * Fetch Facebook's own OpenGraph when no proxy can preview the link.
+ * Skip login walls, removed placeholders and pages without usable content.
  */
 const buildFacebookCard = async (
   url: URL,
@@ -158,20 +193,14 @@ const buildFacebookCard = async (
 
   const og = result.value;
   const image = og.images[0];
-  // A login wall / removed post (junk) or an imageless page is not worth a card.
-  if (isJunkPreview(og) || image === undefined) return ok(null);
+  // A login wall or a page without usable content is not worth a card.
+  if (
+    isJunkPreview(og) ||
+    (image === undefined && og.video === undefined && og.title === undefined)
+  )
+    return ok(null);
 
-  return ok({
-    kind: 'card',
-    card: {
-      url: og.url ?? url.href,
-      title: og.title,
-      description: og.description,
-      imageUrl: image,
-      siteName: og.siteName ?? SITE_LABEL,
-    },
-    sourceUrl: url.href,
-  });
+  return ok(facebookPreview(url, url.href, og));
 };
 
 export const createFacebookProvider = (opts: {
@@ -182,9 +211,11 @@ export const createFacebookProvider = (opts: {
   const rewrite = createRewriteProvider({
     name: PROVIDER_NAME,
     matches,
+    sourceDomains: ['facebook.com', 'fb.watch'],
     proxyHosts: opts.proxyHosts,
     ogClient: opts.ogClient,
     toProxyUrl,
+    toResult: facebookPreview,
   });
 
   return {
@@ -201,12 +232,85 @@ export const createFacebookProvider = (opts: {
       const probe = await rewrite.build(base, ctx);
       if (!probe.ok) return probe;
       if (probe.value !== null) {
+        let preview = probe.value;
+        // A proxy may redirect straight to video and carry no post text.
+        // Enrich from the source without discarding validated media on failure.
+        if (
+          preview.kind === 'card' &&
+          preview.media !== undefined &&
+          !preview.card.title &&
+          !preview.card.description
+        ) {
+          const source = await opts.ogClient.fetch(url.href, PROVIDER_NAME, ctx.timeoutMs);
+          if (
+            source.ok &&
+            !isJunkPreview(source.value) &&
+            (source.value.title || source.value.description || source.value.authorName)
+          ) {
+            const enriched = facebookPreview(url, preview.media.fallbackUrl, source.value);
+            if (enriched.kind === 'card') {
+              preview = {
+                ...preview,
+                card: {
+                  ...enriched.card,
+                  url: facebookContentLink(source.value.url) ?? preview.card.url,
+                  imageUrl: preview.card.imageUrl ?? enriched.card.imageUrl,
+                  imageUrls: preview.card.imageUrls ?? enriched.card.imageUrls,
+                  ...(preview.card.engagement === undefined
+                    ? {}
+                    : {
+                        engagement: preview.card.engagement,
+                      }),
+                },
+              };
+            }
+          }
+        }
         // Carry the original link as sourceUrl (logging / de-dup), not the
         // intermediate canonical we resolved to.
-        return ok({ ...probe.value, sourceUrl: url.href });
+        return ok({ ...preview, sourceUrl: url.href });
       }
-      // No proxy could preview it — fall back to Facebook's own OpenGraph card.
-      return buildFacebookCard(url, ctx, opts.ogClient);
+      const fallback = await buildFacebookCard(url, ctx, opts.ogClient);
+      // A cookieless browser chase can fail while crawler metadata still
+      // identifies the permalink. Retry only a validated source-owned URL.
+      if (fallback.ok && fallback.value?.kind === 'card' && isShareLink(url)) {
+        const permalink = new URL(fallback.value.card.url);
+        if (matches(permalink) && !isShareLink(permalink) && permalink.href !== base.href) {
+          const retry = await rewrite.build(normalizeAlbumPhotoUrl(permalink), ctx);
+          if (retry.ok && retry.value?.kind === 'card') {
+            const source = fallback.value.card;
+            const card = retry.value.card;
+            return ok({
+              ...retry.value,
+              card: {
+                ...card,
+                url: source.url,
+                title: card.title ?? source.title,
+                description: card.description ?? source.description,
+                imageUrl: card.imageUrl ?? source.imageUrl,
+                imageUrls: card.imageUrls ?? source.imageUrls,
+                ...((card.engagement ?? source.engagement)
+                  ? {
+                      engagement: card.engagement ?? source.engagement,
+                    }
+                  : {}),
+                ...((card.authorName ?? source.authorName)
+                  ? {
+                      authorName: card.authorName ?? source.authorName,
+                    }
+                  : {}),
+                ...((card.authorUrl ?? source.authorUrl)
+                  ? {
+                      authorUrl: card.authorUrl ?? source.authorUrl,
+                    }
+                  : {}),
+              },
+              sourceUrl: url.href,
+            });
+          }
+        }
+      }
+      return fallback;
     },
   };
 };

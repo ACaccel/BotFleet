@@ -9,7 +9,7 @@
  * so those are the parameters and everything else lives here; a startup
  * concern added here reaches all five personalities at once.
  */
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import dotenv from 'dotenv';
 
 import { loadEnv, type Env } from '../core/config';
@@ -18,8 +18,8 @@ import { runOrExit, type StartablePersonality } from './run-or-exit';
 
 /**
  * Intents for a personality that observes the whole guild: message
- * edits and deletes, member and role changes, voice state, invites,
- * scheduled events, automod. What the guild-events / voice / activity /
+ * edits and deletes, member and role changes, invites,
+ * scheduled events, automod. What the guild-events / activity /
  * message-backup feature set needs to see.
  */
 export const GUILD_OBSERVER_INTENTS: readonly GatewayIntentBits[] = [
@@ -30,7 +30,6 @@ export const GUILD_OBSERVER_INTENTS: readonly GatewayIntentBits[] = [
   GatewayIntentBits.GuildIntegrations,
   GatewayIntentBits.GuildWebhooks,
   GatewayIntentBits.GuildInvites,
-  GatewayIntentBits.GuildVoiceStates,
   GatewayIntentBits.GuildPresences,
   GatewayIntentBits.GuildMessages,
   GatewayIntentBits.GuildMessageReactions,
@@ -46,14 +45,13 @@ export const GUILD_OBSERVER_INTENTS: readonly GatewayIntentBits[] = [
 
 /**
  * Intents for a personality that only reads and answers messages. The
- * minimum for slash commands, message content, and reactions — a bot
+ * minimum for slash commands and message content — a bot
  * that mirrors nothing has no reason to receive the rest.
  */
 export const MESSAGE_BOT_INTENTS: readonly GatewayIntentBits[] = [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.GuildMembers,
   GatewayIntentBits.GuildMessages,
-  GatewayIntentBits.GuildMessageReactions,
   GatewayIntentBits.MessageContent,
 ];
 
@@ -64,12 +62,12 @@ interface BootstrapOptions {
    */
   readonly name: string;
   readonly intents: readonly GatewayIntentBits[];
+  /** Partial structures to receive, such as DM channels for DM message events. */
+  readonly partials?: readonly Partials[];
   /** Env requirements this personality cannot start without. */
   readonly env?: {
     /** Require a usable `MONGO_URI`. Defaults to true. */
     readonly requireDb?: boolean;
-    /** Require a `PORT`; set by personalities that bind an HTTP server. */
-    readonly requirePort?: boolean;
   };
   /** Construct the personality from its validated env and client. */
   readonly build: (client: Client, env: Env) => StartablePersonality;
@@ -81,13 +79,21 @@ interface BootstrapOptions {
  * teardown, exit 1) so a rejected login can never leave a zombie
  * process behind.
  */
+/**
+ * Partials for personalities that read DMs: discord.js emits a DM's
+ * `messageCreate` only when the uncached DM channel may be partial.
+ */
+export const DM_PARTIALS: readonly Partials[] = [Partials.Channel];
+
 export const bootstrapPersonality = (options: BootstrapOptions): void => {
   dotenv.config({ path: `./src/bot/${options.name}/.env` });
   const env = loadEnv({
     requireDb: options.env?.requireDb ?? true,
-    requirePort: options.env?.requirePort ?? false,
   });
-  const client = new Client({ intents: [...options.intents] });
+  const client = new Client({
+    intents: [...options.intents],
+    ...(options.partials ? { partials: [...options.partials] } : {}),
+  });
   // `runOrExit` is written to always resolve, so the `catch` is the last
   // hole in the entry-point failure path rather than a routine branch:
   // it covers a throw on the failure path itself (a logger that is bound

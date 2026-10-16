@@ -6,16 +6,13 @@
  * database must be connected, and the bot's slash commands must be
  * registered against that guild.
  *
- * This port is the typed seam between the plugin layer and those
- * infrastructure actions. The composition root (`BaseBot`) provides
- * the concrete implementation and registers it under
- * {@link TOKENS.GuildOnboardingPort}; the `guild-events` plugin
- * resolves it via `ctx.resolve` and invokes it from its `guildCreate`
- * subscription, so plugin code never touches `BaseBot` internals.
+ * This port is the typed seam between the plugin layer and those actions.
+ * The composition root (`BaseBot`) registers the implementation under
+ * {@link TOKENS.GuildOnboardingPort}; the `guild-events` plugin resolves it
+ * via `ctx.resolve` from its `guildCreate` subscription.
  *
- * Design constraint: this contract uses only primitive / string types,
- * so `core/plugin` does not gain a dependency on `persistence` or
- * `infra` (layer rule).
+ * The contract uses only primitive / string types, so `core/plugin` gains
+ * no dependency on `persistence` or `infra`.
  */
 
 /** Outcome of onboarding a single new guild. */

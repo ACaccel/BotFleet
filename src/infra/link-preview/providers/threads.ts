@@ -1,49 +1,29 @@
 /**
- * Threads provider. Rewrites a post URL onto one of the operator-configured
- * embed-proxy domains so Discord renders an embed. Matches both the legacy
- * `threads.net` and current `threads.com` hosts.
+ * Threads provider. Retains validated proxy metadata for custom preview
+ * cards and optional video attachments. Matches both the
+ * `threads.net` and `threads.com` hosts.
  *
- * On top of the generic rewrite template this provider expands the
- * `/share/<token>` short links the Threads app's share button emits. The
- * token is opaque — it carries no post id — so every embed proxy serves a
- * login wall for it; only the canonical `/@user/post/<id>` permalink is
- * previewable. The expansion is a redirect chase, but two Threads quirks
- * make it unlike Facebook's: the redirect is served only to a minimal
- * User-Agent (see {@link SHARE_RESOLVE_USER_AGENT}), and the permalink is
- * an intermediate hop rather than the chain's destination (see
- * {@link resolveShareLink}). Hence the hop-scanning resolution instead of
- * `OgClient.resolveCanonical`.
+ * It also expands the `/share/<token>` short links the app's share button
+ * emits: the token carries no post id, so every proxy serves a login wall for
+ * it. Unlike Facebook's, the redirect is served only to a minimal User-Agent
+ * (see {@link SHARE_RESOLVE_USER_AGENT}) and the permalink is an intermediate
+ * hop, not the chain's destination (see {@link resolveShareLink}).
  *
- * No single Threads proxy is good at every post type, so the three healthy
- * ones divide the work and the probe loop's ordering plus its quality tiers
- * pick the right one per post. `viewthreads.com` serves the real post title
- * and the real post image but never `og:video`, which makes it the best card
- * for an ordinary still-image post and only a static thumbnail for a video.
- * `fzthreads.com` and `fixthreads.seria.moe` serve a fetchable `og:video`,
- * and `fzthreads.com` also resolves login-restricted posts the other two
- * cannot. Their weakness is the mirror image: for a post with no media of
- * its own they answer with the author's profile avatar as `og:image`, which
- * the weak-image tier demotes below any proxy holding a real post asset
- * while still ranking it above a text-only embed (see
- * {@link LOW_VALUE_IMAGE_PATTERNS}). Listing the real-asset proxy ahead of
- * the video proxies therefore costs nothing — a video candidate
- * short-circuits the loop from any position — and wins the ordinary post a
- * card built from real post media.
- *
- * `vxthreads.net` is unreachable, `fixthreads.net` and the `threadsez.*`
- * hosts no longer resolve, and a login wall carries a generic Instagram logo
- * as `og:image` and so is rejected by the shared junk-marker filter rather
- * than posted as a broken card. Per-host validation is what keeps all of
- * this honest as proxies come and go: each host is tried until one yields
- * media, a recovered proxy starts contributing again on its own, and while
- * every proxy is degraded Threads previews are skipped silently with no bare
- * link posted.
+ * Proxies differ per post type, so the probe loop's quality tiers pick one per
+ * post rather than a fixed host. Some proxies serve `og:video` or the real
+ * post image; others fall back to the author's avatar for a post without media,
+ * which the weak-image tier ranks below real
+ * post assets but above a text-only embed (see {@link LOW_VALUE_IMAGE_PATTERNS}).
+ * Empty account placeholders are rejected by {@link isPlaceholder}.
+ * A login wall's generic Instagram `og:image` is rejected by the
+ * shared junk-marker filter. While every proxy is degraded, Threads previews
+ * are skipped silently with no bare link posted.
  */
 import { ok } from '../../../core/result';
 
 import { createRewriteProvider } from './rewrite-provider';
-import type { OgClient } from '../og-client';
-import type { LinkPreviewBuildContext, LinkPreviewProvider } from '../types';
+import type { OgClient, OpenGraphMeta } from '../og-client';
+import type { LinkPreviewBuildContext, LinkPreviewProvider, LinkPreviewResult } from '../types';
 
 const PROVIDER_NAME = 'threads';
 
@@ -96,6 +76,28 @@ const toProxyUrl = (url: URL, host: string): string => `https://${host}${url.pat
  * ordinary image again.
  */
 const LOW_VALUE_IMAGE_PATTERNS: readonly RegExp[] = [/\/t51\.2885-19\//, /\/s150x150\//];
+
+/** Some proxies answer an inaccessible post with only a generic account title. */
+const isPlaceholder = (meta: OpenGraphMeta): boolean =>
+  /^@\S+ on Threads$/i.test(meta.title?.trim() ?? '') &&
+  (meta.description?.trim() ?? '') === '' &&
+  meta.images.length === 0 &&
+  (meta.video?.trim() ?? '') === '';
+
+/** Reuse the validated content instead of requiring Discord to scrape the proxy again. */
+const threadsPreview = (url: URL, fallbackUrl: string, meta: OpenGraphMeta): LinkPreviewResult => ({
+  kind: 'card',
+  card: {
+    url: url.href,
+    title: meta.title || 'Threads',
+    description: meta.description,
+    imageUrl: meta.images[0],
+    ...(meta.images.length > 1 ? { imageUrls: meta.images } : {}),
+    siteName: 'Threads',
+  },
+  sourceUrl: url.href,
+  ...(meta.video ? { media: { url: meta.video, fallbackUrl } } : {}),
+});
 
 /**
  * Expand a Threads share short link to its canonical post permalink so the
@@ -154,10 +156,13 @@ export const createThreadsProvider = (opts: {
   const rewrite = createRewriteProvider({
     name: PROVIDER_NAME,
     matches,
+    sourceDomains: ['threads.net', 'threads.com'],
     proxyHosts: opts.proxyHosts,
     ogClient: opts.ogClient,
     toProxyUrl,
     lowValueImagePatterns: LOW_VALUE_IMAGE_PATTERNS,
+    isPlaceholder,
+    toResult: threadsPreview,
   });
 
   return {

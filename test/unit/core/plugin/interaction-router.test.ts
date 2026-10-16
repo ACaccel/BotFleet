@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger } from '../../../../src/core/logger';
 import { systemClock } from '../../../../src/core/time';
 import { createContainer } from '../../../../src/core/ioc';
 import {
@@ -8,8 +7,7 @@ import {
   type InteractionContext,
   type InteractionMiddleware,
 } from '../../../../src/core/plugin';
-
-const silentLogger = createLogger({ level: 'silent', pretty: false });
+import { echoTranslator, silentLogger } from '../../../fixtures/runtime';
 
 const buildCtx = (): InteractionContext => {
   // One container per ctx — bind target must match the method owner,
@@ -21,9 +19,8 @@ const buildCtx = (): InteractionContext => {
     interaction: {} as InteractionContext['interaction'],
     traceId: 'trace-1',
     state: new Map(),
-    logger: silentLogger,
-    // Translator stub: only `t` is exercised; cast is safe within tests.
-    translator: { t: (k: string) => k } as InteractionContext['translator'],
+    logger: silentLogger(),
+    translator: echoTranslator(),
     clock: systemClock,
     resolve: container.resolve.bind(container) as InteractionContext['resolve'],
   };

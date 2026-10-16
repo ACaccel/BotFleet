@@ -1,0 +1,8 @@
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - nodejs=22.13.0
+  - font-ttf-noto-cjk=2.004
+  # NotoColorEmoji.ttf (CBDT bitmaps, OFL-1.1) for colour emoji in Canvas charts.
+  - font-ttf-noto-emoji=2.034

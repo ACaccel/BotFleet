@@ -1,19 +1,16 @@
 /**
- * SelfHostedLlmClient — outbound adapter for a lightweight self-hosted
- * LLM HTTP endpoint.
+ * SelfHostedLlmClient: outbound adapter for a lightweight self-hosted LLM
+ * HTTP endpoint.
  *
- * This client deliberately does NOT implement the {@link LLMProvider}
- * Strategy in `./types.ts`: the self-hosted endpoint's contract differs
- * from the SDK-backed providers in every dimension that interface
- * assumes —
+ * Deliberately does NOT implement the {@link LLMProvider} Strategy in
+ * `./types.ts`: the endpoint's contract differs from the SDK-backed
+ * providers in every dimension that interface assumes:
  *   - the request is a single baked `user` message carrying the whole
  *     transcript, not a multi-turn `messages` array with a system prompt;
  *   - the response is `{ status, response }`, not an SDK completion;
  *   - there is no API key, model id, or temperature to thread through.
- * Forcing it into `LLMProvider` would mean stubbing all of those, so it
- * lives here as a focused single-method client. It still sits on the
- * same `src/infra/llm/` SDK boundary and maps failures into the shared
- * {@link ExternalServiceError} taxonomy so callers handle them uniformly.
+ * Failures map into the shared {@link ExternalServiceError} taxonomy so
+ * callers handle them uniformly.
  */
 import axios from 'axios';
 import { z } from 'zod';
@@ -48,30 +45,14 @@ type SelfHostedLlmError = ExternalServiceError<
 >;
 
 interface SelfHostedLlmClientOptions {
-  /**
-   * Fully-qualified chat endpoint URL (e.g. `https://host/chat`), or a
-   * provider read on every {@link SelfHostedLlmClient.reply} call. The
-   * function form lets a composition root swap the endpoint at runtime
-   * (e.g. gopher's settings API) without rebuilding the client; a plain
-   * string is resolved once and never changes.
-   */
-  readonly endpoint: string | (() => string);
+  /** Fully-qualified chat endpoint URL (e.g. `https://host/chat`), fixed at startup. */
+  readonly endpoint: string;
   /** Per-request timeout in milliseconds. */
   readonly timeoutMs: number;
 }
 
 export class SelfHostedLlmClient {
   public constructor(private readonly options: SelfHostedLlmClientOptions) {}
-
-  /**
-   * Resolve the current endpoint. A string is returned verbatim; a
-   * provider is invoked so runtime updates take effect on the next call.
-   */
-  private resolveEndpoint(): string {
-    return typeof this.options.endpoint === 'function'
-      ? this.options.endpoint()
-      : this.options.endpoint;
-  }
 
   /**
    * POST `transcript` as a single user message and return the model's
@@ -81,10 +62,9 @@ export class SelfHostedLlmClient {
    * failure.
    */
   public async reply(transcript: string): Promise<Result<string, SelfHostedLlmError>> {
-    const endpoint = this.resolveEndpoint();
     try {
       const res = await axios.post(
-        endpoint,
+        this.options.endpoint,
         { messages: [{ role: 'user', content: transcript }] },
         {
           timeout: this.options.timeoutMs,
@@ -154,7 +134,7 @@ export class SelfHostedLlmClient {
       code,
       messageKey,
       messageParams: { provider: 'selfhosted', status },
-      context: { operation: OPERATION, input: { endpoint: this.resolveEndpoint(), status } },
+      context: { operation: OPERATION, input: { endpoint: this.options.endpoint, status } },
       cause,
     });
   }

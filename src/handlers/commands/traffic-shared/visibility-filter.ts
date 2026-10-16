@@ -1,84 +1,128 @@
 /**
- * Privacy filter for `/traffic`. A channel's statistics may be shown
- * only when BOTH gates pass:
- *   (a) operator rank gate — `channelRank <= ceiling`, where the ceiling
- *       depends on who will see the reply:
- *         - `public`  → `min(userRank, channelRank(commandChannel))`
- *           (the reply is posted to the room, so it is capped by BOTH the
- *           invoker's clearance and the command channel's own rank);
- *         - `ephemeral` → `userRank` (only the invoker sees the reply, so
- *           it is capped by their clearance alone — the command channel
- *           does not lower it);
- *   (b) Discord-native `ViewChannel` for the invoking member — a sanity
- *       gate so a channel the member cannot actually see is never shown.
+ * Privacy filter for `/traffic`: the channels whose archived messages a reply
+ * may count, fed to every member statistic as `channelId: { $in: [...] }`
+ * (`/traffic emoji` and `/traffic sticker` deliberately skip it).
  *
- * The set is built by walking the guild's live channel cache, so a
- * channel that survives only in archived message data (deleted or
- * uncached) is never added — fail-safe exclusion.
+ * Candidates are `archive_channels` records plus the live guild cache, so
+ * archived threads and deleted channels are judged rather than dropped. A
+ * channel counts only when every gate passes:
+ *   (a) operator rank — its effective rank (own rank and every ancestor) is
+ *       at most the invoker's rank (`ephemeral`) or
+ *       `min(invoker rank, command channel rank)` (`public`);
+ *   (b) Discord access for the INVOKER (never the counted member): View
+ *       Channel on a live channel; for a thread, View Channel on the parent
+ *       plus Manage Threads if private, because private-thread membership
+ *       cannot be verified without an API call per thread (unknown type
+ *       counts as private); a channel missing from the cache counts only if
+ *       recorded as deleted and viewable by `@everyone`; a thread whose
+ *       parent is gone follows the parent's record, and a private one never
+ *       counts;
+ *   (c) `public` only — every role that can view the command channel can
+ *       also view the channel (through the parent for a thread), so a public
+ *       reply never exposes activity its readers cannot see. Private threads
+ *       never count in public.
+ *
+ * {@link resolveVisibleChannelIds} is pure; `allowed-channels.ts` adapts
+ * discord.js objects to it.
  */
 import {
-  ChannelType,
-  PermissionFlagsBits,
-  type Guild,
-  type GuildBasedChannel,
-  type GuildMember,
-} from 'discord.js';
-import type { PermissionRankPolicy } from '@core/plugin';
-
-import { ancestorChannelIdsOf } from '../../../infra/discord';
+  CATEGORY_CHANNEL_TYPE,
+  PRIVATE_THREAD_CHANNEL_TYPE,
+  THREAD_CHANNEL_TYPES,
+  type ArchiveChannelInfo,
+} from '../../../core/archive/stats';
 
 import type { Visibility } from './types';
 
-interface VisibilityFilterInput {
-  readonly guild: Guild;
-  readonly member: GuildMember;
-  readonly policy: PermissionRankPolicy;
-  readonly mode: Visibility;
-  readonly commandChannelId: string;
+/** One cached channel as the invoking member sees it. */
+export interface LiveChannelAccess {
+  readonly type: number;
+  readonly parentId: string | null;
+  readonly canView: boolean;
+  readonly canManageThreads: boolean;
+  /**
+   * Every role that can view the command channel can view this one. Only read for a
+   * `public` reply; `false` when the command channel's audience is unknown.
+   */
+  readonly audienceCanView: boolean;
 }
 
-const THREAD_TYPES: ReadonlySet<ChannelType> = new Set([
-  ChannelType.PublicThread,
-  ChannelType.PrivateThread,
-  ChannelType.AnnouncementThread,
-]);
+export interface VisibleChannelInput {
+  /** `archive_channels` records, deleted channels included. */
+  readonly records: readonly ArchiveChannelInfo[];
+  /** The guild channel cache, keyed by channel ID. */
+  readonly live: ReadonlyMap<string, LiveChannelAccess>;
+  readonly mode: Visibility;
+  readonly userRank: number;
+  readonly commandChannelId: string;
+  /** Effective rank of a channel given its ancestor chain (`PermissionRankPolicy.channelRank`). */
+  readonly channelRank: (channelId: string, ancestorIds: readonly string[]) => number;
+}
 
-/**
- * Native `ViewChannel` check for the invoking member. A thread inherits
- * its parent's visibility, so the parent is the permission source when
- * present.
- */
-const canView = (channel: GuildBasedChannel, subject: GuildMember): boolean => {
-  const target = THREAD_TYPES.has(channel.type) && channel.parent ? channel.parent : channel;
-  if (!('permissionsFor' in target)) return false;
-  const perms = target.permissionsFor(subject);
-  return perms !== null && perms.has(PermissionFlagsBits.ViewChannel);
-};
+/** Discord nests at most category > channel > thread; the cap guards against a cycle. */
+const MAX_ANCESTOR_DEPTH = 8;
 
-export const buildAllowedChannelSet = (input: VisibilityFilterInput): ReadonlySet<string> => {
-  const { guild, member, policy, mode, commandChannelId } = input;
-  const roleIds = member.roles.cache.keys();
-
-  // A public reply is also capped by the command channel's rank; a
-  // private (ephemeral) reply is capped by the invoker's clearance only.
+export const resolveVisibleChannelIds = (input: VisibleChannelInput): ReadonlySet<string> => {
+  const { live } = input;
+  const records = new Map(input.records.map((record) => [record.channelId, record]));
+  const parentOf = (channelId: string): string | undefined => {
+    const cached = live.get(channelId);
+    return cached === undefined ? records.get(channelId)?.parentId : (cached.parentId ?? undefined);
+  };
+  const ancestorsOf = (channelId: string): string[] => {
+    const ancestors: string[] = [];
+    let parentId = parentOf(channelId);
+    while (parentId !== undefined && ancestors.length < MAX_ANCESTOR_DEPTH) {
+      ancestors.push(parentId);
+      parentId = parentOf(parentId);
+    }
+    return ancestors;
+  };
+  const rankOf = (channelId: string): number =>
+    input.channelRank(channelId, ancestorsOf(channelId));
   const ceiling =
-    mode === 'public'
-      ? policy.visibilityCeiling(
-          guild.id,
-          roleIds,
-          commandChannelId,
-          ancestorChannelIdsOf(
-            guild.channels.cache.get(commandChannelId) ?? null,
-            guild.channels.cache,
-          ),
-        )
-      : policy.userRank(guild.id, roleIds);
+    input.mode === 'public'
+      ? Math.min(input.userRank, rankOf(input.commandChannelId))
+      : input.userRank;
 
-  const allowed = new Set<string>();
-  for (const [channelId, channel] of guild.channels.cache) {
-    const ancestors = ancestorChannelIdsOf(channel, guild.channels.cache);
-    if (policy.channelRank(guild.id, channelId, ancestors) > ceiling) continue;
-    if (canView(channel, member)) allowed.add(channelId);
-  }
-  return allowed;
+  const isPublic = input.mode === 'public';
+  const typeOf = (channelId: string): number | undefined =>
+    live.get(channelId)?.type ?? records.get(channelId)?.type;
+  /** A recorded child of something other than a category, type unknown: maybe a thread. */
+  const unknownThread = (channelId: string): boolean => {
+    const parentId = parentOf(channelId);
+    return (
+      typeOf(channelId) === undefined &&
+      !live.has(channelId) &&
+      parentId !== undefined &&
+      typeOf(parentId) !== CATEGORY_CHANNEL_TYPE
+    );
+  };
+  const deletedButPublic = (channelId: string): boolean => {
+    const record = records.get(channelId);
+    return record?.access === 'deleted' && record.everyoneCanView === true;
+  };
+
+  const isVisible = (channelId: string): boolean => {
+    const type = typeOf(channelId);
+    if (type === CATEGORY_CHANNEL_TYPE || rankOf(channelId) > ceiling) return false;
+    if ((type !== undefined && THREAD_CHANNEL_TYPES.has(type)) || unknownThread(channelId)) {
+      const maybePrivate = type === undefined || type === PRIVATE_THREAD_CHANNEL_TYPE;
+      if (isPublic && maybePrivate) return false;
+      const parentId = parentOf(channelId);
+      if (parentId === undefined) return false;
+      const parent = live.get(parentId);
+      if (parent === undefined) return !maybePrivate && deletedButPublic(parentId);
+      if (!parent.canView || (maybePrivate && !parent.canManageThreads)) return false;
+      return !isPublic || parent.audienceCanView;
+    }
+    const cached = live.get(channelId);
+    if (cached !== undefined) return cached.canView && (!isPublic || cached.audienceCanView);
+    return deletedButPublic(channelId);
+  };
+
+  const visible = new Set<string>();
+  for (const channelId of new Set([...records.keys(), ...live.keys()]))
+    if (isVisible(channelId)) visible.add(channelId);
+  return visible;
 };

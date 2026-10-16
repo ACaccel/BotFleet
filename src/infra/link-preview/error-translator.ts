@@ -18,7 +18,7 @@ const OPERATION = 'OgClient.fetch';
 interface NormalisedHttpError {
   /** HTTP status code, when the request reached the server. */
   readonly status: number | undefined;
-  /** Transport-level code (e.g. `ECONNABORTED`, `ENOTFOUND`). */
+  /** Transport-level code (e.g. `ECONNABORTED`, `ENOTFOUND`, c-ares `ETIMEOUT`). */
   readonly transportCode: string | undefined;
 }
 
@@ -31,7 +31,13 @@ const normalise = (e: unknown): NormalisedHttpError => {
 };
 
 const codeFor = (n: NormalisedHttpError): LinkPreviewErrorCode => {
-  if (n.transportCode === 'ECONNABORTED' || n.transportCode === 'ETIMEDOUT') {
+  // ETIMEOUT is c-ares's spelling, raised by the bounded DNS lookup when a
+  // host's name servers stay silent.
+  if (
+    n.transportCode === 'ECONNABORTED' ||
+    n.transportCode === 'ETIMEDOUT' ||
+    n.transportCode === 'ETIMEOUT'
+  ) {
     return 'LINK_PREVIEW_TIMEOUT';
   }
   if (n.status === 429) return 'LINK_PREVIEW_RATE_LIMITED';

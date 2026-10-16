@@ -19,6 +19,10 @@ describe('error-translator codeFor', () => {
     expect(__test.codeFor({ status: undefined, transportCode: 'ETIMEDOUT' })).toBe(
       'LINK_PREVIEW_TIMEOUT',
     );
+    // c-ares's spelling, from the bounded DNS lookup.
+    expect(__test.codeFor({ status: undefined, transportCode: 'ETIMEOUT' })).toBe(
+      'LINK_PREVIEW_TIMEOUT',
+    );
   });
 
   it('classifies HTTP statuses', () => {

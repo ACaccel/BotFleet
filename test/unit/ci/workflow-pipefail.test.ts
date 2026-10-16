@@ -3,8 +3,8 @@
  *
  * GitHub Actions runs `run:` steps with `bash -e` but **not**
  * `pipefail`, so the exit status of `a | b` is `b`'s. A gate written as
- * `yarn security ... | tee report.json` therefore reports success no
- * matter what `yarn security` found. Every piped `run:` step must set
+ * `npm run security ... | tee report.json` therefore reports success no
+ * matter what `npm run security` found. Every piped `run:` step must set
  * `pipefail` explicitly; this test is the enforcement.
  *
  * Composite actions are scanned too — they run shell on the same
@@ -131,7 +131,7 @@ describe('GitHub Actions shell steps', () => {
 
 describe('the scanner itself', () => {
   it('sees the dash-inline step form this repo mostly uses', () => {
-    const steps = collectRunSteps('probe.yml', '      - run: yarn security | tee report.json\n');
+    const steps = collectRunSteps('probe.yml', '      - run: npm run security | tee report.json\n');
     expect(steps).toHaveLength(1);
     expect(hasShellPipe(steps[0]?.body ?? '')).toBe(true);
   });
@@ -139,7 +139,7 @@ describe('the scanner itself', () => {
   it('sees a dash block-scalar body', () => {
     const steps = collectRunSteps(
       'probe.yml',
-      ['      - run: |', '          yarn security | tee report.json', '      - uses: foo'].join(
+      ['      - run: |', '          npm run security | tee report.json', '      - uses: foo'].join(
         '\n',
       ),
     );
@@ -148,7 +148,7 @@ describe('the scanner itself', () => {
   });
 
   it('sees the name-plus-run step form', () => {
-    const steps = collectRunSteps('probe.yml', '        run: yarn security | tee report.json\n');
+    const steps = collectRunSteps('probe.yml', '        run: npm run security | tee report.json\n');
     expect(steps).toHaveLength(1);
     expect(hasShellPipe(steps[0]?.body ?? '')).toBe(true);
   });

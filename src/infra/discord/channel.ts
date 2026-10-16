@@ -44,3 +44,15 @@ export const ancestorChannelIdsOf = (
   }
   return ancestors;
 };
+
+/**
+ * Whether `channel` is marked age-restricted. A thread inherits the flag
+ * from its parent, which must be cached; an unknown parent, a DM or a
+ * channel type without the flag counts as unrestricted, so a gate built on
+ * this fails closed.
+ */
+export const isAgeRestrictedChannel = (channel: Channel | null | undefined): boolean => {
+  if (channel === null || channel === undefined) return false;
+  if (channel.isThread()) return channel.parent?.nsfw === true;
+  return 'nsfw' in channel && channel.nsfw === true;
+};

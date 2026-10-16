@@ -1,10 +1,15 @@
-import type { ChatInputCommandInteraction } from 'discord.js';
+import {
+  MessageFlags,
+  type AutocompleteInteraction,
+  type ChatInputCommandInteraction,
+} from 'discord.js';
 import type { BaseBot } from '@bot';
-import { Command } from '@cmd';
+import { Command, type CommandSuggestions } from '../command';
 
 import { replyForError } from '../../../infra/discord/reply-for-error';
-
-import { buildHelpEmbed } from './build-help-embed';
+import { getOptionalString } from '../../../infra/discord/options';
+import { buildCommandDetail } from './build-help-embed';
+import { helpOverviewPayload } from './overview-payload';
 
 export default class help extends Command {
   constructor() {
@@ -12,32 +17,51 @@ export default class help extends Command {
     this.setConfig({
       name: 'help',
       category: 'utility',
+      options: { string: [{ name: 'command', required: false, autocomplete: true }] },
     });
   }
+
+  public override autocomplete = async (
+    interaction: AutocompleteInteraction,
+    bot: BaseBot,
+  ): Promise<CommandSuggestions> => {
+    const typed = interaction.options.getFocused().toLowerCase();
+    return [...bot.commandHandlers.values()]
+      .filter((command) => command.config.type === undefined)
+      .map((command) => command.config.name)
+      .filter((name) => name.includes(typed))
+      .sort()
+      .map((name) => ({ name: `/${name}`, value: name }));
+  };
 
   public override async execute(
     interaction: ChatInputCommandInteraction,
     bot: BaseBot,
   ): Promise<void> {
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
-      if (!bot.config.commands) {
-        await interaction.editReply({
-          content: bot.translator?.t('replies:help.no_commands') ?? '',
-        });
+      const viewer = { isAdmin: bot.isAdmin(interaction.user.id) };
+      const requested = getOptionalString(interaction, 'command');
+      if (requested !== undefined) {
+        const command = [...bot.commandHandlers.values()].find(
+          (candidate) => candidate.config.name === requested.replace(/^\//, ''),
+        );
+        await interaction.editReply(
+          command === undefined
+            ? {
+                content:
+                  bot.translator?.t('replies:help.unknown_command', { name: requested }) ?? '',
+              }
+            : { embeds: [buildCommandDetail(command, bot.translator, viewer)] },
+        );
         return;
       }
 
-      const botUser = interaction.client.user;
-      const embed = buildHelpEmbed(bot.commandHandlers, bot.translator, {
-        botName: botUser?.username ?? '',
-        botAvatarUrl: botUser?.displayAvatarURL(),
-        intro: bot.helpMessage,
-      });
-
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply(
+        helpOverviewPayload(bot, interaction.client.user, viewer.isAdmin),
+      );
     } catch (error) {
-      await replyForError(interaction, bot, error, 'replies:help.failed', interaction.guild?.id);
+      await replyForError(interaction, bot, error, 'replies:help.failed', interaction.guildId);
     }
   }
 }

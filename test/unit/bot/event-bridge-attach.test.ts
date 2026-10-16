@@ -19,9 +19,11 @@ vi.mock('@cmd', () => barrelStubs.cmd);
 vi.mock('@button', () => barrelStubs.button);
 vi.mock('@modal', () => barrelStubs.modal);
 vi.mock('@select-menu', () => barrelStubs.selectMenu);
-vi.mock('@reaction', () => barrelStubs.reaction);
 
 import { BaseBot, type Config } from '../../../src/bot/index';
+import { quietEnvLoadFailure } from './fixtures';
+
+quietEnvLoadFailure();
 
 interface BridgeFakeClient {
   readonly client: Client;

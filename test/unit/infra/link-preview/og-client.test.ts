@@ -5,8 +5,11 @@
  * it by Content-Type, so the mock returns a Readable plus headers. Covers
  * tag mapping, entity decoding, first-occurrence precedence, media-type
  * classification, head-only streaming of a large body, and the
- * transport/HTTP failure mapping.
+ * transport/HTTP failure mapping. Also covers {@link createBoundedLookup},
+ * the c-ares-backed `lookup` the client's agents resolve through.
  */
+import http from 'node:http';
+import https from 'node:https';
 import { Readable } from 'node:stream';
 
 import { describe, expect, it, vi } from 'vitest';
@@ -14,7 +17,11 @@ import { describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 
 import { OgClient, parseOpenGraph } from '../../../../src/infra/link-preview';
-import { isUnsafeRedirectHost } from '../../../../src/infra/link-preview/og-client';
+import {
+  createBoundedLookup,
+  isUnsafeRedirectHost,
+  type AddressResolver,
+} from '../../../../src/infra/link-preview/og-client';
 import { isErr, isOk } from '../../../../src/core/result';
 
 vi.mock('axios');
@@ -47,6 +54,19 @@ const streamResponse = (
 });
 
 describe('parseOpenGraph', () => {
+  it('retains only explicitly supplied author metadata', () => {
+    const meta = parseOpenGraph(
+      html(
+        '<meta name="author" content="Example Author"><meta property="article:author" content="https://www.facebook.com/author">',
+      ),
+    );
+    expect(meta.authorName).toBe('Example Author');
+    expect(meta.authorUrl).toBe('https://www.facebook.com/author');
+    expect(
+      parseOpenGraph(html('<meta property="og:title" content="Reel by Example">')).authorName,
+    ).toBeUndefined();
+  });
+
   it('maps og:title / description / image / url / site_name', () => {
     const meta = parseOpenGraph(
       html(
@@ -198,6 +218,10 @@ describe('OgClient.fetch', () => {
         // the beforeRedirect guard refuses internal hops.
         maxRedirects: 3,
         beforeRedirect: expect.any(Function),
+        // Agents carrying the bounded DNS lookup, for the first hop and every
+        // redirect hop alike.
+        httpAgent: expect.any(http.Agent),
+        httpsAgent: expect.any(https.Agent),
         // Streamed so a media body is never pulled and a large HTML body is
         // read only up to its <head>.
         responseType: 'stream',
@@ -225,6 +249,7 @@ describe('OgClient.fetch', () => {
     if (isOk(result)) {
       expect(result.value.video).toBe('https://scontent.cdninstagram.com/reel.mp4');
       expect(result.value.images).toEqual([]);
+      expect(result.value.finalUrl).toBe('https://scontent.cdninstagram.com/reel.mp4');
     }
     expect(response.data.destroyed).toBe(true); // never drained the 4 MiB body
   });
@@ -239,7 +264,54 @@ describe('OgClient.fetch', () => {
     const result = await new OgClient().fetch('https://kkinstagram.com/p/X/', 'instagram', 4000);
 
     expect(isOk(result)).toBe(true);
-    if (isOk(result)) expect(result.value.images).toEqual(['https://cdn.example/photo.jpg']);
+    if (isOk(result)) {
+      expect(result.value.images).toEqual(['https://cdn.example/photo.jpg']);
+      expect(result.value.finalUrl).toBe('https://cdn.example/photo.jpg');
+    }
+  });
+
+  it('reports the URL an HTML page was finally served from, after redirects', async () => {
+    // A proxy that 302s back to instagram.com: the metadata is real, but the
+    // rewrite provider must be able to see it did not come from the proxy.
+    setGet(async () =>
+      streamResponse(
+        html('<meta property="og:image" content="https://scontent.cdninstagram.com/i.jpg">'),
+        'text/html; charset=utf-8',
+        'https://www.instagram.com/reel/X/',
+      ),
+    );
+    const result = await new OgClient().fetch(
+      'https://mbdinstagram.com/reel/X/',
+      'instagram',
+      4000,
+    );
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.images).toEqual(['https://scontent.cdninstagram.com/i.jpg']);
+      expect(result.value.finalUrl).toBe('https://www.instagram.com/reel/X/');
+    }
+  });
+
+  it('treats a redirect to a media file the host cannot reach as that media, final URL included', async () => {
+    setGet(async (...args: unknown[]) => {
+      const { beforeRedirect } = args[1] as {
+        beforeRedirect: (options: Record<string, string>) => void;
+      };
+      beforeRedirect({
+        protocol: 'https:',
+        hostname: 'scontent.cdninstagram.com',
+        path: '/v/reel.mp4',
+      });
+      throw Object.assign(new Error('reset'), { code: 'ECONNRESET' });
+    });
+    const result = await new OgClient().fetch('https://kkinstagram.com/reel/X/', 'instagram', 4000);
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.video).toBe('https://scontent.cdninstagram.com/v/reel.mp4');
+      expect(result.value.finalUrl).toBe('https://scontent.cdninstagram.com/v/reel.mp4');
+    }
   });
 
   it('reads only the head of a large HTML body — never buffers it, never throws', async () => {
@@ -631,5 +703,99 @@ describe('isUnsafeRedirectHost (SSRF guard)', () => {
     ]) {
       expect(isUnsafeRedirectHost(host)).toBe(false);
     }
+  });
+});
+
+describe('createBoundedLookup', () => {
+  type LookupResult = {
+    err: NodeJS.ErrnoException | null;
+    address: string | { address: string; family: number }[];
+    family: number | undefined;
+  };
+
+  const resolver = (impl: Partial<AddressResolver>): AddressResolver => ({
+    resolve4: impl.resolve4 ?? vi.fn(async () => []),
+    resolve6: impl.resolve6 ?? vi.fn(async () => []),
+  });
+
+  const lookup = (
+    r: AddressResolver,
+    options: Parameters<ReturnType<typeof createBoundedLookup>>[1],
+  ): Promise<LookupResult> =>
+    new Promise((resolve) => {
+      createBoundedLookup(r)('proxy.example', options, (err, address, family) =>
+        resolve({ err, address, family }),
+      );
+    });
+
+  const timeout = (): Promise<never> =>
+    Promise.reject(Object.assign(new Error('queryA ETIMEOUT proxy.example'), { code: 'ETIMEOUT' }));
+  const noData = (): Promise<never> =>
+    Promise.reject(
+      Object.assign(new Error('queryAaaa ENODATA proxy.example'), { code: 'ENODATA' }),
+    );
+
+  it('returns the first address (IPv4 before IPv6) when the socket asks for one', async () => {
+    const r = resolver({
+      resolve4: vi.fn(async () => ['203.0.113.7']),
+      resolve6: vi.fn(async () => ['2001:db8::7']),
+    });
+    const result = await lookup(r, { family: 0 });
+    expect(result).toEqual({ err: null, address: '203.0.113.7', family: 4 });
+  });
+
+  it('returns every address of both families when the socket asks for all', async () => {
+    const r = resolver({
+      resolve4: vi.fn(async () => ['203.0.113.7', '203.0.113.8']),
+      resolve6: vi.fn(async () => ['2001:db8::7']),
+    });
+    const result = await lookup(r, { family: 0, all: true });
+    expect(result.err).toBeNull();
+    expect(result.address).toEqual([
+      { address: '203.0.113.7', family: 4 },
+      { address: '203.0.113.8', family: 4 },
+      { address: '2001:db8::7', family: 6 },
+    ]);
+  });
+
+  it('queries only the requested family', async () => {
+    const resolve4 = vi.fn(async () => ['203.0.113.7']);
+    const resolve6 = vi.fn(async () => ['2001:db8::7']);
+    const result = await lookup(resolver({ resolve4, resolve6 }), { family: 6 });
+    expect(result).toEqual({ err: null, address: '2001:db8::7', family: 6 });
+    expect(resolve4).not.toHaveBeenCalled();
+
+    const v4 = await lookup(resolver({ resolve4, resolve6 }), { family: 'IPv4' });
+    expect(v4.address).toBe('203.0.113.7');
+  });
+
+  it('still answers when one family fails and the other resolves', async () => {
+    const r = resolver({ resolve4: vi.fn(async () => ['203.0.113.7']), resolve6: noData });
+    const result = await lookup(r, { family: 0, all: true });
+    expect(result.err).toBeNull();
+    expect(result.address).toEqual([{ address: '203.0.113.7', family: 4 }]);
+  });
+
+  it("reports a dead name server as ETIMEOUT, ahead of the other family's failure", async () => {
+    const r = resolver({ resolve4: noData, resolve6: timeout });
+    const result = await lookup(r, { family: 0 });
+    expect(result.err?.code).toBe('ETIMEOUT');
+  });
+
+  it('reports an empty answer as ENOTFOUND', async () => {
+    const r = resolver({ resolve4: vi.fn(async () => []), resolve6: vi.fn(async () => []) });
+    const result = await lookup(r, { family: 0 });
+    expect(result.err?.code).toBe('ENOTFOUND');
+    expect(result.err?.message).toContain('proxy.example');
+  });
+
+  it('wraps a non-Error rejection as ENOTFOUND rather than passing it through', async () => {
+    const r = resolver({
+      resolve4: vi.fn(async () => Promise.reject('string reason')),
+      resolve6: vi.fn(async () => Promise.reject('string reason')),
+    });
+    const result = await lookup(r, { family: 0 });
+    expect(result.err).toBeInstanceOf(Error);
+    expect(result.err?.code).toBe('ENOTFOUND');
   });
 });

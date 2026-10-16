@@ -3,11 +3,14 @@
  * boundary (nock, real axios + OgClient). The four rewrite providers share
  * one loop, so Twitter stands in for all. Pins: video short-circuit, fall-
  * through on a failed host, `ok(null)` when nothing yields media, that the
- * wire follows a legit public redirect under the Discordbot UA, and that a
- * redirect to an internal address (incl. IPv4-mapped IPv6) is refused.
+ * wire follows a legit public redirect under the Discordbot UA, that a
+ * redirect back to the source site is skipped whatever the source serves,
+ * and that a redirect to an internal address (incl. IPv4-mapped IPv6) is
+ * refused.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import nock from 'nock';
+import type { MessageCreateOptions } from 'discord.js';
 
 import {
   OgClient,
@@ -18,6 +21,8 @@ import {
 } from '../../../src/infra/link-preview';
 import { isOk } from '../../../src/core/result';
 import type { LinkPreviewProvider, LinkPreviewResult } from '../../../src/infra/link-preview';
+import { renderPreviewTo } from '../../../src/infra/discord/social-preview';
+import { echoTranslator } from '../../fixtures/runtime';
 
 const HOSTS = ['fxtwitter.com', 'vxtwitter.com'];
 const PATH = '/jack/status/20';
@@ -34,7 +39,7 @@ const provider = (): LinkPreviewProvider =>
   createTwitterProvider({ proxyHosts: HOSTS, ogClient: new OgClient() });
 
 const build = async (): Promise<string | null> => {
-  const result = await provider().build(TWEET, { timeoutMs: 4000, budgetMs: 8000 });
+  const result = await provider().build(TWEET, { timeoutMs: 4000 });
   if (!isOk(result)) throw new Error('expected ok');
   if (result.value === null) return null;
   if (result.value.kind !== 'rewritten-url') throw new Error('expected rewritten-url');
@@ -108,6 +113,31 @@ describe('rewrite-provider proxy validation contract', () => {
     expect(await build()).toBe(vxUrl);
   });
 
+  it('skips a proxy that redirects back to the source site, whatever the source serves us', async () => {
+    // A proxy that cannot fetch the post 302s to the source. The probe then
+    // reads the source's page from THIS host (a genuine image card here), but
+    // Discord's crawler follows the same redirect from its own address and
+    // gets a login wall — so the host is unusable and the loop moves on.
+    nock('https://fxtwitter.com')
+      .get(PATH)
+      .reply(302, '', { Location: `https://x.com${PATH}` });
+    nock('https://x.com').get(PATH).reply(200, ogHtml(IMAGE_HEAD));
+    nock('https://vxtwitter.com').get(PATH).reply(200, ogHtml(VIDEO_HEAD));
+    expect(await build()).toBe(vxUrl);
+  });
+
+  it('posts nothing when every proxy redirects back to the source site', async () => {
+    nock('https://fxtwitter.com')
+      .get(PATH)
+      .reply(302, '', { Location: `https://x.com${PATH}` });
+    nock('https://x.com').get(PATH).reply(200, ogHtml(IMAGE_HEAD));
+    nock('https://vxtwitter.com')
+      .get(PATH)
+      .reply(302, '', { Location: `https://twitter.com${PATH}` });
+    nock('https://twitter.com').get(PATH).reply(200, ogHtml(IMAGE_HEAD));
+    expect(await build()).toBeNull();
+  });
+
   it('treats a redirect straight to a video file as a playable preview (kkinstagram-style)', async () => {
     // Some proxies (e.g. kkinstagram) 302 the bot UA straight to a *.mp4 on a
     // CDN with no OpenGraph HTML; Discord follows the same redirect and embeds
@@ -152,7 +182,7 @@ describe('facebook share-link resolution contract', () => {
       proxyHosts: ['facebed.com'],
       ogClient: new OgClient(),
     });
-    const result = await provider.build(url, { timeoutMs: 4000, budgetMs: 8000 });
+    const result = await provider.build(url, { timeoutMs: 4000 });
     if (!isOk(result)) throw new Error('expected ok');
     return result.value;
   };
@@ -185,8 +215,15 @@ describe('facebook share-link resolution contract', () => {
       .reply(200, ogHtml(VIDEO_HEAD));
 
     expect(await buildFb(SHARE)).toEqual({
-      kind: 'rewritten-url',
-      url: PROXY_CANON,
+      kind: 'card',
+      card: {
+        url: CANON,
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Facebook',
+      },
+      media: { url: 'https://cdn.example/v.mp4', fallbackUrl: PROXY_CANON },
       sourceUrl: SHARE.href,
     });
   });
@@ -207,7 +244,7 @@ describe('facebook share-link resolution contract', () => {
           [
             '<meta property="og:title" content="Lil mouse">',
             '<meta property="og:image" content="https://scontent.example/thumb.jpg">',
-            '<meta property="og:url" content="https://www.facebook.com/p/1/">',
+            '<meta property="og:url" content="https://www.facebook.com/page/posts/1/">',
           ].join(''),
         ),
       );
@@ -215,13 +252,42 @@ describe('facebook share-link resolution contract', () => {
     expect(await buildFb(SHARE)).toEqual({
       kind: 'card',
       card: {
-        url: 'https://www.facebook.com/p/1/',
+        url: 'https://www.facebook.com/page/posts/1/',
         title: 'Lil mouse',
         description: undefined,
         imageUrl: 'https://scontent.example/thumb.jpg',
         siteName: 'Facebook',
       },
       sourceUrl: SHARE.href,
+    });
+  });
+  it('retains proxy engagement metadata in the Facebook card at the HTTP boundary', async () => {
+    const path = '/example/posts/1';
+    const source = `https://www.facebook.com${path}`;
+    nock('https://facebed.com')
+      .get(path)
+      .reply(
+        200,
+        ogHtml(
+          [
+            '<meta property="og:title" content="Example Author">',
+            '<meta property="og:description" content="Example post">',
+            '<meta property="og:image" content="https://cdn.example/post.jpg">',
+            '<meta property="og:site_name" content="facebed by pi.kt&#10;👍 🤗 708 • 💬 10 • 🔁 5">',
+          ].join(''),
+        ),
+      );
+    expect(await buildFb(new URL(source))).toEqual({
+      kind: 'card',
+      card: {
+        url: source,
+        title: 'Example Author',
+        description: 'Example post',
+        imageUrl: 'https://cdn.example/post.jpg',
+        siteName: 'Facebook',
+        engagement: { likes: 708, comments: 10, shares: 5 },
+      },
+      sourceUrl: source,
     });
   });
 });
@@ -242,7 +308,7 @@ describe('bilibili b23.tv resolution contract', () => {
       proxyHosts: ['vxbilibili.com'],
       ogClient: new OgClient(),
     });
-    const result = await provider.build(url, { timeoutMs: 4000, budgetMs: 8000 });
+    const result = await provider.build(url, { timeoutMs: 4000 });
     if (!isOk(result)) throw new Error('expected ok');
     return result.value;
   };
@@ -329,7 +395,7 @@ describe('threads share-link resolution contract', () => {
       proxyHosts: ['vxthreads.net'],
       ogClient: new OgClient(),
     });
-    const result = await provider.build(url, { timeoutMs: 4000, budgetMs: 8000 });
+    const result = await provider.build(url, { timeoutMs: 4000 });
     if (!isOk(result)) throw new Error('expected ok');
     return result.value;
   };
@@ -369,8 +435,15 @@ describe('threads share-link resolution contract', () => {
       .reply(200, ogHtml(VIDEO_HEAD));
 
     expect(await buildThreads(SHARE)).toEqual({
-      kind: 'rewritten-url',
-      url: PROXY_PERMALINK,
+      kind: 'card',
+      card: {
+        url: PERMALINK,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: undefined,
+        siteName: 'Threads',
+      },
+      media: { url: 'https://cdn.example/v.mp4', fallbackUrl: PROXY_PERMALINK },
       sourceUrl: SHARE.href, // original share link carried, not the permalink
     });
   });
@@ -409,8 +482,14 @@ describe('threads share-link resolution contract', () => {
       .reply(200, ogHtml(IMAGE_HEAD));
 
     expect(await buildThreads(LEGACY_SHARE)).toEqual({
-      kind: 'rewritten-url',
-      url: PROXY_PERMALINK,
+      kind: 'card',
+      card: {
+        url: PERMALINK,
+        title: 'Threads',
+        description: undefined,
+        imageUrl: 'https://cdn.example/i.jpg',
+        siteName: 'Threads',
+      },
       sourceUrl: LEGACY_SHARE.href,
     });
   });
@@ -428,7 +507,6 @@ describe('threads weak-image host selection contract', () => {
   const HOSTS = ['viewthreads.com', 'fzthreads.com', 'fixthreads.seria.moe'];
   const POST_PATH = '/@ajit86403/post/Dcp0Ly0iOIq';
   const PERMALINK = new URL(`https://www.threads.com${POST_PATH}`);
-  const proxyUrl = (host: string): string => `https://${host}${POST_PATH}`;
 
   /** An fbcdn rendition path that carries the post's own media. */
   const POST_IMAGE = 'https://scontent.cdninstagram.com/v/t39.92108-6/501_n.jpg';
@@ -456,13 +534,11 @@ describe('threads weak-image host selection contract', () => {
     crawler(host).get(POST_PATH).reply(503, 'down');
   };
 
-  const buildThreads = async (): Promise<string | null> => {
+  const buildThreads = async (): Promise<LinkPreviewResult | null> => {
     const provider = createThreadsProvider({ proxyHosts: HOSTS, ogClient: new OgClient() });
-    const result = await provider.build(PERMALINK, { timeoutMs: 4000, budgetMs: 8000 });
+    const result = await provider.build(PERMALINK, { timeoutMs: 4000 });
     if (!isOk(result)) throw new Error('expected ok');
-    if (result.value === null) return null;
-    if (result.value.kind !== 'rewritten-url') throw new Error('expected rewritten-url');
-    return result.value.url;
+    return result.value;
   };
 
   beforeAll(() => {
@@ -478,6 +554,55 @@ describe('threads weak-image host selection contract', () => {
     nock.restore();
   });
 
+  it('sends explicit image embeds after a failed proxy without requiring Discord to fetch a proxy URL', async () => {
+    const path = '/@user/post/ExamplePost';
+    const source = new URL(`https://www.threads.com${path}?hl=zh-tw`);
+    crawler('fzthreads.com').get(path).reply(404, 'not found');
+    crawler('viewthreads.com')
+      .get(path)
+      .reply(
+        200,
+        ogHtml(
+          [
+            '<meta property="og:title" content="Author on Threads">',
+            '<meta property="og:description" content="Post text">',
+            `<meta property="og:image" content="${POST_IMAGE}">`,
+            '<meta property="og:image" content="https://cdn.example/second.jpg">',
+          ].join(''),
+        ),
+      );
+    const provider = createThreadsProvider({
+      proxyHosts: ['fzthreads.com', 'viewthreads.com'],
+      ogClient: new OgClient(),
+    });
+    const result = await provider.build(source, { timeoutMs: 4000 });
+    if (!result.ok || result.value?.kind !== 'card') throw new Error('expected a Threads card');
+    const replies: MessageCreateOptions[] = [];
+
+    await renderPreviewTo(
+      async (payload) => {
+        replies.push(payload);
+      },
+      result.value,
+      echoTranslator(),
+    );
+
+    expect(replies).toHaveLength(1);
+    expect(replies[0]?.content).toBeUndefined();
+    expect(
+      replies[0]?.embeds?.map((embed) => ('toJSON' in embed ? embed.toJSON() : embed)),
+    ).toMatchObject([
+      {
+        url: source.href,
+        title: 'Author on Threads',
+        description: 'Post text',
+        image: { url: POST_IMAGE },
+      },
+      { url: source.href, image: { url: 'https://cdn.example/second.jpg' } },
+    ]);
+    expect(replies[0]?.allowedMentions).toEqual({ parse: [] });
+  });
+
   it('prefers the host serving the real post image over one serving only the avatar', async () => {
     // All three hosts are probed: neither image tier short-circuits, because a
     // later host may still hold the video. The avatar-only candidate is the
@@ -486,7 +611,10 @@ describe('threads weak-image host selection contract', () => {
     serves('fzthreads.com', cardHead(AVATAR_IMAGE));
     serves('fixthreads.seria.moe', cardHead(AVATAR_THUMB));
 
-    expect(await buildThreads()).toBe(proxyUrl('viewthreads.com'));
+    expect(await buildThreads()).toMatchObject({
+      kind: 'card',
+      card: { url: PERMALINK.href, imageUrl: POST_IMAGE },
+    });
   });
 
   it('posts an avatar-only host when it is the only one that responds', async () => {
@@ -496,7 +624,7 @@ describe('threads weak-image host selection contract', () => {
     serves('fzthreads.com', cardHead(AVATAR_IMAGE));
     isDown('fixthreads.seria.moe');
 
-    expect(await buildThreads()).toBe(proxyUrl('fzthreads.com'));
+    expect(await buildThreads()).toMatchObject({ kind: 'card', card: { imageUrl: AVATAR_IMAGE } });
   });
 
   it('passes over an avatar-only first host for a later one holding the real asset', async () => {
@@ -506,7 +634,7 @@ describe('threads weak-image host selection contract', () => {
     serves('fzthreads.com', cardHead(POST_IMAGE));
     serves('fixthreads.seria.moe', cardHead(AVATAR_THUMB));
 
-    expect(await buildThreads()).toBe(proxyUrl('fzthreads.com'));
+    expect(await buildThreads()).toMatchObject({ kind: 'card', card: { imageUrl: POST_IMAGE } });
   });
 
   it('promotes a later host whose images mix the avatar with the real asset', async () => {
@@ -517,7 +645,10 @@ describe('threads weak-image host selection contract', () => {
     serves('fzthreads.com', cardHead(AVATAR_IMAGE, POST_IMAGE));
     isDown('fixthreads.seria.moe');
 
-    expect(await buildThreads()).toBe(proxyUrl('fzthreads.com'));
+    expect(await buildThreads()).toMatchObject({
+      kind: 'card',
+      card: { imageUrls: [AVATAR_IMAGE, POST_IMAGE] },
+    });
   });
 
   it('lets a later host with og:video win over an earlier host that served an image', async () => {
@@ -527,7 +658,10 @@ describe('threads weak-image host selection contract', () => {
     serves('viewthreads.com', cardHead(POST_IMAGE));
     serves('fzthreads.com', VIDEO_HEAD);
 
-    expect(await buildThreads()).toBe(proxyUrl('fzthreads.com'));
+    expect(await buildThreads()).toMatchObject({
+      kind: 'card',
+      media: { url: 'https://cdn.example/v.mp4', fallbackUrl: `https://fzthreads.com${POST_PATH}` },
+    });
   });
 
   it('posts nothing when every host serves only the avatar behind a login wall', async () => {

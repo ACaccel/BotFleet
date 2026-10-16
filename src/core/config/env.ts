@@ -26,6 +26,8 @@ import { z } from 'zod';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
+import { DEFAULT_LOG_RETENTION_DAYS, parseLogRetentionDays } from '../logger/log-retention';
+
 /**
  * Regex matched against TOKEN and CLIENT_ID values — substring match,
  * case-insensitive, so a leaked placeholder like
@@ -47,24 +49,26 @@ const nonPlaceholder = (label: string) =>
       `${label} contains a placeholder substring (e.g. "your_token", "changeme")`,
     );
 
-const mongoUriSchema = z
-  .string()
-  .refine(
-    (v) => v.startsWith('mongodb://') || v.startsWith('mongodb+srv://'),
-    'MONGO_URI must use the mongodb:// or mongodb+srv:// scheme',
-  )
-  .refine((v) => {
-    try {
-      return new URL(v).hostname.length > 0;
-    } catch {
-      return false;
-    }
-  }, 'MONGO_URI must include a non-empty host');
+const mongoUriSchema = (label: string) =>
+  z
+    .string()
+    .refine(
+      (v) => v.startsWith('mongodb://') || v.startsWith('mongodb+srv://'),
+      `${label} must use the mongodb:// or mongodb+srv:// scheme`,
+    )
+    .refine((v) => {
+      try {
+        return new URL(v).hostname.length > 0;
+      } catch {
+        return false;
+      }
+    }, `${label} must include a non-empty host`);
 
-// Optional LLM-provider API keys. These live in the typed Env so the
-// `infra/llm` providers resolve them through DI rather than reading
-// `process.env` directly. A bot that does not use a given provider
-// simply omits the key — the registry's missing-key gate at
+// Optional third-party API keys (the LLM providers and the CWA open-data
+// API). These live in the typed Env so their consumers receive them
+// through the composition root rather than reading `process.env`
+// directly. A bot that does not use a given service simply omits the
+// key — for the LLM providers the registry's missing-key gate at
 // `resolve(name)` time emits a `MissingApiKeyError` which surfaces
 // only when something actually asks for that provider.
 //
@@ -74,43 +78,94 @@ const mongoUriSchema = z
 // OPENAI_API_KEY=, ANTHROPIC_API_KEY=, GEMINI_API_KEY= blank). Without
 // this preprocess the empty string survives into `.min(1)` and
 // `loadEnv` rejects an otherwise-valid deployment.
-const llmKeySchema = z.preprocess(
+const optionalApiKeySchema = z.preprocess(
   (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
   z.string().min(1).optional(),
+);
+
+/** An optional TCP port (1–65535); a blank value means absent. */
+const optionalPortSchema = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
+  z.coerce.number().int().min(1).max(65_535).optional(),
 );
 
 /**
  * The typed environment contract, as a zod shape.
  *
  * `Env` is derived from this rather than restated: a hand-written type
- * beside a hand-written destructure is exactly how `ACCUWEATHER_KEY`
- * came to exist in both the schema and the type while never reaching
- * the returned object, silently disabling `/weather_forecast` on every
- * deployment. Adding a key here now updates the type, the runtime
- * projection, and the contract test at once.
+ * beside a hand-written destructure once let a key exist in both the
+ * schema and the type while never reaching the returned object. Adding
+ * a key here updates the type, the runtime projection, and the contract
+ * test at once.
  */
 const envShape = {
+  /** Deployment-owned marker path; unset for ordinary interactive startup. */
+  PLEIADES_READY_FILE: z
+    .string()
+    .refine(path.isAbsolute, 'PLEIADES_READY_FILE must be absolute')
+    .optional(),
   TOKEN: nonPlaceholder('TOKEN'),
   CLIENT_ID: nonPlaceholder('CLIENT_ID'),
-  MONGO_URI: mongoUriSchema.optional(),
-  /** HTTP port for the earthquake webhook (nijika) / settings API (gopher). */
-  PORT: z.coerce.number().int().positive().optional(),
+  MONGO_URI: mongoUriSchema('MONGO_URI').optional(),
+  /**
+   * Read-only account for nijika's `/db` inspection. Required only when
+   * nijika enables that command; startup rejects an account that can write.
+   */
+  MONGO_INSPECT_URI: mongoUriSchema('MONGO_INSPECT_URI').optional(),
+  /** Cooldown and polling interval for transient per-guild connection failures. */
+  MONGO_RECOVERY_INTERVAL_MS: z.coerce.number().int().positive().max(2_147_483_647).default(60_000),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
-  /** Optional per-provider LLM API keys. Absent when the deployment does not use that provider. */
-  OPENAI_API_KEY: llmKeySchema,
-  ANTHROPIC_API_KEY: llmKeySchema,
-  GEMINI_API_KEY: llmKeySchema,
-  XAI_API_KEY: llmKeySchema,
-  /** AccuWeather API key. Optional — only required for the weather_forecast slash command. */
-  ACCUWEATHER_KEY: z.string().min(1).optional(),
   /**
-   * Bearer key for gopher's settings REST API. Optional — only gopher
-   * sets it; the settings-api plugin refuses to start (when enabled)
-   * without it, so a secret never lives in config.json.
+   * Days of file logs to keep; `0` disables pruning. Digits only so a
+   * blank or malformed value fails startup instead of reading as `0`.
    */
-  GOPHER_SETTINGS_API_KEY: z.string().min(1).optional(),
+  LOG_RETENTION_DAYS: z
+    .string()
+    .default(String(DEFAULT_LOG_RETENTION_DAYS))
+    .transform((raw, ctx) => {
+      const days = parseLogRetentionDays(raw);
+      if (days === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'LOG_RETENTION_DAYS must be a whole number of days (0 disables pruning)',
+        });
+        return z.NEVER;
+      }
+      return days;
+    }),
+  /** Optional per-provider LLM API keys. Absent when the deployment does not use that provider. */
+  OPENAI_API_KEY: optionalApiKeySchema,
+  ANTHROPIC_API_KEY: optionalApiKeySchema,
+  GEMINI_API_KEY: optionalApiKeySchema,
+  XAI_API_KEY: optionalApiKeySchema,
+  /**
+   * Central Weather Administration open-data key for nijika's earthquake
+   * reports. Optional: without it the report poller stays off; early-warning
+   * alerts are unaffected.
+   */
+  CWA_API_KEY: optionalApiKeySchema,
+  /**
+   * Loopback port for nijika's earthquake early-warning API. Optional:
+   * without it the alert API stays off. Requires {@link EARTHQUAKE_ALERT_KEY}.
+   */
+  EARTHQUAKE_ALERT_PORT: optionalPortSchema,
+  /** Bearer secret for the earthquake alert API; required with its port. */
+  EARTHQUAKE_ALERT_KEY: optionalApiKeySchema,
+  /**
+   * Loopback port for konata's notification relay API. Optional: without it
+   * the relay stays off. Requires {@link NOTIFY_API_KEY}.
+   */
+  NOTIFY_API_PORT: optionalPortSchema,
+  /** Bearer secret for the notification relay API; required with its port. */
+  NOTIFY_API_KEY: optionalApiKeySchema,
 } as const;
+
+/** Shortest accepted notification relay key, so a guessable secret fails startup. */
+export const NOTIFY_API_KEY_MIN_LENGTH = 32;
+
+/** Shortest accepted earthquake alert key, for the same reason. */
+export const EARTHQUAKE_ALERT_KEY_MIN_LENGTH = 32;
 
 const envSchema = z
   .object(envShape)
@@ -159,8 +214,6 @@ interface LoadEnvOptions {
   envFile?: string;
   /** Require MONGO_URI to be present and valid. Defaults to true. */
   requireDb?: boolean;
-  /** Require PORT to be present and a positive integer. Defaults to false. */
-  requirePort?: boolean;
   /** When true (default), validation failure exits the process. */
   exitOnFailure?: boolean;
   /** Override source object — primarily for unit tests. Defaults to process.env. */
@@ -174,7 +227,7 @@ interface LoadEnvOptions {
  * @returns a frozen {@link Env} containing only the typed, known keys.
  */
 export const loadEnv = (options: LoadEnvOptions = {}): Env => {
-  const { envFile, requireDb = true, requirePort = false, exitOnFailure = true, source } = options;
+  const { envFile, requireDb = true, exitOnFailure = true, source } = options;
 
   if (envFile && !source) {
     const resolved = path.isAbsolute(envFile) ? envFile : path.resolve(process.cwd(), envFile);
@@ -201,11 +254,26 @@ export const loadEnv = (options: LoadEnvOptions = {}): Env => {
         message: 'MONGO_URI is required for this bot',
       });
     }
-    if (requirePort && value.PORT === undefined) {
+    if (
+      value.NOTIFY_API_PORT !== undefined &&
+      (value.NOTIFY_API_KEY === undefined ||
+        value.NOTIFY_API_KEY.length < NOTIFY_API_KEY_MIN_LENGTH)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['PORT'],
-        message: 'PORT is required for this bot',
+        path: ['NOTIFY_API_KEY'],
+        message: `NOTIFY_API_KEY of at least ${NOTIFY_API_KEY_MIN_LENGTH} characters is required when NOTIFY_API_PORT is set`,
+      });
+    }
+    if (
+      value.EARTHQUAKE_ALERT_PORT !== undefined &&
+      (value.EARTHQUAKE_ALERT_KEY === undefined ||
+        value.EARTHQUAKE_ALERT_KEY.length < EARTHQUAKE_ALERT_KEY_MIN_LENGTH)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['EARTHQUAKE_ALERT_KEY'],
+        message: `EARTHQUAKE_ALERT_KEY of at least ${EARTHQUAKE_ALERT_KEY_MIN_LENGTH} characters is required when EARTHQUAKE_ALERT_PORT is set`,
       });
     }
   });
@@ -238,6 +306,31 @@ export const loadEnv = (options: LoadEnvOptions = {}): Env => {
   }
 
   return env;
+};
+
+/**
+ * Read the `npm_config_<flag>` variables npm sets for script flags.
+ *
+ * `npm run <script> --some-flag` without a `--` separator does not pass
+ * the flag to the script: npm consumes it and exports
+ * `npm_config_some_flag` instead (`"true"` for a bare flag, the value
+ * for `--some-flag=value`). CLIs that accept the separator-free form
+ * read those variables through this helper so the raw `process.env`
+ * access stays in this module.
+ *
+ * Flag names are given in their kebab-case CLI spelling (`dry-run`);
+ * the result is keyed the same way and omits flags npm did not set.
+ */
+export const readNpmConfigFlags = <const K extends string>(
+  flags: readonly K[],
+  source: NodeJS.ProcessEnv = process.env,
+): Readonly<Partial<Record<K, string>>> => {
+  const out: Partial<Record<K, string>> = {};
+  for (const flag of flags) {
+    const value = source[`npm_config_${flag.replace(/-/g, '_')}`];
+    if (value !== undefined) out[flag] = value;
+  }
+  return Object.freeze(out);
 };
 
 const handleFailure = (issues: readonly z.ZodIssue[], exitOnFailure: boolean): never => {
