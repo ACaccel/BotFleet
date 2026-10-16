@@ -1,6 +1,6 @@
 {
   "name": "pleiades-fleet",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Multi-personality Discord bot framework on TypeScript, discord.js and MongoDB, with a layered plugin architecture and bilingual i18n.",
   "private": true,
   "engines": {
