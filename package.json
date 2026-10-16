@@ -1,5 +1,5 @@
 {
-  "name": "botfleet",
+  "name": "pleiades-fleet",
   "version": "1.1.0",
   "description": "Multi-personality Discord bot framework on TypeScript, discord.js and MongoDB, with a layered plugin architecture and bilingual i18n.",
   "private": true,
@@ -46,14 +46,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ACaccel/BotFleet.git"
+    "url": "git+https://github.com/ACaccel/pleiades-fleet.git"
   },
   "author": "ACaccel, rbt4168",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/ACaccel/BotFleet/issues"
+    "url": "https://github.com/ACaccel/pleiades-fleet/issues"
   },
-  "homepage": "https://github.com/ACaccel/BotFleet#readme",
+  "homepage": "https://github.com/ACaccel/pleiades-fleet#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.94.0",
     "@discordjs/builders": "^1.14.1",

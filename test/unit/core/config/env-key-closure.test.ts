@@ -28,7 +28,7 @@ const FULL_SOURCE: NodeJS.ProcessEnv = {
   NODE_ENV: 'test',
   LOG_LEVEL: 'warn',
   LOG_RETENTION_DAYS: '30',
-  BOTFLEET_READY_FILE: '/run/botfleet-test/ready.json',
+  PLEIADES_READY_FILE: '/run/pleiades-test/ready.json',
   OPENAI_API_KEY: 'sk-openai',
   ANTHROPIC_API_KEY: 'sk-anthropic',
   GEMINI_API_KEY: 'sk-gemini',

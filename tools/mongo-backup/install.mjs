@@ -5,8 +5,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const SERVICE = 'botfleet-mongo-backup.service';
-export const TIMER = 'botfleet-mongo-backup.timer';
+export const SERVICE = 'pleiades-mongo-backup.service';
+export const TIMER = 'pleiades-mongo-backup.timer';
 const UNIT_DIR = '/etc/systemd/system';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const usage =
@@ -15,7 +15,7 @@ const usage =
 /** @typedef {{root:string,user:string,node:string,mongoPrefix:string,envFile:string,backupDir:string,keep:number}} Settings */
 
 /** @param {string} root @returns {string} */
-export const ownerMarker = (root) => `# Managed by BotFleet: ${root}\n`;
+export const ownerMarker = (root) => `# Managed by Pleiades: ${root}\n`;
 
 /** @param {unknown} value @param {string} field @returns {string} */
 function absolute(value, field) {
@@ -58,7 +58,7 @@ export async function readSettings(root, overrides = {}) {
     node: path.join(runtime, 'bin/node'),
     mongoPrefix: absolute(config.mongodb.prefix, 'mongodb.prefix'),
     envFile: absolute(config.mongodb.probeEnvFile, 'mongodb.probeEnvFile'),
-    backupDir: backupDirectory(overrides.backupDir ?? '/var/backups/botfleet'),
+    backupDir: backupDirectory(overrides.backupDir ?? '/var/backups/pleiades'),
     keep: Number(keep),
   };
 }
@@ -88,8 +88,8 @@ export function renderUnits(settings) {
     String(settings.keep),
   ];
   const service = `${ownerMarker(settings.root)}[Unit]
-Description=BotFleet MongoDB backup
-After=mongodb-botfleet.service
+Description=Pleiades MongoDB backup
+After=mongodb-pleiades.service
 
 [Service]
 Type=oneshot
@@ -114,10 +114,10 @@ LockPersonality=true
 SystemCallArchitectures=native
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=botfleet-mongo-backup
+SyslogIdentifier=pleiades-mongo-backup
 `;
   const timer = `${ownerMarker(settings.root)}[Unit]
-Description=Daily BotFleet MongoDB backup
+Description=Daily Pleiades MongoDB backup
 
 [Timer]
 OnCalendar=*-*-* 03:30:00
@@ -163,7 +163,7 @@ async function install(settings) {
   await fs.access(settings.envFile, fs.constants.R_OK).catch(() => {
     throw new Error(`Cannot read ${settings.envFile}.`);
   });
-  const staging = await fs.mkdtemp(path.join(os.tmpdir(), 'botfleet-backup-units-'));
+  const staging = await fs.mkdtemp(path.join(os.tmpdir(), 'pleiades-backup-units-'));
   try {
     const units = renderUnits(settings);
     for (const [name, content] of Object.entries(units))

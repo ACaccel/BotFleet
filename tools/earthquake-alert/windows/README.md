@@ -27,12 +27,12 @@ Tailscale 以 HTTPS 送到 nijika，nijika 再發到各伺服器的 `earthquake`
 ## 安裝
 
 1. 把 `earthquake-alert.cmd` 和 `earthquake-alert.ps1` 放進同一個固定的資料夾，例如
-   `%LOCALAPPDATA%\BotFleet\earthquake-alert\`。路徑有中文沒關係。不要另存或轉換
+   `%LOCALAPPDATA%\Pleiades\earthquake-alert\`。路徑有中文沒關係。不要另存或轉換
    `.ps1` 的編碼，它必須維持 UTF-8 with BOM。
 2. 如果檔案是從網路下載的，在 PowerShell 解除封鎖：
 
    ```powershell
-   Get-ChildItem "$env:LOCALAPPDATA\BotFleet\earthquake-alert" | Unblock-File
+   Get-ChildItem "$env:LOCALAPPDATA\Pleiades\earthquake-alert" | Unblock-File
    ```
 
 3. 在腳本旁邊建立 `earthquake-alert.config.json`（必要），填入管理者提供的警報網址。網址必須是
@@ -46,7 +46,7 @@ Tailscale 以 HTTPS 送到 nijika，nijika 再發到各伺服器的 `earthquake`
    出現提示時貼上金鑰：
 
    ```powershell
-   $dir = Join-Path $env:LOCALAPPDATA 'BotFleet'
+   $dir = Join-Path $env:LOCALAPPDATA 'Pleiades'
    New-Item -ItemType Directory -Force -Path $dir | Out-Null
    $keyFile = Join-Path $dir 'earthquake-alert.key'
    $secure = Read-Host -AsSecureString 'Paste the key'
@@ -85,13 +85,13 @@ Tailscale 以 HTTPS 送到 nijika，nijika 再發到各伺服器的 `earthquake`
 也可以在 PowerShell 手動執行同一組參數，再查看結束代碼：
 
 ```powershell
-& "$env:LOCALAPPDATA\BotFleet\earthquake-alert\earthquake-alert.cmd" --epicenter-lat=23.85 --epicenter-lon=120.82 --depth=10 --magnitude=7.3 --max-intensity=7 --local-intensity=5+ --arrival-time=1717142400 --remaining-time=20
+& "$env:LOCALAPPDATA\Pleiades\earthquake-alert\earthquake-alert.cmd" --epicenter-lat=23.85 --epicenter-lon=120.82 --depth=10 --magnitude=7.3 --max-intensity=7 --local-intensity=5+ --arrival-time=1717142400 --remaining-time=20
 $LASTEXITCODE
 ```
 
 ## 紀錄與結束代碼
 
-每次執行會在 `%LOCALAPPDATA%\BotFleet\earthquake-alert.log` 追加一行，例如
+每次執行會在 `%LOCALAPPDATA%\Pleiades\earthquake-alert.log` 追加一行，例如
 `result=created pinged=True guilds=2 status=200 attempts=1 local=5+ ...`。紀錄不會包含金鑰。
 
 | 結束代碼 | 意義                                                         |
@@ -110,6 +110,6 @@ $LASTEXITCODE
 | `status=0`、逾時、「連不到伺服器」 | 確認 Tailscale 已連線（`tailscale status`）。用瀏覽器開設定檔裡的網址，看到 `{"error":"unauthorized"}` 代表網路通、nijika 正常。                                                                                                     |
 | `status=404` 或其他非預期的狀態碼  | 確認設定檔的網址結尾是 `/earthquake/alerts`；若正確，伺服器的 `tailscale serve` 路徑或 nijika 的警報設定可能沒開，請聯絡管理者。                                                                                                     |
 | `status=503`                       | nijika 剛啟動，Discord 尚未就緒，稍後再測試。                                                                                                                                                                                        |
-| `setup-error`                      | 紀錄會寫出原因：`config file ...` 表示腳本旁的 `earthquake-alert.config.json` 不存在、格式錯誤或網址不是 `https://`（安裝步驟 3）；`key file ...` 表示 `%LOCALAPPDATA%\BotFleet\earthquake-alert.key` 不存在或是空的（安裝步驟 4）。 |
+| `setup-error`                      | 紀錄會寫出原因：`config file ...` 表示腳本旁的 `earthquake-alert.config.json` 不存在、格式錯誤或網址不是 `https://`（安裝步驟 3）；`key file ...` 表示 `%LOCALAPPDATA%\Pleiades\earthquake-alert.key` 不存在或是空的（安裝步驟 4）。 |
 | 手動執行時出現「已停用指令碼執行」 | `.cmd` 已用 `-ExecutionPolicy Bypass` 執行；若仍被擋，可能是群組原則強制。用 `Get-ExecutionPolicy -List` 查看，並確認已做安裝步驟 2。                                                                                                |
 | 完全沒有紀錄                       | App 沒有執行程式。確認 App 的勾選與程式路徑，並用上面的手動指令測試。                                                                                                                                                                |

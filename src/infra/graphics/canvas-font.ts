@@ -4,7 +4,7 @@ import { createCanvas, registerFont } from 'canvas';
 
 import { ConfigurationError } from '../../core/errors';
 
-const CANVAS_FONT_FAMILY = 'BotFleet CJK';
+const CANVAS_FONT_FAMILY = 'Pleiades CJK';
 export const canvasFont = (size: number, bold = false): string =>
   `${bold ? 'bold ' : ''}${size}px "${CANVAS_FONT_FAMILY}"`;
 

@@ -53,7 +53,7 @@ Startup rejection exits with failure. Shutdown cleans up resources within a dead
 a second signal exits immediately. Discord handles reconnection. Uncaught exceptions
 use a narrow transient-network whitelist, separate from ordinary retry policy.
 
-`BOTFLEET_READY_FILE` attests startup readiness of Discord, repositories and plugins;
+`PLEIADES_READY_FILE` attests startup readiness of Discord, repositories and plugins;
 disabled plugins prevent publication. See [deployment](contributing/deployment.md)
 for this startup marker, which does not indicate continuous health.
 

@@ -36,7 +36,7 @@ import type { FeedFailure, FeedPost, FeedPostMedia, FeedTimelineFetchOptions } f
  * API needs no crawler-specific UA (unlike the OpenGraph probes in
  * `infra/link-preview`), so this one is descriptive rather than spoofed.
  */
-const DEFAULT_USER_AGENT = 'BotFleet-social-feed/1.0 (+https://github.com/ACaccel/BotFleet)';
+const DEFAULT_USER_AGENT = 'Pleiades-social-feed/1.0 (+https://github.com/ACaccel/pleiades-fleet)';
 
 /**
  * Response-body ceiling. A full page measures well under 100 kB; this

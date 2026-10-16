@@ -31,7 +31,7 @@ function state(name: string, content: string): void {
   writeFileSync(join(root, '.deploy', name), content);
 }
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'botfleet-retention-'));
+  root = mkdtempSync(join(tmpdir(), 'pleiades-retention-'));
   releases = join(root, '.deploy/releases');
   mkdirSync(releases, { recursive: true });
 });
@@ -108,7 +108,7 @@ describe('release retention', () => {
   });
 
   it('refuses a releases directory that resolves outside the project state', () => {
-    const outside = mkdtempSync(join(tmpdir(), 'botfleet-outside-'));
+    const outside = mkdtempSync(join(tmpdir(), 'pleiades-outside-'));
     try {
       rmSync(releases, { recursive: true });
       symlinkSync(outside, releases);

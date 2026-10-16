@@ -17,7 +17,7 @@ const checks = [
 
 describe('pre-push hook', () => {
   it('isolates gate subprocesses from the pushed repository Git environment', () => {
-    const root = mkdtempSync(join(tmpdir(), 'botfleet-pre-push-'));
+    const root = mkdtempSync(join(tmpdir(), 'pleiades-pre-push-'));
     try {
       const repo = join(root, 'repository');
       const bin = join(root, 'bin');

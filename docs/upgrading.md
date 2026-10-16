@@ -1,5 +1,36 @@
 # Upgrade notes
 
+## Project rename to Pleiades
+
+BotFleet is now Pleiades; the repository is `ACaccel/pleiades-fleet`. Every
+deployment identifier changed, and the old names are not recognised:
+
+| Old                                                   | New                                                  |
+| ----------------------------------------------------- | ---------------------------------------------------- |
+| `botfleet@<bot>.service`, `mongodb-botfleet.service`  | `pleiades@<bot>.service`, `mongodb-pleiades.service` |
+| `botfleet-mongo-backup.service` / `.timer`            | `pleiades-mongo-backup.service` / `.timer`           |
+| `BOTFLEET_CONDA_PREFIX`, `BOTFLEET_READY_FILE`        | `PLEIADES_CONDA_PREFIX`, `PLEIADES_READY_FILE`       |
+| `/var/backups/botfleet`, `botfleet-backups` (default) | `/var/backups/pleiades`, `pleiades-backups`          |
+| `.git/botfleet-migration`                             | `.git/pleiades-migration`                            |
+| `%LOCALAPPDATA%\BotFleet` (Windows earthquake caller) | `%LOCALAPPDATA%\Pleiades`                            |
+
+The new deploy tool refuses units marked `Managed by BotFleet`, so remove them with
+the previous code before upgrading. Database contents and Discord data are unaffected.
+
+1. With the pre-rename checkout, stop and remove the managed units:
+   `npm run backup:uninstall`, `npm run undeploy`, then `npm run mongo:undeploy`.
+2. Update the checkout and, if desired, rename the host paths (checkout, MongoDB
+   runtime directory, backup directories, `.git/botfleet-migration`). Update every
+   moved path in `mongod.conf`, `deployment.json` and `tools/migration/config.json`.
+3. Conda environments embed absolute paths: after moving one, delete it and rebuild
+   with `bash scripts/setup-env.sh` or `bash scripts/setup-mongo.sh <prefix>`.
+4. A moved checkout keeps a stale `core.hooksPath`; run
+   `git config --local --unset core.hooksPath` and `sh scripts/install-hooks.sh`.
+5. Replace `BOTFLEET_CONDA_PREFIX` with `PLEIADES_CONDA_PREFIX` in any shell profile.
+6. Run `npm run mongo:deploy`, `npm run deploy` and `npm run backup:install`.
+7. On each Windows alert host, move `%LOCALAPPDATA%\BotFleet` to
+   `%LOCALAPPDATA%\Pleiades` and point the warning app at the moved script.
+
 ## Earthquake early-warning API
 
 Nijika's unauthenticated webhook is retired: `GET /discord/` and

@@ -12,10 +12,10 @@ Copy `config.example.json` to `config.json` beside this README:
 
 | Field                 | Meaning                                                                                                                                             |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `environment`         | Application conda environment path, e.g.`/home/guest/miniforge3/envs/botfleet`. If omitted, use the active conda environment.                       |
+| `environment`         | Application conda environment path, e.g.`/home/guest/miniforge3/envs/pleiades`. If omitted, use the active conda environment.                       |
 | `databaseEnvironment` | MongoDB runtime prefix containing `mongod`, `mongodump`, `mongorestore`, and `mongosh`. Defaults to `environment` for combined legacy environments. |
 | `mongoEnv`            | Bot`.env` providing `MONGO_URI`, relative to the Git checkout. Defaults to `src/bot/tomori/.env`. No password belongs in this config.               |
-| `backupDir`           | Parent directory for automatically named backups, outside the repository. Defaults to`botfleet-backups` beside the checkout.                        |
+| `backupDir`           | Parent directory for automatically named backups, outside the repository. Defaults to`pleiades-backups` beside the checkout.                        |
 
 Paths are literal: use absolute paths for both environments and `backupDir`, not `~`.
 Each `mongosh` call runs under a temporary profile with telemetry off, so it neither
@@ -53,7 +53,7 @@ backed up: publish the desired application revision through Git separately.
 Copy the printed directory over SSH (replace the path, account and port):
 
 ```bash
-scp -P SSH_PORT -r /absolute/printed-backup-directory USER@HOST:~/botfleet-backup
+scp -P SSH_PORT -r /absolute/printed-backup-directory USER@HOST:~/pleiades-backup
 ```
 
 Use a destination that does not already exist. The backup contains secrets;
@@ -66,12 +66,12 @@ copied installer). It does not need conda, Node, MongoDB, npm, or Git installed.
 Bootstrap installs these and native build dependencies without sudo:
 
 ```bash
-bash ~/botfleet-backup/tool/bootstrap.sh --env dc \
-  --runtime ~/botfleet-backup/runtime.conf --apply
+bash ~/pleiades-backup/tool/bootstrap.sh --env dc \
+  --runtime ~/pleiades-backup/runtime.conf --apply
 source ~/miniforge3/etc/profile.d/conda.sh
 conda activate dc
-git clone YOUR_REPOSITORY_URL ~/BotFleet
-cd ~/BotFleet
+git clone YOUR_REPOSITORY_URL ~/pleiades-fleet
+cd ~/pleiades-fleet
 git checkout SOURCE_COMMIT_PRINTED_BY_EXPORT
 ```
 
@@ -90,7 +90,7 @@ environment can update its packages.
 Inside the clean clone, with `dc` active:
 
 ```bash
-bash ~/botfleet-backup/tool/migration.sh restore ~/botfleet-backup
+bash ~/pleiades-backup/tool/migration.sh restore ~/pleiades-backup
 ```
 
 One command installs locked application dependencies, restores ignored files,
@@ -106,12 +106,12 @@ application credentials and `.env` contents are preserved.
 MongoDB remains running; bots are not started. Update webhook/API routing if used.
 No slash-command registration is needed. This recovery tool does not install
 systemd services. For temporary combined-environment operation, set
-`BOTFLEET_CONDA_PREFIX="$CONDA_PREFIX"` before bot commands only if that runtime satisfies the launcher version checks and has no activation hooks. Otherwise complete the split setup below before starting bots.
+`PLEIADES_CONDA_PREFIX="$CONDA_PREFIX"` before bot commands only if that runtime satisfies the launcher version checks and has no activation hooks. Otherwise complete the split setup below before starting bots.
 For persistent deployment, complete the split-runtime transition below and follow
 the [operations guide](../../docs/contributing/operations.md). To recheck before bot startup:
 
 ```bash
-bash ~/botfleet-backup/tool/migration.sh verify ~/botfleet-backup
+bash ~/pleiades-backup/tool/migration.sh verify ~/pleiades-backup
 ```
 
 ## Split-runtime recovery
@@ -130,7 +130,7 @@ To transition the recovered host to the normal split layout:
 
 1. Run `npm run setup` to build the checkout's `.conda` application runtime and locked
    native dependencies. Keep the recovery environment available for rollback.
-2. Run `bash scripts/setup-mongo.sh /absolute/mongodb-botfleet/.conda` to prepare
+2. Run `bash scripts/setup-mongo.sh /absolute/mongodb-pleiades/.conda` to prepare
    the independent database runtime. Confirm its versions match `runtime.conf`;
    do not combine this transition with a database upgrade.
 3. Update local migration configuration to the new application and database
@@ -148,7 +148,7 @@ only; existing `data`, logs, or configuration cause restore to fail closed.
 
 A failed restore stops only the MongoDB it started and retains partial files.
 Use a fresh clone/MongoDB destination to retry; do not remove data to bypass a
-conflict. A killed process may leave a lock under `.git/botfleet-migration/`;
+conflict. A killed process may leave a lock under `.git/pleiades-migration/`;
 remove it only after confirming its processes have exited. Keep the source
 until the target works. Rollback after target writes requires reconciling those
 new writes first; never run both hosts with the same bot tokens.
@@ -168,8 +168,8 @@ on PATH. The CI `migration-drill` job provisions them with `scripts/setup-mongo.
 and fails if the drill is skipped. To run it locally:
 
 ```bash
-CONDA_EXE="$(command -v conda)" bash scripts/setup-mongo.sh /tmp/botfleet-mongo
-MIGRATION_TEST_BIN_DIR=/tmp/botfleet-mongo/bin PATH="$PATH:/tmp/botfleet-mongo/bin" \
+CONDA_EXE="$(command -v conda)" bash scripts/setup-mongo.sh /tmp/pleiades-mongo
+MIGRATION_TEST_BIN_DIR=/tmp/pleiades-mongo/bin PATH="$PATH:/tmp/pleiades-mongo/bin" \
   npm run test:tools -- tools/migration/mongo.integration.test.ts
 ```
 

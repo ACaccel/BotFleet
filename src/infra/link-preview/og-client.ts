@@ -138,7 +138,7 @@ const SAFE_MAX_REDIRECTS = 3;
 /** Ceiling on a JSON API body; a single post measures a few kilobytes. */
 const MAX_JSON_BYTES = 1024 * 1024;
 /** Identifies the bot to a JSON API operator (see {@link OgClient.fetchJson}). */
-const API_USER_AGENT = 'BotFleet-link-preview/1.0 (+https://github.com/ACaccel/BotFleet)';
+const API_USER_AGENT = 'Pleiades-link-preview/1.0 (+https://github.com/ACaccel/pleiades-fleet)';
 /** Only the head carries OpenGraph tags; cap parsing work regardless of body size. */
 const HEAD_SCAN_LIMIT = 128 * 1024;
 /** Once seen in the streamed body, the rest is irrelevant — stop reading. */

@@ -1,4 +1,4 @@
-# Project: BotFleet (TypeScript, discord.js, MongoDB)
+# Project: Pleiades (TypeScript, discord.js, MongoDB)
 
 Multi-personality Discord bot framework with a layered plugin
 architecture, a typed manual IoC container, Repository-pattern

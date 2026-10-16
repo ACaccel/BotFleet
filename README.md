@@ -1,4 +1,4 @@
-# BotFleet
+# Pleiades
 
 A multi-personality Discord bot framework built with TypeScript, discord.js and MongoDB.
 Each bot runs as its own process and composes its features from a shared plugin
@@ -110,8 +110,8 @@ Every bot shares the framework capabilities:
 ## Quick start
 
 ```bash
-git clone https://github.com/ACaccel/BotFleet.git
-cd BotFleet
+git clone https://github.com/ACaccel/pleiades-fleet.git
+cd pleiades-fleet
 CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-env.sh
 export PATH="$PWD/.conda/bin:$PATH"
 cp src/bot/nijika/config.example.json src/bot/nijika/config.json

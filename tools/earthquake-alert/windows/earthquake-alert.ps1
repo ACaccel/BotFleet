@@ -22,12 +22,12 @@ $AppTestAlert = @{
     epicenterLat = 23.85; epicenterLon = 120.82; depthKm = 10; magnitude = 7.3
     maxIntensity = '7'; localIntensity = '5+'; remainingSeconds = 20
 }
-$DataDir = Join-Path $env:LOCALAPPDATA 'BotFleet'
+$DataDir = Join-Path $env:LOCALAPPDATA 'Pleiades'
 $KeyFile = Join-Path $DataDir 'earthquake-alert.key'
 $LogFile = Join-Path $DataDir 'earthquake-alert.log'
 # Required: { "url": "https://<server>.<tailnet>.ts.net/earthquake/alerts" }
 $ConfigFile = Join-Path $PSScriptRoot 'earthquake-alert.config.json'
-$NoticeTitle = '地牛Wake Up! → BotFleet'
+$NoticeTitle = '地牛Wake Up! → Pleiades'
 
 # App argument -> request field and value kind. The repository's contract
 # test reads this table, so keep one entry per line in this exact shape.
@@ -231,7 +231,7 @@ function Invoke-Main {
         }
         Write-AlertLog "result=$outcome$details status=200 attempts=$attempts $summary"
         if ($outcome -eq 'test') {
-            Show-Notice '連線測試成功：BotFleet 已收到測試警報（測試不會發到 Discord）。' $false
+            Show-Notice '連線測試成功：Pleiades 已收到測試警報（測試不會發到 Discord）。' $false
         }
         return 0
     }

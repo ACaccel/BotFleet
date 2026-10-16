@@ -123,13 +123,13 @@ export function serviceOps(
           throw new Error('MongoDB service is not active');
         return;
       }
-      const bot = /^botfleet@([a-z-]+)\.service$/.exec(unit)?.[1];
+      const bot = /^pleiades@([a-z-]+)\.service$/.exec(unit)?.[1];
       if (!bot) throw new Error('Invalid bot service');
       while (Date.now() < deadline) {
         const state = field(unit, 'ActiveState');
         if (state === 'failed') throw new Error(`${unit} failed; inspect journalctl -u ${unit}`);
         const pid = Number(field(unit, 'MainPID'));
-        const readyFile = `/run/botfleet-${bot}/ready.json`;
+        const readyFile = `/run/pleiades-${bot}/ready.json`;
         if (state === 'active' && existsSync(readyFile)) {
           try {
             if (

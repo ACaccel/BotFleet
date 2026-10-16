@@ -66,7 +66,7 @@ describe('openInspectConnection', () => {
   it('returns a connection for a read-only account', async () => {
     state.status = authenticated(['find', 'listDatabases']);
     const connection = await openInspectConnection('mongodb://inspector@db.example.com');
-    expect(state.options).toMatchObject({ appName: 'botfleet-db-inspect' });
+    expect(state.options).toMatchObject({ appName: 'pleiades-db-inspect' });
     expect(state.closed).toBe(0);
     expect(await connection.listGuildDatabases()).toEqual([
       { name: '123456789012345678', sizeOnDisk: 8 },

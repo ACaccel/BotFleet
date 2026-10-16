@@ -100,9 +100,9 @@ describe('backup arguments', () => {
     await expect(backup.readUri(file)).resolves.toBe(local('127.0.0.1:27017/?authSource=admin'));
     await fs.writeFile(file, `MONGO_URI=${local('127.0.0.1:27017')}\n`);
     await expect(backup.readUri(file)).resolves.toBe(local('127.0.0.1:27017/?authSource=admin'));
-    await fs.writeFile(file, `MONGO_URI=${local('localhost/botfleet?tls=false')}\n`);
+    await fs.writeFile(file, `MONGO_URI=${local('localhost/pleiades?tls=false')}\n`);
     await expect(backup.readUri(file)).resolves.toBe(
-      local('localhost/?tls=false&authSource=botfleet'),
+      local('localhost/?tls=false&authSource=pleiades'),
     );
     await fs.writeFile(file, 'MONGO_URI=https://example.invalid\n');
     await expect(backup.readUri(file)).rejects.toThrow(/mongodb: scheme/);
@@ -234,28 +234,28 @@ describe('install', () => {
   };
 
   it('derives settings from deployment.json', async () => {
-    await deployment({ user: 'botfleet', bots: ['nijika'], mongodb });
+    await deployment({ user: 'pleiades', bots: ['nijika'], mongodb });
     expect(await installer.readSettings(root)).toEqual({
       root,
-      user: 'botfleet',
+      user: 'pleiades',
       node: path.join(root, '.conda/bin/node'),
       mongoPrefix: '/srv/mongo/.conda',
       envFile: '/srv/bot/src/bot/nijika/.env',
-      backupDir: '/var/backups/botfleet',
+      backupDir: '/var/backups/pleiades',
       keep: 3,
     });
-    await deployment({ user: 'botfleet', runtimePrefix: '/opt/node', mongodb });
+    await deployment({ user: 'pleiades', runtimePrefix: '/opt/node', mongodb });
     const custom = await installer.readSettings(root, { backupDir: '/data/bk', keep: '7' });
     expect(custom).toMatchObject({ node: '/opt/node/bin/node', backupDir: '/data/bk', keep: 7 });
   });
 
   it('rejects missing MongoDB settings, root and invalid overrides', async () => {
     await expect(installer.readSettings(root)).rejects.toThrow(/Configure deployment.json/);
-    await deployment({ user: 'botfleet' });
+    await deployment({ user: 'pleiades' });
     await expect(installer.readSettings(root)).rejects.toThrow(/mongodb is required/);
     await deployment({ user: 'root', mongodb });
     await expect(installer.readSettings(root)).rejects.toThrow(/ordinary service user/);
-    await deployment({ user: 'botfleet', mongodb });
+    await deployment({ user: 'pleiades', mongodb });
     await expect(installer.readSettings(root, { keep: '-1' })).rejects.toThrow(/positive/);
     await expect(installer.readSettings(root, { backupDir: 'rel' })).rejects.toThrow(/--dir/);
     await expect(installer.readSettings(root, { backupDir: '/a b' })).rejects.toThrow(/--dir/);
@@ -265,22 +265,22 @@ describe('install', () => {
   it('renders a hardened oneshot service and a persistent daily timer', async () => {
     const units = installer.renderUnits({
       root: '/srv/bot',
-      user: 'botfleet',
+      user: 'pleiades',
       node: '/srv/bot/.conda/bin/node',
       mongoPrefix: '/srv/mongo/100%$',
       envFile: '/srv/bot/src/bot/nijika/.env',
-      backupDir: '/var/backups/botfleet',
+      backupDir: '/var/backups/pleiades',
       keep: 7,
     });
-    const service = units['botfleet-mongo-backup.service'];
-    const timer = units['botfleet-mongo-backup.timer'];
-    expect(service).toMatch(/^# Managed by BotFleet: \/srv\/bot\n/);
-    expect(service).toContain('Type=oneshot\nUser=botfleet\n');
+    const service = units['pleiades-mongo-backup.service'];
+    const timer = units['pleiades-mongo-backup.timer'];
+    expect(service).toMatch(/^# Managed by Pleiades: \/srv\/bot\n/);
+    expect(service).toContain('Type=oneshot\nUser=pleiades\n');
     expect(service).toContain(
-      'ExecStart="/srv/bot/.conda/bin/node" "/srv/bot/tools/mongo-backup/backup.mjs" "--env-file" "/srv/bot/src/bot/nijika/.env" "--mongo-prefix" "/srv/mongo/100%%$$" "--out-dir" "/var/backups/botfleet" "--keep" "7"',
+      'ExecStart="/srv/bot/.conda/bin/node" "/srv/bot/tools/mongo-backup/backup.mjs" "--env-file" "/srv/bot/src/bot/nijika/.env" "--mongo-prefix" "/srv/mongo/100%%$$" "--out-dir" "/var/backups/pleiades" "--keep" "7"',
     );
     expect(service).toContain('ProtectSystem=strict\nProtectHome=read-only\n');
-    expect(service).toContain('ReadWritePaths=/var/backups/botfleet\n');
+    expect(service).toContain('ReadWritePaths=/var/backups/pleiades\n');
     expect(timer).toContain('OnCalendar=*-*-* 03:30:00\n');
     expect(timer).toContain('Persistent=true\n');
     expect(timer).toContain('WantedBy=timers.target\n');

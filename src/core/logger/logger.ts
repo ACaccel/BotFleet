@@ -57,7 +57,7 @@ interface CreateLoggerInput {
   readonly level: LogLevel;
   /** When true, route through pino-pretty for human-readable dev output. */
   readonly pretty: boolean;
-  /** Bound on every line (e.g. `{ env: 'production', service: 'botfleet' }`). */
+  /** Bound on every line (e.g. `{ env: 'production', service: 'pleiades' }`). */
   readonly base?: Readonly<Record<string, unknown>>;
   /**
    * Additional pino multistream sinks layered on top of the (optional)

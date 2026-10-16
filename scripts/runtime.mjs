@@ -4,7 +4,7 @@ import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const prefix = process.env.BOTFLEET_CONDA_PREFIX || join(root, '.conda');
+const prefix = process.env.PLEIADES_CONDA_PREFIX || join(root, '.conda');
 const node = join(prefix, 'bin', 'node');
 const npm = join(prefix, 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
 
@@ -25,7 +25,7 @@ function runtimeEnvironment() {
 }
 
 function requireRuntime() {
-  if (!isAbsolute(prefix)) throw new Error('BOTFLEET_CONDA_PREFIX must be an absolute path.');
+  if (!isAbsolute(prefix)) throw new Error('PLEIADES_CONDA_PREFIX must be an absolute path.');
   if (!existsSync(join(prefix, 'conda-meta', 'history')) || !existsSync(node) || !existsSync(npm)) {
     throw new Error('Project Conda runtime is missing. Run bash scripts/setup-env.sh first.');
   }

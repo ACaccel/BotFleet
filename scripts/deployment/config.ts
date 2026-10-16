@@ -40,9 +40,9 @@ export interface Release {
   config: DeploymentConfig;
   units: Record<string, string>;
 }
-export const botService = (bot: string): string => `botfleet@${bot}.service`;
-export const mongoService = 'mongodb-botfleet.service';
-export const ownerMarker = (root: string): string => `# Managed by BotFleet: ${root}\n`;
+export const botService = (bot: string): string => `pleiades@${bot}.service`;
+export const mongoService = 'mongodb-pleiades.service';
+export const ownerMarker = (root: string): string => `# Managed by Pleiades: ${root}\n`;
 const actions = [
   'prepare',
   'deploy',
@@ -147,7 +147,7 @@ export function validateRelease(input: unknown, root: string): Release {
     throw new Error('Invalid release manifest');
   for (const [name, content] of Object.entries(value.units)) {
     if (
-      !/^(?:botfleet@(tomori|nijika|msg-archive|konata|gopher)|mongodb-botfleet)\.service$/.test(
+      !/^(?:pleiades@(tomori|nijika|msg-archive|konata|gopher)|mongodb-pleiades)\.service$/.test(
         name,
       ) ||
       !content.startsWith(ownerMarker(root))

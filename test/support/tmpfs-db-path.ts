@@ -20,7 +20,7 @@ const TMPFS_ROOT = '/dev/shm';
 export const createTmpfsDbPath = (): string | undefined => {
   try {
     accessSync(TMPFS_ROOT, constants.W_OK);
-    return mkdtempSync(join(TMPFS_ROOT, 'botfleet-int-mongo-'));
+    return mkdtempSync(join(TMPFS_ROOT, 'pleiades-int-mongo-'));
   } catch {
     return undefined;
   }

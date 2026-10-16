@@ -22,7 +22,7 @@ import {
 /** @typedef {{version:string,databases:{name:string,collections:unknown[]}[]}} DatabaseInventory */
 /** @typedef {{MONGODB_VERSION:string,MONGO_TOOLS_VERSION:string,NODE_VERSION:string,NPM_VERSION:string,MONGOSH_VERSION:string}} Runtime */
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
-const usage = `Usage (inside a BotFleet git checkout):
+const usage = `Usage (inside a Pleiades git checkout):
   migration.sh inspect
   migration.sh export --writers-stopped
   migration.sh restore /absolute/backup-directory [--mongo-dir /absolute/path]
@@ -101,8 +101,8 @@ async function mongo(config, request) {
         env: {
           ...environment(config),
           HOME: home,
-          BOTFLEET_MIGRATION_REQUEST: filename,
-          BOTFLEET_MIGRATION_HELPER: path.join(toolDir, 'mongo.cjs'),
+          PLEIADES_MIGRATION_REQUEST: filename,
+          PLEIADES_MIGRATION_HELPER: path.join(toolDir, 'mongo.cjs'),
         },
       },
     );
@@ -193,7 +193,7 @@ async function noWriters(config) {
       (cwd === config.repo || command.includes(`${config.repo}/`)) &&
       /(?:ts-node|node|npm|yarn).*src\/bot\/[^/]+\/index\.(?:ts|js)/.test(command)
     )
-      fail('A BotFleet writer is still running; stop it before exporting or restoring.');
+      fail('A Pleiades writer is still running; stop it before exporting or restoring.');
   }
 }
 
@@ -501,7 +501,7 @@ async function main() {
     path.resolve(
       repo,
       (
-        await run('git', ['rev-parse', '--git-path', 'botfleet-migration'], { cwd: repo })
+        await run('git', ['rev-parse', '--git-path', 'pleiades-migration'], { cwd: repo })
       ).text.trim(),
     ),
   );

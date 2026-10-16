@@ -22,7 +22,7 @@ import type { LinkPreviewFailure } from '../types';
 import { createVideoLookup } from '../video-client';
 
 /** Identifies the bot to upstreams rather than impersonating a browser. */
-const USER_AGENT = 'BotFleet-link-preview/1.0 (+https://github.com/ACaccel/BotFleet)';
+const USER_AGENT = 'Pleiades-link-preview/1.0 (+https://github.com/ACaccel/pleiades-fleet)';
 const MAX_REDIRECTS = 3;
 /** Ceiling on a metadata body; a long wnacg index page is well under this. */
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;

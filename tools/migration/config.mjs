@@ -35,7 +35,7 @@ export async function loadConfig(repo, filename, activeEnvironment = process.env
   if (!(await fs.stat(path.join(databaseEnvironment, 'conda-meta/history'))).isFile())
     fail('databaseEnvironment must point to a conda environment.');
   const backupDir = await safePath(
-    settings.backupDir ?? path.join(path.dirname(repo), 'botfleet-backups'),
+    settings.backupDir ?? path.join(path.dirname(repo), 'pleiades-backups'),
   );
   const mongoEnv = settings.mongoEnv ?? 'src/bot/tomori/.env';
   if (
@@ -62,7 +62,7 @@ export async function loadConfig(repo, filename, activeEnvironment = process.env
     databaseEnvironment,
     mongoEnv,
     backupDir,
-    stateDir: path.join(repo, '.git/botfleet-migration'),
+    stateDir: path.join(repo, '.git/pleiades-migration'),
   };
 }
 

@@ -9,7 +9,7 @@ import { botUnit, mongoUnit } from '../../../scripts/deployment/units';
 // Deployment targets Linux hosts with systemd; verification never installs or starts these units.
 describe('systemd static verification', () => {
   it('accepts bot and database units with spaces, percent and dollar characters in paths', () => {
-    const temporary = mkdtempSync(join(tmpdir(), 'botfleet-systemd-'));
+    const temporary = mkdtempSync(join(tmpdir(), 'pleiades-systemd-'));
     try {
       const root = join(temporary, 'project space % literal $HOME');
       const directory = join(root, '.deploy/releases/example');
@@ -35,8 +35,8 @@ describe('systemd static verification', () => {
         }),
         units: {},
       };
-      const bot = join(directory, 'botfleet@nijika.service');
-      const database = join(directory, 'mongodb-botfleet.service');
+      const bot = join(directory, 'pleiades@nijika.service');
+      const database = join(directory, 'mongodb-pleiades.service');
       writeFileSync(bot, botUnit(release, 'nijika', true));
       writeFileSync(database, mongoUnit(release, join(directory, 'mongod.conf')));
       const result = spawnSync('systemd-analyze', ['verify', bot, database], { encoding: 'utf8' });

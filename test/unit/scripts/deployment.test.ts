@@ -34,8 +34,8 @@ vi.mock('node:fs', async (importOriginal) => ({
 
 vi.mock('../../../scripts/deployment/mongo-probe', () => ({ waitForMongo: vi.fn() }));
 
-const bot = 'botfleet@nijika.service';
-function release(root = '/srv/BotFleet'): Release {
+const bot = 'pleiades@nijika.service';
+function release(root = '/srv/pleiades-fleet'): Release {
   return {
     root,
     directory: `${root}/.deploy/releases/example`,
@@ -137,36 +137,36 @@ describe('deployment configuration and command boundaries', () => {
     const previous = {
       ...release(),
       units: {
-        'botfleet@tomori.service': 'old tomori',
-        'botfleet@nijika.service': 'old nijika',
+        'pleiades@tomori.service': 'old tomori',
+        'pleiades@nijika.service': 'old nijika',
       },
     };
     const next = {
       ...release(),
-      directory: '/srv/BotFleet/.deploy/releases/next',
-      units: { 'botfleet@tomori.service': 'new tomori' },
+      directory: '/srv/pleiades-fleet/.deploy/releases/next',
+      units: { 'pleiades@tomori.service': 'new tomori' },
     };
     expect(mergeTargetRelease(previous, next, 'tomori')).toEqual({
       ...next,
-      units: { 'botfleet@tomori.service': 'new tomori', 'botfleet@nijika.service': 'old nijika' },
+      units: { 'pleiades@tomori.service': 'new tomori', 'pleiades@nijika.service': 'old nijika' },
     });
     expect(mergeTargetRelease(undefined, next, 'tomori').units).toEqual(next.units);
     expect(() => mergeTargetRelease(previous, next, 'nijika')).toThrow('no service for nijika');
   });
   it('rejects release manifests outside this project release directory', () => {
     expect(() =>
-      validateRelease({ ...release(), directory: '/tmp/foreign' }, '/srv/BotFleet'),
+      validateRelease({ ...release(), directory: '/tmp/foreign' }, '/srv/pleiades-fleet'),
     ).toThrow();
     expect(() =>
       validateRelease(
-        { ...release(), directory: '/srv/BotFleet/.deploy/releases/../outside' },
-        '/srv/BotFleet',
+        { ...release(), directory: '/srv/pleiades-fleet/.deploy/releases/../outside' },
+        '/srv/pleiades-fleet',
       ),
     ).toThrow();
     expect(() => validateRelease(release(), '/srv/Other')).toThrow();
   });
   it('rejects malformed manifests and foreign or traversing unit names', () => {
-    const root = '/srv/BotFleet';
+    const root = '/srv/pleiades-fleet';
     for (const value of [
       null,
       {},
@@ -191,14 +191,14 @@ describe('systemd runtime and argument rendering', () => {
     expect(unit).toContain('Environment="CONDA_PREFIX=/srv/a b%%$HOME/.conda"');
     expect(unit).toContain('"/srv/a b%%$$HOME/.deploy/releases/example/src/bot/nijika/index.ts"');
     expect(unit).toContain('KillMode=control-group');
-    expect(unit).toContain('RuntimeDirectory=botfleet-nijika');
+    expect(unit).toContain('RuntimeDirectory=pleiades-nijika');
     expect(unit).toContain('ExecStartPre=');
-    expect(unit).toContain('Wants=network-online.target mongodb-botfleet.service');
+    expect(unit).toContain('Wants=network-online.target mongodb-pleiades.service');
   });
   it('omits database start dependencies and probes for a bot that does not use MongoDB', () => {
     const unit = botUnit(release(), 'gopher', false);
     expect(unit).not.toContain('ExecStartPre=');
-    expect(unit).not.toContain('mongodb-botfleet.service');
+    expect(unit).not.toContain('mongodb-pleiades.service');
   });
   it('uses the separate MongoDB executable and rejects line injection', () => {
     const unit = mongoUnit(release(), '/srv/db config%$HOME.json');
@@ -249,7 +249,7 @@ describe('service deployment transaction', () => {
     expect(state.journal()).toBeNull();
   });
   it('removes newly added units when another bot fails and preserves disabled existing services', async () => {
-    const second = 'botfleet@tomori.service';
+    const second = 'pleiades@tomori.service';
     const initial = { [bot]: { content: 'old', enabled: false, active: false } };
     const state = fakeOps(initial);
     vi.mocked(state.ops.ready).mockRejectedValueOnce(new Error('startup failed'));
@@ -260,7 +260,7 @@ describe('service deployment transaction', () => {
     expect(state.states[second]).toEqual(absent());
   });
   it('removes bot services without touching the MongoDB service', async () => {
-    const mongo = 'mongodb-botfleet.service';
+    const mongo = 'mongodb-pleiades.service';
     const state = fakeOps({
       [bot]: { content: 'bot', enabled: true, active: true },
       [mongo]: { content: 'db', enabled: true, active: true },
@@ -366,8 +366,8 @@ describe('host ownership checks', () => {
   }
   it('allows recovery to inspect and stop an auto-restarting unit while normal deployment refuses it', () => {
     fields({ ActiveState: 'activating', UnitFileState: 'enabled' });
-    expect(() => inspectUnit('/srv/BotFleet', bot)).toThrow('changing state');
-    expect(inspectUnit('/srv/BotFleet', bot, true)).toEqual({
+    expect(() => inspectUnit('/srv/pleiades-fleet', bot)).toThrow('changing state');
+    expect(inspectUnit('/srv/pleiades-fleet', bot, true)).toEqual({
       content: null,
       enabled: true,
       active: true,
@@ -389,23 +389,23 @@ describe('host ownership checks', () => {
     };
     previous.config.readinessTimeoutSeconds = 45;
     const ops = serviceOps(current, vi.fn(), previous);
-    await ops.ready('mongodb-botfleet.service');
+    await ops.ready('mongodb-pleiades.service');
     expect(waitForMongo).toHaveBeenLastCalledWith('/srv/new/probe.env', 120);
-    await ops.ready('mongodb-botfleet.service', true);
+    await ops.ready('mongodb-pleiades.service', true);
     expect(waitForMongo).toHaveBeenLastCalledWith('/srv/old/probe.env', 45);
   });
   it('refuses foreign fragments and drop-in overrides', () => {
     fields({ FragmentPath: `/usr/lib/systemd/system/${bot}` });
-    expect(() => inspectUnit('/srv/BotFleet', bot)).toThrow('another service definition');
+    expect(() => inspectUnit('/srv/pleiades-fleet', bot)).toThrow('another service definition');
     vi.resetAllMocks();
     fields({ DropInPaths: '/etc/systemd/system/override.conf' });
-    expect(() => inspectUnit('/srv/BotFleet', bot)).toThrow('overrides');
+    expect(() => inspectUnit('/srv/pleiades-fleet', bot)).toThrow('overrides');
   });
   it('refuses same-name units owned by another checkout', () => {
     fields({ FragmentPath: `/etc/systemd/system/${bot}` });
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.lstatSync).mockReturnValue({ isFile: () => true } as fs.Stats);
     vi.mocked(fs.readFileSync).mockReturnValue(ownerMarker('/srv/Other'));
-    expect(() => inspectUnit('/srv/BotFleet', bot)).toThrow('unmanaged');
+    expect(() => inspectUnit('/srv/pleiades-fleet', bot)).toThrow('unmanaged');
   });
 });

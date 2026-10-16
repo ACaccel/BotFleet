@@ -81,7 +81,7 @@ function validateJournal(journal: Journal): void {
     throw new Error('Invalid recovery journal owner or state');
   for (const [name, state] of Object.entries(journal.transaction.before)) {
     if (
-      !/^(?:botfleet@(tomori|nijika|msg-archive|konata|gopher)|mongodb-botfleet)\.service$/.test(
+      !/^(?:pleiades@(tomori|nijika|msg-archive|konata|gopher)|mongodb-pleiades)\.service$/.test(
         name,
       )
     )

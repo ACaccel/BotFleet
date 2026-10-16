@@ -16,18 +16,18 @@ const install = '\n[Install]\nWantedBy=multi-user.target\n';
 export function botUnit(release: Release, bot: string, needsDatabase: boolean): string {
   const node = join(release.prefix, 'bin/node');
   const args = [node, '-r', 'ts-node/register', '-r', 'tsconfig-paths/register'];
-  const runtime = `botfleet-${bot}`;
+  const runtime = `pleiades-${bot}`;
   let body = header(
     release,
-    `BotFleet ${bot}`,
-    needsDatabase && release.config.mongodb ? 'mongodb-botfleet.service' : '',
+    `Pleiades ${bot}`,
+    needsDatabase && release.config.mongodb ? 'mongodb-pleiades.service' : '',
   );
   if (needsDatabase && release.config.mongodb)
     body = body.replace(
       'Wants=network-online.target',
-      'Wants=network-online.target mongodb-botfleet.service',
+      'Wants=network-online.target mongodb-pleiades.service',
     );
-  body += `Environment=${quote(`PATH=${release.prefix}/bin:${release.directory}/node_modules/.bin:/usr/bin:/bin`)}\nEnvironment=${quote(`CONDA_PREFIX=${release.prefix}`)}\nEnvironment=NODE_ENV=production\nEnvironment=${quote(`TS_NODE_PROJECT=${release.directory}/tsconfig.json`)}\nEnvironment=${quote(`BOTFLEET_READY_FILE=/run/${runtime}/ready.json`)}\nRuntimeDirectory=${runtime}\nRuntimeDirectoryMode=0700\nTimeoutStartSec=${release.config.readinessTimeoutSeconds + 15}\n`;
+  body += `Environment=${quote(`PATH=${release.prefix}/bin:${release.directory}/node_modules/.bin:/usr/bin:/bin`)}\nEnvironment=${quote(`CONDA_PREFIX=${release.prefix}`)}\nEnvironment=NODE_ENV=production\nEnvironment=${quote(`TS_NODE_PROJECT=${release.directory}/tsconfig.json`)}\nEnvironment=${quote(`PLEIADES_READY_FILE=/run/${runtime}/ready.json`)}\nRuntimeDirectory=${runtime}\nRuntimeDirectoryMode=0700\nTimeoutStartSec=${release.config.readinessTimeoutSeconds + 15}\n`;
   if (needsDatabase)
     body += `ExecStartPre=${command([...args, join(release.directory, 'scripts/mongo-ready.ts'), join(release.directory, 'src/bot', bot, '.env'), String(release.config.readinessTimeoutSeconds)])}\n`;
   body += `ExecStart=${command([...args, join(release.directory, 'src/bot', bot, 'index.ts')])}\n`;
@@ -37,7 +37,7 @@ export function mongoUnit(release: Release, configFile: string): string {
   const mongo = release.config.mongodb;
   if (!mongo) throw new Error('mongodb configuration is required');
   return (
-    header(release, 'BotFleet MongoDB', '') +
+    header(release, 'Pleiades MongoDB', '') +
     `Environment=${quote(`PATH=${mongo.prefix}/bin:/usr/bin:/bin`)}\nEnvironment=${quote(`CONDA_PREFIX=${mongo.prefix}`)}\nTimeoutStartSec=${release.config.readinessTimeoutSeconds + 15}\nLimitNOFILE=64000\nExecStart=${command([join(mongo.prefix, 'bin/mongod'), '--config', configFile])}\n` +
     install
   );

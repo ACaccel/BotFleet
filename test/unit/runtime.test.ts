@@ -10,12 +10,12 @@ let prefix: string;
 function run(...args: string[]) {
   return spawnSync(process.execPath, [launcher, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, BOTFLEET_CONDA_PREFIX: prefix, PATH: '/usr/bin:/bin' },
+    env: { ...process.env, PLEIADES_CONDA_PREFIX: prefix, PATH: '/usr/bin:/bin' },
   });
 }
 
 beforeEach(() => {
-  prefix = mkdtempSync(join(tmpdir(), 'botfleet-runtime-'));
+  prefix = mkdtempSync(join(tmpdir(), 'pleiades-runtime-'));
   mkdirSync(join(prefix, 'bin'));
   mkdirSync(join(prefix, 'conda-meta'));
   mkdirSync(join(prefix, 'lib/node_modules/npm/bin'), { recursive: true });
@@ -92,7 +92,7 @@ else console.log(JSON.stringify({ args: process.argv.slice(2), manager: process.
     const stopped = join(prefix, 'stopped');
     const script = `const fs=require('node:fs');process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(stopped)},'stopped');process.exit(0)});fs.writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000);`;
     const child = spawn(process.execPath, [launcher, 'exec', 'node', '-e', script], {
-      env: { ...process.env, BOTFLEET_CONDA_PREFIX: prefix },
+      env: { ...process.env, PLEIADES_CONDA_PREFIX: prefix },
       stdio: 'ignore',
     });
     const closed = new Promise((resolveClose) => child.once('close', resolveClose));

@@ -26,7 +26,7 @@ import {
 
 import { condaFontPath } from './canvas-font';
 
-const EMOJI_FONT_FAMILY = 'BotFleet Emoji';
+const EMOJI_FONT_FAMILY = 'Pleiades Emoji';
 const EMOJI_FONT_FILE = 'NotoColorEmoji.ttf';
 /** The font's only bitmap strike; drawing at this size needs no glyph scaling. */
 const NATIVE_FONT_SIZE = 109;

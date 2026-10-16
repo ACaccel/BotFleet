@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-project_prefix="${BOTFLEET_CONDA_PREFIX:-$project_root/.conda}"
+project_prefix="${PLEIADES_CONDA_PREFIX:-$project_root/.conda}"
 if [[ "$project_prefix" != /* ]]; then
-  echo 'BOTFLEET_CONDA_PREFIX must be an absolute path.' >&2
+  echo 'PLEIADES_CONDA_PREFIX must be an absolute path.' >&2
   exit 1
 fi
 if [[ -f "$project_root/.deploy/current.json" || -e "$project_root/.deploy/transaction.json" || -e "$project_root/.deploy/lock" ]]; then

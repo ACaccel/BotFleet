@@ -50,17 +50,17 @@ describe('loadEnv', () => {
         exitOnFailure: false,
         source: {
           ...validBase,
-          BOTFLEET_READY_FILE: '/run/botfleet/ready.json',
+          PLEIADES_READY_FILE: '/run/pleiades/ready.json',
         },
-      }).BOTFLEET_READY_FILE,
-    ).toBe('/run/botfleet/ready.json');
+      }).PLEIADES_READY_FILE,
+    ).toBe('/run/pleiades/ready.json');
     for (const value of ['', 'ready.json']) {
       expect(() =>
         loadEnv({
           exitOnFailure: false,
           source: {
             ...validBase,
-            BOTFLEET_READY_FILE: value,
+            PLEIADES_READY_FILE: value,
           },
         }),
       ).toThrow(EnvLoadError);
@@ -225,7 +225,7 @@ describe('loadEnv', () => {
       expect(() =>
         loadEnv({
           exitOnFailure: false,
-          envFile: '/tmp/botfleet-no-such-file.env',
+          envFile: '/tmp/pleiades-no-such-file.env',
         }),
       ).toThrow(EnvLoadError);
       const issues = stderrCapture

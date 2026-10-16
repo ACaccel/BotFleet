@@ -103,7 +103,7 @@ const requireGuildDatabaseName = (name: string): string => {
 /** Open the inspection client and verify that its account cannot write. */
 export const openInspectConnection = async (uri: string): Promise<InspectConnection> => {
   const client = new mongoose.mongo.MongoClient(uri, {
-    appName: 'botfleet-db-inspect',
+    appName: 'pleiades-db-inspect',
     maxPoolSize: 4,
     serverSelectionTimeoutMS: 10_000,
   });

@@ -1,4 +1,4 @@
-// Online backup of every BotFleet application database, run daily by systemd.
+// Online backup of every Pleiades application database, run daily by systemd.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';

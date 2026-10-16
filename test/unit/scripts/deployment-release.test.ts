@@ -31,7 +31,7 @@ function file(relative: string, content = ''): string {
   return filename;
 }
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'botfleet-release-'));
+  root = mkdtempSync(join(tmpdir(), 'pleiades-release-'));
   file('.conda/conda-meta/history');
   file('.conda/bin/node');
   file('src/bot/tomori/index.ts', 'export const revision = 1;');
@@ -71,8 +71,8 @@ describe('release preparation', () => {
 
     const release = makeRelease(root, config, false);
 
-    expect(release.units['botfleet@gopher.service']).toContain('src/bot/gopher/index.ts');
-    expect(release.units['botfleet@gopher.service']).not.toContain('mongo-ready');
+    expect(release.units['pleiades@gopher.service']).toContain('src/bot/gopher/index.ts');
+    expect(release.units['pleiades@gopher.service']).not.toContain('mongo-ready');
   });
 
   it('validates and generates only the targeted bot', () => {
@@ -82,7 +82,7 @@ describe('release preparation', () => {
 
     const release = makeRelease(root, config, false, 'tomori');
 
-    expect(Object.keys(release.units)).toEqual(['botfleet@tomori.service']);
+    expect(Object.keys(release.units)).toEqual(['pleiades@tomori.service']);
     expect(() => makeRelease(root, config, false)).toThrow('Missing local env for nijika');
   });
 
@@ -116,7 +116,7 @@ describe('release preparation', () => {
     expect(readFileSync(join(release.directory, 'src/bot/tomori/config.json'), 'utf8')).toBe(
       '{"language":"en"}',
     );
-    expect(release.units['botfleet@tomori.service']).toContain(join(root, '.conda/bin/node'));
+    expect(release.units['pleiades@tomori.service']).toContain(join(root, '.conda/bin/node'));
     expect(
       commands.run.mock.calls.some(([, args]) =>
         args.includes(
@@ -191,7 +191,7 @@ describe('MongoDB service preparation', () => {
       ...original,
       processManagement: { fork: false },
     });
-    expect(release.units['mongodb-botfleet.service']).toContain(join(prefix, 'bin/mongod'));
+    expect(release.units['mongodb-pleiades.service']).toContain(join(prefix, 'bin/mongod'));
     expect(
       commands.run.mock.calls.some(([program]) => program === 'sudo' || program === 'systemctl'),
     ).toBe(false);

@@ -2,14 +2,14 @@
 
 ## Runtime setup
 
-Follow [local setup](local-setup.md#prerequisites). `BOTFLEET_CONDA_PREFIX` selects
+Follow [local setup](local-setup.md#prerequisites). `PLEIADES_CONDA_PREFIX` selects
 an absolute prefix instead of `.conda`; services use its Node directly. Keep the
 runtime available while deployed.
 
 For a managed local database, create an independent runtime:
 
 ```bash
-CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-mongo.sh "$HOME/mongodb-botfleet/.conda"
+CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-mongo.sh "$HOME/mongodb-pleiades/.conda"
 ```
 
 Setup does not start MongoDB or create/move data. Both setup scripts reject
@@ -70,13 +70,13 @@ keep their units, so they keep running their previous release until the next ful
 or the MongoDB settings to every unit. Inspect bots with:
 
 ```bash
-sudo systemctl restart botfleet@nijika.service
-systemctl status botfleet@nijika.service
-journalctl -u botfleet@nijika.service -f
+sudo systemctl restart pleiades@nijika.service
+systemctl status pleiades@nijika.service
+journalctl -u pleiades@nijika.service -f
 ```
 
-The database unit is `mongodb-botfleet.service`. Its daily backup runs as
-`botfleet-mongo-backup.service`, outside the deployment transaction; see the
+The database unit is `mongodb-pleiades.service`. Its daily backup runs as
+`pleiades-mongo-backup.service`, outside the deployment transaction; see the
 [backup guide](../../tools/mongo-backup/README.md).
 
 For gopher endpoint changes, follow

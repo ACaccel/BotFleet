@@ -155,7 +155,7 @@ async function readInventory(connection, databases, EJSON) {
 async function main({ connect, EJSON }) {
   let stage = 'request';
   try {
-    const request = readPrivateRequest(process.env.BOTFLEET_MIGRATION_REQUEST);
+    const request = readPrivateRequest(process.env.PLEIADES_MIGRATION_REQUEST);
     let databases = request.action === 'discover' ? [] : validateDatabases(request.databases);
     if (
       !['discover', 'inventory', 'empty', 'create-user', 'verify', 'ping'].includes(request.action)

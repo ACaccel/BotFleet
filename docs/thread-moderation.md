@@ -39,7 +39,7 @@ this bot's message-update subscribers, but do not delete older messages.
 
 Nijika also deletes public messages from any bot when their origin can be
 attributed to a currently banned user in the same thread. This includes other
-BotFleet personalities and external apps. Discord interaction metadata identifies
+Pleiades personalities and external apps. Discord interaction metadata identifies
 the command or component initiator and takes precedence over reply references.
 Otherwise, an ordinary same-thread reply reference can identify the original
 author, including through up to three linked replies or saved source records.

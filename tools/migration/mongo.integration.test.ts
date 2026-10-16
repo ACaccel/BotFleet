@@ -96,7 +96,7 @@ async function stop(child: ChildProcess): Promise<void> {
 it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
   'exports and restores all application data with %s runtimes',
   async (layout) => {
-    const directory = mkdtempSync(join(tmpdir(), 'botfleet-mongo-drill-'));
+    const directory = mkdtempSync(join(tmpdir(), 'pleiades-mongo-drill-'));
     const children: ChildProcess[] = [];
     const password = 'isolated-drill-password';
     const user = 'migration_drill';
@@ -150,21 +150,21 @@ it.skipIf(!binDirectory).each(['combined', 'split'] as const)(
       return run('mongosh', ['--nodb', '--quiet', '--file', join(__dirname, 'mongo-run.cjs')], {
         ...testEnvironment,
         HOME: shellHome,
-        BOTFLEET_MIGRATION_REQUEST: request,
-        BOTFLEET_MIGRATION_HELPER: helper,
+        PLEIADES_MIGRATION_REQUEST: request,
+        PLEIADES_MIGRATION_HELPER: helper,
       });
     }
     function execute(uri: string, script: string): void {
       const request = privateFile({ uri });
       const filename = privateFile(
-        `const fs = require('node:fs');\nconst request = JSON.parse(fs.readFileSync(process.env.BOTFLEET_MIGRATION_REQUEST, 'utf8'));\nconst connection = connect(request.uri);\nconst database = connection.getSiblingDB('migration_drill');\n${script}`,
+        `const fs = require('node:fs');\nconst request = JSON.parse(fs.readFileSync(process.env.PLEIADES_MIGRATION_REQUEST, 'utf8'));\nconst connection = connect(request.uri);\nconst database = connection.getSiblingDB('migration_drill');\n${script}`,
         '.cjs',
       );
       succeed(
         run('mongosh', ['--nodb', '--quiet', '--file', filename], {
           ...testEnvironment,
           HOME: shellHome,
-          BOTFLEET_MIGRATION_REQUEST: request,
+          PLEIADES_MIGRATION_REQUEST: request,
         }),
       );
     }

@@ -9,8 +9,8 @@ Integration tests use `mongodb-memory-server`, with its data on `/dev/shm` when
 that tmpfs is writable (Linux) and in the default temporary directory otherwise.
 
 ```bash
-git clone git@github.com:ACaccel/BotFleet.git
-cd BotFleet
+git clone git@github.com:ACaccel/pleiades-fleet.git
+cd pleiades-fleet
 CONDA_EXE="$HOME/miniforge3/bin/conda" bash scripts/setup-env.sh
 export PATH="$PWD/.conda/bin:$PATH"
 ```

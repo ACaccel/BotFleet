@@ -60,7 +60,7 @@ function existingConda(withEnvironment = false): void {
 
 describe('migration bootstrap', () => {
   beforeEach(() => {
-    directory = mkdtempSync(path.join(tmpdir(), 'botfleet-bootstrap-'));
+    directory = mkdtempSync(path.join(tmpdir(), 'pleiades-bootstrap-'));
     prefix = path.join(directory, 'conda runtime');
     log = path.join(directory, 'commands.log');
     runtime = path.join(directory, 'runtime.conf');

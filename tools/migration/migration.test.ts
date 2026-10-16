@@ -111,8 +111,8 @@ describe('runtime configuration', () => {
     const result = await loadConfig(repo, undefined, environment);
     expect(result.environment).toBe(environment);
     expect(result.mongoEnv).toBe('src/bot/tomori/.env');
-    expect(result.backupDir).toBe(path.join(root, 'botfleet-backups'));
-    expect(result.stateDir).toBe(path.join(repo, '.git/botfleet-migration'));
+    expect(result.backupDir).toBe(path.join(root, 'pleiades-backups'));
+    expect(result.stateDir).toBe(path.join(repo, '.git/pleiades-migration'));
   });
   it('accepts project-local application and separate database environments', async () => {
     const app = path.join(repo, '.conda');
@@ -217,7 +217,7 @@ describe('simplified CLI failures', () => {
     await fs.writeFile(path.join(repo, 'package.json'), '{}\n');
     const result = invoke(['restore', directory]);
     expect(result.stderr).toContain('tracked changes');
-    expect(await exists(path.join(repo, '.git/botfleet-migration/lock'))).toBe(false);
+    expect(await exists(path.join(repo, '.git/pleiades-migration/lock'))).toBe(false);
   });
   it('does not accept a database version prefix match', async () => {
     const directory = await backup({ mongoVersion: '7.0.3' });
@@ -245,7 +245,7 @@ describe('simplified CLI failures', () => {
     const directory = await backup({ mongoPort: 0 });
     const result = invoke(['restore', directory]);
     expect(result.stderr).toContain('Invalid backup MongoDB port');
-    expect(await exists(path.join(repo, '.git/botfleet-migration/restored.json'))).toBe(false);
+    expect(await exists(path.join(repo, '.git/pleiades-migration/restored.json'))).toBe(false);
   });
   it('checks standalone JavaScript module types', () => {
     const project = path.resolve(__dirname, '../..');

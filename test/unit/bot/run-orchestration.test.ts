@@ -239,9 +239,9 @@ describe('deployment startup readiness', () => {
   let bot: MinimalBot | undefined;
 
   beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'botfleet-ready-'));
+    directory = mkdtempSync(join(tmpdir(), 'pleiades-ready-'));
     marker = join(directory, 'ready.json');
-    vi.stubEnv('BOTFLEET_READY_FILE', marker);
+    vi.stubEnv('PLEIADES_READY_FILE', marker);
     vi.stubEnv('TOKEN', 'real-bot-token-value');
     vi.stubEnv('CLIENT_ID', '123456789012345678');
     vi.stubEnv('MONGO_URI', 'mongodb://localhost:27017');

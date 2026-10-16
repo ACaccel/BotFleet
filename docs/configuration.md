@@ -34,7 +34,7 @@ placeholders fail startup; there is no root `.env.example`.
 | `MONGO_INSPECT_URI`                                                    | Read-only account for nijika's [`/db`](#database-inspection); required once `db` is enabled             |
 | `NOTIFY_API_PORT`                                                      | Optional konata [notification relay](#notification-relay-api) port (1–65535); blank means absent        |
 | `NOTIFY_API_KEY`                                                       | Relay bearer secret, at least 32 characters; required when `NOTIFY_API_PORT` is set                     |
-| `BOTFLEET_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup                                              |
+| `PLEIADES_READY_FILE`                                                  | Deployment-managed startup marker; omit for manual startup                                              |
 
 ### Log retention
 
@@ -505,7 +505,7 @@ configuration is validated and read once at startup. Gopher does not expose a
 settings HTTP API or rewrite its configuration.
 
 For a local process, stop it and run `npm run gopher` again. For a managed
-deployment, restart `botfleet@gopher.service`; its release links to the same
+deployment, restart `pleiades@gopher.service`; its release links to the same
 local configuration. See [deployment](contributing/deployment.md).
 
 ### Database inspection
@@ -633,7 +633,7 @@ for accepted structures and limits.
 | `job_poll_seconds`               | `5`             | Full-backup job polling and the idle inbox loop's recheck       |
 | `max_pending_events`             | `1000`          | In-process admission limit; ×10 sizes the changed-message table |
 | `max_inbox_bytes`                | `1000000000`    | Durable inbox allocation limit                                  |
-| `storage.budget_bytes`           | `100000000000`  | Entire BotFleet budget                                          |
+| `storage.budget_bytes`           | `100000000000`  | Entire Pleiades budget                                          |
 | `storage.background_limit_bytes` | `85000000000`   | Background work ceiling                                         |
 | `storage.reserve_bytes`          | `5000000000`    | Budget/filesystem headroom                                      |
 | `storage.mongo_data_root`        | auto-discovered | Explicit MongoDB data root if discovery is unavailable          |

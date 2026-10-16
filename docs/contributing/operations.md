@@ -33,8 +33,8 @@ Follow the [migration runbook](../../tools/migration/README.md) for host transfe
 
 ## Database backups
 
-`botfleet-mongo-backup.timer` dumps every application database daily into
-`/var/backups/botfleet` and keeps 3 snapshots. Install, check and restore steps are in
+`pleiades-mongo-backup.timer` dumps every application database daily into
+`/var/backups/pleiades` and keeps 3 snapshots. Install, check and restore steps are in
 the [backup guide](../../tools/mongo-backup/README.md).
 
 ## Recording removal rollout
@@ -72,7 +72,7 @@ To enable konata's [notification relay API](../configuration.md#notification-rel
    Preparation rejects a port without a key of at least 32 characters and a
    malformed route block.
 5. Check the startup line `notification relay API is listening on 127.0.0.1:<port>`
-   in `journalctl -u botfleet@konata.service`.
+   in `journalctl -u pleiades@konata.service`.
 
 The API listens on `127.0.0.1` only. To rotate the key, change both sides and
 redeploy konata; to disable it, remove `NOTIFY_API_PORT` and redeploy.
@@ -102,7 +102,7 @@ To enable Nijika or Tomori's [early-warning API](../configuration.md#early-warni
 5. Deploy nijika with `npm run deploy -t nijika` (see [deployment](deployment.md#commands)).
    Preparation rejects a port without a key of at least 32 characters and a malformed
    `earthquake_alert` block. Check the startup line `earthquake alert API is listening on 127.0.0.1:4000` in
-   `journalctl -u botfleet@nijika.service`.
+   `journalctl -u pleiades@nijika.service`.
 6. On Windows, install the scripts, the `earthquake-alert.config.json` holding
    `https://<server>.<tailnet>.ts.net/earthquake/alerts` and the key file, and point the app at
    `earthquake-alert.cmd` as described in

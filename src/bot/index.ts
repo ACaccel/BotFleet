@@ -737,8 +737,8 @@ export abstract class BaseBot<TConfig extends Config = Config> {
    */
   public run = async (callback?: () => Promise<void>): Promise<void> => {
     const rootLogger = this.setupContainer();
-    if (this.env?.BOTFLEET_READY_FILE !== undefined) {
-      this.serviceReadiness = new ServiceReadiness(this.env.BOTFLEET_READY_FILE);
+    if (this.env?.PLEIADES_READY_FILE !== undefined) {
+      this.serviceReadiness = new ServiceReadiness(this.env.PLEIADES_READY_FILE);
       this.client.on(Events.ShardReady, this.retryServiceReadiness);
       this.client.on(Events.ShardResume, this.retryServiceReadiness);
     }

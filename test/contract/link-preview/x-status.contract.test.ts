@@ -44,7 +44,7 @@ describe('x status API contract', () => {
     nock(PRIMARY, {
       reqheaders: {
         accept: 'application/json',
-        'user-agent': (value) => value.startsWith('BotFleet-link-preview/'),
+        'user-agent': (value) => value.startsWith('Pleiades-link-preview/'),
       },
     })
       .get(PATH)

@@ -85,7 +85,7 @@ export function makeRelease(
 ): Release {
   const bots = only ? [only] : config.bots;
   const prefix = realpathSync(
-    config.runtimePrefix ?? resolve(process.env.BOTFLEET_CONDA_PREFIX ?? join(root, '.conda')),
+    config.runtimePrefix ?? resolve(process.env.PLEIADES_CONDA_PREFIX ?? join(root, '.conda')),
   );
   validatePrefix(prefix, 'node');
   const version = run(join(prefix, 'bin/node'), ['--version']).trim();

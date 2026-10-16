@@ -124,7 +124,7 @@ Discord renderers use the shared [presentation color rules](docs/architecture.md
 ## Reporting a security vulnerability
 
 Report suspected vulnerabilities privately through
-[GitHub Security Advisories](https://github.com/ACaccel/BotFleet/security/advisories/new),
+[GitHub Security Advisories](https://github.com/ACaccel/pleiades-fleet/security/advisories/new),
 including affected paths, reproduction conditions, and impact. Do not open a
 public issue.
 

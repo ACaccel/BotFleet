@@ -19,7 +19,7 @@ transfer: it stops writers, includes ignored runtime files and recreates users.
   run may be missing; collections are not a single point-in-time snapshot. MongoDB users
   and roles in `admin` are not included.
 
-Defaults: `--dir /var/backups/botfleet`, `--keep 3`. The directory must be an absolute
+Defaults: `--dir /var/backups/pleiades`, `--keep 3`. The directory must be an absolute
 path of letters, digits, `.`, `_`, `-` and `/`. One snapshot of the 2026-10 production
 data was about 390 MB and took about 70 seconds.
 
@@ -30,7 +30,7 @@ prompt for sudo. Re-run to change options.
 
 ```bash
 npm run backup:install                      # or: -- --dir /path --keep 7
-sudo systemctl start botfleet-mongo-backup.service   # first snapshot now
+sudo systemctl start pleiades-mongo-backup.service   # first snapshot now
 ```
 
 Review the units without installing them:
@@ -41,21 +41,21 @@ Review the units without installing them:
 ## Check
 
 ```bash
-systemctl list-timers botfleet-mongo-backup.timer
-journalctl -u botfleet-mongo-backup.service -n 20
-ls /var/backups/botfleet
+systemctl list-timers pleiades-mongo-backup.timer
+journalctl -u pleiades-mongo-backup.service -n 20
+ls /var/backups/pleiades
 ```
 
 ## Restore
 
-1. Stop the bots that write the affected databases (`sudo systemctl stop botfleet@<bot>`).
+1. Stop the bots that write the affected databases (`sudo systemctl stop pleiades@<bot>`).
 2. Write a private credentials file, for example
    `install -m 600 /dev/null /tmp/restore.yml`, then add the line `uri: "<MONGO_URI>"`.
 3. Restore one database, replacing its current collections:
 
    ```bash
    <mongodb.prefix>/bin/mongorestore --config /tmp/restore.yml --gzip --drop \
-     --nsInclude '<database>.*' --dir /var/backups/botfleet/mongodb-<timestamp>
+     --nsInclude '<database>.*' --dir /var/backups/pleiades/mongodb-<timestamp>
    ```
 
    Omit `--nsInclude` to restore every database in the snapshot.

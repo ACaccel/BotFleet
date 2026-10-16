@@ -1,10 +1,10 @@
 {
-  "user": "botfleet",
+  "user": "pleiades",
   "bots": ["tomori", "nijika", "msg-archive"],
   "readinessTimeoutSeconds": 120,
   "mongodb": {
-    "prefix": "/home/botfleet/mongodb-botfleet/.conda",
-    "configFile": "/home/botfleet/mongodb-botfleet/mongod.conf",
-    "probeEnvFile": "/home/botfleet/BotFleet/src/bot/nijika/.env"
+    "prefix": "/home/pleiades/mongodb-pleiades/.conda",
+    "configFile": "/home/pleiades/mongodb-pleiades/mongod.conf",
+    "probeEnvFile": "/home/pleiades/pleiades-fleet/src/bot/nijika/.env"
   }
 }
