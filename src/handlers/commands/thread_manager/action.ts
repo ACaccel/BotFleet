@@ -41,11 +41,22 @@ export default class thread_manager extends Command {
       if (!bot.isAdmin(interaction.user.id)) throw new ThreadManagementError('manager_admin_only');
       if (!interaction.guild) throw new ThreadManagementError('thread_only');
       const repo = requireThreadRepo(bot, interaction.guild.id);
-      const thread = await resolveManagedThread(interaction.guild, targetThreadId(interaction));
       const action = interaction.options.getSubcommand();
       if (action === 'list') {
-        const users = [...unwrap(await repo.listManagers(bot.clientId, thread.id))].sort();
-        const pages = Math.max(1, Math.ceil(users.length / 20));
+        const selectedThread = interaction.options.getChannel('thread');
+        const thread = selectedThread
+          ? await resolveManagedThread(interaction.guild, selectedThread.id)
+          : undefined;
+        const assignments = thread
+          ? unwrap(await repo.listManagers(bot.clientId, thread.id)).map((userId) => ({
+              threadId: thread.id,
+              userId,
+            }))
+          : [...unwrap(await repo.listGuildManagers(bot.clientId))];
+        assignments.sort(
+          (a, b) => a.threadId.localeCompare(b.threadId) || a.userId.localeCompare(b.userId),
+        );
+        const pages = Math.max(1, Math.ceil(assignments.length / 20));
         const page = interaction.options.getInteger('page') ?? 1;
         if (!Number.isSafeInteger(page) || page < 1 || page > pages) {
           await interaction.editReply({
@@ -57,10 +68,15 @@ export default class thread_manager extends Command {
         }
         const header =
           bot.translator?.t(
-            `replies:thread_moderation.manager_${users.length ? 'list' : 'empty'}`,
-            { count: users.length, page, pages },
+            `replies:thread_moderation.manager_${thread ? '' : 'guild_'}${assignments.length ? 'list' : 'empty'}`,
+            { count: assignments.length, page, pages },
           ) ?? '';
-        const rows = users.slice((page - 1) * 20, page * 20).map((id) => `<@${id}> (\`${id}\`)`);
+        const rows = assignments
+          .slice((page - 1) * 20, page * 20)
+          .map(
+            ({ threadId, userId }) =>
+              `${thread ? '' : `<#${threadId}> — `}<@${userId}> (\`${userId}\`)`,
+          );
         await interaction.editReply({
           content: [header, ...rows].join('\n'),
           allowedMentions: { parse: [] },
@@ -68,6 +84,7 @@ export default class thread_manager extends Command {
         return;
       }
       if (action !== 'add' && action !== 'remove') throw new ThreadManagementError('claim_stale');
+      const thread = await resolveManagedThread(interaction.guild, targetThreadId(interaction));
       const user = interaction.options.getUser('user', true);
       if (action === 'add') {
         if (

@@ -1001,6 +1001,8 @@
     "manager_removed": "已撤銷 {{user}} 的代理管理權並取消其待審申請。原串主與管理員的既有權限不受影響。",
     "manager_list": "代理管理者共 {{count}} 位（第 {{page}}／{{pages}} 頁）。",
     "manager_empty": "此討論串目前沒有代理管理者。",
+    "manager_guild_list": "此伺服器的代理管理者設定共 {{count}} 筆（第 {{page}}／{{pages}} 頁）。",
+    "manager_guild_empty": "此 bot 在此伺服器尚未設定任何代理管理者。",
     "claim_no_access": "申請者必須是可存取目標討論串的伺服器成員。",
     "claim_owner_missing": "無法確認討論串原串主，請聯絡管理員。",
     "claim_reason_invalid": "請輸入 1 到 1000 字的申請原因。",

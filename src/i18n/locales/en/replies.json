@@ -1001,6 +1001,8 @@
     "manager_removed": "Removed delegated management for {{user}} and closed their pending requests. Original owner and admin authority is unchanged.",
     "manager_list": "Delegated managers: {{count}} (page {{page}}/{{pages}}).",
     "manager_empty": "This thread has no delegated managers.",
+    "manager_guild_list": "Delegated manager assignments on this server: {{count}} (page {{page}}/{{pages}}).",
+    "manager_guild_empty": "This bot has no delegated managers configured on this server.",
     "claim_no_access": "The applicant must be a member who can access the target thread.",
     "claim_owner_missing": "The thread owner could not be verified. Please contact an admin.",
     "claim_reason_invalid": "Enter a reason between 1 and 1000 characters.",

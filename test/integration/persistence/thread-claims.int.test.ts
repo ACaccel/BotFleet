@@ -157,6 +157,36 @@ describe('thread claims and managers (integration)', () => {
     });
   });
 
+  it('lists only configured managers for the selected bot and guild across threads', async () => {
+    await fixture(async (repo, conn) => {
+      expect(unwrap(await repo.listGuildManagers('bot'))).toEqual([]);
+      unwrap(await repo.setManager('bot', 'thread', 'user', 'admin', true, 1));
+      unwrap(await repo.setManager('bot', 'thread', 'other', 'admin', true, 2));
+      unwrap(await repo.setManager('bot', 'another-thread', 'user', 'admin', true, 3));
+      unwrap(await repo.setManager('other-bot', 'thread', 'excluded', 'admin', true, 4));
+      unwrap(await repo.setManager('bot', 'revoked', 'excluded', 'admin', true, 5));
+      unwrap(await repo.setManager('bot', 'revoked', 'excluded', 'admin', false, 6));
+      unwrap(await repo.setBlocked('bot', 'banned-only', ['blocked'], true));
+      await conn.models.ThreadModeration.collection.insertOne({
+        bot_id: 'bot',
+        thread_id: 'legacy',
+        blocked_user_ids: ['blocked'],
+      });
+      await fixture(async (otherGuildRepo) => {
+        unwrap(await otherGuildRepo.setManager('bot', 'thread', 'excluded', 'admin', true, 1));
+        const restarted = new MongoThreadModerationRepo(conn);
+        expect(unwrap(await restarted.listGuildManagers('bot'))).toEqual(
+          expect.arrayContaining([
+            { threadId: 'thread', userId: 'user' },
+            { threadId: 'thread', userId: 'other' },
+            { threadId: 'another-thread', userId: 'user' },
+          ]),
+        );
+        expect(unwrap(await restarted.listGuildManagers('bot'))).toHaveLength(3);
+      });
+    });
+  });
+
   it('never bans a manager during concurrent grants and bans', async () => {
     await fixture(async (repo, conn) => {
       for (let i = 0; i < 8; i++) {
@@ -277,6 +307,9 @@ describe('thread claims and managers (integration)', () => {
       const find = vi.spyOn(conn.models.ThreadModeration, 'findOne');
       find.mockImplementationOnce(failed);
       expect((await repo.listManagers('bot', 'thread')).ok).toBe(false);
+      const findMany = vi.spyOn(conn.models.ThreadModeration, 'find');
+      findMany.mockImplementationOnce(failed);
+      expect((await repo.listGuildManagers('bot')).ok).toBe(false);
       find.mockImplementationOnce(failed);
       expect((await repo.findClaim('bot', 'thread', 'claim')).ok).toBe(false);
       find.mockImplementationOnce(failed);

@@ -64,8 +64,9 @@ A replacement account can request management from any accessible guild channel:
 /thread claim thread:<thread> reason:<explanation>
 ```
 
-`thread` is optional here and in `/thread manager`: run inside the thread to
-target it directly.
+`thread` is optional here and in `/thread manager add` and `remove`: run inside
+the thread to target it directly. `/thread manager list` defaults to the whole
+server, including when run inside a thread; specify `thread` to filter it.
 
 The applicant must still be a guild member and able to view the target thread;
 private-thread membership is checked when required. Reasons accept 1–1000
@@ -102,6 +103,8 @@ An admin can manage delegates directly:
 ```text
 /thread manager add thread:<thread> user:@Replacement
 /thread manager remove thread:<thread> user:@Replacement
+/thread manager list
+/thread manager list page:2
 /thread manager list thread:<thread>
 /thread manager list thread:<thread> page:2
 ```
@@ -111,7 +114,11 @@ Removal works after the user leaves and rejects their outstanding requests, so
 old review buttons cannot restore revoked rights. Original owner/admin authority
 is unaffected. Grants clear existing thread bans, and delegates cannot be banned
 until their delegated management is revoked. The manager list is private, with
-20 entries per page. Grant/revoke and review actor/time are retained for auditing.
+20 assignments per page, scoped to this bot and server. The server-wide list
+shows each configured thread/user pair, sorted by thread ID then user ID, and
+excludes threads with no delegated managers. A user managing multiple threads
+appears once per thread. Specifying `thread` lists only that thread's managers.
+Grant/revoke and review actor/time are retained for auditing.
 
 ## Enable and operate
 

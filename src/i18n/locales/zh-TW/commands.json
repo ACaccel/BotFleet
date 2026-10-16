@@ -383,13 +383,13 @@
             }
           },
           "list": {
-            "description": "列出討論串的代理管理者",
+            "description": "列出代理管理者（預設為全伺服器）",
             "options": {
               "thread": {
-                "description": "目標討論串(預設為目前的討論串)"
+                "description": "只列出此討論串（省略時列出全伺服器）"
               },
               "page": {
-                "description": "頁碼（每頁 20 位）"
+                "description": "頁碼（每頁 20 筆設定）"
               }
             }
           }

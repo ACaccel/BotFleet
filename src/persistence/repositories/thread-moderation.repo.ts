@@ -17,6 +17,11 @@ export interface ThreadClaim {
   readonly delivery_completed_at?: number;
 }
 
+export interface ThreadManagerAssignment {
+  readonly threadId: string;
+  readonly userId: string;
+}
+
 export interface ThreadModerationRepo {
   recordMessageSource(
     botId: string,
@@ -35,6 +40,9 @@ export interface ThreadModerationRepo {
     userId: string,
   ): Promise<Result<boolean, DatabaseError>>;
   listManagers(botId: string, threadId: string): Promise<Result<readonly string[], DatabaseError>>;
+  listGuildManagers(
+    botId: string,
+  ): Promise<Result<readonly ThreadManagerAssignment[], DatabaseError>>;
   setManager(
     botId: string,
     threadId: string,
@@ -265,6 +273,23 @@ export class MongoThreadModerationRepo implements ThreadModerationRepo {
         .lean()
         .exec();
       return doc?.manager_ids ?? [];
+    });
+  }
+
+  public async listGuildManagers(
+    botId: string,
+  ): Promise<Result<readonly ThreadManagerAssignment[], DatabaseError>> {
+    return this.execute('listGuildManagers', async () => {
+      const docs = await this.conn.models.ThreadModeration.find({
+        bot_id: botId,
+        'manager_ids.0': { $exists: true },
+      })
+        .select({ thread_id: 1, manager_ids: 1, _id: 0 })
+        .lean()
+        .exec();
+      return docs.flatMap((doc) =>
+        doc.manager_ids.map((userId) => ({ threadId: doc.thread_id, userId })),
+      );
     });
   }
 

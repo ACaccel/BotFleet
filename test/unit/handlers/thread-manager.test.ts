@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import Thread from '../../../src/handlers/commands/thread';
 import { ok } from '../../../src/core/result';
+import type { ThreadModerationRepo } from '../../../src/persistence/repositories/thread-moderation.repo';
 import { buildFakeBot, echoTranslatorWithParams } from '../../fixtures/discord/bot-fake';
 import { buildGuild } from '../../fixtures/discord/guild-builder';
 import {
@@ -26,6 +27,8 @@ interface BuildOptions {
   readonly withParams?: boolean;
   /** Managers already granted on the thread. */
   readonly managers?: readonly string[];
+  readonly omitThread?: boolean;
+  readonly channelId?: string;
 }
 
 const build = (action = 'add', opts: BuildOptions = {}) => {
@@ -50,6 +53,7 @@ const build = (action = 'add', opts: BuildOptions = {}) => {
     ok(managers.has(user)),
   );
   const listManagers = vi.fn(async () => ok([...managers]));
+  const listGuildManagers = vi.fn<ThreadModerationRepo['listGuildManagers']>(async () => ok([]));
   const fetchMember = vi.fn().mockResolvedValue({ user: { id: TARGET, bot: false } });
   const fetchMembership = vi.fn().mockResolvedValue({ id: TARGET });
   const has = vi.fn().mockReturnValue(true);
@@ -64,9 +68,9 @@ const build = (action = 'add', opts: BuildOptions = {}) => {
     members: { fetch: fetchMembership },
   };
   const fetchThread = vi.fn().mockResolvedValue(thread);
-  const getRepos = vi
-    .fn()
-    .mockReturnValue({ threadModeration: { setManager, isManager, listManagers } });
+  const getRepos = vi.fn().mockReturnValue({
+    threadModeration: { setManager, isManager, listManagers, listGuildManagers },
+  });
   const { bot, logger } = buildFakeBot({
     clientId: BOT,
     threadModerationEnabled: opts.moderationEnabled ?? true,
@@ -80,7 +84,8 @@ const build = (action = 'add', opts: BuildOptions = {}) => {
   const interaction = buildChatInputInteraction({
     userId: opts.actor ?? ADMIN,
     guild,
-    channels: { thread: { id: THREAD } },
+    channels: opts.omitThread ? {} : { thread: { id: THREAD } },
+    channel: { id: opts.channelId ?? THREAD },
     users: { user: { id: opts.target ?? TARGET, displayName: 'target' } },
     options: opts.page === undefined ? {} : { page: opts.page },
     subcommand: action,
@@ -101,6 +106,7 @@ const build = (action = 'add', opts: BuildOptions = {}) => {
     setManager,
     isManager,
     listManagers,
+    listGuildManagers,
     interaction,
   };
 };
@@ -245,6 +251,7 @@ describe('/thread manager', () => {
       const f = build('list', { page, withParams: true, managers: [...users].reverse() });
       await run(f);
       expect(f.listManagers).toHaveBeenCalledWith(BOT, THREAD);
+      expect(f.listGuildManagers).not.toHaveBeenCalled();
       expect(f.sink.editReplies.at(-1)).toEqual({
         content: [
           `replies:thread_moderation.manager_list:${JSON.stringify({ count: 21, page, pages: 2 })}`,
@@ -257,6 +264,96 @@ describe('/thread manager', () => {
       expect(f.setManager).not.toHaveBeenCalled();
     },
   );
+
+  it.each([THREAD, '100000000000000008'])(
+    'defaults to saved server-wide assignments from channel %s',
+    async (channelId) => {
+      const f = build('list', { omitThread: true, channelId, withParams: true });
+      f.listGuildManagers.mockResolvedValue(
+        ok([
+          { threadId: '100000000000000009', userId: TARGET },
+          { threadId: THREAD, userId: DELEGATE },
+          { threadId: THREAD, userId: TARGET },
+        ]),
+      );
+      await run(f);
+      expect(f.sink.defers).toEqual([{ flags: MessageFlags.Ephemeral }]);
+      expect(f.getRepos).toHaveBeenCalledWith(GUILD);
+      expect(f.listGuildManagers).toHaveBeenCalledWith(BOT);
+      expect(f.fetchThread).not.toHaveBeenCalled();
+      expect(f.fetchMember).not.toHaveBeenCalled();
+      expect(f.listManagers).not.toHaveBeenCalled();
+      expect(f.setManager).not.toHaveBeenCalled();
+      expect(f.sink.editReplies).toEqual([
+        {
+          content: [
+            'replies:thread_moderation.manager_guild_list:{"count":3,"page":1,"pages":1}',
+            `<#${THREAD}> — <@${TARGET}> (\`${TARGET}\`)`,
+            `<#${THREAD}> — <@${DELEGATE}> (\`${DELEGATE}\`)`,
+            `<#100000000000000009> — <@${TARGET}> (\`${TARGET}\`)`,
+          ].join('\n'),
+          allowedMentions: { parse: [] },
+        },
+      ]);
+    },
+  );
+
+  it.each([1, 2])('paginates server-wide assignments on page %s', async (page) => {
+    const f = build('list', { omitThread: true, page, withParams: true });
+    const assignments = Array.from({ length: 21 }, (_, i) => ({
+      threadId: String(100000000000000010n + BigInt(i)),
+      userId: TARGET,
+    }));
+    f.listGuildManagers.mockResolvedValue(ok([...assignments].reverse()));
+    await run(f);
+    const content = [
+      `replies:thread_moderation.manager_guild_list:${JSON.stringify({ count: 21, page, pages: 2 })}`,
+      ...assignments
+        .slice((page - 1) * 20, page * 20)
+        .map(({ threadId, userId }) => `<#${threadId}> — <@${userId}> (\`${userId}\`)`),
+    ].join('\n');
+    expect(f.sink.editReplies.at(-1)).toEqual({ content, allowedMentions: { parse: [] } });
+    expect(content.length).toBeLessThanOrEqual(2000);
+  });
+
+  it('explains when the server has no configured managers', async () => {
+    const f = build('list', { omitThread: true });
+    await run(f);
+    expectReply(f, 'manager_guild_empty');
+  });
+
+  it.each([0, 2, 1.5])('rejects invalid server-wide page %s', async (page) => {
+    const f = build('list', { omitThread: true, page });
+    await run(f);
+    expectReply(f, 'list_invalid_page');
+  });
+
+  it('reports server-wide lookup errors without returning a partial list', async () => {
+    const f = build('list', { omitThread: true, withParams: true });
+    f.listGuildManagers.mockResolvedValue({
+      ok: false,
+      error: new Error('Storage failure'),
+    } as never);
+    await run(f);
+    expect(f.logger.error).toHaveBeenCalledOnce();
+    expect(f.sink.editReplies).toEqual([
+      { content: expect.stringMatching(/^replies:thread_moderation.claim_failed:.*traceId/u) },
+    ]);
+  });
+
+  it('denies server-wide listing to non-admins', async () => {
+    const f = build('list', { omitThread: true, actor: OWNER });
+    await run(f);
+    expectReply(f, 'manager_admin_only');
+    expect(f.listGuildManagers).not.toHaveBeenCalled();
+  });
+
+  it.each(['add', 'remove'])('still defaults %s to the current thread', async (action) => {
+    const f = build(action, { omitThread: true, managers: action === 'remove' ? [TARGET] : [] });
+    await run(f);
+    expect(f.fetchThread).toHaveBeenCalledWith(THREAD, { force: true });
+    expectReply(f, action === 'add' ? 'manager_added' : 'manager_removed');
+  });
 
   it('explains an empty manager list', async () => {
     const f = build('list');

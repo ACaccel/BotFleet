@@ -383,13 +383,13 @@
             }
           },
           "list": {
-            "description": "List a thread's delegated managers",
+            "description": "List delegated managers (defaults to the whole server)",
             "options": {
               "thread": {
-                "description": "Target thread (defaults to the current thread)"
+                "description": "Only list this thread (omit for the whole server)"
               },
               "page": {
-                "description": "Page number (20 users per page)"
+                "description": "Page number (20 assignments per page)"
               }
             }
           }
