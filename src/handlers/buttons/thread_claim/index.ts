@@ -1,12 +1,12 @@
 import { MessageFlags } from 'discord.js';
-import type { ButtonInteraction } from 'discord.js';
+import type { ButtonInteraction, ThreadChannel } from 'discord.js';
 import type { BaseBot } from '@bot';
 import { unwrap } from '@core/result';
 import { logError } from '@core/logger';
 import { ancestorChannelIdsOf } from '../../../infra/discord';
 import type { ThreadClaim } from '../../../persistence/repositories/thread-moderation.repo';
 import { ButtonHandler } from '../button-handler';
-import { buildThreadClaimCard } from '../../thread-claim-view';
+import { buildThreadClaimCard, notifyClaimApplicant } from '../../thread-claim-view';
 import {
   assertThreadApplicant,
   requireThreadRepo,
@@ -51,9 +51,10 @@ export default class thread_claim extends ButtonHandler {
       if (claim.expires_at <= Date.now()) throw new ThreadManagementError('claim_expired');
       if (!claim.delivery_completed_at) throw new ThreadManagementError('claim_delivering');
       const approved = action === 'approve';
+      let thread: ThreadChannel | undefined;
       if (approved) {
         const guild = await bot.client.guilds.fetch(guildId);
-        const thread = await resolveManagedThread(guild, threadId);
+        thread = await resolveManagedThread(guild, threadId);
         if (
           bot.guildSettings &&
           !bot.guildSettings.isEnabled(
@@ -126,15 +127,7 @@ export default class thread_claim extends ButtonHandler {
           ) ?? '',
         allowedMentions: { parse: [] },
       });
-      try {
-        const applicant = await bot.client.users.fetch(claim.applicant_id);
-        await applicant.send({
-          content: `${bot.translator?.t(`replies:thread_moderation.claim_${approved ? 'approved' : 'rejected'}`) ?? ''}\nhttps://discord.com/channels/${guildId}/${threadId}`,
-          allowedMentions: { parse: [] },
-        });
-      } catch (error) {
-        logError(bot.logger, guildId, error);
-      }
+      await notifyClaimApplicant(bot, guildId, threadId, claim.applicant_id, approved, thread);
     } catch (error) {
       await threadManagementFailure(interaction, bot, error);
     }

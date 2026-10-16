@@ -1031,6 +1031,8 @@
     "claim_owner_changed": "The thread owner no longer matches this request. Submit a new request.",
     "claim_approved": "The request was approved. The applicant can now manage this thread through this bot.",
     "claim_rejected": "The thread management request was rejected.",
+    "claim_applicant_approved": "Your thread management request was approved. You can now manage this thread through this bot.",
+    "claim_applicant_rejected": "Your thread management request was rejected.",
     "claim_failed": "Could not complete thread management. Please try again later. (ID: {{traceId}})",
     "claim_delivering": "This request is still being delivered. Try this review button again shortly."
   },

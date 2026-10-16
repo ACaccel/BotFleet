@@ -1031,6 +1031,8 @@
     "claim_owner_changed": "討論串串主與申請資料不符，請重新申請。",
     "claim_approved": "申請已核准，申請者現在可以透過此 bot 管理該討論串。",
     "claim_rejected": "討論串管理權申請已拒絕。",
+    "claim_applicant_approved": "你的討論串管理權申請已核准，現在可以透過此 bot 管理這個討論串。",
+    "claim_applicant_rejected": "你的討論串管理權申請未獲核准。",
     "claim_failed": "無法完成討論串管理操作，請稍後再試。（追蹤 ID：{{traceId}}）",
     "claim_delivering": "此申請仍在完成投遞，請稍後再按審核按鈕。"
   },

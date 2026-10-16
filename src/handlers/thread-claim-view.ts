@@ -5,7 +5,9 @@ import {
   EmbedBuilder,
   escapeMarkdown,
 } from 'discord.js';
+import type { ThreadChannel } from 'discord.js';
 import type { BaseBot } from '@bot';
+import { logError } from '@core/logger';
 import type { ThreadClaim } from '../persistence/repositories/thread-moderation.repo';
 import { EMBED_COLORS } from '../infra/discord/presentation-colors';
 
@@ -62,4 +64,38 @@ export const buildThreadClaimCard = (
       .setDisabled(!enabled || !pending),
   );
   return { embeds: [embed], components: [row], allowedMentions: { parse: [] } };
+};
+
+/** Best-effort: a committed decision stands even if the applicant cannot be reached. */
+export const notifyClaimApplicant = async (
+  bot: BaseBot,
+  guildId: string,
+  threadId: string,
+  applicantId: string,
+  approved: boolean,
+  thread: ThreadChannel | undefined,
+): Promise<void> => {
+  const notice =
+    bot.translator?.t(
+      `replies:thread_moderation.claim_applicant_${approved ? 'approved' : 'rejected'}`,
+    ) ?? '';
+  try {
+    const applicant = await bot.client.users.fetch(applicantId);
+    await applicant.send({
+      content: `${notice}\nhttps://discord.com/channels/${guildId}/${threadId}`,
+      allowedMentions: { parse: [] },
+    });
+  } catch (error) {
+    logError(bot.logger, guildId, error);
+    // Only approvals fall back to a public mention; rejections stay private.
+    if (!approved || !thread) return;
+    try {
+      await thread.send({
+        content: `<@${applicantId}> ${notice}`,
+        allowedMentions: { users: [applicantId] },
+      });
+    } catch (fallbackError) {
+      logError(bot.logger, guildId, fallbackError);
+    }
+  }
 };

@@ -93,8 +93,11 @@ DM card. Approval rechecks applicant membership, thread access and original
 owner, then atomically records the decision, grants management and clears the
 applicant's ban in this thread. The first decision wins; replay cannot grant
 again. Other cards are disabled on a best-effort basis and remain inoperative
-even if editing their display fails. Applicant notifications are also best-effort
-and do not undo a saved decision. Delivered cards and grants survive restarts.
+even if editing their display fails. The applicant receives a DM with the
+decision and thread link. If an approval DM fails (for example, the applicant
+blocks server DMs), the bot mentions the applicant in the thread instead, which
+needs **Send Messages in Threads**; rejections are never posted publicly.
+Notifications are best-effort and do not undo a saved decision. Delivered cards and grants survive restarts.
 
 Pending requests expire after seven days. One pending request per applicant and
 thread is allowed; submissions for that thread are at least one minute apart.

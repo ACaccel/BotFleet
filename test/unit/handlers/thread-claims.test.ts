@@ -60,6 +60,7 @@ const build = () => {
   const has = vi.fn().mockReturnValue(true);
   const membership = vi.fn().mockResolvedValue({ id: APPLICANT });
   const fetchChannel = vi.fn();
+  const threadSend = vi.fn().mockResolvedValue(undefined);
   const guild = buildGuild({ id: GUILD });
   Object.assign(guild.members, { fetch: fetchMember });
   Object.assign(guild.channels, { fetch: fetchChannel });
@@ -72,6 +73,7 @@ const build = () => {
     isThread: () => true,
     permissionsFor: () => ({ has }),
     members: { fetch: membership },
+    send: threadSend,
   };
   fetchChannel.mockResolvedValue(thread);
   const message = { id: 'message', channelId: 'dm', edit: vi.fn().mockResolvedValue(undefined) };
@@ -134,6 +136,7 @@ const build = () => {
     fetchUser,
     fetchGuild,
     send,
+    threadSend,
     message,
     createDM,
     getRepos,
@@ -432,11 +435,11 @@ describe('thread_claim DM review', () => {
       NOW,
     );
     expectReply(f.buttonSink, 'claim_approved');
-    expect(f.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: expect.stringContaining(`https://discord.com/channels/${GUILD}/${THREAD}`),
-      }),
-    );
+    expect(f.send).toHaveBeenCalledWith({
+      content: `replies:thread_moderation.claim_applicant_approved\nhttps://discord.com/channels/${GUILD}/${THREAD}`,
+      allowedMentions: { parse: [] },
+    });
+    expect(f.threadSend).not.toHaveBeenCalled();
     await f.review();
     expect(f.repo.decideClaim).toHaveBeenCalledOnce();
     expectReply(f.buttonSink, 'claim_already_reviewed');
@@ -546,6 +549,10 @@ describe('thread_claim DM review', () => {
       NOW,
     );
     expectReply(f.buttonSink, 'claim_rejected');
+    expect(f.send).toHaveBeenCalledWith({
+      content: `replies:thread_moderation.claim_applicant_rejected\nhttps://discord.com/channels/${GUILD}/${THREAD}`,
+      allowedMentions: { parse: [] },
+    });
   });
 
   it('does not announce approval when another reviewer wins the storage race', async () => {
@@ -567,5 +574,35 @@ describe('thread_claim DM review', () => {
     expect(f.repo.failClaimDelivery).not.toHaveBeenCalled();
     expectReply(f.buttonSink, 'claim_approved');
     expect(f.logger.error).toHaveBeenCalledTimes(2);
+  });
+
+  it('mentions the applicant in the thread when the approval DM fails', async () => {
+    const f = build();
+    f.send.mockRejectedValue(new Error('Applicant DM closed'));
+    await f.review();
+    expectReply(f.buttonSink, 'claim_approved');
+    expect(f.threadSend).toHaveBeenCalledWith({
+      content: `<@${APPLICANT}> replies:thread_moderation.claim_applicant_approved`,
+      allowedMentions: { users: [APPLICANT] },
+    });
+  });
+
+  it('keeps approval successful when the thread fallback also fails', async () => {
+    const f = build();
+    f.send.mockRejectedValue(new Error('Applicant DM closed'));
+    f.threadSend.mockRejectedValue(new Error('Thread locked'));
+    await f.review();
+    expect(f.repo.decideClaim).toHaveBeenCalledOnce();
+    expectReply(f.buttonSink, 'claim_approved');
+    expect(f.logger.error).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not publish a rejection in the thread when the DM fails', async () => {
+    const f = build();
+    Object.assign(f.button, { customId: f.button.customId.replace('approve', 'reject') });
+    f.send.mockRejectedValue(new Error('Applicant DM closed'));
+    await f.review();
+    expectReply(f.buttonSink, 'claim_rejected');
+    expect(f.threadSend).not.toHaveBeenCalled();
   });
 });
