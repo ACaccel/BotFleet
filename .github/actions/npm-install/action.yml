@@ -4,11 +4,12 @@ description: 'Create the project Conda runtime and install the npm lockfile'
 runs:
   using: 'composite'
   steps:
-    - uses: conda-incubator/setup-miniconda@v3
+    - uses: conda-incubator/setup-miniconda@v4
       with:
         miniforge-version: latest
         activate-environment: ''
-        auto-activate-base: false
+        auto-activate: false
+        conda-remove-defaults: true
     - run: |
         CONDA_EXE="$CONDA/bin/conda" bash scripts/setup-env.sh
         echo "$GITHUB_WORKSPACE/.conda/bin" >> "$GITHUB_PATH"

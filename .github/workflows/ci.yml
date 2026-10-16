@@ -23,11 +23,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Runners are pinned to the deployment host's Ubuntu release rather than
+# `ubuntu-latest`, so a runner image migration is a deliberate change.
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/npm-install
       # TypeScript imports gitignored per-bot config.json files. Seed
       # placeholder copies for both noEmit and emit-mode checks.
@@ -43,9 +45,9 @@ jobs:
     # Coverage runs all six projects once and enforces the thresholds in
     # vitest.config.ts. Check discovery first because Vitest can succeed
     # when one project silently contains no tests.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/npm-install
       - uses: ./.github/actions/seed-bot-config
       - name: Require tests in every Vitest project
@@ -69,9 +71,9 @@ jobs:
     # MIGRATION_TEST_BIN_DIR names real database binaries, so `tests`
     # never executes it. This job provisions the pinned runtime and
     # fails when the drill is skipped rather than run.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/npm-install
       - name: Provision the pinned MongoDB runtime
         shell: bash
@@ -95,14 +97,14 @@ jobs:
           ' "$report"
 
   security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The only job that needs more than the workflow-level `contents:
     # read`: gitleaks annotates the pull request with what it found.
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # gitleaks needs full history
       - uses: ./.github/actions/npm-install
@@ -115,7 +117,7 @@ jobs:
           npm run security -- --output-format=json | tee audit-ci-report.json
       - name: Archive audit report + allowlist
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-ci-report-${{ github.run_id }}
           path: |
@@ -127,6 +129,6 @@ jobs:
         # scanner runs with repository contents in scope, so an
         # upstream tag repoint must not change what executes here.
         # Bump deliberately alongside the version comment.
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
