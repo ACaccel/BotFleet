@@ -29,7 +29,11 @@ the previous code before upgrading. Database contents and Discord data are unaff
 5. Replace `BOTFLEET_CONDA_PREFIX` with `PLEIADES_CONDA_PREFIX` in any shell profile.
 6. Run `npm run mongo:deploy`, `npm run deploy` and `npm run backup:install`.
 7. On each Windows alert host, move `%LOCALAPPDATA%\BotFleet` to
-   `%LOCALAPPDATA%\Pleiades` and point the warning app at the moved script.
+   `%LOCALAPPDATA%\Pleiades`, replace `earthquake-alert.cmd` and `earthquake-alert.ps1`
+   with the current versions, and point the warning app at the moved script. The
+   previous script still reads its key from `%LOCALAPPDATA%\BotFleet` and fails with
+   `setup-error`. Then run the app's test, as in the
+   [caller guide](../tools/earthquake-alert/windows/README.md#測試).
 
 ## Earthquake early-warning API
 
