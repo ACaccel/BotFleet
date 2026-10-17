@@ -1,0 +1,67 @@
+name: Migration drill
+
+# The drill provisions a real MongoDB runtime, so it runs only when
+# something it exercises changes: the migration tool, the database
+# runtime pin, the Node runtime and lockfile, the shared install
+# action, or the test configuration. The weekly run catches drift that
+# arrives from outside the repository, such as a runner image or
+# upstream package change. It is not a required check, so a filtered
+# run never blocks a merge.
+on:
+  pull_request:
+    paths: &drill-paths
+      - 'tools/migration/**'
+      - 'scripts/setup-mongo.sh'
+      - 'environments/mongodb.yml'
+      - 'environment.yml'
+      - 'package-lock.json'
+      - 'vitest.config.ts'
+      - 'vitest.projects.ts'
+      - '.github/actions/npm-install/**'
+      - '.github/workflows/migration-drill.yml'
+  push:
+    branches:
+      - main
+      - dev
+    paths: *drill-paths
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-drill:
+    # The MongoDB migration drill skips itself unless
+    # MIGRATION_TEST_BIN_DIR names real database binaries, so the CI
+    # `tests` job never executes it. This job provisions the pinned
+    # runtime and fails when the drill is skipped rather than run.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/npm-install
+      - name: Provision the pinned MongoDB runtime
+        shell: bash
+        run: CONDA_EXE="$CONDA/bin/conda" bash scripts/setup-mongo.sh "$RUNNER_TEMP/mongodb"
+      - name: Run the migration drill and require it to execute
+        shell: bash
+        run: |
+          set -euo pipefail
+          export MIGRATION_TEST_BIN_DIR="$RUNNER_TEMP/mongodb/bin"
+          # Appended so the database runtime's own node cannot shadow
+          # the project runtime that npm-install put first on PATH.
+          export PATH="$PATH:$MIGRATION_TEST_BIN_DIR"
+          report="$RUNNER_TEMP/migration-drill.json"
+          npm run test:tools -- tools/migration/mongo.integration.test.ts \
+            --reporter=default --reporter=json --outputFile.json="$report"
+          jq -e '
+            if .numTotalTests > 0 and .numPassedTests == .numTotalTests
+            then "Migration drill ran \(.numPassedTests) tests."
+            else error("Migration drill did not run: \(.numPassedTests) of \(.numTotalTests) passed, \(.numPendingTests) skipped.")
+            end
+          ' "$report"

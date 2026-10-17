@@ -164,8 +164,10 @@ and metadata, not each document's content; complete writer shutdown is required.
 drill (`mongo.integration.test.ts`) exports and restores both runtime layouts
 against a throwaway `mongod`; it is skipped unless `MIGRATION_TEST_BIN_DIR` names
 a directory containing `mongod`, `mongodump` and `mongorestore`, with `mongosh`
-on PATH. The CI `migration-drill` job provisions them with `scripts/setup-mongo.sh`
-and fails if the drill is skipped. To run it locally:
+on PATH. The `Migration drill` workflow (`.github/workflows/migration-drill.yml`)
+provisions them with `scripts/setup-mongo.sh` and fails if the drill is skipped.
+It runs when a file the drill depends on changes (its path list is in the
+workflow), weekly, and on manual dispatch; it is not a required check. To run it locally:
 
 ```bash
 CONDA_EXE="$(command -v conda)" bash scripts/setup-mongo.sh /tmp/pleiades-mongo

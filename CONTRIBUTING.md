@@ -96,9 +96,9 @@ and the local gates before pushing to `dev`. After pushing, confirm GitHub CI
 is green with `gh run list --branch dev` and fix failures. Gitleaks and CodeQL
 run on GitHub only. A verified Gitleaks false positive that history keeps goes
 into `.gitleaksignore` as its exact fingerprint with the reason; do not widen
-`.gitleaks.toml` for it. CI also runs the isolated MongoDB
+`.gitleaks.toml` for it. A separate workflow runs the isolated MongoDB
 [migration drill](tools/migration/README.md#tests), which `test:coverage` skips
-without database binaries. The live `npm run smoke` check is separate from CI; see
+without database binaries, when its inputs change and weekly. The live `npm run smoke` check is separate from CI; see
 [operations](docs/contributing/operations.md#pre-deploy-smoke).
 
 ## Architectural rules
