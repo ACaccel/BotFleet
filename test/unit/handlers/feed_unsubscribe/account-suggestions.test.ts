@@ -1,5 +1,5 @@
 /**
- * The suggestions `/feed unsubscribe` offers for its `account` option.
+ * The suggestions `/feed unsubscribe` offers for its `target` option.
  *
  * The option takes a list, and Discord replaces the whole option value
  * with the chosen suggestion — so the risky part is not which accounts
@@ -61,7 +61,7 @@ describe('buildAccountSuggestions', () => {
 
   it('lists the same handle once per platform it is subscribed on', () => {
     // Two entries with identical values is the truthful rendering: an
-    // `account` given without a `platform` removes the subscription
+    // `target` given without a `platform` removes the subscription
     // from both, so the labels are what tells them apart.
     const choices = buildAccountSuggestions([doc('alice', 'x'), doc('alice', 'bluesky')], {
       focused: '',

@@ -1,6 +1,6 @@
 /**
  * Turns a channel's stored subscriptions into the suggestions
- * `/feed unsubscribe` offers for its `account` option.
+ * `/feed unsubscribe` offers for its `target` option.
  *
  * The option takes a list, so completion works on the **last** segment
  * only and each suggestion's value repeats the segments already typed.
@@ -42,7 +42,7 @@ const LEADING_AT = /^@+/;
 interface AccountSuggestionScope {
   /** The `platform` option, when they have already filled it in. */
   readonly platform?: string;
-  /** The `account` option's text as typed so far, commas and all. */
+  /** The `target` option's text as typed so far, commas and all. */
   readonly focused: string;
 }
 
@@ -58,7 +58,7 @@ interface AccountSuggestionScope {
  *
  * The same account subscribed on two platforms yields two entries, each
  * naming its own platform. Their values are identical, which is
- * truthful — an `account` given without a `platform` removes the
+ * truthful — a `target` given without a `platform` removes the
  * subscription from both.
  */
 export const buildAccountSuggestions = (

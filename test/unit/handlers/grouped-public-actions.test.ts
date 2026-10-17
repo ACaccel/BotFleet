@@ -98,7 +98,7 @@ describe.each(families)('/$name subcommands', ({ name, Root, actions }) => {
 });
 
 describe('/feed autocomplete', () => {
-  it('keeps unsubscribe account suggestions attached to the nested option', async () => {
+  it('keeps unsubscribe target suggestions attached to the nested option', async () => {
     const suggestions = [{ name: '@example', value: 'example' }];
     const suggest = vi
       .spyOn(FeedUnsubscribe.prototype, 'autocomplete')
@@ -106,11 +106,10 @@ describe('/feed autocomplete', () => {
     const interaction = autocompleteFor('unsubscribe');
     const root = new Feed();
 
-    expect(
-      root.config.subcommands
-        ?.find((command) => command.name === 'unsubscribe')
-        ?.options?.string?.find((option) => option.name === 'account')?.autocomplete,
-    ).toBe(true);
+    const options = root.config.subcommands?.find((command) => command.name === 'unsubscribe')
+      ?.options?.string;
+    expect(options?.find((option) => option.name === 'target')?.autocomplete).toBe(true);
+    expect(options?.map((option) => option.name)).not.toContain('account');
     await expect(root.autocomplete?.(interaction, bot)).resolves.toEqual(suggestions);
     expect(suggest).toHaveBeenCalledExactlyOnceWith(interaction, bot);
   });

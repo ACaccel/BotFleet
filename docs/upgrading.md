@@ -392,9 +392,12 @@ unlimited. No configuration change is required.
 ## Forum-native feed targets
 
 `/feed subscribe` and `/feed unsubscribe` now use `target` for profile handles or
-forum sources. The old `account` option remains an optional alias; supplying both
-is rejected. Re-register commands after upgrading. The media option is optional:
-X retains `media_only`, while Bahamut defaults to `any` to include text-only floors.
+forum sources. The old `account` option has been removed. Subscribe requires
+`target`; unsubscribe keeps it optional for channel/platform removal.
+Re-register commands after upgrading to replace the old options. The media option
+is optional: X and Bahamut default to `any`, including text-only posts. Stored
+subscription filters remain unchanged; subscribe again with `media:any` to update
+an existing media-only subscription without resetting its cursor.
 Existing X and Bahamut thread subscription keys/cursors are preserved, so no
 subscription data migration is required. See [Bahamut subscriptions](configuration.md#bahamut-subscriptions)
 for board new-topic streams, thread new-floor streams, URL resolution and backlog

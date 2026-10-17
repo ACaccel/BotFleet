@@ -254,6 +254,8 @@ across its destinations. Feed announcements and media use one send, and preview
 failure falls back to the existing proxy announcement. Feed configuration remains
 independent of the message-preview plugin.
 Bahamut feeds distinguish board new-topic streams from thread new-floor streams.
+Feed commands expose `target` only; the persistence field remains `account`
+to preserve existing subscription keys without a data migration.
 The adapter canonicalizes desktop/mobile B/C URLs and resolves Co floor links to
 parent threads before persistence; existing thread keys and cursors stay valid.
 Board HTML is read in creation order, verified against the source's sort selector;

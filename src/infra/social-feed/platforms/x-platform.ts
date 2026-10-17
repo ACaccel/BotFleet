@@ -111,6 +111,7 @@ interface XPlatformOptions {
 export class XPlatform implements FeedPlatform {
   public readonly id = X_PLATFORM_ID;
   public readonly displayName = X_PLATFORM_DISPLAY_NAME;
+  public readonly defaultMediaFilter = 'any';
 
   private readonly source: XTimelineSource;
   private readonly embedProxyHost: string;

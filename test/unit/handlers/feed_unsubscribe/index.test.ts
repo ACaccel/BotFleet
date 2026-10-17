@@ -5,7 +5,7 @@
  * The scope is the whole risk: too wide and a member clears
  * subscriptions nobody asked to remove, too narrow and the command
  * silently does nothing. Every option combination therefore asserts on
- * the exact `deleteWhere` query, not just on the reply. The `account`
+ * the exact `deleteWhere` query, not just on the reply. The `target`
  * option accepts a list, which widens that scope one more way.
  *
  * The widest scope of all — the whole channel — deletes nothing here:
@@ -164,12 +164,11 @@ describe('/feed unsubscribe', () => {
     expect((body.options ?? []).map((option) => option.name)).toEqual([
       'platform',
       'target',
-      'account',
       'channel',
     ]);
   });
 
-  it('asks Discord to autocomplete both target aliases', () => {
+  it('asks Discord to autocomplete only target', () => {
     // Asserted on the REST payload for the same reason as the ordering
     // above: the flag has to survive `setConfig` -> localisation ->
     // builder, and dropping it anywhere leaves the hook implemented but
@@ -183,17 +182,7 @@ describe('/feed unsubscribe', () => {
     const autocompleting = (body.options ?? [])
       .filter((option) => option.autocomplete === true)
       .map((option) => option.name);
-    expect(autocompleting).toEqual(['target', 'account']);
-  });
-
-  it('rejects conflicting aliases before any deletion or clear confirmation', async () => {
-    const { bot, interaction, sink, deleteWhere, listByChannel } = build({
-      options: { target: 'someone', account: 'other' },
-    });
-    await new FeedUnsubscribe().execute(interaction, bot);
-    expect(reply(sink)).toContain('replies:feed.target_alias_conflict');
-    expect(deleteWhere).not.toHaveBeenCalled();
-    expect(listByChannel).not.toHaveBeenCalled();
+    expect(autocompleting).toEqual(['target']);
   });
 
   it('accepts the public target option and awaits its configured resolver', async () => {
@@ -411,7 +400,7 @@ describe('/feed unsubscribe', () => {
 
   it('normalises the account through the named platform', async () => {
     const { bot, interaction, deleteWhere } = build({
-      options: { platform: 'fake', account: '@SomeOne' },
+      options: { platform: 'fake', target: '@SomeOne' },
     });
 
     await new FeedUnsubscribe().execute(interaction, bot);
@@ -425,7 +414,7 @@ describe('/feed unsubscribe', () => {
 
   it('removes every account a single invocation names', async () => {
     const { bot, interaction, deleteWhere } = build({
-      options: { platform: 'fake', account: '@Alpha, beta gamma' },
+      options: { platform: 'fake', target: '@Alpha, beta gamma' },
     });
 
     await new FeedUnsubscribe().execute(interaction, bot);
@@ -440,7 +429,7 @@ describe('/feed unsubscribe', () => {
   it('refuses a list past the cap without deleting anything', async () => {
     const tooMany = Array.from({ length: MAX_FEED_ACCOUNTS + 1 }, (_, i) => `a${String(i)}`);
     const { bot, interaction, sink, deleteWhere } = build({
-      options: { account: tooMany.join(',') },
+      options: { target: tooMany.join(',') },
     });
 
     await new FeedUnsubscribe().execute(interaction, bot);
@@ -451,10 +440,10 @@ describe('/feed unsubscribe', () => {
     expect(deleteWhere).not.toHaveBeenCalled();
   });
 
-  it('refuses an account option that names nothing, rather than clearing the channel', async () => {
+  it('refuses a target option that names nothing, rather than clearing the channel', async () => {
     // The dangerous direction: an unusable list must not degrade into
     // "no narrowing", which would empty the whole channel.
-    const { bot, interaction, sink, deleteWhere } = build({ options: { account: ' , @ ' } });
+    const { bot, interaction, sink, deleteWhere } = build({ options: { target: ' , @ ' } });
 
     await new FeedUnsubscribe().execute(interaction, bot);
 
@@ -466,7 +455,7 @@ describe('/feed unsubscribe', () => {
     // The whole reason this command never consults the registry for
     // authorisation: a retired platform's entries must stay clearable.
     const { bot, interaction, sink, deleteWhere } = build({
-      options: { platform: 'retired', account: '@SomeOne' },
+      options: { platform: 'retired', target: '@SomeOne' },
       deleted: [subscription({ platform: 'retired' })],
     });
 
@@ -481,7 +470,7 @@ describe('/feed unsubscribe', () => {
   });
 
   it('still resolves an account when no platform narrows the scope', async () => {
-    const { bot, interaction, deleteWhere } = build({ options: { account: '@SomeOne' } });
+    const { bot, interaction, deleteWhere } = build({ options: { target: '@SomeOne' } });
 
     await new FeedUnsubscribe().execute(interaction, bot);
 
@@ -490,7 +479,7 @@ describe('/feed unsubscribe', () => {
 
   it('lists every subscription it removed', async () => {
     const { bot, interaction, sink } = build({
-      options: { account: 'someone, anotherone' },
+      options: { target: 'someone, anotherone' },
       deleted: [
         subscription({ account: 'someone' }),
         subscription({ platform: 'other', account: 'anotherone' }),
@@ -548,7 +537,7 @@ describe('/feed unsubscribe', () => {
   });
 
   it('suggests widening the search when a narrowed scope matched nothing', async () => {
-    const { bot, interaction, sink } = build({ deleted: [], options: { account: 'ghost' } });
+    const { bot, interaction, sink } = build({ deleted: [], options: { target: 'ghost' } });
 
     await new FeedUnsubscribe().execute(interaction, bot);
 
@@ -559,7 +548,7 @@ describe('/feed unsubscribe', () => {
     // One bad entry fails the whole call: a partial deletion would make
     // a typo look like an account that was never subscribed.
     const { bot, interaction, sink, deleteWhere } = build({
-      options: { platform: 'fake', account: 'alpha, banned' },
+      options: { platform: 'fake', target: 'alpha, banned' },
     });
 
     await new FeedUnsubscribe().execute(interaction, bot);

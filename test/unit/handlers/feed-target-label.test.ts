@@ -173,8 +173,6 @@ describe.each(['en', 'zh-TW'] as const)('feed target integration in %s', (locale
         status: '200',
       }),
     ).toContain('maxPages');
-    for (const key of ['target_alias_conflict', 'no_accounts']) {
-      expect(translator.tStrict(`replies:feed.${key}`)).toContain('target');
-    }
+    expect(translator.tStrict('replies:feed.no_accounts')).toContain('target');
   });
 });

@@ -43,7 +43,6 @@ export default class feed_unsubscribe extends Command {
         string: [
           { name: 'platform', required: false, choices: platformChoices },
           { name: 'target', required: false, autocomplete: true },
-          { name: 'account', required: false, autocomplete: true },
         ],
         channel: [{ name: 'channel', required: false }],
       },
@@ -68,11 +67,6 @@ export default class feed_unsubscribe extends Command {
       await interaction.editReply({ content: t(key, params) });
     };
     try {
-      const target = getOptionalString(interaction, 'target');
-      const account = getOptionalString(interaction, 'account');
-      if (target !== undefined && account !== undefined) {
-        return refuse('replies:feed.target_alias_conflict');
-      }
       const guild = interaction.guild;
       const repos = await requireGuildRepos(bot, interaction);
       // Already replied on null; the `guild` half restates that for tsc.
@@ -86,7 +80,7 @@ export default class feed_unsubscribe extends Command {
 
       // The option names as many accounts as the member cares to list;
       // an unusable list is refused before anything is deleted.
-      const raw = target ?? account;
+      const raw = getOptionalString(interaction, 'target');
       const parsed = raw === undefined ? undefined : parseFeedAccounts(raw);
       if (parsed !== undefined && parsed.kind !== 'accounts') {
         return refuse(...feedAccountRefusal(parsed));

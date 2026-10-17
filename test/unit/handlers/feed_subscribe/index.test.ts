@@ -27,6 +27,7 @@ import { FeedError } from '../../../../src/core/errors';
 import { err, ok } from '../../../../src/core/result';
 import {
   FeedPlatformRegistry,
+  XPlatform,
   MAX_FEED_ACCOUNTS,
   type FeedFailure,
   type FeedPlatform,
@@ -146,7 +147,7 @@ const build = (fixture: Fixture = {}) => {
     guild,
     userId: USER_ID,
     channel: { id: HOME_CHANNEL },
-    options: { platform: 'fake', account: '@SomeOne', media: 'media_only', ...fixture.options },
+    options: { platform: 'fake', target: '@SomeOne', media: 'media_only', ...fixture.options },
     ...(fixture.createdTimestamp === undefined
       ? {}
       : { createdTimestamp: fixture.createdTimestamp }),
@@ -168,14 +169,18 @@ const reply = (sink: ReturnType<typeof newInteractionSink>): string =>
   [...sink.editReplies, ...sink.followUps].map((message) => message.content ?? '').join('\n');
 
 describe('/feed subscribe', () => {
-  it('keeps both target aliases and media optional in the Discord payload', () => {
+  it('requires target, keeps media optional, and removes account from the Discord payload', () => {
     const body = buildCommandJsonBody(
       localizeCommandConfig(new FeedSubscribe().config, echoTranslatorWithParams()),
     ) as { readonly options?: readonly { readonly name: string; readonly required?: boolean }[] };
 
-    for (const name of ['target', 'account', 'media']) {
-      expect(body.options).toContainEqual(expect.objectContaining({ name, required: false }));
-    }
+    expect(body.options).toContainEqual(
+      expect.objectContaining({ name: 'target', required: true }),
+    );
+    expect(body.options).toContainEqual(
+      expect.objectContaining({ name: 'media', required: false }),
+    );
+    expect(body.options?.map(({ name }) => name)).not.toContain('account');
   });
 
   it('defaults missing media to media_only for platforms without a declared default', async () => {
@@ -188,20 +193,31 @@ describe('/feed subscribe', () => {
     );
   });
 
-  it('preserves the X media_only default when media is omitted', async () => {
-    const { bot, interaction, upsert } = build({
-      options: { platform: 'x', media: null },
-      platformOverrides: { id: 'x', displayName: 'X (Twitter)' },
-    });
-    await new FeedSubscribe().execute(interaction, bot);
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ filter: { media: 'media_only' } }),
-    );
-  });
+  it.each([false, true])(
+    'defaults X to all posts when media is omitted (existing: %s)',
+    async (existing) => {
+      const x = new XPlatform({ timeoutMs: 8000, embedProxyHost: 'fxtwitter.com' });
+      const { bot, interaction, upsert } = build({
+        options: { platform: 'x', media: null },
+        existing: existing ? subscription() : undefined,
+        platformOverrides: {
+          id: x.id,
+          displayName: x.displayName,
+          defaultMediaFilter: x.defaultMediaFilter,
+        },
+      });
+      await new FeedSubscribe().execute(interaction, bot);
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ filter: { media: 'any' } }));
+      if (existing) {
+        expect(upsert.mock.calls[0]?.[0]).not.toHaveProperty('last_seen_id');
+        expect(upsert.mock.calls[0]?.[0]).not.toHaveProperty('last_seen_timestamp');
+      }
+    },
+  );
 
   it("uses Bahamut's any default and preserves an existing cursor", async () => {
     const { bot, interaction, sink, upsert, fetchTimeline } = build({
-      options: { platform: 'bahamut', target: 'board:36476', account: null, media: null },
+      options: { platform: 'bahamut', target: 'board:36476', media: null },
       existing: subscription({ account: 'board:36476', filter: { media: 'photo_only' } }),
       platformOverrides: {
         id: 'bahamut',
@@ -232,26 +248,16 @@ describe('/feed subscribe', () => {
     );
   });
 
-  it('accepts target without the legacy account option', async () => {
+  it('subscribes using target', async () => {
     const { bot, interaction, upsert } = build({
-      options: { target: '@NewTarget', account: null },
+      options: { target: '@NewTarget' },
     });
     await new FeedSubscribe().execute(interaction, bot);
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ account: 'newtarget' }));
   });
 
-  it('rejects both aliases without fetching or writing', async () => {
-    const { bot, interaction, sink, fetchTimeline, upsert } = build({
-      options: { target: 'other' },
-    });
-    await new FeedSubscribe().execute(interaction, bot);
-    expect(reply(sink)).toContain('replies:feed.target_alias_conflict');
-    expect(fetchTimeline).not.toHaveBeenCalled();
-    expect(upsert).not.toHaveBeenCalled();
-  });
-
-  it('rejects a missing target and alias without fetching or writing', async () => {
-    const { bot, interaction, sink, fetchTimeline, upsert } = build({ options: { account: null } });
+  it('rejects a missing target without fetching or writing', async () => {
+    const { bot, interaction, sink, fetchTimeline, upsert } = build({ options: { target: null } });
     await new FeedSubscribe().execute(interaction, bot);
     expect(reply(sink)).toContain('replies:feed.no_accounts');
     expect(fetchTimeline).not.toHaveBeenCalled();
@@ -550,7 +556,7 @@ describe('/feed subscribe', () => {
 
   it('subscribes every account a single invocation names', async () => {
     const { bot, interaction, sink, upsert } = build({
-      options: { account: 'alpha, @Beta gamma' },
+      options: { target: 'alpha, @Beta gamma' },
     });
 
     await new FeedSubscribe().execute(interaction, bot);
@@ -571,7 +577,7 @@ describe('/feed subscribe', () => {
     // per-account gate would also let a report contradict itself.
     const { bot, interaction, sink, upsert } = build({
       invokerPermissions: [],
-      options: { account: 'alpha, beta, gamma' },
+      options: { target: 'alpha, beta, gamma' },
     });
 
     await new FeedSubscribe().execute(interaction, bot);
@@ -584,7 +590,7 @@ describe('/feed subscribe', () => {
   it('subscribes the good accounts around one the platform rejects', async () => {
     const { bot, interaction, sink, upsert } = build({
       invalidAccounts: new Set(['banned']),
-      options: { account: 'alpha, banned, gamma' },
+      options: { target: 'alpha, banned, gamma' },
     });
 
     await new FeedSubscribe().execute(interaction, bot);
@@ -604,7 +610,7 @@ describe('/feed subscribe', () => {
     // is the only place an operator sees one.
     const { bot, interaction, logger } = build({
       invalidAccounts: new Set(['banned']),
-      options: { account: 'alpha, banned' },
+      options: { target: 'alpha, banned' },
     });
 
     await new FeedSubscribe().execute(interaction, bot);
@@ -620,7 +626,7 @@ describe('/feed subscribe', () => {
     // the stack and the cause of an individual failure diagnosable.
     const { bot, interaction, logger } = build({
       invalidAccounts: new Set(['banned']),
-      options: { account: 'banned' },
+      options: { target: 'banned' },
     });
 
     await new FeedSubscribe().execute(interaction, bot);
@@ -634,7 +640,7 @@ describe('/feed subscribe', () => {
     // budget it no longer has.
     const { bot, interaction, sink, upsert } = build({
       createdTimestamp: Date.now() - FEED_BATCH_BUDGET_MS - 1,
-      options: { account: 'alpha, beta' },
+      options: { target: 'alpha, beta' },
     });
 
     await new FeedSubscribe().execute(interaction, bot);
@@ -648,7 +654,7 @@ describe('/feed subscribe', () => {
   it('refuses a list past the cap without writing or reading anything', async () => {
     const tooMany = Array.from({ length: MAX_FEED_ACCOUNTS + 1 }, (_, i) => `a${String(i)}`);
     const { bot, interaction, sink, upsert, fetchTimeline } = build({
-      options: { account: tooMany.join(',') },
+      options: { target: tooMany.join(',') },
     });
 
     await new FeedSubscribe().execute(interaction, bot);
@@ -661,7 +667,7 @@ describe('/feed subscribe', () => {
   });
 
   it('refuses an option that names no account at all', async () => {
-    const { bot, interaction, sink, upsert } = build({ options: { account: ' , @ ' } });
+    const { bot, interaction, sink, upsert } = build({ options: { target: ' , @ ' } });
 
     await new FeedSubscribe().execute(interaction, bot);
 

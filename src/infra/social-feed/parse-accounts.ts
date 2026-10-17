@@ -1,6 +1,6 @@
 /**
- * Parses the `account` option of the `/feed_*` commands, which accepts
- * several handles in one invocation.
+ * Parses the `target` option of the `/feed` commands, which accepts
+ * several handles or forum sources in one invocation.
  *
  * Shared rather than duplicated: `/feed subscribe` and
  * `/feed unsubscribe` are sibling handler directories that may not

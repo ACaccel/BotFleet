@@ -163,14 +163,11 @@
               "bahamut": "Bahamut"
             }
           },
-          "account": {
-            "description": "target 的舊版別名；target 與 account 請擇一使用"
-          },
           "channel": {
             "description": "要轉發到的頻道 (預設為目前頻道)"
           },
           "media": {
-            "description": "媒體過濾條件（預設：X 限圖片或影片；Bahamut 所有貼文）",
+            "description": "媒體過濾條件（預設：所有貼文，包含純文字）",
             "choices": {
               "media_only": "只轉發含圖片或影片的貼文,不含純文字",
               "photo_only": "只轉發含圖片的貼文",
@@ -198,9 +195,6 @@
               "x": "X (Twitter)",
               "bahamut": "Bahamut"
             }
-          },
-          "account": {
-            "description": "target 的舊版別名；target 與 account 請擇一使用"
           },
           "target": {
             "description": "只移除這些目標的訂閱，以逗號分隔；可從自動完成選取已儲存的目標"

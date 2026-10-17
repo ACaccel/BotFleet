@@ -8,8 +8,7 @@
  *   - **Hard rules** reject reposts for every scope. Account subscriptions
  *     also require the followed author and reject replies; source subscriptions
  *     include original floors by any author, including replies.
- *   - **Subscription filters** combine media and keyword narrowing;
- *     their defaults forward only media-carrying posts.
+ *   - **Subscription filters** combine the stored media and keyword narrowing.
  *
  * Reads {@link FeedPost} fields only; ordering and cursor comparison are
  * delegated to the platform, so no platform-specific arithmetic (X's

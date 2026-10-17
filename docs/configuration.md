@@ -323,8 +323,9 @@ must pass the existing guild, channel privacy and Discord permission checks.
 
 `/feed subscribe`, `/feed unsubscribe` and `/feed list` manage database-backed
 subscriptions in visible channels. Use `target` for an X handle or a Bahamut
-forum URL. The old `account` option remains an alias; supplying both is refused.
-Media is optional: X defaults to `media_only`, Bahamut to `any`. Repeating a
+forum URL. Subscribe requires `target`; unsubscribe can omit it to remove a
+platform's subscriptions or request confirmation to clear the channel.
+Media is optional: X and Bahamut default to `any`, including text-only posts. Repeating a
 subscription replaces its filters; omitting a keyword clears the old value.
 New subscriptions start at the current source head without replaying old posts.
 `maxPostsPerPoll` defaults to `5` per subscription (maximum `20`); polling defaults
@@ -385,10 +386,10 @@ one canonical subscription key.
 for subscribe and unsubscribe. Existing thread subscriptions need no database
 migration. With `platform:bahamut`, canonical IDs and B/C URLs remain usable for removal
 while the platform is disabled; a Co link requires an enabled, reachable resolver. Several
-targets can be comma-separated. The `account` alias is kept for older commands;
-use only one of `target` or `account` per invocation.
+targets can be comma-separated. The former `account` command option has been
+removed; use `target` for every platform.
 
-Bahamut's default `media:any` includes text-only posts. Optional `keyword` is one
+Both platforms' default `media:any` includes text-only posts. Optional `keyword` is one
 case-insensitive substring, not a regex or an OR list. It combines with the media
 filter using AND. There is no special interpretation of post content.
 

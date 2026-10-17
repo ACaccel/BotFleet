@@ -1,5 +1,5 @@
 /**
- * The `account` option parser shared by `/feed subscribe` and
+ * The `target` option parser shared by `/feed subscribe` and
  * `/feed unsubscribe`.
  *
  * It is the only thing standing between a free-text Discord option and

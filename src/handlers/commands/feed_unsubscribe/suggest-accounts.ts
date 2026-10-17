@@ -1,6 +1,6 @@
 /**
  * `/feed unsubscribe`'s autocomplete hook: which of the channel's
- * subscribed accounts to offer for the `account` option.
+ * subscribed targets to offer for the `target` option.
  *
  * A database read and nothing else. The upstream platform is never
  * consulted — an autocomplete response is due within three seconds of
@@ -27,7 +27,7 @@ import type { CommandSuggestions } from '../command';
 import { buildAccountSuggestions } from './account-suggestions';
 
 /**
- * Suggestions for the focused `account` segment, or an empty list.
+ * Suggestions for the focused `target` segment, or an empty list.
  *
  * Every unusable state — a DM, a guild with no database, a channel the
  * invoker cannot view, a failed read — resolves to no suggestions
@@ -40,7 +40,7 @@ export const suggestUnsubscribeAccounts = async (
   bot: BaseBot,
 ): Promise<CommandSuggestions> => {
   const focused = interaction.options.getFocused(true);
-  if (focused.name !== 'target' && focused.name !== 'account') return [];
+  if (focused.name !== 'target') return [];
 
   const guild = interaction.guild;
   if (guild === null) return [];

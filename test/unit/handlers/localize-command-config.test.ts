@@ -103,7 +103,7 @@ describe('localizeCommandConfig', () => {
     // for it — the handler still declares the hook, Discord never asks.
     const config: CommandConfig = {
       name: 'feed_unsubscribe',
-      options: { string: [{ name: 'account', required: false, autocomplete: true }] },
+      options: { string: [{ name: 'target', required: false, autocomplete: true }] },
     };
     const localized = localizeCommandConfig(config, bracketTranslator());
     expect(localized.options?.string?.[0]?.autocomplete).toBe(true);

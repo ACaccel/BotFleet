@@ -162,8 +162,8 @@ Upgrading from standalone commands such as `/feed_subscribe`, or from the remove
 To add a command, follow [adding a slash command](docs/contributing/adding-a-command.md).
 
 `/feed` follows X accounts, Bahamut boards (new topics), and Bahamut threads
-(new floors). Supply a profile handle or forum URL through `target`; Bahamut
-includes text posts by default. See [feed configuration and examples](docs/configuration.md#bahamut-subscriptions).
+(new floors). Subscribe requires a profile handle or forum URL through `target`;
+Both platforms include text posts by default. See [feed configuration and examples](docs/configuration.md#bahamut-subscriptions).
 
 ## Project layout
 

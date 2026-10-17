@@ -163,14 +163,11 @@
               "bahamut": "Bahamut"
             }
           },
-          "account": {
-            "description": "Legacy alias for target; use only one of target or account"
-          },
           "channel": {
             "description": "Channel to forward into (default: this channel)"
           },
           "media": {
-            "description": "Media filter (default: X photos/videos; Bahamut all posts)",
+            "description": "Media filter (default: all posts, including text-only posts)",
             "choices": {
               "media_only": "Only posts with a photo or video, no text-only posts",
               "photo_only": "Only posts with a photo",
@@ -198,9 +195,6 @@
               "x": "X (Twitter)",
               "bahamut": "Bahamut"
             }
-          },
-          "account": {
-            "description": "Legacy alias for target; use only one of target or account"
           },
           "target": {
             "description": "Only remove these targets, comma-separated; pick stored targets from autocomplete"

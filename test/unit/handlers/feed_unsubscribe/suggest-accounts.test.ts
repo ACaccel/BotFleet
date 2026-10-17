@@ -50,7 +50,7 @@ interface Fixture {
   readonly guildless?: boolean;
   readonly options?: Readonly<Record<string, string>>;
   readonly focused?: string;
-  /** Which option Discord is asking about; the `account` one by default. */
+  /** Which option Discord is asking about; the `target` one by default. */
   readonly focusedOption?: string;
 }
 
@@ -87,7 +87,7 @@ const build = (fixture: Fixture = {}) => {
     channel: { id: HOME_CHANNEL },
     options: { ...fixture.options },
     focused: fixture.focused ?? '',
-    focusedOption: fixture.focusedOption ?? 'account',
+    focusedOption: fixture.focusedOption ?? 'target',
   });
 
   return { bot, interaction, listByChannel, logger };
@@ -96,18 +96,14 @@ const build = (fixture: Fixture = {}) => {
 const accountsOf = (choices: readonly { value: string }[]) => choices.map((c) => c.value);
 
 describe('suggestUnsubscribeAccounts', () => {
-  it.each(['target', 'account'])(
-    'completes the %s alias using the same stored targets',
-    async (focusedOption) => {
-      const { bot, interaction } = build({
-        focusedOption,
-        byChannel: { [HOME_CHANNEL]: [subscription('36476/3047', HOME_CHANNEL, 'bahamut')] },
-      });
-      const choices = await suggestUnsubscribeAccounts(interaction, bot);
-      expect(accountsOf(choices)).toEqual(['36476/3047']);
-      expect(choices[0]?.name).not.toContain('@36476/3047');
-    },
-  );
+  it('completes target using stored subscriptions', async () => {
+    const { bot, interaction } = build({
+      byChannel: { [HOME_CHANNEL]: [subscription('36476/3047', HOME_CHANNEL, 'bahamut')] },
+    });
+    const choices = await suggestUnsubscribeAccounts(interaction, bot);
+    expect(accountsOf(choices)).toEqual(['36476/3047']);
+    expect(choices[0]?.name).not.toContain('@36476/3047');
+  });
   it('reads the invoking channel when the channel option is empty', async () => {
     const { bot, interaction, listByChannel } = build({
       byChannel: { [HOME_CHANNEL]: [subscription('alice', HOME_CHANNEL)] },
@@ -202,18 +198,18 @@ describe('suggestUnsubscribeAccounts', () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it('offers nothing when Discord asks about an option other than account', async () => {
-    // Unreachable today — `account` is the only flagged option — but a
-    // second flagged option added later would otherwise be answered
-    // with account handles matched against the wrong fragment.
-    const { bot, interaction, listByChannel } = build({
-      focusedOption: 'platform',
-      byChannel: { [HOME_CHANNEL]: [subscription('alice', HOME_CHANNEL)] },
-    });
+  it.each(['account', 'platform'])(
+    'offers nothing for unsupported option %s',
+    async (focusedOption) => {
+      const { bot, interaction, listByChannel } = build({
+        focusedOption,
+        byChannel: { [HOME_CHANNEL]: [subscription('alice', HOME_CHANNEL)] },
+      });
 
-    expect(await suggestUnsubscribeAccounts(interaction, bot)).toEqual([]);
-    expect(listByChannel).not.toHaveBeenCalled();
-  });
+      expect(await suggestUnsubscribeAccounts(interaction, bot)).toEqual([]);
+      expect(listByChannel).not.toHaveBeenCalled();
+    },
+  );
 
   it('offers nothing when the guild has no repository bundle', async () => {
     const { bot, interaction } = build({ noRepos: true });

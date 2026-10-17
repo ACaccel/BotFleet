@@ -44,8 +44,7 @@ export default class feed_subscribe extends Command {
       options: {
         string: [
           { name: 'platform', required: true, choices: platformChoices },
-          { name: 'target', required: false },
-          { name: 'account', required: false },
+          { name: 'target', required: true },
           { name: 'media', required: false, choices: mediaChoices },
           { name: 'keyword', required: false },
         ],
@@ -65,12 +64,7 @@ export default class feed_subscribe extends Command {
       await interaction.editReply({ content: t(key, params) });
     };
     try {
-      const target = getOptionalString(interaction, 'target');
-      const account = getOptionalString(interaction, 'account');
-      if (target !== undefined && account !== undefined) {
-        return refuse('replies:feed.target_alias_conflict');
-      }
-      const raw = target ?? account;
+      const raw = getOptionalString(interaction, 'target');
       if (raw === undefined) return refuse('replies:feed.no_accounts');
       const platformId = getRequiredString(interaction, 'platform');
       const platform = bot.feedPlatformRegistry?.get(platformId);
