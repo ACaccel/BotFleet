@@ -8,9 +8,10 @@ import path from 'path';
  * corresponding npm run script (`test:unit`, `test:int`, `test:contract`,
  * `test:i18n`, `test:tools`) selects via `--project <name>`.
  *
- * CI runs `vitest list --json` and fails unless every project lists at
- * least one test, catching a broken project glob that would otherwise
- * pass silently (see `.github/workflows/ci.yml`).
+ * CI records per-project test counts during the coverage run
+ * (`scripts/vitest-project-counts.ts`) and fails unless every project
+ * has at least one test, catching a broken project glob that would
+ * otherwise pass silently (see `.github/workflows/ci.yml`).
  *
  * `globalSetup` for the `integration` project owns the
  * mongodb-memory-server lifecycle. `integration-nodb` holds the

@@ -43,28 +43,31 @@ jobs:
 
   tests:
     # Coverage runs all six projects once and enforces the thresholds in
-    # vitest.config.ts. Check discovery first because Vitest can succeed
-    # when one project silently contains no tests.
+    # vitest.config.ts. The same run records per-project test counts,
+    # because Vitest can succeed when one project silently contains no
+    # tests; a separate `vitest list` pass would collect every file twice.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/npm-install
       - uses: ./.github/actions/seed-bot-config
+      - name: Run coverage and record per-project test counts
+        shell: bash
+        run: |
+          npm run test:coverage -- --reporter=default \
+            --reporter=./scripts/vitest-project-counts.ts \
+            --outputFile.project-counts="$RUNNER_TEMP/project-counts.json"
       - name: Require tests in every Vitest project
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/runtime.mjs exec vitest list --json | jq -e '
-            group_by(.projectName)
-            | map({key: .[0].projectName, value: length})
-            | from_entries
-            | . as $counts
+          jq -e '
+            . as $counts
             | ["unit", "integration", "integration-nodb", "contract", "i18n", "tools"]
             | map(select(($counts[.] // 0) == 0))
             | if length == 0 then "All six Vitest projects contain tests."
               else error("Empty Vitest projects: \(join(", "))") end
-          '
-      - run: npm run test:coverage
+          ' "$RUNNER_TEMP/project-counts.json"
 
   migration-drill:
     # The MongoDB migration drill skips itself unless
