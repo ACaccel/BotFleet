@@ -4,6 +4,19 @@ description: 'Create the project Conda runtime and install the npm lockfile'
 runs:
   using: 'composite'
   steps:
+    # Only downloads are cached. The environment is still created and
+    # `npm ci` still runs (rebuilding native modules) on every job, so a
+    # stale cache can cost a download but never change what is installed.
+    # `~/conda_pkgs_dir` is setup-miniconda's default package directory.
+    - uses: actions/cache@v6
+      with:
+        path: ~/conda_pkgs_dir
+        key: conda-pkgs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('environment.yml') }}
+    - uses: actions/cache@v6
+      with:
+        path: ~/.npm
+        key: npm-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+        restore-keys: npm-cache-${{ runner.os }}-${{ runner.arch }}-
     - uses: conda-incubator/setup-miniconda@v4
       with:
         miniforge-version: latest
