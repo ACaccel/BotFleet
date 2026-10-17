@@ -19,8 +19,17 @@ describe('gay meter', () => {
     expect(singleReading('u1', 'UTC', NOON)).toEqual(singleReading('u1', 'UTC', NOON + 3_600_000));
   });
 
-  it('reads a pair the same in either order', () => {
-    expect(pairReading('u1', 'u2', 'UTC', NOON)).toEqual(pairReading('u2', 'u1', 'UTC', NOON));
+  it('reads A x B and B x A as separate pairings', () => {
+    const differs = Array.from({ length: 20 }, (_, day) => {
+      const now = NOON + day * DAY;
+      return (
+        pairReading('u1', 'u2', 'UTC', now).percent !== pairReading('u2', 'u1', 'UTC', now).percent
+      );
+    });
+    expect(differs).toContain(true);
+    expect(pairReading('u2', 'u1', 'UTC', NOON)).toEqual(
+      pairReading('u2', 'u1', 'UTC', NOON + 3_600_000),
+    );
   });
 
   it('retains the rare low branch, and only uses comments every catalog has', () => {
@@ -74,7 +83,7 @@ describe('gay meter', () => {
     );
   });
 
-  it('caps pair bonuses, remains symmetric and omits unknown elements', () => {
+  it('caps pair bonuses, applies them in either order and omits unknown elements', () => {
     const summary: GayArchiveSummary = {
       members: [],
       pair: {
@@ -90,7 +99,9 @@ describe('gay meter', () => {
       const base = pairReading('u1', 'u2', 'UTC', now);
       const boosted = pairReading('u1', 'u2', 'UTC', now, summary);
       expect(boosted.percent).toBe(Math.min(100, base.percent + 20));
-      expect(boosted).toEqual(pairReading('u2', 'u1', 'UTC', now, summary));
+      expect(pairReading('u2', 'u1', 'UTC', now, summary).percent).toBe(
+        Math.min(100, pairReading('u2', 'u1', 'UTC', now).percent + 20),
+      );
       expect(
         pairReading('u1', 'u2', 'UTC', now, { members: [], pair: { repliesABDays: 30 } }),
       ).toEqual(base);

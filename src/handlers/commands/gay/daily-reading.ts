@@ -27,7 +27,8 @@ export const archiveWindow = (now: number, timeZone: string): StatsWindow => {
 };
 
 export const dailyReading = async (input: DailyReadingInput): Promise<Reading> => {
-  const userIds = [...new Set(input.userIds)].sort();
+  // Pair order is significant: `A x B` and `B x A` read differently.
+  const userIds = [...new Set(input.userIds)];
   const first = userIds[0];
   if (first === undefined || userIds.length > 2) throw new Error('Expected one or two members');
   const second = userIds[1];
@@ -42,7 +43,7 @@ export const dailyReading = async (input: DailyReadingInput): Promise<Reading> =
   const key = createHash('sha256')
     .update(
       JSON.stringify([
-        'gay-v2',
+        'gay-v3',
         input.timeZone,
         localSlotOf(input.now, input.timeZone).dayKey,
         userIds,

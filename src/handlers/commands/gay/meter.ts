@@ -48,7 +48,7 @@ export const singleReading = (
   return reading('single', percent, roll);
 };
 
-/** Today's pair reading, the same whichever order the two members are given. */
+/** Today's pair reading; `A x B` and `B x A` are separate pairings with their own base score. */
 export const pairReading = (
   a: string,
   b: string,
@@ -56,7 +56,8 @@ export const pairReading = (
   now?: number,
   summary?: GayArchiveSummary,
 ): Reading => {
-  const seed = `gay-pair|${[a, b].sort().join('|')}`;
+  const seed = `gay-pair|${a}|${b}`;
+  // The summary is keyed by sorted IDs; the mutual bonus is direction-free, so order is irrelevant here.
   const pair = summary?.pair;
   // Bidirectional days earn more than one-sided attention, capped per element.
   const mutualPoints = (forward?: number, backward?: number): number =>

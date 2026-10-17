@@ -10,10 +10,10 @@ Readings do not infer sexuality or relationships. Dates follow the bot's
 The base generator hashes the subject IDs and local date with SHA-256 and reads
 the first unsigned 32-bit integer. A second hash uses a `#2` seed suffix.
 
-| Mode   | Rule                                                                                                                                                                                      |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single | When the first integer is divisible by 20, use the second modulo 30 (0–29). Otherwise use 30 plus the second modulo 71 (30–100). The branches occur approximately 5% and 95% of the time. |
-| Pair   | Sort the two IDs, hash the pair and date, and take modulo 101 (0–100). Add the optional interaction bonus and cap at 100. Reversing the member order does not change the reading.         |
+| Mode   | Rule                                                                                                                                                                                                                        |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Single | When the first integer is divisible by 20, use the second modulo 30 (0–29). Otherwise use 30 plus the second modulo 71 (30–100). The branches occur approximately 5% and 95% of the time.                                   |
+| Pair   | Hash the two IDs in the given order (`user` then `user2`) with the date, and take modulo 101 (0–100). Add the optional interaction bonus and cap at 100. `A x B` and `B x A` are separate pairings with independent scores. |
 
 Single archive traits append active-day count and, when known, the rounded
 percentage of messages containing emoji to the seed. Message volume does not
@@ -57,7 +57,7 @@ Incomplete backups describe only observed activity, not the full history.
 The first reading is atomically stored in the separate `gay_readings` collection,
 including a base reading after an archive timeout or missing data. It contains
 only a hashed identity, score, comment key and expiry time. Identity includes
-the calculation version, local date, time zone, sorted subject IDs and currently
+the calculation version, local date, time zone, ordered subject IDs and currently
 permitted channel set; the guild database supplies guild isolation. Permissions
 are resolved before accessing a snapshot. Equivalent scopes share a reading
 across bots and restarts; different scopes can produce different scores.

@@ -82,14 +82,15 @@ describe('archive-aware daily readings', () => {
     expect(await dailyReading(input)).toEqual(winner);
   });
 
-  it('separates subjects, dates, time zones and permitted scopes while sorting pairs', async () => {
+  it('separates subjects, dates, time zones and permitted scopes including pair order', async () => {
     const input = fixture();
     const keyOf = async (patch: Partial<typeof input>): Promise<string> => {
       await dailyReading({ ...input, ...patch });
       return input.snapshots.find.mock.calls.at(-1)?.[0] ?? '';
     };
     const base = await keyOf({ userIds: ['u1', 'u2'], channelIds: ['b', 'a', 'a'] });
-    expect(await keyOf({ userIds: ['u2', 'u1'], channelIds: ['a', 'b'] })).toBe(base);
+    expect(await keyOf({ userIds: ['u1', 'u2'], channelIds: ['a', 'b'] })).toBe(base);
+    expect(await keyOf({ userIds: ['u2', 'u1'], channelIds: ['a', 'b'] })).not.toBe(base);
     expect(await keyOf({ userIds: ['u1', 'u2'], channelIds: ['a'] })).not.toBe(base);
     expect(await keyOf({ userIds: ['u1', 'u2'], channelIds: ['a', 'b'], now: NOW + DAY })).not.toBe(
       base,
@@ -98,11 +99,11 @@ describe('archive-aware daily readings', () => {
       await keyOf({ userIds: ['u1', 'u2'], channelIds: ['a', 'b'], timeZone: 'Asia/Taipei' }),
     ).not.toBe(base);
     expect(await keyOf({ userIds: ['u1'], channelIds: ['a', 'b'] })).not.toBe(base);
-    expect(await dailyReading({ ...input, userIds: ['u1', 'u2'] })).toEqual(
-      pairReading('u1', 'u2', 'UTC', NOW),
+    expect(await dailyReading({ ...input, userIds: ['u2', 'u1'] })).toEqual(
+      pairReading('u2', 'u1', 'UTC', NOW),
     );
     expect(input.stats.summarize).toHaveBeenLastCalledWith({
-      userIds: ['u1', 'u2'],
+      userIds: ['u2', 'u1'],
       channelIds: ['public'],
       timeZone: 'UTC',
       window: archiveWindow(NOW, 'UTC'),
