@@ -29,6 +29,7 @@ import {
   FeedPlatformRegistry,
   XPlatform,
   MAX_FEED_ACCOUNTS,
+  MAX_FEED_KEYWORD_LENGTH,
   type FeedFailure,
   type FeedPlatform,
 } from '../../../../src/infra/social-feed';
@@ -663,6 +664,45 @@ describe('/feed subscribe', () => {
     expect(content).toContain('replies:feed.too_many_accounts');
     expect(content).toContain(`"max":${String(MAX_FEED_ACCOUNTS)}`);
     expect(fetchTimeline).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('stores a keyword expression as typed', async () => {
+    const { bot, interaction, upsert } = build({
+      options: { keyword: ' live OR (album AND tour) ' },
+    });
+
+    await new FeedSubscribe().execute(interaction, bot);
+
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter: expect.objectContaining({ keyword: 'live OR (album AND tour)' }),
+      }),
+    );
+  });
+
+  it('refuses a malformed keyword expression before reading or writing anything', async () => {
+    const { bot, interaction, sink, upsert, fetchTimeline } = build({
+      options: { keyword: 'live OR (album' },
+    });
+
+    await new FeedSubscribe().execute(interaction, bot);
+
+    expect(reply(sink)).toContain('replies:feed.keyword_invalid');
+    expect(fetchTimeline).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('refuses an over-long keyword instead of storing a truncated expression', async () => {
+    const { bot, interaction, sink, upsert } = build({
+      options: { keyword: 'a'.repeat(MAX_FEED_KEYWORD_LENGTH + 1) },
+    });
+
+    await new FeedSubscribe().execute(interaction, bot);
+
+    const content = reply(sink);
+    expect(content).toContain('replies:feed.keyword_too_long');
+    expect(content).toContain(`"max":${String(MAX_FEED_KEYWORD_LENGTH)}`);
     expect(upsert).not.toHaveBeenCalled();
   });
 

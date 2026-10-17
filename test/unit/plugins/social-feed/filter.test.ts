@@ -138,6 +138,24 @@ describe('selectPostsToForward — keyword filter', () => {
     expect(select(posts, { filter: { media: 'media_only', keyword: 'album' } })).toEqual([]);
   });
 
+  it('evaluates a stored keyword expression with AND, OR, NOT and parentheses', () => {
+    const posts = [
+      post({ id: '10', text: 'live tonight' }),
+      post({ id: '11', text: 'album release and tour' }),
+      post({ id: '12', text: 'album artwork' }),
+      post({ id: '13', text: 'live replay' }),
+    ];
+    const keyword = '(live NOT replay) OR (album AND tour)';
+    expect(select(posts, { filter: { media: 'any', keyword } })).toEqual(['10', '11']);
+  });
+
+  it('keeps a stored keyword that predates the expression syntax as one substring', () => {
+    // An unbalanced parenthesis was valid plain text before keywords
+    // became expressions; it must not start failing or matching nothing.
+    const posts = [post({ id: '10', text: 'notice (part 2' }), post({ id: '11', text: 'part 2' })];
+    expect(select(posts, { filter: { media: 'any', keyword: '(part 2' } })).toEqual(['10']);
+  });
+
   it('applies the keyword on top of the media rule, not instead of it', () => {
     const posts = [post({ id: '10', text: 'new album', media: [] })];
     expect(select(posts, { filter: { media: 'media_only', keyword: 'album' } })).toEqual([]);

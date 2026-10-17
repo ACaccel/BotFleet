@@ -272,7 +272,9 @@ replaying the existing members' backlog. Verified deleted opening floors produce
 anchored to the preceding source time so later reply timestamps cannot reorder
 new-topic events. Source notifications include bounded
 body excerpts because forum unfurls can show a different floor. Media and
-substring keyword filters remain generic; no content-specific recognition runs.
+keyword filters remain generic; no content-specific recognition runs. The boolean
+keyword grammar lives in [`infra/social-feed`](../src/infra/social-feed/keyword-expression.ts)
+so `/feed subscribe` validation and plugin matching share one parser.
 Threads retains validated proxy OpenGraph metadata for custom cards instead of
 depending on a second fetch by Discord's URL crawler. Facebook retains metadata
 from proxies or the source site. Both preserve the complete image list. The renderer

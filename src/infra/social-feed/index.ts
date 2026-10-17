@@ -32,6 +32,14 @@ export { FeedPlatformsSchema, parseFeedPlatformsConfig, type FeedPlatformsConfig
 export { newestPostForBaseline, resolveBaselineCursor, type FeedBaselineCursor } from './baseline';
 export { prepareFeedSubscription } from './subscribe';
 export { parseFeedAccounts, feedAccountRefusal, MAX_FEED_ACCOUNTS } from './parse-accounts';
+export {
+  parseFeedKeyword,
+  feedKeywordRefusal,
+  compileFeedKeyword,
+  matchesFeedKeyword,
+  MAX_FEED_KEYWORD_LENGTH,
+  type FeedKeywordExpression,
+} from './keyword-expression';
 
 export { XPlatform } from './platforms/x-platform';
 export { BahamutPlatform } from './platforms/bahamut-platform';

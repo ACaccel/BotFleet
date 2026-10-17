@@ -348,6 +348,29 @@ Discord accepts the complete message; send failures retry on the next pass.
 Cursor-aware sources also advance past intentionally excluded records after
 preceding deliveries succeed, so filtered batches cannot block newer posts.
 
+#### Feed keyword filters
+
+`keyword` narrows a subscription on either platform to posts whose text matches a
+boolean expression. It combines with the media filter using AND.
+
+| Syntax                     | Matches                                                                     |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `live`                     | Text containing `live` (case-insensitive)                                   |
+| `new album`                | The phrase `new album`; adjacent words stay one phrase                      |
+| `live AND album`, `&`      | Both terms                                                                  |
+| `live OR album`, `\|`      | Either term                                                                 |
+| `NOT replay`, `!replay`    | Text without the term; `live !replay` = `live AND NOT replay`               |
+| `live OR (album AND tour)` | Grouping; full-width parentheses also work                                  |
+| `"R&B"`                    | Quoted text is literal, including `&`, `\|`, parentheses and operator words |
+
+Precedence is `NOT`, then `AND`, then `OR`. Operator words match in any letter case
+but only as whole words. `!` (or full-width `！`) negates only at the start of a term;
+inside or after a word, as in `notice!`, it is literal text. The expression is limited to 100 characters; malformed or
+longer input is refused with a syntax hint rather than stored. A stored keyword that
+predates this syntax and does not parse (such as an unbalanced parenthesis) keeps
+matching as one literal substring. Keywords never use regular expressions, and there
+is no special interpretation of post content.
+
 #### Bahamut subscriptions
 
 Add `"bahamut": {}` to `social_feed.platforms` and enable `social_feed` in the bot's
@@ -389,9 +412,8 @@ while the platform is disabled; a Co link requires an enabled, reachable resolve
 targets can be comma-separated. The former `account` command option has been
 removed; use `target` for every platform.
 
-Both platforms' default `media:any` includes text-only posts. Optional `keyword` is one
-case-insensitive substring, not a regex or an OR list. It combines with the media
-filter using AND. There is no special interpretation of post content.
+Both platforms' default `media:any` includes text-only posts. Optional `keyword`
+follows the [feed keyword filters](#feed-keyword-filters) syntax.
 
 The adapter reads public HTML without login or paid APIs. Blocked requests or
 unrecognized pages produce feed errors and retry on the next poll. Each read

@@ -651,6 +651,8 @@
     "reason_unknown": "我這邊出了點問題。",
     "no_accounts": "請使用 target 指定至少一個訂閱目標。",
     "too_many_accounts": "一次最多只能指定 {{max}} 個目標，請用逗號分隔。",
+    "keyword_too_long": "關鍵字最多 {{max}} 個字。",
+    "keyword_invalid": "無法解讀這個關鍵字。請用 `AND`、`OR` 或 `NOT`（或在關鍵字前加 `!`）連接關鍵字，括號與引號要成對，`AND`、`OR` 前後都要有關鍵字，例如 `直播 OR (專輯 AND 發售)`。若文字本身含有 `&`、`|`、開頭的 `!`、括號或這些英文字，請用引號包住，例如 `\"R&B\"`。",
     "unsubscribed_one": "已移除 {{count}} 筆訂閱:\n{{list}}",
     "unsubscribed_other": "已移除 {{count}} 筆訂閱:\n{{list}}",
     "unsubscribed_more": "…另外還有 {{count}} 筆。",

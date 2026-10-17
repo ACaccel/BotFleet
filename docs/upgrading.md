@@ -402,3 +402,13 @@ Existing X and Bahamut thread subscription keys/cursors are preserved, so no
 subscription data migration is required. See [Bahamut subscriptions](configuration.md#bahamut-subscriptions)
 for board new-topic streams, thread new-floor streams, URL resolution and backlog
 limits.
+
+## Feed keyword expressions
+
+`/feed subscribe`'s `keyword` now accepts [boolean expressions](configuration.md#feed-keyword-filters)
+with `AND`, `OR`, `NOT`, `&`, `|`, `!`, parentheses and quotes. Re-register commands to
+update the option description. Stored keywords need no migration, but one that
+contains a whole-word `and`, `or` or `not`, `&`, `|`, a word-initial `!` or balanced parentheses is now
+read as an expression; subscribe again with the text in quotes to keep a literal
+match. A stored keyword that does not parse still matches as one substring. Input
+longer than 100 characters is refused instead of truncated.

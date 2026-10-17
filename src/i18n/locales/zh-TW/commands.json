@@ -176,7 +176,7 @@
             }
           },
           "keyword": {
-            "description": "只轉發內文包含這段文字的內容（最多 100 字）"
+            "description": "只轉發符合關鍵字的內容，可用 AND、OR、NOT 與括號組合，例如：直播 OR (專輯 AND 發售)"
           },
           "target": {
             "description": "訂閱目標，以逗號分隔：X 帳號，或 Bahamut 看板／討論串 ID、公開 B/C/Co 連結"

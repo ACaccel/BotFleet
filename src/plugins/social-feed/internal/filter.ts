@@ -14,7 +14,13 @@
  * delegated to the platform, so no platform-specific arithmetic (X's
  * snowflake ids) leaks into the plugin. Free of I/O.
  */
-import type { FeedPlatform, FeedPost } from '../../../infra/social-feed';
+import {
+  compileFeedKeyword,
+  matchesFeedKeyword,
+  type FeedKeywordExpression,
+  type FeedPlatform,
+  type FeedPost,
+} from '../../../infra/social-feed';
 import type { FeedMediaFilter } from '../../../persistence/schemas/feed-subscription.schema';
 
 /**
@@ -27,7 +33,7 @@ import type { FeedMediaFilter } from '../../../persistence/schemas/feed-subscrip
  */
 export interface SubscriptionFilter {
   readonly media: FeedMediaFilter;
-  /** Case-insensitive substring the post text must contain. */
+  /** Keyword expression the post text must satisfy; see `compileFeedKeyword`. */
   readonly keyword?: string;
 }
 
@@ -78,15 +84,15 @@ const matchesMedia = (post: FeedPost, media: FeedMediaFilter): boolean => {
 };
 
 /**
- * True when the post body contains the keyword, case-insensitively.
+ * True when the post body satisfies the compiled keyword expression.
  *
- * A post whose platform reported no text carries `''`, which matches no
- * keyword — so a keyword subscription on a platform that does not
- * expose post text forwards nothing rather than everything. That is the
- * safe direction for a filter whose purpose is to narrow.
+ * A post whose platform reported no text carries `''`, which contains no
+ * term — so a keyword subscription on a platform that does not expose
+ * post text forwards nothing unless the expression only excludes terms.
+ * That is the safe direction for a filter whose purpose is to narrow.
  */
-const matchesKeyword = (post: FeedPost, keyword: string | undefined): boolean =>
-  keyword === undefined || post.text.toLowerCase().includes(keyword.toLowerCase());
+const matchesKeyword = (post: FeedPost, keyword: FeedKeywordExpression | null): boolean =>
+  keyword === null || matchesFeedKeyword(keyword, post.text);
 
 /**
  * Choose the posts a pass should forward for one subscription: the
@@ -104,6 +110,8 @@ export const selectPostsToForward = (
   input: SelectPostsInput,
 ): readonly FeedPost[] => {
   const { platform, filter, lastSeenId } = input;
+  // Compiled once per pass rather than once per post.
+  const keyword = compileFeedKeyword(filter.keyword);
   const eligible = posts.filter((post) => {
     if (post.isDeleted === true) return false;
     if (post.isRepost) return false;
@@ -114,7 +122,7 @@ export const selectPostsToForward = (
       if (post.isReply) return false;
     }
     if (!matchesMedia(post, filter.media)) return false;
-    if (!matchesKeyword(post, filter.keyword)) return false;
+    if (!matchesKeyword(post, keyword)) return false;
     if (lastSeenId === undefined) return true;
     return platform.compareIds(post.id, lastSeenId) > 0;
   });

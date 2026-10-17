@@ -176,7 +176,7 @@
             }
           },
           "keyword": {
-            "description": "Only forward content containing this text (max 100 characters)"
+            "description": "Only forward matching content; combine with AND, OR, NOT and (), e.g. live OR (album AND tour)"
           },
           "target": {
             "description": "Targets, comma-separated: X handles or Bahamut board/thread IDs or public B/C/Co links"

@@ -651,6 +651,8 @@
     "reason_unknown": "Something went wrong on my side.",
     "no_accounts": "Provide at least one subscription target using target.",
     "too_many_accounts": "Name at most {{max}} targets at a time, separated by commas.",
+    "keyword_too_long": "The keyword can be at most {{max}} characters.",
+    "keyword_invalid": "I could not read that keyword. Join keywords with `AND`, `OR` or `NOT` (or `!` before a keyword), keep parentheses and quotes paired, and put a keyword on both sides of `AND` and `OR`, for example `live OR (album AND release)`. Quote text containing `&`, `|`, a leading `!`, parentheses or those words, such as `\"R&B\"`.",
     "unsubscribed_one": "Removed {{count}} subscription:\n{{list}}",
     "unsubscribed_other": "Removed {{count}} subscriptions:\n{{list}}",
     "unsubscribed_more": "…and {{count}} more.",

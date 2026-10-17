@@ -72,6 +72,12 @@ export default class feed_subscribe extends Command {
 
       const parsed = parseFeedAccounts(raw);
       if (parsed.kind !== 'accounts') return refuse(...feedAccountRefusal(parsed));
+      const built = buildSubscriptionFilter(
+        getOptionalString(interaction, 'media') ?? platform.defaultMediaFilter,
+        getOptionalString(interaction, 'keyword'),
+      );
+      if (built.kind === 'refused') return refuse(...built.refusal);
+      const { filter } = built;
 
       const guild = interaction.guild;
       const repos = await requireGuildRepos(bot, interaction);
@@ -113,10 +119,6 @@ export default class feed_subscribe extends Command {
         });
       }
 
-      const filter = buildSubscriptionFilter(
-        getOptionalString(interaction, 'media') ?? platform.defaultMediaFilter,
-        getOptionalString(interaction, 'keyword'),
-      );
       const outcomes = await subscribeAccounts({
         platform,
         repo: repos.feedSubscription,
