@@ -1,15 +1,9 @@
 /**
- * `/feed subscribe` — forward one or more social accounts' new posts
- * into one channel. The channel is checked once, then each account is
- * subscribed independently (see `subscribe-accounts.ts`).
+ * `/feed subscribe` forwards new content from targets into one channel.
+ * Gate the channel once, then subscribe each target independently.
  *
- * Authority is ungated: any member may subscribe. Reach is not. Every
- * `/feed` command is bounded by the channels the invoker can already
- * see, so none of them can be used to write into — or read out of — a
- * part of the guild that is closed to the person running it. The
- * bot-permission check is not an authority check either: it refuses a
- * delivery that could only ever fail silently, and runs last so a
- * member who cannot see the channel learns nothing about the bot there.
+ * Any member may subscribe within channels they can see. Check bot
+ * permissions last so an inaccessible channel reveals no bot state.
  */
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { MessageFlags } from 'discord.js';
@@ -50,8 +44,9 @@ export default class feed_subscribe extends Command {
       options: {
         string: [
           { name: 'platform', required: true, choices: platformChoices },
-          { name: 'account', required: true },
-          { name: 'media', required: true, choices: mediaChoices },
+          { name: 'target', required: false },
+          { name: 'account', required: false },
+          { name: 'media', required: false, choices: mediaChoices },
           { name: 'keyword', required: false },
         ],
         channel: [{ name: 'channel', required: false }],
@@ -70,11 +65,18 @@ export default class feed_subscribe extends Command {
       await interaction.editReply({ content: t(key, params) });
     };
     try {
+      const target = getOptionalString(interaction, 'target');
+      const account = getOptionalString(interaction, 'account');
+      if (target !== undefined && account !== undefined) {
+        return refuse('replies:feed.target_alias_conflict');
+      }
+      const raw = target ?? account;
+      if (raw === undefined) return refuse('replies:feed.no_accounts');
       const platformId = getRequiredString(interaction, 'platform');
       const platform = bot.feedPlatformRegistry?.get(platformId);
       if (platform === undefined) throw platformNotConfiguredError(platformId);
 
-      const parsed = parseFeedAccounts(getRequiredString(interaction, 'account'));
+      const parsed = parseFeedAccounts(raw);
       if (parsed.kind !== 'accounts') return refuse(...feedAccountRefusal(parsed));
 
       const guild = interaction.guild;
@@ -118,7 +120,7 @@ export default class feed_subscribe extends Command {
       }
 
       const filter = buildSubscriptionFilter(
-        getRequiredString(interaction, 'media'),
+        getOptionalString(interaction, 'media') ?? platform.defaultMediaFilter,
         getOptionalString(interaction, 'keyword'),
       );
       const outcomes = await subscribeAccounts({
@@ -133,10 +135,10 @@ export default class feed_subscribe extends Command {
       });
       // Each failure was logged where it was absorbed; this line is the
       // durable record of the batch as a whole.
-      const summary = formatOutcomesForLog(outcomes);
+      const summary = formatOutcomesForLog(outcomes, platformId);
       logSystem(bot.logger, ops.feed.subscriptionsProcessed(channel.id, outcomes.length, summary));
 
-      const report = { platform: platform.displayName, channel: mention, filter };
+      const report = { platform: platform.displayName, platformId, channel: mention, filter };
       await sendPagedEphemeralReply(interaction, formatOutcomePages(outcomes, report, t), {
         logger: bot.logger,
         partialNotice: (failed) => t('replies:common.pages_failed', { count: failed }),

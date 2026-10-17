@@ -9,6 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { FeedError } from '../../../../src/core/errors';
+import { ok } from '../../../../src/core/result';
 import { prepareFeedSubscription } from '../../../../src/infra/social-feed';
 import { buildFakeFeedPlatform, buildFeedPost } from '../../../fixtures/social-feed/fake-platform';
 
@@ -17,6 +18,21 @@ const alwaysNew = { nowMs: NOW_MS, isNew: async (): Promise<boolean> => true };
 const neverNew = { nowMs: NOW_MS, isNew: async (): Promise<boolean> => false };
 
 describe('prepareFeedSubscription', () => {
+  it('awaits target resolution before looking up or storing the canonical source', async () => {
+    const fake = buildFakeFeedPlatform({
+      posts: [buildFeedPost({ id: '7', createdTimestamp: 100 })],
+    });
+    const isNew = vi.fn(async () => true);
+    const normalizeAccount = vi.fn(async () => ok('12345/42'));
+    const prepared = await prepareFeedSubscription(
+      { ...fake.platform, normalizeAccount },
+      'single-floor-url',
+      { nowMs: NOW_MS, isNew },
+    );
+    expect(isNew).toHaveBeenCalledWith('12345/42');
+    expect(fake.fetchTimeline).toHaveBeenCalledWith('12345/42');
+    expect(prepared.ok && prepared.value.account).toBe('12345/42');
+  });
   it('canonicalises the handle and seeds a cursor from the newest post', async () => {
     const { platform } = buildFakeFeedPlatform({
       posts: [buildFeedPost({ id: '7', createdTimestamp: 1_700_000_500 })],

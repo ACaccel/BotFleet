@@ -48,14 +48,17 @@
     "unknown": "An unexpected error occurred while building the link preview from `{{provider}}` (status {{status}})."
   },
   "feed": {
-    "fetch_failed": "Could not read `@{{account}}`'s posts from {{platform}} (status {{status}}).",
-    "timeout": "Reading `@{{account}}`'s posts from {{platform}} timed out (status {{status}}).",
-    "upstream_failure": "The {{platform}} feed source is temporarily unavailable while reading `@{{account}}` (status {{status}}). Please try again later.",
-    "rate_limited": "The {{platform}} feed source is rate limited while reading `@{{account}}` (status {{status}}). Please try again later.",
-    "not_found": "The {{platform}} account `@{{account}}` was not found (status {{status}}). It may have been renamed, suspended, or misspelled.",
-    "invalid_response": "The {{platform}} feed source returned an unexpected response for `@{{account}}` (status {{status}}).",
+    "fetch_failed": "Could not read `{{account}}`'s posts from {{platform}} (status {{status}}).",
+    "timeout": "Reading `{{account}}`'s posts from {{platform}} timed out (status {{status}}).",
+    "upstream_failure": "The {{platform}} feed source is temporarily unavailable while reading `{{account}}` (status {{status}}). Please try again later.",
+    "rate_limited": "The {{platform}} feed source is rate limited while reading `{{account}}` (status {{status}}). Please try again later.",
+    "not_found": "The {{platform}} target `{{account}}` was not found (status {{status}}). Check the target and its public availability.",
+    "invalid_response": "The {{platform}} feed source returned an unexpected response for `{{account}}` (status {{status}}).",
     "invalid_account": "`@{{account}}` is not a valid {{platform}} account name.",
-    "platform_not_configured": "The feed platform `{{platform}}` is not configured on this bot."
+    "platform_not_configured": "The feed platform `{{platform}}` is not configured on this bot.",
+    "bahamut_resolution_required": "Cannot resolve this Bahamut floor link without an upstream resolver. Use a listed canonical target or enable the Bahamut platform.",
+    "bahamut_lookback_exceeded": "Could not reach the saved position for {{platform}} target `{{account}}` (status {{status}}). Increase maxPages and try again.",
+    "invalid_target": "`{{account}}` is not a valid {{platform}} target. Use a public Bahamut B.php, C.php or Co.php forum link, board:<bsn>, or <bsn>/<snA>."
   },
   "plugin": {
     "lifecycle_phase_violation": "Plugin `{{plugin}}` called registerInstance(`{{token}}`) during phase `{{phase}}`; only `init` is allowed."

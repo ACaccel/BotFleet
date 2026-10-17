@@ -4,6 +4,7 @@
  * into the object the plugin and the commands resolve.
  */
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import {
   FEED_PLATFORM_DISPLAY_NAMES,
@@ -79,7 +80,7 @@ describe('createDefaultFeedPlatformRegistry', () => {
     // so an id on it with no branch in the factory would offer users a
     // subscription nothing could ever serve. The exhaustive record makes
     // adding an id without a config block a compile error too.
-    const platforms: Record<FeedPlatformId, Record<string, never>> = { x: {} };
+    const platforms: Record<FeedPlatformId, Record<string, never>> = { x: {}, bahamut: {} };
 
     const registry = createDefaultFeedPlatformRegistry(parseFeedPlatformsConfig({ platforms }));
 
@@ -94,6 +95,34 @@ describe('createDefaultFeedPlatformRegistry', () => {
     expect(registry.get('x')?.id).toBe('x');
     // One spelling everywhere the platform is named to a user.
     expect(registry.get('x')?.displayName).toBe(FEED_PLATFORM_DISPLAY_NAMES.x);
+  });
+
+  it('defaults and registers an opted-in Bahamut platform', async () => {
+    const config = parseFeedPlatformsConfig({ platforms: { bahamut: {} } });
+    expect(config.bahamut).toEqual({
+      baseUrl: 'https://forum.gamer.com.tw',
+      timeoutMs: 8000,
+      maxPages: 5,
+    });
+    const platform = createDefaultFeedPlatformRegistry(config).get('bahamut');
+    expect(platform?.displayName).toBe(FEED_PLATFORM_DISPLAY_NAMES.bahamut);
+    expect(platform?.subscriptionScope).toBe('source');
+    expect(
+      await platform?.normalizeAccount('https://forum.gamer.com.tw/C.php?bsn=36476&snA=3047'),
+    ).toEqual({ ok: true, value: '36476/3047' });
+  });
+
+  it.each([
+    { maxPages: 0 },
+    { maxPages: 21 },
+    { timeoutMs: 0 },
+    { baseUrl: 'bad' },
+    { baseUrl: 'ftp://forum.gamer.com.tw' },
+    { baseUrl: 'https://user:password@forum.gamer.com.tw' },
+    { baseUrl: 'https://forum.gamer.com.tw?board=1' },
+    { unknown: true },
+  ])('rejects invalid Bahamut settings %j', (bahamut) => {
+    expect(() => parseFeedPlatformsConfig({ platforms: { bahamut } })).toThrow(z.ZodError);
   });
 
   it('wires the configured embed proxy host into the platform it builds', () => {

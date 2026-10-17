@@ -11,11 +11,10 @@
  * down by one bad guild, upstream account, subscription, or send: each is
  * isolated, and the plugin wrapping this reschedules itself in a `finally`.
  *
- * Cursor invariant: the stored cursor is always a post actually delivered
- * (or the seed baseline that suppresses backfill); it advances only after a
- * successful send, so a failed send retries next pass; and it is compared by
- * post id, never timestamp, because an upstream `since` only gates a `204`
- * and does not filter the page.
+ * Cursor invariant: pending matches advance only after successful delivery.
+ * Cursor-aware sources also pass intentionally excluded or deleted records,
+ * after all preceding matches succeeded. Seeding suppresses backfill; ordering
+ * always uses source IDs because a timestamp hint may omit same-second posts.
  */
 import type { Client, SendableChannels } from 'discord.js';
 
@@ -24,6 +23,7 @@ import type { Translator } from '../../../core/i18n';
 import { logError, type Logger } from '../../../core/logger';
 import type { Clock } from '../../../core/time';
 import {
+  newestPostForBaseline,
   resolveBaselineCursor,
   type FeedPlatform,
   type FeedPlatformRegistry,
@@ -94,6 +94,8 @@ interface SubscriptionPassInput {
   readonly fetchedAtMs: number;
   /** One preparation per post in this account pass, shared across destinations. */
   readonly previewFor: (post: FeedPost) => Promise<FeedPreview | undefined>;
+  /** A mixed group seeds new subscribers at the current source head, not an old batch. */
+  readonly baselinePosts?: () => ReturnType<FeedPlatform['fetchTimeline']>;
 }
 
 /**
@@ -197,6 +199,18 @@ const sinceTimestampFor = (group: AccountGroup, fullSweep: boolean): number | un
   return minimum;
 };
 
+/** Cursor sources keep the oldest seeded member's position, including on full sweeps. */
+const afterIdFor = (group: AccountGroup): string | undefined => {
+  let minimum: string | undefined;
+  for (const { sub } of group.members) {
+    if (sub.last_seen_id === undefined) continue;
+    if (minimum === undefined || group.platform.compareIds(sub.last_seen_id, minimum) < 0) {
+      minimum = sub.last_seen_id;
+    }
+  }
+  return minimum;
+};
+
 /**
  * Seed a cursor without posting anything.
  *
@@ -211,6 +225,14 @@ const seedCursor = async (
   posts: readonly FeedPost[],
 ): Promise<void> => {
   const { guildId, repos, sub } = input.member;
+  if (input.baselinePosts !== undefined) {
+    const baseline = await input.baselinePosts();
+    if (!baseline.ok) {
+      logError(deps.logger, guildId, baseline.error);
+      return;
+    }
+    posts = baseline.value;
+  }
   const baseline = resolveBaselineCursor(input.platform, posts, input.fetchedAtMs);
   const stored = await repos.feedSubscription.advanceCursor(
     sub._id,
@@ -336,17 +358,37 @@ const pollSubscription = async (
     await seedCursor(deps, input, posts);
     return;
   }
-  const toForward = selectPostsToForward(posts, {
+  const eligible = selectPostsToForward(posts, {
     platform: input.platform,
     account: sub.account,
     filter: sub.filter,
     lastSeenId: sub.last_seen_id,
-    maxPosts: deps.config.maxPostsPerPoll,
+    maxPosts: posts.length,
   });
-  if (toForward.length === 0) return;
-  const channel = resolveChannel(deps, input.member, input.platform.id);
-  if (channel === undefined) return;
-  await forwardPosts(deps, input, channel, toForward);
+  const toForward = eligible.slice(0, deps.config.maxPostsPerPoll);
+  if (toForward.length > 0) {
+    const channel = resolveChannel(deps, input.member, input.platform.id);
+    if (channel === undefined) return;
+    await forwardPosts(deps, input, channel, toForward);
+  }
+  // Only complete batches can move past filtered records. A failed send throws
+  // before this point; a capped batch keeps its last delivered cursor.
+  if (input.platform.supportsCursorPagination === true && eligible.length <= toForward.length) {
+    const newest = newestPostForBaseline(input.platform, posts);
+    const delivered = toForward.at(-1);
+    if (
+      newest !== undefined &&
+      input.platform.compareIds(newest.id, sub.last_seen_id) > 0 &&
+      (delivered === undefined || input.platform.compareIds(newest.id, delivered.id) > 0)
+    ) {
+      const stored = await input.member.repos.feedSubscription.advanceCursor(
+        sub._id,
+        newest.id,
+        newest.createdTimestamp,
+      );
+      if (!stored.ok) logError(deps.logger, input.member.guildId, stored.error);
+    }
+  }
 };
 
 /**
@@ -362,8 +404,13 @@ export const runFeedPass = async (deps: FeedPassDeps, fullSweep: boolean): Promi
   for (const group of groups) {
     try {
       const fetchedAtMs = deps.clock.now();
+      const afterId =
+        group.platform.supportsCursorPagination === true ? afterIdFor(group) : undefined;
       const fetched = await group.platform.fetchTimeline(group.account, {
         sinceTimestamp: sinceTimestampFor(group, fullSweep),
+        ...(group.platform.supportsCursorPagination === true
+          ? { afterId, limit: deps.config.maxPostsPerPoll }
+          : {}),
       });
       if (!fetched.ok) {
         // One read serves every guild subscribing to this account, so
@@ -376,6 +423,12 @@ export const runFeedPass = async (deps: FeedPassDeps, fullSweep: boolean): Promi
       }
 
       const previews = new Map<string, Promise<FeedPreview | undefined>>();
+      let baselineRead: ReturnType<FeedPlatform['fetchTimeline']> | undefined;
+      const baselinePosts =
+        group.platform.supportsCursorPagination === true && afterId !== undefined
+          ? (): ReturnType<FeedPlatform['fetchTimeline']> =>
+              (baselineRead ??= group.platform.fetchTimeline(group.account))
+          : undefined;
       const previewFor = (post: FeedPost): Promise<FeedPreview | undefined> => {
         let prepared = previews.get(post.id);
         if (prepared === undefined) {
@@ -388,7 +441,7 @@ export const runFeedPass = async (deps: FeedPassDeps, fullSweep: boolean): Promi
         try {
           await pollSubscription(
             deps,
-            { member, platform: group.platform, fetchedAtMs, previewFor },
+            { member, platform: group.platform, fetchedAtMs, previewFor, baselinePosts },
             fetched.value,
           );
         } catch (err: unknown) {

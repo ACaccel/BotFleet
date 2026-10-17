@@ -2,6 +2,10 @@
 
 For service commands and rollback, see [deployment](deployment.md).
 
+For X accounts and Bahamut board/thread subscriptions, target URLs, cursor
+recovery and command registration after upgrades, see
+[feed configuration](../configuration.md#bahamut-subscriptions).
+
 For `/gay` archive inputs, daily score persistence and fallback behavior, see
 [daily fun readings](../fun-readings.md). No archive setup is required to use its
 basic reading; score snapshots expire automatically.

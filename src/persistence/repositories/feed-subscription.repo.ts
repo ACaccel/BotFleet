@@ -6,8 +6,8 @@
  * takes effect on the next pass without any cross-module notification.
  *
  * The document also carries the polling cursor. The poller advances it
- * only after the matching posts have actually been delivered, so a
- * failed send is retried on the next pass rather than skipped.
+ * only after matching posts have been delivered. Cursor sources may also
+ * pass intentionally excluded records; failed sends stay pending.
  */
 import type { Types } from 'mongoose';
 import type { DatabaseError } from '../../core/errors/external-service-error';

@@ -34,6 +34,8 @@ export { prepareFeedSubscription } from './subscribe';
 export { parseFeedAccounts, feedAccountRefusal, MAX_FEED_ACCOUNTS } from './parse-accounts';
 
 export { XPlatform } from './platforms/x-platform';
+export { BahamutPlatform } from './platforms/bahamut-platform';
+export { normalizeBahamutTargetOffline } from './platforms/bahamut-target';
 export { FxTwitterTimelineSource } from './platforms/fxtwitter-source';
 export type { XTimelineSource } from './platforms/x-types';
 export { translateFeedError, invalidResponseError } from './platforms/error-translator';

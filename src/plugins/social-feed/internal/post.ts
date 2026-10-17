@@ -10,6 +10,7 @@
  * never trigger an @everyone / @role ping.
  */
 import type { SendableChannels } from 'discord.js';
+import { escapeMarkdown } from 'discord.js';
 
 import type { Translator } from '../../../core/i18n';
 import type { FeedPlatform, FeedPost, FeedPreview } from '../../../infra/social-feed';
@@ -24,12 +25,20 @@ export const buildFeedMessage = (
   platform: FeedPlatform,
   post: FeedPost,
   url: string = platform.toEmbedUrl(post),
-): string =>
-  translator.t('replies:feed.post', {
+): string => {
+  const announcement = translator.t('replies:feed.post', {
     author: post.authorAccount,
     platform: platform.displayName,
     url,
   });
+  if (platform.subscriptionScope !== 'source' || post.text === '') return announcement;
+  // Forum unfurls may show the opening floor rather than the linked reply.
+  const body = escapeMarkdown(post.text, { maskedLink: true });
+  const available = Math.max(0, 1900 - announcement.length);
+  if (available === 0) return announcement;
+  const excerpt = body.length <= available ? body : `${body.slice(0, available - 1)}…`;
+  return `${announcement}\n${excerpt}`;
+};
 
 /** Preview failure degrades to a link; Discord send failures still propagate. */
 export const prepareFeedPreview = async (

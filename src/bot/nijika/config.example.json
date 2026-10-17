@@ -140,6 +140,11 @@
         "apiBaseUrl": "https://api.fxtwitter.com",
         "timeoutMs": 8000,
         "embedProxyHost": "fxtwitter.com"
+      },
+      "bahamut": {
+        "baseUrl": "https://forum.gamer.com.tw",
+        "timeoutMs": 8000,
+        "maxPages": 5
       }
     }
   },

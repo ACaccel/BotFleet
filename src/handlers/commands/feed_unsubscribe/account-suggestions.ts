@@ -16,6 +16,7 @@
  * Pure: it takes documents and strings, so it is testable without an
  * interaction or a database.
  */
+import type { BoundTranslate } from '../../../core/i18n';
 import type { FeedSubscriptionDoc } from '../../../persistence/schemas/feed-subscription.schema';
 import {
   MAX_AUTOCOMPLETE_CHOICES,
@@ -23,6 +24,7 @@ import {
 } from '../../../infra/discord/autocomplete-limits';
 import { MAX_FEED_ACCOUNTS, parseFeedAccounts } from '../../../infra/social-feed';
 import { feedPlatformDisplayName } from '../../feed-platform-name';
+import { formatFeedTarget } from '../../feed-target-label';
 import type { CommandSuggestions } from '../command';
 
 /**
@@ -62,6 +64,7 @@ interface AccountSuggestionScope {
 export const buildAccountSuggestions = (
   docs: readonly FeedSubscriptionDoc[],
   scope: AccountSuggestionScope,
+  t?: BoundTranslate,
 ): CommandSuggestions => {
   const segments = scope.focused.split(',');
   // The last segment is what the member is still typing; everything
@@ -85,7 +88,7 @@ export const buildAccountSuggestions = (
     const lower = doc.account.toLowerCase();
     if (taken.has(lower) || !lower.includes(fragment)) continue;
     const value = `${prefix}${doc.account}`;
-    const name = `${feedPlatformDisplayName(doc.platform)} @${doc.account}`;
+    const name = `${feedPlatformDisplayName(doc.platform)} ${formatFeedTarget(doc.platform, doc.account, t)}`;
     if (value.length > MAX_AUTOCOMPLETE_FIELD_LENGTH) continue;
     if (name.length > MAX_AUTOCOMPLETE_FIELD_LENGTH) continue;
     suggestions.push({ name, value });

@@ -119,7 +119,7 @@ Plugin settings are validated at startup; strict schemas reject unknown keys.
 | `llm_auto_reply`                | gopher         | Self-hosted endpoint, reply probability, context, cooldown and timeout                     |
 | `identity_sync`                 | gopher         | Avatar/nickname sync; requires `sourceUserId` when sync is enabled                         |
 | `social_link_preview`           | nijika, tomori | Disabled; provider/proxy lists and request limits                                          |
-| `social_feed`                   | nijika, tomori | Disabled; enabled feeds require a nonempty `platforms` map (`x` supported)                 |
+| `social_feed`                   | nijika, tomori | Enabled feeds require a nonempty `platforms` map (`x` and `bahamut` supported)             |
 | `guild_events.attachment_cache` | nijika, tomori | Enabled; see attachment storage below                                                      |
 | `level_roles`                   | nijika         | `level_<n>` to role-ID map for `/role sync`; a non-ID value disables the command           |
 | `temp_role.maxActivePerMember`  | nijika, tomori | Active temporary roles per creator in a guild; default `3`, integer `1`–`50`               |
@@ -322,9 +322,11 @@ even if its ID is listed. Allowed bot messages still require enabled previews an
 must pass the existing guild, channel privacy and Discord permission checks.
 
 `/feed subscribe`, `/feed unsubscribe` and `/feed list` manage database-backed
-subscriptions in visible channels. Subscribe requires a media filter; repeating
-it replaces the filter, and omitting a keyword clears the old value. New
-subscriptions forward original posts from creation time, without backfill.
+subscriptions in visible channels. Use `target` for an X handle or a Bahamut
+forum URL. The old `account` option remains an alias; supplying both is refused.
+Media is optional: X defaults to `media_only`, Bahamut to `any`. Repeating a
+subscription replaces its filters; omitting a keyword clears the old value.
+New subscriptions start at the current source head without replaying old posts.
 `maxPostsPerPoll` defaults to `5` per subscription (maximum `20`); polling defaults
 to `300000` ms with a full sweep every `12` polls.
 
@@ -340,8 +342,70 @@ Feeds use their own `social_feed.platforms.x.apiBaseUrl`, `timeoutMs` and
 `embedProxyHost`; they do not depend on `social_link_preview.enabled` or its
 provider lists. Status metadata is prepared once per post per account pass and
 shared across subscription channels. If no preview is available, delivery
-retains the existing proxy-link announcement. Cursors advance only after
+retains the existing proxy-link announcement. Pending matches advance only after
 Discord accepts the complete message; send failures retry on the next pass.
+Cursor-aware sources also advance past intentionally excluded records after
+preceding deliveries succeed, so filtered batches cannot block newer posts.
+
+#### Bahamut subscriptions
+
+Add `"bahamut": {}` to `social_feed.platforms` and enable `social_feed` in the bot's
+`config.json`. Restart after changing config. Re-register slash commands when
+upgrading to expose the Bahamut choice and `target` option.
+
+| `social_feed.platforms.bahamut` field | Default                      | Constraints                                                                       |
+| ------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------- |
+| `baseUrl`                             | `https://forum.gamer.com.tw` | HTTP(S) origin or compatible mirror, without credentials, path, query or fragment |
+| `timeoutMs`                           | `8000`                       | Integer 1–30000; deadline for each complete source read or floor-link resolution  |
+| `maxPages`                            | `5`                          | Integer 1–20; source pages inspected per read, plus thread first-page discovery   |
+
+Two source types are supported:
+
+- **Board:** a `B.php?bsn=...` URL follows newly created topics, not replies that
+  bump old topics. A positive `subbsn` restricts the source to that subboard.
+  Notifications and filters use the topic title plus its opening floor body and
+  media. The adapter explicitly requests creation ordering and verifies it.
+- **Thread:** a `C.php?bsn=...&snA=...` URL follows newly published floors by any
+  author. Filters use each floor's body and media. Inline comments and edits to
+  existing floors do not create notifications.
+
+```text
+/feed subscribe platform:bahamut target:https://forum.gamer.com.tw/B.php?bsn=36476
+/feed subscribe platform:bahamut target:https://forum.gamer.com.tw/C.php?bsn=36476&snA=3047
+```
+
+Official mobile `https://m.gamer.com.tw/forum/B.php` and `C.php` URLs also work.
+A desktop `Co.php?bsn=...&sn=...` or mobile `Co.php?bsn=...&snB=...` floor link
+resolves to its parent thread; it does not follow only that floor. Resolution
+requires a public metadata read. Different URLs for the same board/thread share
+one canonical subscription key.
+
+`/feed list` identifies the target type. Boards store `board:36476` (or
+`board:36476:3` for a subboard); threads retain `36476/3047`. These keys also work
+for subscribe and unsubscribe. Existing thread subscriptions need no database
+migration. With `platform:bahamut`, canonical IDs and B/C URLs remain usable for removal
+while the platform is disabled; a Co link requires an enabled, reachable resolver. Several
+targets can be comma-separated. The `account` alias is kept for older commands;
+use only one of `target` or `account` per invocation.
+
+Bahamut's default `media:any` includes text-only posts. Optional `keyword` is one
+case-insensitive substring, not a regex or an OR list. It combines with the media
+filter using AND. There is no special interpretation of post content.
+
+The adapter reads public HTML without login or paid APIs. Blocked requests or
+unrecognized pages produce feed errors and retry on the next poll. Each read
+returns at most `maxPostsPerPoll` pending records, oldest first. Filtered records
+are checked off; matching records are checked off only after successful delivery.
+The list's progress timestamp may therefore refer to a filtered record.
+A verified deleted opening floor is checked off without notification, so it cannot
+block later topics; an unrecognized missing opening floor remains an error.
+If `maxPages` cannot reach the previous cursor, the read fails without skipping
+unseen posts. Increase `maxPages` and, if necessary, `timeoutMs` after long downtime;
+re-subscribing without first removing the subscription preserves its old cursor.
+Cancel and create a new subscription only when intentionally discarding backlog.
+Notifications include the source author, canonical post link and a bounded body
+excerpt. Private/login-only boards, search results, author feeds and the essence
+archive are outside this adapter's scope.
 
 ### Giveaway destination
 

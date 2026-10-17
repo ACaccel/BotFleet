@@ -29,7 +29,7 @@ export type FeedPreview = Exclude<RenderablePreviewResult, { readonly kind: 'car
  * config block. It is deliberately *not* the type of
  * {@link FeedPlatform.id} — see that field.
  */
-export const SUPPORTED_FEED_PLATFORMS = ['x'] as const;
+export const SUPPORTED_FEED_PLATFORMS = ['x', 'bahamut'] as const;
 
 export type FeedPlatformId = (typeof SUPPORTED_FEED_PLATFORMS)[number];
 
@@ -49,6 +49,7 @@ export type FeedPlatformId = (typeof SUPPORTED_FEED_PLATFORMS)[number];
  */
 export const FEED_PLATFORM_DISPLAY_NAMES: Readonly<Record<FeedPlatformId, string>> = {
   x: 'X (Twitter)',
+  bahamut: 'Bahamut',
 };
 
 /**
@@ -97,8 +98,10 @@ export interface FeedPost {
    * the **original** author, not the account whose timeline was read.
    */
   readonly authorAccount: string;
-  /** Post creation time, in unix **seconds**. */
+  /** Creation time in unix seconds; deleted checkpoints retain the preceding source time. */
   readonly createdTimestamp: number;
+  /** A verified deletion can advance a source cursor but is never delivered. */
+  readonly isDeleted?: boolean;
   /** Canonical permalink, e.g. `https://x.com/<account>/status/<id>`. */
   readonly url: string;
   /**
@@ -118,6 +121,10 @@ export interface FeedPost {
 
 /** Per-call tuning for {@link FeedPlatform.fetchTimeline}. */
 export interface FeedTimelineFetchOptions {
+  /** Oldest delivered cursor in the group; retained even during full sweeps. */
+  readonly afterId?: string;
+  /** Maximum records in a cursor-aware source batch. */
+  readonly limit?: number;
   /**
    * Only ask for posts newer than this unix-seconds timestamp. This is a
    * bandwidth hint, not a filter: an implementation may still return
@@ -144,12 +151,20 @@ export interface FeedPlatform {
   readonly id: string;
   /** Human-readable platform name used in messages and log lines. */
   readonly displayName: string;
+  /** Source feeds follow forum events by any author; absent means own original posts. */
+  readonly subscriptionScope?: 'account' | 'source';
   /**
-   * Validate and canonicalise a user-supplied account string (strip a
-   * leading `@`, apply the platform's casing and character rules) so
-   * that one account always maps to one subscription key.
+   * Cursor sources return the current head without afterId, and the oldest
+   * next batch with afterId. The poller can pass intentionally filtered records.
    */
-  normalizeAccount(raw: string): Result<string, FeedFailure>;
+  readonly supportsCursorPagination?: boolean;
+  /** Default narrowing when the command omits its media option. */
+  readonly defaultMediaFilter?: 'media_only' | 'any';
+  /**
+   * Canonicalise a handle or source URL into one stored target key.
+   * URL aliases may need an asynchronous public metadata lookup.
+   */
+  normalizeAccount(raw: string): Result<string, FeedFailure> | Promise<Result<string, FeedFailure>>;
   /**
    * Read `account`'s recent posts. `Ok([])` means "nothing new", which
    * is the common case for a poller and must not be treated as an error.

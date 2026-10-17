@@ -60,16 +60,15 @@ type ParsedFeedAccounts =
 /**
  * Split `raw` into the accounts it names, in first-seen order.
  *
- * De-duplication is case-insensitive because every shipped platform
- * lower-cases a handle when it canonicalises one, so `Foo, foo` names a
- * single subscription and would otherwise be reported twice.
+ * Handles are case-insensitive, but URL paths/query keys and explicit
+ * source prefixes retain their spelling until platform normalization.
  */
 export const parseFeedAccounts = (raw: string): ParsedFeedAccounts => {
   const seen = new Map<string, string>();
   for (const token of raw.split(SEPARATOR)) {
     const account = token.replace(LEADING_AT, '');
     if (account === '') continue;
-    const key = account.toLowerCase();
+    const key = /[:/]/.test(account) ? account : account.toLowerCase();
     if (!seen.has(key)) seen.set(key, account);
   }
   if (seen.size === 0) return { kind: 'empty' };

@@ -5,13 +5,11 @@
  *
  * Two tiers of rule, deliberately separated:
  *
- *   - **Hard rules**, which no subscription may relax — the post must
- *     be the followed account's own (not a repost of someone else's)
- *     and must not be a reply. Forwarding either would put text a third
- *     party wrote, or a fragment of a conversation, into a channel that
- *     asked for one account's posts.
- *   - **Subscription filter**, the operator-chosen media and keyword
- *     narrowing, whose defaults forward only media-carrying posts.
+ *   - **Hard rules** reject reposts for every scope. Account subscriptions
+ *     also require the followed author and reject replies; source subscriptions
+ *     include original floors by any author, including replies.
+ *   - **Subscription filters** combine media and keyword narrowing;
+ *     their defaults forward only media-carrying posts.
  *
  * Reads {@link FeedPost} fields only; ordering and cursor comparison are
  * delegated to the platform, so no platform-specific arithmetic (X's
@@ -25,7 +23,7 @@ import type { FeedMediaFilter } from '../../../persistence/schemas/feed-subscrip
  *
  * Structurally identical to the stored `filter` sub-document, and
  * declared here so the selection rules state their own input contract —
- * read-only, and narrowed to the two fields they consult — rather than
+ * read-only, and narrowed to the fields they consult — rather than
  * inheriting the stored document's mutability.
  */
 export interface SubscriptionFilter {
@@ -38,7 +36,7 @@ export interface SubscriptionFilter {
 interface SelectPostsInput {
   /** Platform the subscription follows; owns id ordering. */
   readonly platform: FeedPlatform;
-  /** Followed account, already normalised by the platform. */
+  /** Followed account or thread key, already normalised by the platform. */
   readonly account: string;
   readonly filter: SubscriptionFilter;
   /** Newest post id already forwarded; absent before the cursor is seeded. */
@@ -93,8 +91,8 @@ const matchesKeyword = (post: FeedPost, keyword: string | undefined): boolean =>
 
 /**
  * Choose the posts a pass should forward for one subscription: the
- * account's own, original (non-reply) posts that match the
- * subscription's filter and are newer than its cursor, oldest first.
+ * original posts allowed by the platform's subscription scope that match
+ * the filter and are newer than its cursor, oldest first.
  *
  * The cap takes the **oldest** eligible posts rather than the newest.
  * Because the caller advances the cursor only to the last post it
@@ -108,10 +106,14 @@ export const selectPostsToForward = (
 ): readonly FeedPost[] => {
   const { platform, filter, lastSeenId } = input;
   const eligible = posts.filter((post) => {
-    if (!isOwnPost(post, input.account)) return false;
-    // Replies (including this account's own thread continuations) are
-    // not original posts, so they stay out of the feed.
-    if (post.isReply) return false;
+    if (post.isDeleted === true) return false;
+    if (post.isRepost) return false;
+    // Source subscriptions follow every original event, regardless of author;
+    // account subscriptions keep the original author and non-reply rules.
+    if (platform.subscriptionScope !== 'source') {
+      if (!isOwnPost(post, input.account)) return false;
+      if (post.isReply) return false;
+    }
     if (!matchesMedia(post, filter.media)) return false;
     if (!matchesKeyword(post, filter.keyword)) return false;
     if (lastSeenId === undefined) return true;

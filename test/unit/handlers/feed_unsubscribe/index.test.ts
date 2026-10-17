@@ -21,7 +21,14 @@ import { localizeCommandConfig } from '../../../../src/handlers/commands/command
 import { buildCommandJsonBody } from '../../../../src/handlers/commands/command-builder';
 import { MAX_LISTED_REMOVALS } from '../../../../src/handlers/feed-removed-list';
 import { err, ok } from '../../../../src/core/result';
-import { FeedPlatformRegistry, MAX_FEED_ACCOUNTS } from '../../../../src/infra/social-feed';
+import { FeedError } from '../../../../src/core/errors';
+import type * as SocialFeed from '../../../../src/infra/social-feed';
+import {
+  FeedPlatformRegistry,
+  MAX_FEED_ACCOUNTS,
+  normalizeBahamutTargetOffline,
+  type FeedPlatform,
+} from '../../../../src/infra/social-feed';
 import { databaseErrorFrom } from '../../../../src/persistence/error-translator';
 import type { FeedSubscriptionDoc } from '../../../../src/persistence/schemas/feed-subscription.schema';
 import { buildFakeBot, echoTranslatorWithParams } from '../../../fixtures/discord/bot-fake';
@@ -39,6 +46,11 @@ const HOME_CHANNEL = 'chan-home';
 const OTHER_CHANNEL = 'chan-other';
 const THREAD_CHANNEL = 'chan-thread';
 const USER_ID = 'u-1';
+
+vi.mock('../../../../src/infra/social-feed', async (importOriginal) => ({
+  ...(await importOriginal<typeof SocialFeed>()),
+  normalizeBahamutTargetOffline: vi.fn(),
+}));
 
 /** Any option that narrows the scope, so the command deletes at once. */
 const NARROWED = { platform: 'fake' } as const;
@@ -65,6 +77,7 @@ interface Fixture {
   readonly invokerPermissions?: readonly bigint[];
   /** Leaves the invoker out of the member cache — permissions unknowable. */
   readonly invokerMemberMissing?: boolean;
+  readonly platformOverrides?: Partial<FeedPlatform>;
 }
 
 const build = (fixture: Fixture = {}) => {
@@ -94,7 +107,7 @@ const build = (fixture: Fixture = {}) => {
   );
   const { bot, logger } = buildFakeBot({
     translator: echoTranslatorWithParams(),
-    feedPlatformRegistry: new FeedPlatformRegistry([platform]),
+    feedPlatformRegistry: new FeedPlatformRegistry([{ ...platform, ...fixture.platformOverrides }]),
     connectionManager: { isDisabled: () => undefined },
     getRepos: () => ({ feedSubscription: { deleteWhere, listByChannel } }),
   });
@@ -150,12 +163,13 @@ describe('/feed unsubscribe', () => {
 
     expect((body.options ?? []).map((option) => option.name)).toEqual([
       'platform',
+      'target',
       'account',
       'channel',
     ]);
   });
 
-  it('asks Discord to autocomplete the account option, and only that one', () => {
+  it('asks Discord to autocomplete both target aliases', () => {
     // Asserted on the REST payload for the same reason as the ordering
     // above: the flag has to survive `setConfig` -> localisation ->
     // builder, and dropping it anywhere leaves the hook implemented but
@@ -169,7 +183,98 @@ describe('/feed unsubscribe', () => {
     const autocompleting = (body.options ?? [])
       .filter((option) => option.autocomplete === true)
       .map((option) => option.name);
-    expect(autocompleting).toEqual(['account']);
+    expect(autocompleting).toEqual(['target', 'account']);
+  });
+
+  it('rejects conflicting aliases before any deletion or clear confirmation', async () => {
+    const { bot, interaction, sink, deleteWhere, listByChannel } = build({
+      options: { target: 'someone', account: 'other' },
+    });
+    await new FeedUnsubscribe().execute(interaction, bot);
+    expect(reply(sink)).toContain('replies:feed.target_alias_conflict');
+    expect(deleteWhere).not.toHaveBeenCalled();
+    expect(listByChannel).not.toHaveBeenCalled();
+  });
+
+  it('accepts the public target option and awaits its configured resolver', async () => {
+    const normalizeAccount = vi.fn(async () => ok('stored-target'));
+    const { bot, interaction, deleteWhere } = build({
+      options: { platform: 'fake', target: 'public-link' },
+      platformOverrides: { normalizeAccount },
+    });
+    await new FeedUnsubscribe().execute(interaction, bot);
+    expect(normalizeAccount).toHaveBeenCalledWith('public-link');
+    expect(deleteWhere).toHaveBeenCalledWith({
+      channelId: HOME_CHANNEL,
+      platform: 'fake',
+      accounts: ['stored-target'],
+    });
+  });
+
+  it('removes canonical Bahamut targets with the platform disabled', async () => {
+    vi.mocked(normalizeBahamutTargetOffline).mockReturnValueOnce(ok('36476/3047'));
+    const { bot, interaction, deleteWhere } = build({
+      options: { platform: 'bahamut', target: '36476/3047' },
+    });
+    await new FeedUnsubscribe().execute(interaction, bot);
+    expect(deleteWhere).toHaveBeenCalledWith({
+      channelId: HOME_CHANNEL,
+      platform: 'bahamut',
+      accounts: ['36476/3047'],
+    });
+  });
+
+  it.each([
+    ['https://forum.gamer.com.tw/B.php?bsn=36476', 'board:36476'],
+    ['https://m.gamer.com.tw/forum/C.php?bsn=36476&snA=3047', '36476/3047'],
+    ['board:36476:3', 'board:36476:3'],
+  ])('passes offline target %s intact to the shared normalizer', async (target, canonical) => {
+    vi.mocked(normalizeBahamutTargetOffline).mockReturnValueOnce(ok(canonical));
+    const { bot, interaction, deleteWhere } = build({
+      options: { platform: 'bahamut', target },
+    });
+    await new FeedUnsubscribe().execute(interaction, bot);
+    expect(normalizeBahamutTargetOffline).toHaveBeenLastCalledWith(target);
+    expect(deleteWhere).toHaveBeenCalledWith({
+      channelId: HOME_CHANNEL,
+      platform: 'bahamut',
+      accounts: [canonical],
+    });
+  });
+
+  it('does not delete any targets when offline resolution fails', async () => {
+    const failure = new FeedError({
+      code: 'FEED_INVALID_ACCOUNT',
+      messageKey: 'errors:feed.bahamut_resolution_required',
+      messageParams: { platform: 'Bahamut' },
+      context: { operation: 'test' },
+    });
+    vi.mocked(normalizeBahamutTargetOffline)
+      .mockReturnValueOnce(ok('board:36476'))
+      .mockReturnValueOnce(err(failure));
+    const { bot, interaction, sink, deleteWhere, listByChannel } = build({
+      options: { platform: 'bahamut', target: 'board:36476, floor-link' },
+    });
+    await new FeedUnsubscribe().execute(interaction, bot);
+    expect(reply(sink)).toContain('errors:feed.bahamut_resolution_required');
+    expect(deleteWhere).not.toHaveBeenCalled();
+    expect(listByChannel).not.toHaveBeenCalled();
+  });
+
+  it('does not delete on a configured asynchronous resolution failure', async () => {
+    const failure = new FeedError({
+      code: 'FEED_INVALID_ACCOUNT',
+      messageKey: 'errors:feed.invalid_target',
+      messageParams: { platform: 'Fake', account: 'bad-link' },
+      context: { operation: 'test' },
+    });
+    const { bot, interaction, sink, deleteWhere } = build({
+      options: { platform: 'fake', target: 'bad-link' },
+      platformOverrides: { normalizeAccount: async () => err(failure) },
+    });
+    await new FeedUnsubscribe().execute(interaction, bot);
+    expect(reply(sink)).toContain('errors:feed.invalid_target');
+    expect(deleteWhere).not.toHaveBeenCalled();
   });
 
   it('answers ephemerally', async () => {

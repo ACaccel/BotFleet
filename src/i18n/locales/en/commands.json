@@ -151,25 +151,26 @@
     }
   },
   "feed": {
-    "description": "Manage social feed subscriptions",
+    "description": "Manage social and forum feed subscriptions",
     "subcommands": {
       "subscribe": {
-        "description": "Forward a social account's new posts into a channel",
+        "description": "Forward new posts, board threads or thread replies into a channel",
         "options": {
           "platform": {
-            "description": "Social platform the account is on",
+            "description": "Platform for the subscription targets",
             "choices": {
-              "x": "X (Twitter)"
+              "x": "X (Twitter)",
+              "bahamut": "Bahamut"
             }
           },
           "account": {
-            "description": "Account handles, comma-separated; the leading @ is optional"
+            "description": "Legacy alias for target; use only one of target or account"
           },
           "channel": {
             "description": "Channel to forward into (default: this channel)"
           },
           "media": {
-            "description": "Which posts to forward, by attached media",
+            "description": "Media filter (default: X photos/videos; Bahamut all posts)",
             "choices": {
               "media_only": "Only posts with a photo or video, no text-only posts",
               "photo_only": "Only posts with a photo",
@@ -178,12 +179,15 @@
             }
           },
           "keyword": {
-            "description": "Only forward posts whose text contains this (max 100 characters)"
+            "description": "Only forward content containing this text (max 100 characters)"
+          },
+          "target": {
+            "description": "Targets, comma-separated: X handles or Bahamut board/thread IDs or public B/C/Co links"
           }
         }
       },
       "unsubscribe": {
-        "description": "Stop forwarding social posts into a channel",
+        "description": "Stop forwarding posts or forum updates into a channel",
         "options": {
           "channel": {
             "description": "Channel to unsubscribe (default: this channel)"
@@ -191,16 +195,20 @@
           "platform": {
             "description": "Only remove subscriptions on this platform",
             "choices": {
-              "x": "X (Twitter)"
+              "x": "X (Twitter)",
+              "bahamut": "Bahamut"
             }
           },
           "account": {
-            "description": "Only remove subscriptions to these accounts, comma-separated"
+            "description": "Legacy alias for target; use only one of target or account"
+          },
+          "target": {
+            "description": "Only remove these targets, comma-separated; pick stored targets from autocomplete"
           }
         }
       },
       "list": {
-        "description": "List this server's social feed subscriptions"
+        "description": "List this server's feed subscriptions"
       }
     }
   },

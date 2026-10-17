@@ -9,6 +9,7 @@
  */
 import { z } from 'zod';
 import { DEFAULT_X_API_BASE_URL } from './platforms/x-types';
+import { DEFAULT_BAHAMUT_BASE_URL } from './platforms/bahamut-platform';
 
 /** Hard cap so a typo cannot hold one upstream request open for minutes. */
 const MAX_TIMEOUT_MS = 30_000;
@@ -27,11 +28,33 @@ const XPlatformConfigSchema = z
   })
   .strict();
 
-/**
- * The `social_feed.platforms` block. A platform absent from the block is
- * not registered, which is how an operator turns one off.
- */
-export const FeedPlatformsSchema = z.object({ x: XPlatformConfigSchema.optional() }).strict();
+const BahamutPlatformConfigSchema = z
+  .object({
+    baseUrl: z
+      .string()
+      .url()
+      .refine((raw) => {
+        if (!URL.canParse(raw)) return false;
+        const url = new URL(raw);
+        return (
+          ['https:', 'http:'].includes(url.protocol) &&
+          url.username === '' &&
+          url.password === '' &&
+          url.search === '' &&
+          url.hash === '' &&
+          url.pathname === '/'
+        );
+      }, 'baseUrl must be an HTTP(S) origin without credentials, path, query or fragment')
+      .default(DEFAULT_BAHAMUT_BASE_URL),
+    timeoutMs: z.number().int().positive().max(MAX_TIMEOUT_MS).default(8_000),
+    maxPages: z.number().int().min(1).max(20).default(5),
+  })
+  .strict();
+
+/** Platforms omitted from this block are not registered. */
+export const FeedPlatformsSchema = z
+  .object({ x: XPlatformConfigSchema.optional(), bahamut: BahamutPlatformConfigSchema.optional() })
+  .strict();
 
 export type FeedPlatformsConfig = z.infer<typeof FeedPlatformsSchema>;
 

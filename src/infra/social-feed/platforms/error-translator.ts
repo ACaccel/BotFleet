@@ -9,8 +9,8 @@
  *
  * The platform name travels as data so the catalog templates can name it,
  * but `OPERATION` below deliberately does not: it records the class that
- * actually issued the request, which is what an operator greps on. A second
- * platform with its own client therefore needs its own translator.
+ * actually issued the request, which is what an operator greps on. Other
+ * platforms supply their operation tag while sharing the HTTP taxonomy.
  */
 import { FeedError, type FeedErrorCode } from '../../../core/errors';
 
@@ -93,19 +93,25 @@ const buildError = (
   code: FeedErrorCode,
   status: string,
   cause: unknown,
+  operation = OPERATION,
 ): FeedFailure =>
   new FeedError({
     code,
     messageKey: messageKeyFor(code),
     messageParams: { platform, account, status },
-    context: { operation: OPERATION, input: { platform, account, status } },
+    context: { operation, input: { platform, account, status } },
     cause,
   });
 
 /** Translate a thrown HTTP/transport error into a {@link FeedError}. */
-export const translateFeedError = (platform: string, account: string, e: unknown): FeedFailure => {
+export const translateFeedError = (
+  platform: string,
+  account: string,
+  e: unknown,
+  operation = OPERATION,
+): FeedFailure => {
   const n = normalise(e);
-  return buildError(platform, account, codeFor(n), statusLabel(n), e);
+  return buildError(platform, account, codeFor(n), statusLabel(n), e, operation);
 };
 
 /**
@@ -117,7 +123,9 @@ export const invalidResponseError = (
   platform: string,
   account: string,
   cause?: unknown,
-): FeedFailure => buildError(platform, account, 'FEED_INVALID_RESPONSE', 'invalid_response', cause);
+  operation = OPERATION,
+): FeedFailure =>
+  buildError(platform, account, 'FEED_INVALID_RESPONSE', 'invalid_response', cause, operation);
 
 /** Test-only re-export so unit tests can introspect the classifier. */
 export const __test = { normalise, codeFor, statusLabel };

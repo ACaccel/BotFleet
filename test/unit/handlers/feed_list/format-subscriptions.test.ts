@@ -35,6 +35,26 @@ const subscription = (overrides: Partial<FeedSubscriptionDoc> = {}): FeedSubscri
   }) as FeedSubscriptionDoc;
 
 describe('formatSubscriptionPages', () => {
+  it('identifies forum boards and threads without an account prefix and describes cursor progress', () => {
+    const pages = formatSubscriptionPages(
+      [
+        subscription({
+          platform: 'bahamut',
+          account: 'board:12345',
+          filter: { media: 'any' },
+          last_seen_timestamp: 100,
+        }),
+        subscription({ platform: 'bahamut', account: '12345/42', filter: { media: 'any' } }),
+      ],
+      t,
+    ).join('\n');
+    expect(pages).toContain('replies:feed.target_board');
+    expect(pages).toContain('replies:feed.target_thread');
+    expect(pages).toContain('replies:feed.checked_through');
+    expect(pages).toContain('replies:feed.never_checked');
+    expect(pages).not.toContain('@board:');
+    expect(pages).not.toContain('@12345/42');
+  });
   it('returns no pages for an empty list, leaving the copy to the handler', () => {
     expect(formatSubscriptionPages([], t)).toEqual([]);
   });

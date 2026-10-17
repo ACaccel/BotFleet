@@ -151,25 +151,26 @@
     }
   },
   "feed": {
-    "description": "管理社群訂閱",
+    "description": "管理社群與論壇訂閱",
     "subcommands": {
       "subscribe": {
-        "description": "把某個社群帳號的新貼文轉發到頻道",
+        "description": "將新貼文、看板新討論串或討論串新樓層轉發到頻道",
         "options": {
           "platform": {
-            "description": "帳號所在的社群平台",
+            "description": "訂閱目標所在的平台",
             "choices": {
-              "x": "X (Twitter)"
+              "x": "X (Twitter)",
+              "bahamut": "Bahamut"
             }
           },
           "account": {
-            "description": "帳號名稱,多個帳號用逗號分隔,前面加不加 @ 都可以"
+            "description": "target 的舊版別名；target 與 account 請擇一使用"
           },
           "channel": {
             "description": "要轉發到的頻道 (預設為目前頻道)"
           },
           "media": {
-            "description": "依貼文附加的媒體決定轉發範圍",
+            "description": "媒體過濾條件（預設：X 限圖片或影片；Bahamut 所有貼文）",
             "choices": {
               "media_only": "只轉發含圖片或影片的貼文,不含純文字",
               "photo_only": "只轉發含圖片的貼文",
@@ -178,12 +179,15 @@
             }
           },
           "keyword": {
-            "description": "只轉發內文包含這段文字的貼文 (最多 100 字)"
+            "description": "只轉發內文包含這段文字的內容（最多 100 字）"
+          },
+          "target": {
+            "description": "訂閱目標，以逗號分隔：X 帳號，或 Bahamut 看板／討論串 ID、公開 B/C/Co 連結"
           }
         }
       },
       "unsubscribe": {
-        "description": "停止把社群貼文轉發到某個頻道",
+        "description": "停止將貼文或論壇更新轉發到頻道",
         "options": {
           "channel": {
             "description": "要退訂的頻道 (預設為目前頻道)"
@@ -191,16 +195,20 @@
           "platform": {
             "description": "只移除這個平台的訂閱",
             "choices": {
-              "x": "X (Twitter)"
+              "x": "X (Twitter)",
+              "bahamut": "Bahamut"
             }
           },
           "account": {
-            "description": "只移除這些帳號的訂閱,多個帳號用逗號分隔"
+            "description": "target 的舊版別名；target 與 account 請擇一使用"
+          },
+          "target": {
+            "description": "只移除這些目標的訂閱，以逗號分隔；可從自動完成選取已儲存的目標"
           }
         }
       },
       "list": {
-        "description": "列出本伺服器的社群動態訂閱"
+        "description": "列出本伺服器的動態訂閱"
       }
     }
   },

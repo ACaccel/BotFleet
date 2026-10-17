@@ -1,23 +1,18 @@
 /**
  * Renders what `/feed subscribe` did with each account it was given.
  *
- * One invocation can name up to `MAX_FEED_ACCOUNTS` accounts and a
- * failure line carries a whole sentence, so the report can outgrow a
- * single Discord message — hence pages rather than a string. Every
- * account appears, including the ones that failed or were never
- * attempted: the member has to be able to tell which handles are now
- * subscribed and which need retyping.
+ * Every target appears, including failed and unattempted ones, so the
+ * member knows what needs retrying. Failure sentences can make a full
+ * batch exceed Discord's limit, so the report returns pages.
  *
- * This is also where a failure becomes words. The batch loop keeps the
- * error itself, so the operator log can have the untranslated code and
- * the member a sentence in their own language; both renderings live
- * here, side by side, rather than one of them being frozen at the point
- * the error was caught.
+ * Keep errors intact until rendering: members receive translated copy,
+ * while operator logs retain searchable error codes.
  */
 import { DomainError, type AnyDomainError } from '../../../core/errors';
 import type { BoundTranslate } from '../../../core/i18n';
 import { paginateLines } from '../../../infra/discord/paginate';
 import { formatFeedFilter, type DescribableFeedFilter } from '../../feed-filter-labels';
+import { formatFeedTarget } from '../../feed-target-label';
 import type { FeedSubscribeOutcome } from './subscribe-accounts';
 
 /** Copy used when a failure carries no renderable catalog key. */
@@ -33,6 +28,8 @@ const UNKNOWN_FAILURE_CODE = 'UNEXPECTED';
 interface SubscribeReportContext {
   /** Platform display name, as every other feed message spells it. */
   readonly platform: string;
+  /** Adapter ID controls target labels independently of its display name. */
+  readonly platformId?: string;
   /** Channel mention, rendered by the handler that resolved the channel. */
   readonly channel: string;
   /** The filter this invocation wrote, worded here rather than by the handler. */
@@ -42,11 +39,8 @@ interface SubscribeReportContext {
 /**
  * The member-facing sentence for a failure.
  *
- * A `DomainError` names its own catalog key, which is how an invalid
- * handle and an upstream 404 read differently. A key with no catalog
- * entry — i18next echoes it back — and anything that is not a
- * `DomainError` degrade to the generic copy rather than showing a
- * member a raw key or an internal message.
+ * Missing catalog entries and non-domain errors use generic copy to
+ * avoid exposing raw keys or internal messages.
  */
 const reasonOf = (cause: unknown, t: BoundTranslate): string => {
   if (!(cause instanceof DomainError)) return t(UNKNOWN_REASON_KEY);
@@ -64,15 +58,8 @@ const codeOf = (cause: unknown): string => {
 };
 
 /**
- * Make an account string safe to quote back, the same defence
- * `XPlatform` applies to the handles it refuses.
- *
- * A canonical handle needs none of this, but a failed or skipped
- * outcome carries whatever the member typed, and the translator
- * interpolates without escaping — so an unbounded string could put
- * backticks, or simply length, into the bot's own message. The parser
- * has already removed whitespace, leaving the ceiling and the backticks
- * to deal with here.
+ * Failed and skipped outcomes contain untrusted input. Bound the echo
+ * and remove backticks because translation interpolates without escaping.
  */
 const echoableAccount = (raw: string): string =>
   raw.replace(/`/g, ' ').slice(0, MAX_ECHOED_ACCOUNT_LENGTH);
@@ -83,21 +70,32 @@ const echoableAccount = (raw: string): string =>
  * has to fail the build here instead of silently rendering as one of
  * the three that already exist.
  *
- * Both success lines carry `label`, the filter now in force: a
- * re-subscribe replaces the stored filter wholesale, so a member can
- * lose a keyword and only this line would say so.
+ * Success lines name the current filter because re-subscribing replaces
+ * it wholesale and may clear a previously configured keyword.
  */
-const formatOutcome = (outcome: FeedSubscribeOutcome, label: string, t: BoundTranslate): string => {
+const formatOutcome = (
+  outcome: FeedSubscribeOutcome,
+  label: string,
+  platformId: string,
+  t: BoundTranslate,
+): string => {
+  const account = formatFeedTarget(
+    platformId,
+    outcome.status === 'failed' || outcome.status === 'skipped'
+      ? echoableAccount(outcome.account)
+      : outcome.account,
+    t,
+  );
   switch (outcome.status) {
     case 'created':
-      return t('replies:feed.account_subscribed', { account: outcome.account, filter: label });
+      return t('replies:feed.account_subscribed', { account, filter: label });
     case 'updated':
-      return t('replies:feed.account_updated', { account: outcome.account, filter: label });
+      return t('replies:feed.account_updated', { account, filter: label });
     case 'skipped':
-      return t('replies:feed.account_skipped', { account: echoableAccount(outcome.account) });
+      return t('replies:feed.account_skipped', { account });
     case 'failed':
       return t('replies:feed.account_failed', {
-        account: echoableAccount(outcome.account),
+        account,
         reason: reasonOf(outcome.cause, t),
       });
     default: {
@@ -115,12 +113,15 @@ const formatOutcome = (outcome: FeedSubscribeOutcome, label: string, t: BoundTra
  * member-facing sentence: the log is read in one language, and the code
  * is what an operator can search for.
  */
-export const formatOutcomesForLog = (outcomes: readonly FeedSubscribeOutcome[]): string =>
+export const formatOutcomesForLog = (
+  outcomes: readonly FeedSubscribeOutcome[],
+  platformId = '',
+): string =>
   outcomes
     .map((outcome) =>
       outcome.status === 'failed'
-        ? `@${echoableAccount(outcome.account)} failed(${codeOf(outcome.cause)})`
-        : `@${echoableAccount(outcome.account)} ${outcome.status}`,
+        ? `${formatFeedTarget(platformId, echoableAccount(outcome.account))} failed(${codeOf(outcome.cause)})`
+        : `${formatFeedTarget(platformId, echoableAccount(outcome.account))} ${outcome.status}`,
     )
     .join('; ');
 
@@ -143,7 +144,7 @@ export const formatOutcomePages = (
   const label = formatFeedFilter(context.filter, t);
   const lines: string[] = [
     t('replies:feed.subscribe_header', { platform: context.platform, channel: context.channel }),
-    ...outcomes.map((outcome) => formatOutcome(outcome, label, t)),
+    ...outcomes.map((outcome) => formatOutcome(outcome, label, context.platformId ?? '', t)),
   ];
   return paginateLines(lines);
 };

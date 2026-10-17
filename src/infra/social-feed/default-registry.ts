@@ -16,6 +16,7 @@
  */
 import { FeedPlatformRegistry } from './registry';
 import { XPlatform } from './platforms/x-platform';
+import { BahamutPlatform } from './platforms/bahamut-platform';
 import type { FeedPlatformsConfig } from './config';
 import type { FeedPlatform } from './types';
 
@@ -31,6 +32,9 @@ export const createDefaultFeedPlatformRegistry = (
         embedProxyHost: platforms.x.embedProxyHost,
       }),
     );
+  }
+  if (platforms.bahamut !== undefined) {
+    registered.push(new BahamutPlatform(platforms.bahamut));
   }
   return new FeedPlatformRegistry(registered);
 };

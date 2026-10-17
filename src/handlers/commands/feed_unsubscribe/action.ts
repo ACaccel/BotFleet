@@ -1,17 +1,13 @@
 /**
  * `/feed unsubscribe` — stop forwarding social posts into a channel.
  *
- * Channel-centric, matching the subscription key: the channel is always
- * part of the scope (defaulting to the invoking one), and `platform` /
- * `account` — which accepts a list — only narrow it. Reach is bounded
- * by `gateFeedChannel`, for the deletion and for the suggestions alike.
+ * The channel always scopes deletion; platform and target only narrow
+ * it. `gateFeedChannel` bounds deletion and suggestions by visibility.
  *
- * Naming neither narrowing option is the widest scope a member can ask
- * for, and the one an after-the-fact confirmation cannot undo, so it
- * deletes nothing on its own: it counts what would go and asks. A
- * narrowed scope names what it removes and applies at once. Nothing
- * here consults the upstream — a subscription must stay removable after
- * its platform has been switched off in config.
+ * Whole-channel deletion counts and asks first; a narrowed scope applies
+ * immediately. Confirmation after deletion could not undo the removal.
+ * Stored canonical targets remain removable after their platform has
+ * been switched off in config. Resolving a floor URL may need upstream.
  */
 import type { AutocompleteInteraction, ChatInputCommandInteraction } from 'discord.js';
 import { MessageFlags } from 'discord.js';
@@ -42,12 +38,11 @@ export default class feed_unsubscribe extends Command {
     this.setConfig({
       name: 'feed_unsubscribe',
       category: 'community',
-      // Declaration order is registration order, so the narrowing
-      // options come first and `channel` last, matching how
-      // `/feed subscribe` reads.
+      // Declaration order keeps narrowing options before the channel.
       options: {
         string: [
           { name: 'platform', required: false, choices: platformChoices },
+          { name: 'target', required: false, autocomplete: true },
           { name: 'account', required: false, autocomplete: true },
         ],
         channel: [{ name: 'channel', required: false }],
@@ -73,6 +68,11 @@ export default class feed_unsubscribe extends Command {
       await interaction.editReply({ content: t(key, params) });
     };
     try {
+      const target = getOptionalString(interaction, 'target');
+      const account = getOptionalString(interaction, 'account');
+      if (target !== undefined && account !== undefined) {
+        return refuse('replies:feed.target_alias_conflict');
+      }
       const guild = interaction.guild;
       const repos = await requireGuildRepos(bot, interaction);
       // Already replied on null; the `guild` half restates that for tsc.
@@ -86,16 +86,17 @@ export default class feed_unsubscribe extends Command {
 
       // The option names as many accounts as the member cares to list;
       // an unusable list is refused before anything is deleted.
-      const raw = getOptionalString(interaction, 'account');
+      const raw = target ?? account;
       const parsed = raw === undefined ? undefined : parseFeedAccounts(raw);
       if (parsed !== undefined && parsed.kind !== 'accounts') {
         return refuse(...feedAccountRefusal(parsed));
       }
 
       const platform = getOptionalString(interaction, 'platform');
-      const accounts = resolveUnsubscribeAccounts(
+      const accounts = await resolveUnsubscribeAccounts(
         platform === undefined ? undefined : bot.feedPlatformRegistry?.get(platform),
         parsed?.accounts,
+        platform,
       );
       // An invalid handle is reported as such rather than as an empty
       // deletion; `replyForError` renders its `errors:feed.*` copy.

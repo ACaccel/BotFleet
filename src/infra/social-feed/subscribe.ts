@@ -62,7 +62,7 @@ export const prepareFeedSubscription = async (
   rawAccount: string,
   deps: PrepareFeedSubscriptionDeps,
 ): Promise<Result<PreparedFeedSubscription, FeedFailure>> => {
-  const normalized = platform.normalizeAccount(rawAccount);
+  const normalized = await platform.normalizeAccount(rawAccount);
   if (!normalized.ok) return normalized;
   const account = normalized.value;
 

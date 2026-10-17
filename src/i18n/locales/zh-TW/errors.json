@@ -48,14 +48,17 @@
     "unknown": "建立 `{{provider}}` 連結預覽時發生未預期的錯誤(狀態 {{status}})。"
   },
   "feed": {
-    "fetch_failed": "無法讀取 `@{{account}}` 在 {{platform}} 的貼文(狀態 {{status}})。",
-    "timeout": "讀取 `@{{account}}` 在 {{platform}} 的貼文逾時(狀態 {{status}})。",
-    "upstream_failure": "讀取 `@{{account}}` 時 {{platform}} 貼文來源暫時無法存取(狀態 {{status}}),請稍後再試。",
-    "rate_limited": "讀取 `@{{account}}` 時 {{platform}} 貼文來源觸發限流(狀態 {{status}}),請稍後再試。",
-    "not_found": "找不到 {{platform}} 帳號 `@{{account}}`(狀態 {{status}}),可能已改名、被停權,或是帳號名稱打錯了。",
-    "invalid_response": "{{platform}} 貼文來源對 `@{{account}}` 回傳了非預期的內容(狀態 {{status}})。",
+    "fetch_failed": "無法讀取 `{{account}}` 在 {{platform}} 的貼文(狀態 {{status}})。",
+    "timeout": "讀取 `{{account}}` 在 {{platform}} 的貼文逾時(狀態 {{status}})。",
+    "upstream_failure": "讀取 `{{account}}` 時 {{platform}} 貼文來源暫時無法存取(狀態 {{status}}),請稍後再試。",
+    "rate_limited": "讀取 `{{account}}` 時 {{platform}} 貼文來源觸發限流(狀態 {{status}}),請稍後再試。",
+    "not_found": "找不到 {{platform}} 目標 `{{account}}`（狀態 {{status}}）。請確認目標正確且可公開存取。",
+    "invalid_response": "{{platform}} 貼文來源對 `{{account}}` 回傳了非預期的內容(狀態 {{status}})。",
     "invalid_account": "`@{{account}}` 不是有效的 {{platform}} 帳號名稱。",
-    "platform_not_configured": "尚未設定 `{{platform}}` 這個貼文平台。"
+    "platform_not_configured": "尚未設定 `{{platform}}` 這個貼文平台。",
+    "bahamut_resolution_required": "目前沒有可用的上游解析器，無法解析這個 Bahamut 樓層連結。請使用清單中的標準目標 ID，或啟用 Bahamut 平台。",
+    "bahamut_lookback_exceeded": "無法回溯至 {{platform}} 目標 `{{account}}` 的已儲存位置（狀態 {{status}}）。請增加 maxPages 後重試。",
+    "invalid_target": "`{{account}}` 不是有效的 {{platform}} 目標。請使用 Bahamut 公開論壇 B.php、C.php、Co.php 連結，或 board:<bsn>、<bsn>/<snA> ID。"
   },
   "plugin": {
     "lifecycle_phase_violation": "Plugin `{{plugin}}` 在階段 `{{phase}}` 呼叫了 registerInstance(`{{token}}`),只有 `init` 階段允許此操作。"

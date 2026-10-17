@@ -29,6 +29,7 @@ import {
   FeedPlatformRegistry,
   MAX_FEED_ACCOUNTS,
   type FeedFailure,
+  type FeedPlatform,
 } from '../../../../src/infra/social-feed';
 import { databaseErrorFrom } from '../../../../src/persistence/error-translator';
 import type { FeedSubscriptionDoc } from '../../../../src/persistence/schemas/feed-subscription.schema';
@@ -82,6 +83,7 @@ interface Fixture {
   readonly posts?: readonly ReturnType<typeof buildFeedPost>[];
   readonly upsertFails?: boolean;
   readonly created?: boolean;
+  readonly platformOverrides?: Partial<FeedPlatform>;
   /** Subscription the repository already holds for this triple. */
   readonly existing?: FeedSubscriptionDoc;
   readonly options?: Readonly<Record<string, string | null>>;
@@ -130,7 +132,7 @@ const build = (fixture: Fixture = {}) => {
   const { bot, logger } = buildFakeBot({
     translator: echoTranslatorWithParams(),
     feedPlatformRegistry: new FeedPlatformRegistry(
-      fixture.platformUnregistered === true ? [] : [platform],
+      fixture.platformUnregistered === true ? [] : [{ ...platform, ...fixture.platformOverrides }],
     ),
     connectionManager: { isDisabled: () => undefined },
     getRepos,
@@ -166,22 +168,94 @@ const reply = (sink: ReturnType<typeof newInteractionSink>): string =>
   [...sink.editReplies, ...sink.followUps].map((message) => message.content ?? '').join('\n');
 
 describe('/feed subscribe', () => {
-  it('requires media in the command payload sent to Discord', () => {
+  it('keeps both target aliases and media optional in the Discord payload', () => {
     const body = buildCommandJsonBody(
       localizeCommandConfig(new FeedSubscribe().config, echoTranslatorWithParams()),
     ) as { readonly options?: readonly { readonly name: string; readonly required?: boolean }[] };
 
-    expect(body.options).toContainEqual(expect.objectContaining({ name: 'media', required: true }));
+    for (const name of ['target', 'account', 'media']) {
+      expect(body.options).toContainEqual(expect.objectContaining({ name, required: false }));
+    }
   });
 
-  it('rejects a missing media choice before fetching or storing a subscription', async () => {
-    const { bot, interaction, sink, fetchTimeline, upsert } = build({ options: { media: null } });
+  it('defaults missing media to media_only for platforms without a declared default', async () => {
+    const { bot, interaction, upsert } = build({ options: { media: null } });
 
     await new FeedSubscribe().execute(interaction, bot);
 
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: { media: 'media_only' } }),
+    );
+  });
+
+  it('preserves the X media_only default when media is omitted', async () => {
+    const { bot, interaction, upsert } = build({
+      options: { platform: 'x', media: null },
+      platformOverrides: { id: 'x', displayName: 'X (Twitter)' },
+    });
+    await new FeedSubscribe().execute(interaction, bot);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: { media: 'media_only' } }),
+    );
+  });
+
+  it("uses Bahamut's any default and preserves an existing cursor", async () => {
+    const { bot, interaction, sink, upsert, fetchTimeline } = build({
+      options: { platform: 'bahamut', target: 'board:36476', account: null, media: null },
+      existing: subscription({ account: 'board:36476', filter: { media: 'photo_only' } }),
+      platformOverrides: {
+        id: 'bahamut',
+        displayName: 'Bahamut',
+        defaultMediaFilter: 'any',
+        normalizeAccount: async () => ok('board:36476'),
+      },
+    });
+
+    await new FeedSubscribe().execute(interaction, bot);
+
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ filter: { media: 'any' } }));
+    expect(upsert.mock.calls[0]?.[0]).not.toHaveProperty('last_seen_id');
+    expect(upsert.mock.calls[0]?.[0]).not.toHaveProperty('last_seen_timestamp');
+    expect(fetchTimeline).not.toHaveBeenCalled();
+    expect(reply(sink)).toContain('replies:feed.target_board');
+    expect(reply(sink)).not.toContain('@board:36476');
+  });
+
+  it('honors an explicit media filter over the platform default', async () => {
+    const { bot, interaction, upsert } = build({
+      options: { media: 'video_only' },
+      platformOverrides: { defaultMediaFilter: 'any' },
+    });
+    await new FeedSubscribe().execute(interaction, bot);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: { media: 'video_only' } }),
+    );
+  });
+
+  it('accepts target without the legacy account option', async () => {
+    const { bot, interaction, upsert } = build({
+      options: { target: '@NewTarget', account: null },
+    });
+    await new FeedSubscribe().execute(interaction, bot);
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ account: 'newtarget' }));
+  });
+
+  it('rejects both aliases without fetching or writing', async () => {
+    const { bot, interaction, sink, fetchTimeline, upsert } = build({
+      options: { target: 'other' },
+    });
+    await new FeedSubscribe().execute(interaction, bot);
+    expect(reply(sink)).toContain('replies:feed.target_alias_conflict');
     expect(fetchTimeline).not.toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
-    expect(reply(sink)).toContain('replies:feed.failed');
+  });
+
+  it('rejects a missing target and alias without fetching or writing', async () => {
+    const { bot, interaction, sink, fetchTimeline, upsert } = build({ options: { account: null } });
+    await new FeedSubscribe().execute(interaction, bot);
+    expect(reply(sink)).toContain('replies:feed.no_accounts');
+    expect(fetchTimeline).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
   });
 
   it('answers ephemerally, so a subscription never leaks into the channel', () => {
@@ -209,7 +283,7 @@ describe('/feed subscribe', () => {
     const content = reply(sink);
     expect(content).toContain('replies:feed.account_subscribed');
     // The confirmation must describe what was actually written.
-    expect(content).toContain('"account":"someone"');
+    expect(content).toContain('"account":"@someone"');
     expect(content).toContain('"platform":"Fake"');
     expect(content).toContain(`"channel":"<#${HOME_CHANNEL}>"`);
   });
@@ -488,7 +562,7 @@ describe('/feed subscribe', () => {
     ]);
     const content = reply(sink);
     for (const account of ['alpha', 'beta', 'gamma']) {
-      expect(content).toContain(`"account":"${account}"`);
+      expect(content).toContain(`"account":"@${account}"`);
     }
   });
 
@@ -522,7 +596,7 @@ describe('/feed subscribe', () => {
     const content = reply(sink);
     expect(content).toContain('replies:feed.account_failed');
     expect(content).toContain('errors:feed.invalid_account');
-    expect(content).toContain('"account":"alpha"');
+    expect(content).toContain('"account":"@alpha"');
   });
 
   it('records the whole batch in the operator log, failures included', async () => {

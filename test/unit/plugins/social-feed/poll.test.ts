@@ -2,7 +2,7 @@
  * Unit tests for one social-feed pass.
  *
  * Three invariants are under test. **Cursor discipline**: the cursor
- * advances only past posts that actually reached Discord, so a failed
+ * advances only past deliverable posts that reached Discord, so a failed
  * send is retried rather than skipped, and a fresh subscription never
  * backfills nor swallows a genuinely new post. **Shared reads**: one
  * `(platform, account)` pair costs exactly one upstream request per
@@ -28,6 +28,7 @@ import {
   FeedPlatformRegistry,
   type FeedPlatform,
   type FeedPost,
+  type FeedTimelineFetchOptions,
 } from '../../../../src/infra/social-feed';
 import type { GuildRegistry } from '../../../../src/bot/guild-registry';
 import type { Translator } from '../../../../src/core/i18n';
@@ -187,6 +188,7 @@ const makeClient = (guildChannels: ReadonlyMap<string, ReadonlyMap<string, Chann
   }) as unknown as Client;
 
 interface HarnessInput {
+  readonly platformOverrides?: Partial<FeedPlatform>;
   readonly posts?: readonly FeedPost[];
   readonly fetchFails?: boolean;
   /** Guilds in the registry, each with its own repo handle. */
@@ -227,7 +229,9 @@ const harness = (
         : undefined,
   });
   const platforms = new FeedPlatformRegistry([
-    ...(input.registerFakePlatform === false ? [] : [fake.platform]),
+    ...(input.registerFakePlatform === false
+      ? []
+      : [{ ...fake.platform, ...input.platformOverrides }]),
     ...(input.extraPlatforms ?? []),
   ]);
 
@@ -1122,5 +1126,176 @@ describe('runFeedPass — failure isolation', () => {
     await expect(runFeedPass(deps, false)).resolves.toBeUndefined();
     expect(send).toHaveBeenCalledTimes(1);
     expect(errorLog).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runFeedPass — cursor-aware forum sources', () => {
+  const source = { supportsCursorPagination: true, subscriptionScope: 'source' } as const;
+
+  it('passes the oldest seeded cursor and batch cap even during a full sweep', async () => {
+    const a = subscription({ last_seen_id: '5', last_seen_timestamp: 50 });
+    const b = subscription({
+      last_seen_id: '15',
+      last_seen_timestamp: 150,
+      channel_id: 'channel-2',
+    });
+    const { repos } = makeRepos([a, b]);
+    const { deps, fetchTimeline } = harness({
+      repos,
+      posts: [],
+      platformOverrides: source,
+      maxPostsPerPoll: 2,
+    });
+    await runFeedPass(deps, true);
+    expect(fetchTimeline).toHaveBeenCalledWith(ACCOUNT, {
+      sinceTimestamp: undefined,
+      afterId: '5',
+      limit: 2,
+    });
+  });
+
+  it('moves past a completely filtered batch so a later matching topic is not starved', async () => {
+    const sub = subscription({
+      last_seen_id: '5',
+      last_seen_timestamp: 50,
+      filter: { media: 'any', keyword: 'release' },
+    });
+    const { repos, cursorOf } = makeRepos([sub]);
+    const fetchTimeline = vi.fn(async (_account: string, options?: FeedTimelineFetchOptions) =>
+      ok(
+        options?.afterId === '5'
+          ? [post({ id: '10', text: 'Other topic' }), post({ id: '11', text: 'Another topic' })]
+          : [
+              post({
+                id: '12',
+                text: 'Release notes',
+                authorAccount: 'another-user',
+                isReply: true,
+              }),
+            ],
+      ),
+    );
+    const send = makeSend();
+    const { deps } = harness({
+      repos,
+      channel: makeChannel(send),
+      platformOverrides: { ...source, fetchTimeline },
+    });
+    await runFeedPass(deps, false);
+    expect(send).not.toHaveBeenCalled();
+    expect(cursorOf(sub)?.id).toBe('11');
+    await runFeedPass(deps, false);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(cursorOf(sub)?.id).toBe('12');
+    expect(fetchTimeline.mock.calls[1]?.[1]?.afterId).toBe('11');
+  });
+
+  it('never moves past a failed delivery, then resumes through trailing filtered records', async () => {
+    const sub = subscription({
+      last_seen_id: '5',
+      last_seen_timestamp: 50,
+      filter: { media: 'any', keyword: 'release' },
+    });
+    const { repos, cursorOf } = makeRepos([sub]);
+    const send = makeSend()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('send failed'));
+    const { deps } = harness({
+      repos,
+      channel: makeChannel(send),
+      platformOverrides: source,
+      posts: [
+        post({ id: '10', text: 'Release first' }),
+        post({ id: '11', text: 'Other' }),
+        post({ id: '12', text: 'Release second' }),
+        post({ id: '13', text: 'Other' }),
+      ],
+    });
+    await runFeedPass(deps, false);
+    expect(cursorOf(sub)?.id).toBe('10');
+    await runFeedPass(deps, false);
+    expect(cursorOf(sub)?.id).toBe('13');
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not advance past remaining eligible records when the delivery cap is reached', async () => {
+    const sub = subscription({
+      last_seen_id: '5',
+      last_seen_timestamp: 50,
+      filter: { media: 'any', keyword: 'release' },
+    });
+    const { repos, cursorOf } = makeRepos([sub]);
+    const send = makeSend();
+    const { deps } = harness({
+      repos,
+      channel: makeChannel(send),
+      platformOverrides: source,
+      maxPostsPerPoll: 2,
+      posts: [
+        post({ id: '10', text: 'Release A' }),
+        post({ id: '20', text: 'Release B' }),
+        post({ id: '30', text: 'Release C' }),
+        post({ id: '40', text: 'Other' }),
+      ],
+    });
+    await runFeedPass(deps, false);
+    expect(cursorOf(sub)?.id).toBe('20');
+    await runFeedPass(deps, false);
+    expect(cursorOf(sub)?.id).toBe('40');
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  it('shares a separate current-head baseline for new members without skipping an existing backlog', async () => {
+    const old = subscription({ last_seen_id: '5', last_seen_timestamp: 50 });
+    const fresh = subscription({ channel_id: 'new-channel' });
+    const another = subscription({ channel_id: 'another-channel' });
+    const { repos, cursorOf } = makeRepos([old, fresh, another]);
+    const fetchTimeline = vi.fn(async (_account: string, options?: FeedTimelineFetchOptions) =>
+      ok([post({ id: options?.afterId === undefined ? '99' : '10' })]),
+    );
+    const send = makeSend();
+    const { deps } = harness({
+      repos,
+      channel: makeChannel(send),
+      platformOverrides: { ...source, fetchTimeline },
+    });
+    await runFeedPass(deps, false);
+    expect(cursorOf(old)?.id).toBe('10');
+    expect(cursorOf(fresh)?.id).toBe('99');
+    expect(cursorOf(another)?.id).toBe('99');
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(fetchTimeline).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a new member unseeded if its separate head read fails', async () => {
+    const old = subscription({ last_seen_id: '5', last_seen_timestamp: 50 });
+    const fresh = subscription({ channel_id: 'new-channel' });
+    const { repos, cursorOf } = makeRepos([old, fresh]);
+    const failure = new FeedError({
+      code: 'FEED_FETCH_FAILED',
+      messageKey: 'errors:feed.fetch_failed',
+      context: { operation: 'test' },
+    });
+    const fetchTimeline = vi
+      .fn()
+      .mockResolvedValueOnce(ok([post({ id: '10' })]))
+      .mockResolvedValueOnce(err(failure));
+    const { deps, errorLog } = harness({
+      repos,
+      channel: makeChannel(makeSend()),
+      platformOverrides: { ...source, fetchTimeline },
+    });
+    await runFeedPass(deps, false);
+    expect(cursorOf(old)?.id).toBe('10');
+    expect(cursorOf(fresh)).toBeUndefined();
+    expect(errorLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains pending matches when the destination is unavailable', async () => {
+    const sub = subscription({ last_seen_id: '5', last_seen_timestamp: 50 });
+    const { repos, advanceCursor } = makeRepos([sub]);
+    const { deps } = harness({ repos, platformOverrides: source, posts: [post({ id: '10' })] });
+    await runFeedPass(deps, false);
+    expect(advanceCursor).not.toHaveBeenCalled();
   });
 });

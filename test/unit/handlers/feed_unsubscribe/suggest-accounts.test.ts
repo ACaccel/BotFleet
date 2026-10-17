@@ -96,6 +96,18 @@ const build = (fixture: Fixture = {}) => {
 const accountsOf = (choices: readonly { value: string }[]) => choices.map((c) => c.value);
 
 describe('suggestUnsubscribeAccounts', () => {
+  it.each(['target', 'account'])(
+    'completes the %s alias using the same stored targets',
+    async (focusedOption) => {
+      const { bot, interaction } = build({
+        focusedOption,
+        byChannel: { [HOME_CHANNEL]: [subscription('36476/3047', HOME_CHANNEL, 'bahamut')] },
+      });
+      const choices = await suggestUnsubscribeAccounts(interaction, bot);
+      expect(accountsOf(choices)).toEqual(['36476/3047']);
+      expect(choices[0]?.name).not.toContain('@36476/3047');
+    },
+  );
   it('reads the invoking channel when the channel option is empty', async () => {
     const { bot, interaction, listByChannel } = build({
       byChannel: { [HOME_CHANNEL]: [subscription('alice', HOME_CHANNEL)] },

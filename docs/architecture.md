@@ -253,6 +253,24 @@ Feed platforms return neutral single-message previews; each account pass shares 
 across its destinations. Feed announcements and media use one send, and preview
 failure falls back to the existing proxy announcement. Feed configuration remains
 independent of the message-preview plugin.
+Bahamut feeds distinguish board new-topic streams from thread new-floor streams.
+The adapter canonicalizes desktop/mobile B/C URLs and resolves Co floor links to
+parent threads before persistence; existing thread keys and cursors stay valid.
+Board HTML is read in creation order, verified against the source's sort selector;
+topic content and creation time come from the opening floor, not the board's
+last-reply timestamp. Thread reads exclude inline comments and preserve authors.
+`FeedPlatform.subscriptionScope` defaults to account ownership/non-reply checks;
+source scope accepts forum events by any author. `supportsCursorPagination`
+sources receive the oldest seeded member's cursor even during full sweeps and
+return the oldest unprocessed batch. A page-limit gap is an error, not permission
+to skip unseen records. These sources can advance past filtered records after all
+preceding deliveries succeed; capped or failed sends retain pending matches. A
+mixed group shares a separate current-head read to seed new members without
+replaying the existing members' backlog. Verified deleted opening floors produce non-deliverable cursor checkpoints,
+anchored to the preceding source time so later reply timestamps cannot reorder
+new-topic events. Source notifications include bounded
+body excerpts because forum unfurls can show a different floor. Media and
+substring keyword filters remain generic; no content-specific recognition runs.
 Threads retains validated proxy OpenGraph metadata for custom cards instead of
 depending on a second fetch by Discord's URL crawler. Facebook retains metadata
 from proxies or the source site. Both preserve the complete image list. The renderer

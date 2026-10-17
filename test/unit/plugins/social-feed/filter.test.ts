@@ -49,6 +49,17 @@ const select = (
   }).map((p) => p.id);
 
 describe('selectPostsToForward — hard rules', () => {
+  it('never forwards deleted source checkpoints even with every filter open', () => {
+    const deleted = post({ id: '10', isDeleted: true });
+    expect(
+      selectPostsToForward([deleted], {
+        platform: { ...platform, subscriptionScope: 'source' },
+        account: ACCOUNT,
+        filter: PERMISSIVE,
+        maxPosts: 5,
+      }),
+    ).toEqual([]);
+  });
   it('drops a repost of someone else even under the most permissive filter', () => {
     const reposted = post({ id: '10', isRepost: true, authorAccount: 'someoneelse' });
     expect(select([reposted], { filter: PERMISSIVE })).toEqual([]);
@@ -191,5 +202,41 @@ describe('selectPostsToForward — default filter reproduces the former x-media-
   it('sorts oldest-first regardless of the order the upstream returned', () => {
     const posts = [post({ id: '30' }), post({ id: '10' }), post({ id: '20' })];
     expect(select(posts)).toEqual(['10', '20', '30']);
+  });
+});
+
+describe('selectPostsToForward — source scope', () => {
+  const page = [
+    post({ id: '10', text: 'Release notes' }),
+    post({ id: '11', text: 'Release notes', authorAccount: 'another-user', isReply: true }),
+    post({ id: '12', text: 'Release notes', authorAccount: 'another-user', isRepost: true }),
+    post({ id: '13', text: 'Other topic', authorAccount: 'another-user', isReply: true }),
+    post({
+      id: '14',
+      text: 'Release notes',
+      authorAccount: 'another-user',
+      isReply: true,
+      media: [],
+    }),
+  ];
+
+  it('accepts other authors and replies but excludes reposts and applies all filters', () => {
+    const selected = selectPostsToForward(page, {
+      platform: { ...platform, subscriptionScope: 'source' },
+      account: ACCOUNT,
+      filter: { media: 'photo_only', keyword: 'release' },
+      maxPosts: 10,
+    });
+    expect(selected.map((item) => item.id)).toEqual(['10', '11']);
+  });
+
+  it.each(['account', undefined] as const)('preserves account rules for scope %s', (scope) => {
+    const selected = selectPostsToForward(page, {
+      platform: { ...platform, subscriptionScope: scope },
+      account: ACCOUNT,
+      filter: { media: 'any' },
+      maxPosts: 10,
+    });
+    expect(selected.map((item) => item.id)).toEqual(['10']);
   });
 });

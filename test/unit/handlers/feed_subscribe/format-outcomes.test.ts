@@ -81,7 +81,7 @@ describe('formatOutcomePages', () => {
     const lines = (page ?? '').split('\n');
     expect(lines).toHaveLength(5);
     expect(lines[1]).toContain('replies:feed.account_subscribed');
-    expect(lines[1]).toContain('"account":"alpha"');
+    expect(lines[1]).toContain('"account":"@alpha"');
     expect(lines[2]).toContain('replies:feed.account_updated');
     expect(lines[3]).toContain('replies:feed.account_failed');
     expect(lines[4]).toContain('replies:feed.account_skipped');
@@ -185,8 +185,8 @@ describe('formatOutcomePages', () => {
       t,
     );
 
-    expect(page).toContain('"account":" bad "');
-    expect(page).toContain(`"account":"${'x'.repeat(32)}"`);
+    expect(page).toContain('"account":"@ bad "');
+    expect(page).toContain(`"account":"@${'x'.repeat(32)}"`);
     expect(page).not.toContain('x'.repeat(33));
   });
 

@@ -23,6 +23,15 @@ const accountsOf = (raw: string): readonly string[] => {
 };
 
 describe('parseFeedAccounts', () => {
+  it('preserves case-sensitive URL keys while still deduplicating handles and identical URLs', () => {
+    const lower = 'https://forum.gamer.com.tw/C.php?bsn=12345&sna=42';
+    const upper = 'https://forum.gamer.com.tw/C.php?bsn=12345&snA=42';
+    expect(accountsOf(`${lower},${upper},${upper},SomeOne,someone`)).toEqual([
+      lower,
+      upper,
+      'SomeOne',
+    ]);
+  });
   it('reads a single account, which stays the common case', () => {
     expect(accountsOf('someone')).toEqual(['someone']);
   });

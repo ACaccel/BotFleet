@@ -18,15 +18,13 @@
 import type { AutocompleteInteraction } from 'discord.js';
 import type { BaseBot } from '@bot';
 
+import { bindTranslator } from '../../../core/i18n';
 import { logSystem, ops } from '../../../core/logger';
 import { getOptionalString } from '../../../infra/discord/options';
 import { gateFeedChannel } from '../../feed-channel-gate';
 import { lookupGuildRepos } from '../../require-guild-repos';
 import type { CommandSuggestions } from '../command';
 import { buildAccountSuggestions } from './account-suggestions';
-
-/** The one option on this command Discord will ask about. */
-const ACCOUNT_OPTION = 'account';
 
 /**
  * Suggestions for the focused `account` segment, or an empty list.
@@ -41,13 +39,8 @@ export const suggestUnsubscribeAccounts = async (
   interaction: AutocompleteInteraction,
   bot: BaseBot,
 ): Promise<CommandSuggestions> => {
-  // Only `account` is flagged for autocomplete today, so this is the
-  // only option Discord can be asking about. It is checked anyway
-  // because the failure it guards against is silent: a second flagged
-  // option added later would otherwise be answered with account
-  // handles matched against the wrong fragment.
   const focused = interaction.options.getFocused(true);
-  if (focused.name !== ACCOUNT_OPTION) return [];
+  if (focused.name !== 'target' && focused.name !== 'account') return [];
 
   const guild = interaction.guild;
   if (guild === null) return [];
@@ -76,8 +69,9 @@ export const suggestUnsubscribeAccounts = async (
     return [];
   }
 
-  return buildAccountSuggestions(stored.value, {
-    platform: getOptionalString(interaction, 'platform'),
-    focused: focused.value,
-  });
+  return buildAccountSuggestions(
+    stored.value,
+    { platform: getOptionalString(interaction, 'platform'), focused: focused.value },
+    bindTranslator(bot.translator),
+  );
 };

@@ -10,19 +10,28 @@ import type { BoundTranslate } from '../../../core/i18n';
 import { paginateLines } from '../../../infra/discord/paginate';
 import type { FeedSubscriptionDoc } from '../../../persistence/schemas/feed-subscription.schema';
 import { FEED_FILTER_SEPARATOR, describeFeedFilter } from '../../feed-filter-labels';
+import { formatFeedTarget } from '../../feed-target-label';
 
 /**
- * One subscription's line. The forwarding time is a Discord relative
- * timestamp rather than a formatted date, so each reader sees it in
- * their own locale and timezone without the bot knowing either.
+ * One subscription's line. Source cursors describe inspected records,
+ * including filtered ones; account cursors describe forwarded posts.
+ * Discord renders relative timestamps in each reader's locale.
  */
 const formatSubscription = (doc: FeedSubscriptionDoc, t: BoundTranslate): string => {
-  const forwarded =
+  const progress =
     doc.last_seen_timestamp === undefined
-      ? t('replies:feed.never_forwarded')
-      : `<t:${String(doc.last_seen_timestamp)}:R>`;
-  const annotations = [...describeFeedFilter(doc.filter, t), forwarded];
-  return `- \`${doc.platform} @${doc.account}\` — ${annotations.join(FEED_FILTER_SEPARATOR)}`;
+      ? t(
+          doc.platform === 'bahamut'
+            ? 'replies:feed.never_checked'
+            : 'replies:feed.never_forwarded',
+        )
+      : doc.platform === 'bahamut'
+        ? t('replies:feed.checked_through', {
+            timestamp: `<t:${String(doc.last_seen_timestamp)}:R>`,
+          })
+        : `<t:${String(doc.last_seen_timestamp)}:R>`;
+  const annotations = [...describeFeedFilter(doc.filter, t), progress];
+  return `- \`${doc.platform} ${formatFeedTarget(doc.platform, doc.account, t)}\` — ${annotations.join(FEED_FILTER_SEPARATOR)}`;
 };
 
 /**

@@ -65,14 +65,14 @@ const feedSubscriptionFilterSchema = new Schema(
 
 export const feedSubscriptionSchema = new Schema({
   platform: { type: String, required: true },
-  /** Account handle, already normalised by the platform adapter. */
+  /** Canonical account or forum target; the field name preserves stored keys. */
   account: { type: String, required: true },
   channel_id: { type: String, required: true },
   created_by: { type: String, required: true },
   /** Creation time, unix **milliseconds** (`Date.now()`). */
   created_at: { type: Number, required: true },
   filter: { type: feedSubscriptionFilterSchema, required: true, default: () => ({}) },
-  /** Newest post already forwarded; absent until the cursor is seeded. */
+  /** Newest processed record; cursor sources also include deliberately excluded records. */
   last_seen_id: { type: String, required: false },
   /** Timestamp of `last_seen_id`, unix **seconds** — the upstream unit. */
   last_seen_timestamp: { type: Number, required: false },

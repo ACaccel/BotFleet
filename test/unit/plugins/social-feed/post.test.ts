@@ -50,6 +50,25 @@ const samplePost = buildFeedPost({
 const { platform: fakePlatform } = buildFakeFeedPlatform();
 
 describe('buildFeedMessage', () => {
+  it('includes thread floor text because forum unfurls can show the opening post', async () => {
+    const message = buildFeedMessage(
+      await realTranslator(),
+      { ...fakePlatform, subscriptionScope: 'source' },
+      { ...samplePost, text: 'D4Y7P9R3T @everyone' },
+    );
+    expect(message).toContain('D4Y7P9R3T');
+    expect(message).toContain(samplePost.authorAccount);
+    expect(message).toContain(fakePlatform.toEmbedUrl(samplePost));
+  });
+
+  it('bounds the thread excerpt within one Discord message', async () => {
+    const message = buildFeedMessage(
+      await realTranslator(),
+      { ...fakePlatform, subscriptionScope: 'source' },
+      { ...samplePost, text: '*'.repeat(10_000) },
+    );
+    expect(message.length).toBeLessThanOrEqual(2000);
+  });
   it('resolves the real catalog key, leaving no placeholder behind', async () => {
     const message = buildFeedMessage(await realTranslator(), fakePlatform, samplePost);
 

@@ -388,3 +388,14 @@ Newly archived files are stored at
 earlier keep the previous flat `data/deleted_attachments/<guildId>/<localized
 timestamp> <name>` naming; they are not moved or renamed, and retention is still
 unlimited. No configuration change is required.
+
+## Forum-native feed targets
+
+`/feed subscribe` and `/feed unsubscribe` now use `target` for profile handles or
+forum sources. The old `account` option remains an optional alias; supplying both
+is rejected. Re-register commands after upgrading. The media option is optional:
+X retains `media_only`, while Bahamut defaults to `any` to include text-only floors.
+Existing X and Bahamut thread subscription keys/cursors are preserved, so no
+subscription data migration is required. See [Bahamut subscriptions](configuration.md#bahamut-subscriptions)
+for board new-topic streams, thread new-floor streams, URL resolution and backlog
+limits.
