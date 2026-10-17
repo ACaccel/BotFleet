@@ -7,7 +7,12 @@
  * platform. Stored forum IDs and board/thread URLs resolve offline;
  * resolving a floor link may require the configured adapter's upstream.
  */
-import { ok, type Result } from '../../../core/result';
+import {
+  parseYouTubeTarget,
+  YOUTUBE_CHANNEL_ID,
+} from '../../../infra/social-feed/platforms/youtube-target';
+import { platformNotConfiguredError } from '../../feed-panel/platform-not-configured';
+import { err, ok, type Result } from '../../../core/result';
 import {
   normalizeBahamutTargetOffline,
   type FeedFailure,
@@ -24,7 +29,8 @@ import {
  * matching nothing — a platform with case-sensitive handles would need
  * its `platform` named for an exact match.
  */
-const fallbackNormalize = (raw: string): string => raw.replace(/^@+/, '').toLowerCase();
+const fallbackNormalize = (raw: string): string =>
+  YOUTUBE_CHANNEL_ID.test(raw) ? raw : raw.replace(/^@+/, '').toLowerCase();
 
 /**
  * The stored accounts the deletion should match, or `undefined` when
@@ -50,6 +56,16 @@ export const resolveUnsubscribeAccounts = async (
   if (raw === undefined) return ok(undefined);
   const accounts: string[] = [];
   for (const entry of raw) {
+    const resolvedPlatform = platformId ?? platform?.id;
+    if (resolvedPlatform === 'youtube') {
+      const parsed = parseYouTubeTarget(entry);
+      if (!parsed.ok) return parsed;
+      if (parsed.value.kind === 'channel') {
+        accounts.push(parsed.value.id);
+        continue;
+      }
+      if (!platform) return err(platformNotConfiguredError('youtube'));
+    }
     if ((platformId ?? platform?.id) === 'bahamut') {
       const offline = normalizeBahamutTargetOffline(entry);
       if (offline.ok) {

@@ -11,6 +11,7 @@
  * Pure: it takes a filter and a translate function, so every
  * combination is testable without an interaction or a catalog.
  */
+import { feedFilterCapabilities } from '../infra/social-feed/filter-capabilities';
 import type { BoundTranslate } from '../core/i18n';
 import type { FeedSubscriptionFilter } from '../persistence/schemas/feed-subscription.schema';
 
@@ -36,17 +37,22 @@ export const FEED_FILTER_SEPARATOR = ' · ';
 /**
  * Labels for this filter.
  *
- * The media filter is always shown, default included: a reader cannot
- * tell an unlabelled line apart from one whose label they do not know,
- * and the default is a real choice (text-only posts are dropped) rather
- * than an absence of one. The keyword is shown only when set, because
- * "no keyword" genuinely means no narrowing.
+ * Show only platform-relevant constraints, including their defaults.
+ * An absent keyword adds no narrowing and needs no annotation.
  */
 export const describeFeedFilter = (
   filter: DescribableFeedFilter,
   t: BoundTranslate,
+  platform?: string,
 ): readonly string[] => {
-  const labels: string[] = [t(`replies:feed.filter_media.${filter.media}`)];
+  const capabilities = feedFilterCapabilities(platform ?? '');
+  const labels: string[] = [
+    t(
+      capabilities.media
+        ? `replies:feed.filter_media.${filter.media}`
+        : 'replies:feed.filter_videos',
+    ),
+  ];
   if (filter.keyword !== undefined && filter.keyword !== '') {
     // The keyword is whatever a member typed and the translator
     // interpolates without escaping, so a backtick would break out of
@@ -58,5 +64,8 @@ export const describeFeedFilter = (
 };
 
 /** The same labels as one phrase, for a line that carries nothing else. */
-export const formatFeedFilter = (filter: DescribableFeedFilter, t: BoundTranslate): string =>
-  describeFeedFilter(filter, t).join(FEED_FILTER_SEPARATOR);
+export const formatFeedFilter = (
+  filter: DescribableFeedFilter,
+  t: BoundTranslate,
+  platform?: string,
+): string => describeFeedFilter(filter, t, platform).join(FEED_FILTER_SEPARATOR);

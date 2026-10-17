@@ -144,3 +144,25 @@ describe('resolveUnsubscribeAccounts', () => {
     expect(resolved.ok && resolved.value).toEqual(['banned']);
   });
 });
+
+describe('new feed target removal', () => {
+  const channel = 'UCAbCdEfGhIjKlMnOpQrStUv';
+  it('preserves case-sensitive YouTube keys and resolves their URLs while disabled', async () => {
+    expect(
+      await resolveUnsubscribeAccounts(
+        undefined,
+        [channel, `https://www.youtube.com/channel/${channel}`],
+        'youtube',
+      ),
+    ).toEqual({ ok: true, value: [channel, channel] });
+    expect(await resolveUnsubscribeAccounts(undefined, [channel])).toEqual({
+      ok: true,
+      value: [channel],
+    });
+  });
+  it('requires an available resolver for a disabled YouTube handle', async () => {
+    const result = await resolveUnsubscribeAccounts(undefined, ['@somechannel'], 'youtube');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('FEED_PLATFORM_NOT_CONFIGURED');
+  });
+});

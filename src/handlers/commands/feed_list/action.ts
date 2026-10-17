@@ -19,6 +19,7 @@ import { bindTranslator } from '../../../core/i18n';
 import { replyForError } from '../../../infra/discord/reply-for-error';
 import { sendPagedEphemeralReply } from '../../../infra/discord/send-paged-reply';
 import { requireGuildRepos } from '../../require-guild-repos';
+import { attachFeedListEditor } from '../../feed-panel/interaction';
 import { formatSubscriptionPages } from './format-subscriptions';
 
 export default class feed_list extends Command {
@@ -66,10 +67,11 @@ export default class feed_list extends Command {
         await interaction.editReply({ content: t('replies:feed.list_empty') });
         return;
       }
-      await sendPagedEphemeralReply(interaction, pages, {
+      const failed = await sendPagedEphemeralReply(interaction, pages, {
         logger: bot.logger,
         partialNotice: (failed) => t('replies:common.pages_failed', { count: failed }),
       });
+      if (failed === 0) await attachFeedListEditor(interaction, bot, visible);
     } catch (err) {
       await replyForError(interaction, bot, err, 'replies:feed.failed', interaction.guildId);
     }

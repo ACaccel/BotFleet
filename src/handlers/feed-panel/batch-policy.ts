@@ -8,7 +8,7 @@
  * the loop because they are the part worth stating — and testing —
  * without a repository or a platform in hand.
  */
-import { DomainError, type AnyDomainError } from '../../../core/errors';
+import { DomainError, type AnyDomainError } from '../../core/errors';
 
 /**
  * How long the batch may keep starting accounts, measured from the

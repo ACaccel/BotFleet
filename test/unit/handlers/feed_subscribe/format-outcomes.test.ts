@@ -15,8 +15,8 @@ import { describe, expect, it } from 'vitest';
 import {
   formatOutcomePages,
   formatOutcomesForLog,
-} from '../../../../src/handlers/commands/feed_subscribe/format-outcomes';
-import type { FeedSubscribeOutcome } from '../../../../src/handlers/commands/feed_subscribe/subscribe-accounts';
+} from '../../../../src/handlers/feed-panel/format-outcomes';
+import type { FeedSubscribeOutcome } from '../../../../src/handlers/feed-panel/subscribe-accounts';
 import { FEED_FILTER_SEPARATOR } from '../../../../src/handlers/feed-filter-labels';
 import { DatabaseError, FeedError } from '../../../../src/core/errors';
 import { MAX_PAGE_LENGTH } from '../../../../src/infra/discord/paginate';

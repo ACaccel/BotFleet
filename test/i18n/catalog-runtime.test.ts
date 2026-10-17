@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { I18NextTranslator } from '../../src/core/i18n/i18next-translator';
 import { loadCatalogResources } from '../../src/core/i18n/catalog-loader';
-import { PERMISSION_LABEL_KEYS } from '../../src/handlers/commands/feed_subscribe/permission-requirements';
+import { PERMISSION_LABEL_KEYS } from '../../src/handlers/feed-panel/permission-requirements';
 import { FEED_PLATFORM_DISPLAY_NAMES, SUPPORTED_FEED_PLATFORMS } from '../../src/infra/social-feed';
 import { FEED_MEDIA_FILTERS } from '../../src/persistence/schemas/feed-subscription.schema';
 

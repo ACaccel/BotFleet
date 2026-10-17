@@ -7,10 +7,10 @@
  * layers that may not import each other, so the shared rule lives in
  * infra, next to the platform it consults.
  */
-import type { FeedPlatform, FeedPost } from './types';
+import { MAX_FEED_SNAPSHOT_POSTS, type FeedPlatform, type FeedPost } from './types';
 
 /** The slice of a platform the baseline rule actually consults. */
-type BaselinePlatform = Pick<FeedPlatform, 'compareIds' | 'baselineIdAt'>;
+type BaselinePlatform = Pick<FeedPlatform, 'compareIds' | 'baselineIdAt' | 'trackingMode'>;
 
 const MS_PER_SECOND = 1000;
 
@@ -18,6 +18,7 @@ const MS_PER_SECOND = 1000;
 export interface FeedBaselineCursor {
   readonly lastSeenId: string;
   readonly lastSeenTimestamp: number;
+  readonly seenIds?: readonly string[];
 }
 
 /**
@@ -67,7 +68,10 @@ export const newestPostForBaseline = (
 /**
  * The baseline cursor for a first read of `posts` taken at `nowMs`.
  *
- * An empty timeline offers no post to anchor on, so the anchor is
+ * Snapshots seed every ID, with timestamp plus ID deciding displayed progress
+ * only. An empty snapshot seeds an empty ledger with a clock sentinel.
+ *
+ * An empty ordered timeline offers no post to anchor on, so the anchor is
  * derived from the clock instead — a platform-computed id floor rather
  * than zero, or a later full sweep would treat every pre-existing post
  * as new.
@@ -77,6 +81,25 @@ export const resolveBaselineCursor = (
   posts: readonly FeedPost[],
   nowMs: number,
 ): FeedBaselineCursor => {
+  if (platform.trackingMode === 'snapshot') {
+    if (posts.length > MAX_FEED_SNAPSHOT_POSTS) {
+      throw new Error('Feed snapshot exceeds its bounded source window');
+    }
+    const newest = posts.reduce<FeedPost | undefined>(
+      (candidate, post) =>
+        candidate === undefined ||
+        post.createdTimestamp > candidate.createdTimestamp ||
+        (post.createdTimestamp === candidate.createdTimestamp && post.id > candidate.id)
+          ? post
+          : candidate,
+      undefined,
+    );
+    return {
+      lastSeenId: newest?.id ?? `snapshot:${nowMs}`,
+      lastSeenTimestamp: newest?.createdTimestamp ?? Math.floor(nowMs / MS_PER_SECOND),
+      seenIds: [...new Set(posts.map((post) => post.id))],
+    };
+  }
   const newest = newestPostForBaseline(platform, posts);
   return {
     lastSeenId: newest?.id ?? platform.baselineIdAt(nowMs),

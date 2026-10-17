@@ -13,7 +13,7 @@ import {
   PERMISSION_LABEL_KEYS,
   missingFeedPermissions,
   requiredFeedPermissions,
-} from '../../../../src/handlers/commands/feed_subscribe/permission-requirements';
+} from '../../../../src/handlers/feed-panel/permission-requirements';
 
 /** A permission set granting exactly `granted`. */
 const has =

@@ -154,32 +154,21 @@
     "description": "Manage social and forum feed subscriptions",
     "subcommands": {
       "subscribe": {
-        "description": "Forward new posts, board threads or thread replies into a channel",
+        "description": "Configure a feed subscription in a private editor",
         "options": {
           "platform": {
             "description": "Platform for the subscription targets",
             "choices": {
               "x": "X (Twitter)",
-              "bahamut": "Bahamut"
+              "bahamut": "Bahamut",
+              "youtube": "YouTube"
             }
           },
           "channel": {
             "description": "Channel to forward into (default: this channel)"
           },
-          "media": {
-            "description": "Media filter (default: all posts, including text-only posts)",
-            "choices": {
-              "media_only": "Only posts with a photo or video, no text-only posts",
-              "photo_only": "Only posts with a photo",
-              "video_only": "Only posts with a video",
-              "any": "Every post: text-only, photo and video"
-            }
-          },
-          "keyword": {
-            "description": "Only forward matching content; combine with AND, OR, NOT and (), e.g. live OR (album AND tour)"
-          },
           "target": {
-            "description": "Targets, comma-separated: X handles or Bahamut board/thread IDs or public B/C/Co links"
+            "description": "Targets: X handle, Bahamut URL, or YouTube channel; comma-separated"
           }
         }
       },
@@ -193,7 +182,8 @@
             "description": "Only remove subscriptions on this platform",
             "choices": {
               "x": "X (Twitter)",
-              "bahamut": "Bahamut"
+              "bahamut": "Bahamut",
+              "youtube": "YouTube"
             }
           },
           "target": {

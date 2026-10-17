@@ -22,6 +22,7 @@ import {
   MAX_AUTOCOMPLETE_CHOICES,
   MAX_AUTOCOMPLETE_FIELD_LENGTH,
 } from '../../../infra/discord/autocomplete-limits';
+import { YOUTUBE_CHANNEL_ID } from '../../../infra/social-feed/platforms/youtube-target';
 import { MAX_FEED_ACCOUNTS, parseFeedAccounts } from '../../../infra/social-feed';
 import { feedPlatformDisplayName } from '../../feed-platform-name';
 import { formatFeedTarget } from '../../feed-target-label';
@@ -70,14 +71,18 @@ export const buildAccountSuggestions = (
   // The last segment is what the member is still typing; everything
   // before it is settled and gets echoed back verbatim-but-normalised.
   const fragment = (segments.at(-1) ?? '').trim().replace(LEADING_AT, '').toLowerCase();
-  const parsed = parseFeedAccounts(segments.slice(0, -1).join(','));
+  const parsed = parseFeedAccounts(segments.slice(0, -1).join(','), scope.platform);
   if (parsed.kind === 'too_many') return [];
   const committed = parsed.kind === 'accounts' ? parsed.accounts : [];
   // A list already at the command's own cap cannot usefully grow: the
   // command refuses the whole option at one entry more, so offering a
   // candidate here would only build a list it then rejects.
   if (committed.length >= MAX_FEED_ACCOUNTS) return [];
-  const taken = new Set(committed.map((account) => account.toLowerCase()));
+  const taken = new Set(
+    committed.map((account) =>
+      YOUTUBE_CHANNEL_ID.test(account) ? account : account.toLowerCase(),
+    ),
+  );
   const prefix =
     committed.length === 0 ? '' : committed.join(SEGMENT_SEPARATOR) + SEGMENT_SEPARATOR;
 
@@ -86,7 +91,8 @@ export const buildAccountSuggestions = (
     if (suggestions.length >= MAX_AUTOCOMPLETE_CHOICES) break;
     if (scope.platform !== undefined && doc.platform !== scope.platform) continue;
     const lower = doc.account.toLowerCase();
-    if (taken.has(lower) || !lower.includes(fragment)) continue;
+    if (taken.has(doc.platform === 'youtube' ? doc.account : lower) || !lower.includes(fragment))
+      continue;
     const value = `${prefix}${doc.account}`;
     const name = `${feedPlatformDisplayName(doc.platform)} ${formatFeedTarget(doc.platform, doc.account, t)}`;
     if (value.length > MAX_AUTOCOMPLETE_FIELD_LENGTH) continue;

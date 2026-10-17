@@ -154,32 +154,21 @@
     "description": "管理社群與論壇訂閱",
     "subcommands": {
       "subscribe": {
-        "description": "將新貼文、看板新討論串或討論串新樓層轉發到頻道",
+        "description": "在私人面板中設定動態訂閱",
         "options": {
           "platform": {
             "description": "訂閱目標所在的平台",
             "choices": {
               "x": "X (Twitter)",
-              "bahamut": "Bahamut"
+              "bahamut": "Bahamut",
+              "youtube": "YouTube"
             }
           },
           "channel": {
             "description": "要轉發到的頻道 (預設為目前頻道)"
           },
-          "media": {
-            "description": "媒體過濾條件（預設：所有貼文，包含純文字）",
-            "choices": {
-              "media_only": "只轉發含圖片或影片的貼文,不含純文字",
-              "photo_only": "只轉發含圖片的貼文",
-              "video_only": "只轉發含影片的貼文",
-              "any": "轉發所有貼文:純文字、圖片、影片都包含"
-            }
-          },
-          "keyword": {
-            "description": "只轉發符合關鍵字的內容，可用 AND、OR、NOT 與括號組合，例如：直播 OR (專輯 AND 發售)"
-          },
           "target": {
-            "description": "訂閱目標，以逗號分隔：X 帳號，或 Bahamut 看板／討論串 ID、公開 B/C/Co 連結"
+            "description": "訂閱目標：X 帳號、巴哈網址或 YouTube 頻道；以逗號分隔"
           }
         }
       },
@@ -193,7 +182,8 @@
             "description": "只移除這個平台的訂閱",
             "choices": {
               "x": "X (Twitter)",
-              "bahamut": "Bahamut"
+              "bahamut": "Bahamut",
+              "youtube": "YouTube"
             }
           },
           "target": {

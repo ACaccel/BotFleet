@@ -19,7 +19,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
 
-import { subscribeAccounts } from '../../../../src/handlers/commands/feed_subscribe/subscribe-accounts';
+import { subscribeAccounts } from '../../../../src/handlers/feed-panel/subscribe-accounts';
 import { DomainError, FeedError } from '../../../../src/core/errors';
 import { err, ok } from '../../../../src/core/result';
 import type { FeedSubscriptionRepo } from '../../../../src/persistence/repositories';
@@ -297,4 +297,39 @@ describe('subscribeAccounts', () => {
     expect(upsert).not.toHaveBeenCalled();
     expect(fetchTimeline).not.toHaveBeenCalled();
   });
+});
+
+describe('subscribeAccounts — snapshot baselines', () => {
+  it.each([[[]], [[buildFeedPost({ id: 'opaque-z' }), buildFeedPost({ id: 'opaque-a' })]]])(
+    'inserts snapshot IDs and leaves existing subscription progress untouched',
+    async (posts) => {
+      const fake = buildFakeFeedPlatform({ posts });
+      const find = vi.fn(async (_platform: string, account: string) =>
+        ok(account === 'existing' ? doc() : undefined),
+      );
+      const upsert = vi.fn(async () => ok({ doc: doc(), created: true }));
+      await subscribeAccounts({
+        platform: { ...fake.platform, trackingMode: 'snapshot' },
+        repo: { find, upsert } as unknown as FeedSubscriptionRepo,
+        accounts: ['new', 'existing'],
+        channelId: CHANNEL_ID,
+        createdBy: USER_ID,
+        filter: { media: 'any', keyword: 'video' },
+        deadlineMs: NO_DEADLINE,
+        logFailure: vi.fn(),
+      });
+      expect(upsert).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          seen_ids: posts.map((post) => post.id),
+          filter: { media: 'any', keyword: 'video' },
+        }),
+      );
+      expect(upsert).toHaveBeenNthCalledWith(
+        2,
+        expect.not.objectContaining({ seen_ids: expect.anything() }),
+      );
+      expect(fake.fetchTimeline).toHaveBeenCalledTimes(1);
+    },
+  );
 });

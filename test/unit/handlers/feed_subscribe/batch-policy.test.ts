@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FEED_BATCH_BUDGET_MS,
   isSystemicFailure,
-} from '../../../../src/handlers/commands/feed_subscribe/batch-policy';
+} from '../../../../src/handlers/feed-panel/batch-policy';
 import { DatabaseError, FeedError } from '../../../../src/core/errors';
 
 const feedError = (code: 'FEED_RATE_LIMITED' | 'FEED_NOT_FOUND' | 'FEED_INVALID_ACCOUNT') =>

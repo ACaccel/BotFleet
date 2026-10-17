@@ -58,7 +58,8 @@
     "platform_not_configured": "The feed platform `{{platform}}` is not configured on this bot.",
     "bahamut_resolution_required": "Cannot resolve this Bahamut floor link without an upstream resolver. Use a listed canonical target or enable the Bahamut platform.",
     "bahamut_lookback_exceeded": "Could not reach the saved position for {{platform}} target `{{account}}` (status {{status}}). Increase maxPages and try again.",
-    "invalid_target": "`{{account}}` is not a valid {{platform}} target. Use a public Bahamut B.php, C.php or Co.php forum link, board:<bsn>, or <bsn>/<snA>."
+    "invalid_target": "`{{account}}` is not a valid {{platform}} target. Use a public Bahamut B.php, C.php or Co.php forum link, board:<bsn>, or <bsn>/<snA>.",
+    "invalid_youtube_target": "Invalid {{platform}} target. Use a UC channel ID, @handle, or an HTTPS YouTube channel URL."
   },
   "plugin": {
     "lifecycle_phase_violation": "Plugin `{{plugin}}` called registerInstance(`{{token}}`) during phase `{{phase}}`; only `init` is allowed."

@@ -16,6 +16,7 @@
  */
 import { FeedPlatformRegistry } from './registry';
 import { XPlatform } from './platforms/x-platform';
+import { YouTubePlatform } from './platforms/youtube-platform';
 import { BahamutPlatform } from './platforms/bahamut-platform';
 import type { FeedPlatformsConfig } from './config';
 import type { FeedPlatform } from './types';
@@ -36,5 +37,6 @@ export const createDefaultFeedPlatformRegistry = (
   if (platforms.bahamut !== undefined) {
     registered.push(new BahamutPlatform(platforms.bahamut));
   }
+  if (platforms.youtube !== undefined) registered.push(new YouTubePlatform(platforms.youtube));
   return new FeedPlatformRegistry(registered);
 };

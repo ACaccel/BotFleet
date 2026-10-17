@@ -13,8 +13,9 @@
  *
  * Cursor invariant: pending matches advance only after successful delivery.
  * Cursor-aware sources also pass intentionally excluded or deleted records,
- * after all preceding matches succeeded. Seeding suppresses backfill; ordering
- * always uses source IDs because a timestamp hint may omit same-second posts.
+ * after all preceding matches succeeded. Snapshots use a bounded persistent
+ * ID ledger and full source reads; timestamps only determine delivery order.
+ * Seeding suppresses backfill for both tracking modes.
  */
 import type { Client, SendableChannels } from 'discord.js';
 
@@ -30,6 +31,8 @@ import {
   type FeedPost,
   type FeedPreview,
 } from '../../../infra/social-feed';
+import { MAX_FEED_SNAPSHOT_POSTS } from '../../../infra/social-feed/types';
+import { MAX_FEED_SEEN_IDS } from '../../../persistence/schemas/feed-subscription.schema';
 import type { Repos } from '../../../persistence/repositories';
 import type { FeedSubscriptionDoc } from '../../../persistence/schemas/feed-subscription.schema';
 import type { SocialFeedPluginConfig } from '../config';
@@ -99,13 +102,11 @@ interface SubscriptionPassInput {
 }
 
 /**
- * Group identity. The account is folded to lower case: platforms treat
- * account names case-insensitively (and normalise them on the way in),
- * so two subscriptions differing only in case follow one account and
- * must not cost two upstream reads.
+ * Snapshot keys preserve canonical case because native channel IDs can be
+ * case-sensitive. Ordered sources retain historical case-insensitive grouping.
  */
-const groupKey = (platformId: string, account: string): string =>
-  `${platformId}:${account.toLowerCase()}`;
+const groupKey = (platform: FeedPlatform, account: string): string =>
+  `${platform.id}:${platform.trackingMode === 'snapshot' ? account : account.toLowerCase()}`;
 
 /** Key for the once-per-pass "platform not configured" warning. */
 const platformWarnKey = (platformId: string, guildId: string): string => `${platformId}@${guildId}`;
@@ -157,7 +158,7 @@ const collectGroups = async (deps: FeedPassDeps): Promise<readonly AccountGroup[
           }
           continue;
         }
-        const key = groupKey(platform.id, sub.account);
+        const key = groupKey(platform, sub.account);
         const group = groups.get(key);
         if (group === undefined) {
           groups.set(key, { platform, account: sub.account, members: [{ guildId, repos, sub }] });
@@ -238,6 +239,7 @@ const seedCursor = async (
     sub._id,
     baseline.lastSeenId,
     baseline.lastSeenTimestamp,
+    ...(baseline.seenIds === undefined ? [] : [baseline.seenIds]),
   );
   if (!stored.ok) {
     logError(deps.logger, guildId, stored.error);
@@ -339,6 +341,92 @@ const resolveChannel = (
 };
 
 /**
+ * A snapshot is a complete bounded window, not an ordered cursor page.
+ * Pin processed IDs still in that window before retaining older history, so
+ * eviction never replays an unchanged current entry. Pending matches are
+ * never added, including when a channel, send, or persistence write fails.
+ */
+const pollSnapshotSubscription = async (
+  deps: FeedPassDeps,
+  input: SubscriptionPassInput,
+  posts: readonly FeedPost[],
+): Promise<void> => {
+  const { sub, repos } = input.member;
+  if (sub.seen_ids === undefined) {
+    await seedCursor(deps, input, posts);
+    return;
+  }
+  const unique = [...new Map(posts.map((post) => [post.id, post])).values()];
+  const currentIds = new Set(unique.map((post) => post.id));
+  const processed = new Set(sub.seen_ids);
+  const matching = selectPostsToForward(unique, {
+    platform: input.platform,
+    account: sub.account,
+    filter: sub.filter,
+    maxPosts: unique.length,
+  });
+  const matchingIds = new Set(matching.map((post) => post.id));
+  let dirty = false;
+  for (const post of unique) {
+    if (!matchingIds.has(post.id) && !processed.has(post.id)) {
+      processed.add(post.id);
+      dirty = true;
+    }
+  }
+  let progress = {
+    lastSeenId: sub.last_seen_id ?? `snapshot:${input.fetchedAtMs}`,
+    lastSeenTimestamp: sub.last_seen_timestamp ?? Math.floor(input.fetchedAtMs / 1000),
+  };
+  let persistenceFailed = false;
+  const persist = async (): Promise<void> => {
+    // The source bound is half the ledger capacity, so all pinned IDs fit.
+    const pinned = unique.filter((post) => processed.has(post.id)).map((post) => post.id);
+    const historical = [...processed].filter((id) => !currentIds.has(id));
+    const ledger = [...historical.slice(-(MAX_FEED_SEEN_IDS - pinned.length)), ...pinned];
+    try {
+      const stored = await repos.feedSubscription.advanceCursor(
+        sub._id,
+        progress.lastSeenId,
+        progress.lastSeenTimestamp,
+        ledger,
+      );
+      if (!stored.ok) throw stored.error;
+      dirty = false;
+    } catch (error: unknown) {
+      persistenceFailed = true;
+      throw error;
+    }
+  };
+  try {
+    const pending = matching.filter((post) => !processed.has(post.id));
+    if (pending.length === 0) return;
+    const channel = resolveChannel(deps, input.member, input.platform.id);
+    if (channel === undefined) return;
+    for (const post of pending.slice(0, deps.config.maxPostsPerPoll)) {
+      const preview = await input.previewFor(post);
+      const url =
+        preview?.kind === 'rewritten-url'
+          ? preview.url
+          : preview === undefined
+            ? input.platform.toEmbedUrl(post)
+            : `<${post.url}>`;
+      await sendFeedPost(
+        channel,
+        buildFeedMessage(deps.translator, input.platform, post, url),
+        preview === undefined ? undefined : { result: preview, translator: deps.translator },
+      );
+      processed.add(post.id);
+      progress = { lastSeenId: post.id, lastSeenTimestamp: post.createdTimestamp };
+      dirty = true;
+      // Stop immediately on a failed write rather than sending an unrecorded batch.
+      await persist();
+    }
+  } finally {
+    if (dirty && !persistenceFailed) await persist();
+  }
+};
+
+/**
  * Apply one group's page to one subscription.
  *
  * Seeding comes before channel resolution because it sends nothing: an
@@ -354,6 +442,10 @@ const pollSubscription = async (
   posts: readonly FeedPost[],
 ): Promise<void> => {
   const { sub } = input.member;
+  if (input.platform.trackingMode === 'snapshot') {
+    await pollSnapshotSubscription(deps, input, posts);
+    return;
+  }
   if (sub.last_seen_id === undefined) {
     await seedCursor(deps, input, posts);
     return;
@@ -404,14 +496,22 @@ export const runFeedPass = async (deps: FeedPassDeps, fullSweep: boolean): Promi
   for (const group of groups) {
     try {
       const fetchedAtMs = deps.clock.now();
+      const snapshot = group.platform.trackingMode === 'snapshot';
       const afterId =
-        group.platform.supportsCursorPagination === true ? afterIdFor(group) : undefined;
-      const fetched = await group.platform.fetchTimeline(group.account, {
-        sinceTimestamp: sinceTimestampFor(group, fullSweep),
-        ...(group.platform.supportsCursorPagination === true
-          ? { afterId, limit: deps.config.maxPostsPerPoll }
-          : {}),
-      });
+        !snapshot && group.platform.supportsCursorPagination === true
+          ? afterIdFor(group)
+          : undefined;
+      const fetched = await group.platform.fetchTimeline(
+        group.account,
+        snapshot
+          ? undefined
+          : {
+              sinceTimestamp: sinceTimestampFor(group, fullSweep),
+              ...(group.platform.supportsCursorPagination === true
+                ? { afterId, limit: deps.config.maxPostsPerPoll }
+                : {}),
+            },
+      );
       if (!fetched.ok) {
         // One read serves every guild subscribing to this account, so
         // the failure belongs to no single guild; the affected ids are
@@ -422,10 +522,14 @@ export const runFeedPass = async (deps: FeedPassDeps, fullSweep: boolean): Promi
         continue;
       }
 
+      if (snapshot && fetched.value.length > MAX_FEED_SNAPSHOT_POSTS) {
+        throw new Error('Feed snapshot exceeds its bounded source window');
+      }
+
       const previews = new Map<string, Promise<FeedPreview | undefined>>();
       let baselineRead: ReturnType<FeedPlatform['fetchTimeline']> | undefined;
       const baselinePosts =
-        group.platform.supportsCursorPagination === true && afterId !== undefined
+        !snapshot && group.platform.supportsCursorPagination === true && afterId !== undefined
           ? (): ReturnType<FeedPlatform['fetchTimeline']> =>
               (baselineRead ??= group.platform.fetchTimeline(group.account))
           : undefined;

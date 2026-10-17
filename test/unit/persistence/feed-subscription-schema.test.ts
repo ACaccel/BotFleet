@@ -9,10 +9,14 @@
  * turn red.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { Mongoose } from 'mongoose';
 import {
   DEFAULT_FEED_MEDIA_FILTER,
   FEED_MEDIA_FILTERS,
   isFeedMediaFilter,
+  feedSubscriptionSchema,
+  MAX_FEED_SEEN_IDS,
+  MAX_FEED_SEEN_ID_LENGTH,
   type FeedMediaFilter,
   type FeedSubscriptionDoc,
 } from '../../../src/persistence/schemas/feed-subscription.schema';
@@ -64,5 +68,33 @@ describe('isFeedMediaFilter', () => {
     } else {
       expect.unreachable('video_only is a known media filter');
     }
+  });
+});
+
+describe('snapshot ledger schema', () => {
+  const Model = new Mongoose().model('SnapshotSubscription', feedSubscriptionSchema);
+  const fields = {
+    platform: 'snapshot',
+    account: 'channel',
+    channel_id: 'channel-1',
+    created_by: 'user',
+    created_at: 1,
+  };
+  it('leaves absent ledgers unseeded and preserves seeded empty arrays', () => {
+    expect(new Model(fields).seen_ids).toBeUndefined();
+    expect(new Model({ ...fields, seen_ids: [] }).seen_ids).toEqual([]);
+    expect(new Model({ ...fields, seen_ids: [] }).validateSync()).toBeUndefined();
+  });
+  it('rejects oversized ledgers and invalid native ID lengths', () => {
+    expect(
+      new Model({
+        ...fields,
+        seen_ids: Array.from({ length: MAX_FEED_SEEN_IDS + 1 }, (_, i) => String(i)),
+      }).validateSync(),
+    ).toBeDefined();
+    expect(
+      new Model({ ...fields, seen_ids: ['x'.repeat(MAX_FEED_SEEN_ID_LENGTH + 1)] }).validateSync(),
+    ).toBeDefined();
+    expect(new Model({ ...fields, seen_ids: [''] }).validateSync()).toBeDefined();
   });
 });

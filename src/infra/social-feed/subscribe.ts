@@ -1,7 +1,8 @@
 /**
  * The domain sequence a subscription command runs before it writes:
  * canonicalise the handle, and, only when the subscription is new, read the
- * upstream once to prove the account exists and to anchor a cursor.
+ * upstream once to prove the account exists and to anchor a cursor. Snapshot
+ * baselines also capture every current native ID, including an empty ledger.
  *
  * It is the platform-facing half of subscribing, so it sits next to
  * {@link FeedPlatform} and the baseline rule it composes, leaving the

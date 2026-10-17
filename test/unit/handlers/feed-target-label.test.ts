@@ -11,7 +11,7 @@ import { createCommand } from '../../../src/handlers/commands';
 import {
   formatOutcomePages,
   formatOutcomesForLog,
-} from '../../../src/handlers/commands/feed_subscribe/format-outcomes';
+} from '../../../src/handlers/feed-panel/format-outcomes';
 import { formatSubscriptionPages } from '../../../src/handlers/commands/feed_list/format-subscriptions';
 import { buildAccountSuggestions } from '../../../src/handlers/commands/feed_unsubscribe/account-suggestions';
 import {
@@ -146,6 +146,7 @@ describe.each(['en', 'zh-TW'] as const)('feed target integration in %s', (locale
         expect(subcommand.options?.find(({ name }) => name === 'platform')?.choices).toEqual([
           { name: 'X (Twitter)', value: 'x' },
           { name: 'Bahamut', value: 'bahamut' },
+          { name: 'YouTube', value: 'youtube' },
         ]);
       }
     }

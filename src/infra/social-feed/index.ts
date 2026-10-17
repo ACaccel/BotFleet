@@ -47,3 +47,5 @@ export { normalizeBahamutTargetOffline } from './platforms/bahamut-target';
 export { FxTwitterTimelineSource } from './platforms/fxtwitter-source';
 export type { XTimelineSource } from './platforms/x-types';
 export { translateFeedError, invalidResponseError } from './platforms/error-translator';
+
+export { YouTubePlatform } from './platforms/youtube-platform';

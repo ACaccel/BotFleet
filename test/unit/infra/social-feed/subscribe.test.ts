@@ -122,3 +122,21 @@ describe('prepareFeedSubscription', () => {
     ).rejects.toBe(boom);
   });
 });
+
+describe('prepareFeedSubscription — snapshot tracking', () => {
+  it('captures every native ID without applying subscription filters', async () => {
+    const fake = buildFakeFeedPlatform({
+      posts: [
+        buildFeedPost({ id: 'opaque-z', createdTimestamp: 1 }),
+        buildFeedPost({ id: 'opaque-a', createdTimestamp: 2, isDeleted: true }),
+      ],
+    });
+    const platform = { ...fake.platform, trackingMode: 'snapshot' as const };
+    const prepared = await prepareFeedSubscription(platform, 'someone', alwaysNew);
+    expect(prepared.ok && prepared.value.cursor?.seenIds).toEqual(['opaque-z', 'opaque-a']);
+    expect(prepared.ok && prepared.value.cursor?.lastSeenId).toBe('opaque-a');
+    const existing = await prepareFeedSubscription(platform, 'someone', neverNew);
+    expect(existing.ok && existing.value.cursor).toBeUndefined();
+    expect(fake.fetchTimeline).toHaveBeenCalledTimes(1);
+  });
+});

@@ -21,16 +21,16 @@ const formatSubscription = (doc: FeedSubscriptionDoc, t: BoundTranslate): string
   const progress =
     doc.last_seen_timestamp === undefined
       ? t(
-          doc.platform === 'bahamut'
+          ['bahamut', 'youtube'].includes(doc.platform)
             ? 'replies:feed.never_checked'
             : 'replies:feed.never_forwarded',
         )
-      : doc.platform === 'bahamut'
+      : ['bahamut', 'youtube'].includes(doc.platform)
         ? t('replies:feed.checked_through', {
             timestamp: `<t:${String(doc.last_seen_timestamp)}:R>`,
           })
         : `<t:${String(doc.last_seen_timestamp)}:R>`;
-  const annotations = [...describeFeedFilter(doc.filter, t), progress];
+  const annotations = [...describeFeedFilter(doc.filter, t, doc.platform), progress];
   return `- \`${doc.platform} ${formatFeedTarget(doc.platform, doc.account, t)}\` — ${annotations.join(FEED_FILTER_SEPARATOR)}`;
 };
 

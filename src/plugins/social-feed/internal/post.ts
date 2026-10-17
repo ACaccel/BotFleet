@@ -26,13 +26,17 @@ export const buildFeedMessage = (
   post: FeedPost,
   url: string = platform.toEmbedUrl(post),
 ): string => {
-  const announcement = translator.t('replies:feed.post', {
-    author: post.authorAccount,
+  const key = platform.id === 'youtube' ? 'replies:feed.video_post' : 'replies:feed.post';
+  const announcement = translator.t(key, {
+    author:
+      post.authorName === undefined
+        ? post.authorAccount
+        : escapeMarkdown(post.authorName.slice(0, 200)),
     platform: platform.displayName,
     url,
   });
   if (platform.subscriptionScope !== 'source' || post.text === '') return announcement;
-  // Forum unfurls may show the opening floor rather than the linked reply.
+  // Keep source details visible even when the destination cannot unfurl the URL.
   const body = escapeMarkdown(post.text, { maskedLink: true });
   const available = Math.max(0, 1900 - announcement.length);
   if (available === 0) return announcement;

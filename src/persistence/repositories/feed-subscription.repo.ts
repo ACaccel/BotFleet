@@ -17,6 +17,8 @@ import { databaseErrorFrom } from '../error-translator';
 import {
   DEFAULT_FEED_MEDIA_FILTER,
   isFeedMediaFilter,
+  MAX_FEED_SEEN_IDS,
+  MAX_FEED_SEEN_ID_LENGTH,
   type FeedMediaFilter,
   type FeedSubscriptionDoc,
   type StoredFeedSubscription,
@@ -24,7 +26,7 @@ import {
 
 /**
  * Filter as supplied by the caller. `media` is always resolved by the
- * command layer (its option carries the default); `keyword` is absent
+ * editor before saving; `keyword` is absent
  * when the subscription does not narrow by text.
  */
 export interface FeedSubscriptionFilterInput {
@@ -38,6 +40,8 @@ export interface FeedSubscriptionFilterInput {
  * names, as the other repositories' document-shaped inputs do.
  */
 export interface FeedSubscriptionUpsertInput {
+  /** Compare identity and update only; never recreate a removed editor target. */
+  readonly existingId?: Types.ObjectId;
   readonly platform: string;
   readonly account: string;
   readonly channel_id: string;
@@ -48,6 +52,8 @@ export interface FeedSubscriptionUpsertInput {
   readonly last_seen_id?: string;
   /** Unix **seconds**, matching the upstream post timestamp. */
   readonly last_seen_timestamp?: number;
+  /** Insert-only snapshot ledger; absent differs from initialized empty. */
+  readonly seen_ids?: readonly string[];
 }
 
 /**
@@ -137,14 +143,32 @@ export interface FeedSubscriptionRepo {
    * `lastSeenTimestamp` is unix **seconds** (the upstream post unit),
    * unlike `created_at`, which is milliseconds. A subscription deleted
    * since the pass read it is not an error: the update matches nothing
-   * and the call still resolves `ok`.
+   * and the call still resolves `ok`. When supplied, `processedIds` replaces
+   * the bounded snapshot ledger atomically with the displayed cursor.
    */
   advanceCursor(
     id: Types.ObjectId,
     lastSeenId: string,
     lastSeenTimestamp: number,
+    processedIds?: readonly string[],
   ): Promise<Result<void, DatabaseError>>;
 }
+
+/** Reject corrupt ledgers rather than silently resetting and replaying a snapshot. */
+const normalizeSeenIds = (value: unknown): string[] | undefined => {
+  if (value === null || value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error('Snapshot ledger must be an array');
+  const ids = new Set<string>();
+  for (const id of value) {
+    if (typeof id !== 'string' || id.length === 0 || id.length > MAX_FEED_SEEN_ID_LENGTH) {
+      throw new Error('Snapshot ledger contains an invalid ID');
+    }
+    ids.add(id);
+    if (ids.size > MAX_FEED_SEEN_IDS)
+      throw new Error('Snapshot ledger exceeds its bounded capacity');
+  }
+  return [...ids];
+};
 
 /**
  * Convert a stored document into the repository's contract: fill the
@@ -157,7 +181,7 @@ export interface FeedSubscriptionRepo {
  * that forgets to call it will not compile.
  */
 const normalize = (doc: StoredFeedSubscription): FeedSubscriptionDoc => {
-  const { filter, last_seen_id, last_seen_timestamp, ...rest } = doc;
+  const { filter, last_seen_id, last_seen_timestamp, seen_ids, ...rest } = doc;
   const storedMedia = filter?.media;
   return {
     ...rest,
@@ -167,6 +191,7 @@ const normalize = (doc: StoredFeedSubscription): FeedSubscriptionDoc => {
     },
     last_seen_id: last_seen_id ?? undefined,
     last_seen_timestamp: last_seen_timestamp ?? undefined,
+    seen_ids: normalizeSeenIds(seen_ids),
   };
 };
 
@@ -287,7 +312,12 @@ export class MongoFeedSubscriptionRepo implements FeedSubscriptionRepo {
   ): Promise<Result<FeedSubscriptionUpsertResult, DatabaseError>> {
     const { platform, account, channel_id, created_by, filter } = input;
     const res = await this.conn.models.FeedSubscription.findOneAndUpdate(
-      { platform, account, channel_id },
+      {
+        platform,
+        account,
+        channel_id,
+        ...(input.existingId === undefined ? {} : { _id: input.existingId }),
+      },
       {
         $set: { filter },
         $setOnInsert: {
@@ -296,24 +326,36 @@ export class MongoFeedSubscriptionRepo implements FeedSubscriptionRepo {
           channel_id,
           created_by,
           created_at: Date.now(),
+          ...(input.seen_ids !== undefined ? { seen_ids: normalizeSeenIds(input.seen_ids) } : {}),
           ...(input.last_seen_id !== undefined ? { last_seen_id: input.last_seen_id } : {}),
           ...(input.last_seen_timestamp !== undefined
             ? { last_seen_timestamp: input.last_seen_timestamp }
             : {}),
         },
       },
-      { upsert: true, new: true, includeResultMetadata: true, lean: true },
+      {
+        upsert: input.existingId === undefined,
+        new: true,
+        includeResultMetadata: true,
+        lean: true,
+        runValidators: true,
+      },
     ).exec();
 
     if (res.value === null) {
-      // `upsert: true` with `new: true` always yields a document;
-      // a null here means the driver contract was violated, which
-      // belongs on the Err rail rather than in a non-null assertion.
+      // A removed editor target must fail without recreating its subscription.
       return err(
-        databaseErrorFrom(new Error('findOneAndUpdate returned no document for an upsert'), {
-          operation: 'MongoFeedSubscriptionRepo.upsert',
-          input: { platform, account, channel_id },
-        }),
+        databaseErrorFrom(
+          new Error(
+            input.existingId === undefined
+              ? 'findOneAndUpdate returned no document for an upsert'
+              : 'Subscription no longer exists',
+          ),
+          {
+            operation: 'MongoFeedSubscriptionRepo.upsert',
+            input: { platform, account, channel_id },
+          },
+        ),
       );
     }
 
@@ -354,11 +396,19 @@ export class MongoFeedSubscriptionRepo implements FeedSubscriptionRepo {
     id: Types.ObjectId,
     lastSeenId: string,
     lastSeenTimestamp: number,
+    processedIds?: readonly string[],
   ): Promise<Result<void, DatabaseError>> {
     try {
       await this.conn.models.FeedSubscription.updateOne(
         { _id: id },
-        { $set: { last_seen_id: lastSeenId, last_seen_timestamp: lastSeenTimestamp } },
+        {
+          $set: {
+            last_seen_id: lastSeenId,
+            last_seen_timestamp: lastSeenTimestamp,
+            ...(processedIds !== undefined ? { seen_ids: normalizeSeenIds(processedIds) } : {}),
+          },
+        },
+        { runValidators: true },
       ).exec();
       return ok(undefined);
     } catch (rawErr: unknown) {

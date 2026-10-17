@@ -149,3 +149,11 @@ describe('buildAccountSuggestions', () => {
     expect(values([], 'ali')).toEqual([]);
   });
 });
+
+it('keeps YouTube channel IDs that differ only in case distinct when completing a batch', () => {
+  const first = 'UCAbCdEfGhIjKlMnOpQrStUv';
+  const second = 'UCabCdEfGhIjKlMnOpQrStUv';
+  expect(values([doc(first, 'youtube'), doc(second, 'youtube')], `${first}, `, 'youtube')).toEqual([
+    `${first}, ${second}`,
+  ]);
+});

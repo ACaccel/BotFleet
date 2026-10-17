@@ -81,7 +81,10 @@ export default class feed_unsubscribe extends Command {
       // The option names as many accounts as the member cares to list;
       // an unusable list is refused before anything is deleted.
       const raw = getOptionalString(interaction, 'target');
-      const parsed = raw === undefined ? undefined : parseFeedAccounts(raw);
+      const parsed =
+        raw === undefined
+          ? undefined
+          : parseFeedAccounts(raw, getOptionalString(interaction, 'platform'));
       if (parsed !== undefined && parsed.kind !== 'accounts') {
         return refuse(...feedAccountRefusal(parsed));
       }

@@ -100,6 +100,7 @@ interface ReposHandle {
   readonly advanceCursor: ReturnType<typeof vi.fn>;
   readonly deleteWhere: ReturnType<typeof vi.fn>;
   /** Cursor state as the fake store holds it, keyed by subscription id. */
+  seenOf(sub: FeedSubscriptionDoc): readonly string[] | undefined;
   cursorOf(sub: FeedSubscriptionDoc): { id: string; timestamp: number } | undefined;
 }
 
@@ -109,19 +110,28 @@ const makeRepos = (
   overrides: { listFails?: boolean; advanceFails?: boolean } = {},
 ): ReposHandle => {
   const cursors = new Map<string, { id: string; timestamp: number }>();
-  const advanceCursor = vi.fn(async (id: Types.ObjectId, lastSeenId: string, ts: number) => {
-    if (overrides.advanceFails === true) {
-      return err(
-        new DatabaseError({
-          code: 'DATABASE_UNKNOWN',
-          messageKey: 'errors:db.unavailable',
-          context: { operation: 'test' },
-        }),
-      );
-    }
-    cursors.set(id.toString(), { id: lastSeenId, timestamp: ts });
-    return ok(undefined);
-  });
+  const seen = new Map<string, readonly string[]>();
+  const advanceCursor = vi.fn(
+    async (
+      id: Types.ObjectId,
+      lastSeenId: string,
+      ts: number,
+      processedIds?: readonly string[],
+    ) => {
+      if (overrides.advanceFails === true) {
+        return err(
+          new DatabaseError({
+            code: 'DATABASE_UNKNOWN',
+            messageKey: 'errors:db.unavailable',
+            context: { operation: 'test' },
+          }),
+        );
+      }
+      cursors.set(id.toString(), { id: lastSeenId, timestamp: ts });
+      if (processedIds !== undefined) seen.set(id.toString(), [...processedIds]);
+      return ok(undefined);
+    },
+  );
   const deleteWhere = vi.fn(async () => ok([]));
   const repos = {
     feedSubscription: {
@@ -141,7 +151,14 @@ const makeRepos = (
                 const cursor = cursors.get(sub._id.toString());
                 return cursor === undefined
                   ? sub
-                  : { ...sub, last_seen_id: cursor.id, last_seen_timestamp: cursor.timestamp };
+                  : {
+                      ...sub,
+                      last_seen_id: cursor.id,
+                      last_seen_timestamp: cursor.timestamp,
+                      ...(seen.has(sub._id.toString())
+                        ? { seen_ids: seen.get(sub._id.toString()) }
+                        : {}),
+                    };
               }),
             ),
       advanceCursor,
@@ -153,6 +170,7 @@ const makeRepos = (
     advanceCursor,
     deleteWhere,
     cursorOf: (sub) => cursors.get(sub._id.toString()),
+    seenOf: (sub) => seen.get(sub._id.toString()) ?? sub.seen_ids,
   };
 };
 
@@ -1297,5 +1315,249 @@ describe('runFeedPass — cursor-aware forum sources', () => {
     const { deps } = harness({ repos, platformOverrides: source, posts: [post({ id: '10' })] });
     await runFeedPass(deps, false);
     expect(advanceCursor).not.toHaveBeenCalled();
+  });
+});
+
+describe('runFeedPass — persistent snapshot tracking', () => {
+  const platformOverrides: Partial<FeedPlatform> = {
+    trackingMode: 'snapshot',
+    compareIds: () => {
+      throw new Error('Opaque IDs must not be compared');
+    },
+    baselineIdAt: () => {
+      throw new Error('Opaque IDs have no clock floor');
+    },
+  };
+  const entry = (id: string, createdTimestamp: number, extra: Partial<FeedPost> = {}): FeedPost =>
+    post({ id, createdTimestamp, ...extra });
+  const seeded = (extra: Partial<FeedSubscriptionDoc> = {}): FeedSubscriptionDoc =>
+    subscription({
+      last_seen_id: 'known',
+      last_seen_timestamp: 100,
+      seen_ids: ['known'],
+      ...extra,
+    });
+
+  it('seeds all current IDs without replay, including excluded records', async () => {
+    const sub = subscription({ last_seen_id: 'legacy-cursor' });
+    const store = makeRepos([sub]);
+    const send = makeSend();
+    const { deps } = harness({
+      platformOverrides,
+      repos: store.repos,
+      channel: makeChannel(send),
+      posts: [entry('z', 1), entry('a', 20), entry('deleted', 3, { isDeleted: true })],
+    });
+    await runFeedPass(deps, false);
+    expect(send).not.toHaveBeenCalled();
+    expect(store.seenOf(sub)).toEqual(['z', 'a', 'deleted']);
+    expect(store.cursorOf(sub)).toEqual({ id: 'a', timestamp: 20 });
+  });
+
+  it('persists an empty initial snapshot and delivers its first future entry', async () => {
+    const sub = subscription();
+    const store = makeRepos([sub]);
+    const send = makeSend();
+    const { deps, fetchTimeline } = harness({
+      platformOverrides,
+      repos: store.repos,
+      channel: makeChannel(send),
+    });
+    await runFeedPass(deps, false);
+    expect(store.seenOf(sub)).toEqual([]);
+    fetchTimeline.mockResolvedValue(ok([entry('first', 1)]));
+    await runFeedPass(deps, false);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(store.seenOf(sub)).toEqual(['first']);
+  });
+
+  it('delivers non-monotonic and delayed IDs oldest first with an ID tie break', async () => {
+    const sub = seeded();
+    const store = makeRepos([sub]);
+    const send = makeSend();
+    const { deps, fetchTimeline } = harness({
+      platformOverrides: { ...platformOverrides, supportsCursorPagination: true },
+      repos: store.repos,
+      channel: makeChannel(send),
+      posts: [entry('a', 30), entry('z', 10), entry('known', 200), entry('b', 30)],
+    });
+    await runFeedPass(deps, false);
+    expect(
+      send.mock.calls.map(
+        ([payload]) => payload.content.match(/https:\/\/fake\.invalid\/([^"}]+)/)?.[1],
+      ),
+    ).toEqual(['z', 'a', 'b']);
+    expect(fetchTimeline).toHaveBeenCalledWith(ACCOUNT, undefined);
+    expect(store.cursorOf(sub)).toEqual({ id: 'b', timestamp: 30 });
+  });
+
+  it('ignores reordered and edited entries after process restart', async () => {
+    const sub = seeded();
+    const firstStore = makeRepos([sub]);
+    const first = harness({
+      platformOverrides,
+      repos: firstStore.repos,
+      channel: makeChannel(makeSend()),
+      posts: [entry('new', 1)],
+    });
+    await runFeedPass(first.deps, false);
+    const restarted = makeRepos([{ ...sub, seen_ids: [...(firstStore.seenOf(sub) ?? [])] }]);
+    const send = makeSend();
+    const next = harness({
+      platformOverrides,
+      repos: restarted.repos,
+      channel: makeChannel(send),
+      posts: [entry('new', 999, { text: 'edited' }), entry('known', 1)],
+    });
+    await runFeedPass(next.deps, true);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('shares one complete fetch but keeps each subscriber ledger independent', async () => {
+    const first = seeded();
+    const second = seeded({ channel_id: 'channel-2', seen_ids: ['known', 'new'] });
+    const store = makeRepos([first, second]);
+    const send = makeSend();
+    const { deps, fetchTimeline } = harness({
+      platformOverrides,
+      repos: store.repos,
+      channels: new Map([
+        [CHANNEL, makeChannel(send)],
+        ['channel-2', makeChannel(send)],
+      ]),
+      posts: [entry('new', 1)],
+    });
+    await runFeedPass(deps, false);
+    expect(fetchTimeline).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(store.seenOf(first)).toContain('new');
+    expect(store.seenOf(second)).toContain('new');
+  });
+
+  it('preserves case-sensitive snapshot account keys', async () => {
+    const store = makeRepos([
+      seeded({ account: 'ChannelABC' }),
+      seeded({ account: 'ChannelAbc', channel_id: 'channel-2' }),
+    ]);
+    const { deps, fetchTimeline } = harness({ platformOverrides, repos: store.repos });
+    await runFeedPass(deps, false);
+    expect(fetchTimeline.mock.calls.map(([account]) => account)).toEqual([
+      'ChannelABC',
+      'ChannelAbc',
+    ]);
+  });
+
+  it('caps delivery without processing unsent matches and later drains the remainder', async () => {
+    const sub = seeded();
+    const store = makeRepos([sub]);
+    const send = makeSend();
+    const { deps } = harness({
+      platformOverrides,
+      repos: store.repos,
+      channel: makeChannel(send),
+      maxPostsPerPoll: 1,
+      posts: [entry('a', 20), entry('z', 10), entry('excluded', 30, { isDeleted: true })],
+    });
+    await runFeedPass(deps, false);
+    expect(store.seenOf(sub)).toEqual(expect.arrayContaining(['known', 'z', 'excluded']));
+    expect(store.seenOf(sub)).not.toContain('a');
+    await runFeedPass(deps, false);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(store.seenOf(sub)).toContain('a');
+  });
+
+  it('records successful sends and exclusions when a later send fails, then retries pending', async () => {
+    const sub = seeded();
+    const store = makeRepos([sub]);
+    const send = makeSend()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('send failed'));
+    const { deps, errorLog } = harness({
+      platformOverrides,
+      repos: store.repos,
+      channel: makeChannel(send),
+      posts: [entry('a', 1), entry('b', 2), entry('skip', 3, { isReply: true })],
+    });
+    await runFeedPass(deps, false);
+    expect(store.seenOf(sub)).toEqual(expect.arrayContaining(['a', 'skip']));
+    expect(store.seenOf(sub)).not.toContain('b');
+    expect(errorLog).toHaveBeenCalled();
+    await runFeedPass(deps, false);
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(store.seenOf(sub)).toContain('b');
+  });
+
+  it('records exclusions in finally even if the first send fails', async () => {
+    const sub = seeded();
+    const store = makeRepos([sub]);
+    const send = makeSend().mockRejectedValue(new Error('send failed'));
+    const { deps } = harness({
+      platformOverrides,
+      repos: store.repos,
+      channel: makeChannel(send),
+      posts: [entry('pending', 1), entry('skip', 2, { isDeleted: true })],
+    });
+    await runFeedPass(deps, false);
+    expect(store.seenOf(sub)).toEqual(expect.arrayContaining(['known', 'skip']));
+    expect(store.seenOf(sub)).not.toContain('pending');
+  });
+
+  it('keeps matching records pending when the channel is missing', async () => {
+    const sub = seeded();
+    const store = makeRepos([sub]);
+    const { deps } = harness({
+      platformOverrides,
+      repos: store.repos,
+      posts: [entry('pending', 1), entry('skip', 2, { isDeleted: true })],
+    });
+    await runFeedPass(deps, false);
+    expect(store.seenOf(sub)).toContain('skip');
+    expect(store.seenOf(sub)).not.toContain('pending');
+  });
+
+  it('stops delivery on a failed database update and preserves pending records', async () => {
+    const sub = seeded();
+    const store = makeRepos([sub], { advanceFails: true });
+    const send = makeSend();
+    const { deps, errorLog } = harness({
+      platformOverrides,
+      repos: store.repos,
+      channel: makeChannel(send),
+      posts: [entry('a', 1), entry('b', 2)],
+    });
+    await runFeedPass(deps, false);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(store.advanceCursor).toHaveBeenCalledTimes(1);
+    expect(store.seenOf(sub)).toEqual(['known']);
+    expect(errorLog).toHaveBeenCalled();
+  });
+
+  it('retains every current processed ID when older history fills the ledger', async () => {
+    const sub = seeded({ seen_ids: Array.from({ length: 2000 }, (_, i) => `old-${i}`) });
+    const store = makeRepos([sub]);
+    const posts = Array.from({ length: 1000 }, (_, i) =>
+      entry(i === 0 ? 'old-0' : `skip-${i}`, i, { isDeleted: true }),
+    );
+    const { deps } = harness({ platformOverrides, repos: store.repos, posts });
+    await runFeedPass(deps, false);
+    expect(store.seenOf(sub)).toHaveLength(2000);
+    for (const post of posts) expect(store.seenOf(sub)).toContain(post.id);
+    expect(store.seenOf(sub)).not.toContain('old-1');
+  });
+
+  it('fails an oversized snapshot explicitly before sending or updating its ledger', async () => {
+    const sub = seeded();
+    const store = makeRepos([sub]);
+    const send = makeSend();
+    const { deps, errorLog } = harness({
+      platformOverrides,
+      repos: store.repos,
+      channel: makeChannel(send),
+      posts: Array.from({ length: 1001 }, (_, i) => entry(`id-${i}`, i)),
+    });
+    await runFeedPass(deps, false);
+    expect(send).not.toHaveBeenCalled();
+    expect(store.advanceCursor).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalled();
   });
 });

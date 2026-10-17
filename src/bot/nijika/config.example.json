@@ -45,7 +45,10 @@
     }
   },
   "bug_report": {
-    "hub": { "guildId": "YOUR_HUB_GUILD_ID", "channelId": "YOUR_HUB_FORUM_CHANNEL_ID" },
+    "hub": {
+      "guildId": "YOUR_HUB_GUILD_ID",
+      "channelId": "YOUR_HUB_FORUM_CHANNEL_ID"
+    },
     "tags": {
       "bug": "Bug",
       "suggestion": "Suggestion",
@@ -145,6 +148,9 @@
         "baseUrl": "https://forum.gamer.com.tw",
         "timeoutMs": 8000,
         "maxPages": 5
+      },
+      "youtube": {
+        "timeoutMs": 8000
       }
     }
   },

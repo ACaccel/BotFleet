@@ -72,3 +72,9 @@ describe('formatFeedFilter', () => {
     );
   });
 });
+
+it('describes only the filters relevant to YouTube', () => {
+  expect(describeFeedFilter({ media: 'any' }, t, 'youtube')).toEqual([
+    'replies:feed.filter_videos',
+  ]);
+});

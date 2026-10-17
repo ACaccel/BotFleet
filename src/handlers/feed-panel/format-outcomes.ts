@@ -1,18 +1,9 @@
-/**
- * Renders what `/feed subscribe` did with each account it was given.
- *
- * Every target appears, including failed and unattempted ones, so the
- * member knows what needs retrying. Failure sentences can make a full
- * batch exceed Discord's limit, so the report returns pages.
- *
- * Keep errors intact until rendering: members receive translated copy,
- * while operator logs retain searchable error codes.
- */
-import { DomainError, type AnyDomainError } from '../../../core/errors';
-import type { BoundTranslate } from '../../../core/i18n';
-import { paginateLines } from '../../../infra/discord/paginate';
-import { formatFeedFilter, type DescribableFeedFilter } from '../../feed-filter-labels';
-import { formatFeedTarget } from '../../feed-target-label';
+/** Report every batch outcome without exposing unsafe target URLs. */
+import { DomainError, type AnyDomainError } from '../../core/errors';
+import type { BoundTranslate } from '../../core/i18n';
+import { paginateLines } from '../../infra/discord/paginate';
+import { formatFeedFilter, type DescribableFeedFilter } from '../feed-filter-labels';
+import { formatFeedTarget } from '../feed-target-label';
 import type { FeedSubscribeOutcome } from './subscribe-accounts';
 
 /** Copy used when a failure carries no renderable catalog key. */
@@ -61,8 +52,17 @@ const codeOf = (cause: unknown): string => {
  * Failed and skipped outcomes contain untrusted input. Bound the echo
  * and remove backticks because translation interpolates without escaping.
  */
-const echoableAccount = (raw: string): string =>
-  raw.replace(/`/g, ' ').slice(0, MAX_ECHOED_ACCOUNT_LENGTH);
+const echoableAccount = (raw: string): string => {
+  if (URL.canParse(raw)) {
+    const url = new URL(raw);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    raw = url.href;
+  }
+  return raw.replace(/[`\r\n]/g, ' ').slice(0, MAX_ECHOED_ACCOUNT_LENGTH);
+};
 
 /**
  * One account's line, keyed by its outcome. A `switch` with an
@@ -141,7 +141,7 @@ export const formatOutcomePages = (
 ): readonly string[] => {
   if (outcomes.length === 0) return [];
   // Rendered once: the filter is per-invocation, not per-account.
-  const label = formatFeedFilter(context.filter, t);
+  const label = formatFeedFilter(context.filter, t, context.platformId);
   const lines: string[] = [
     t('replies:feed.subscribe_header', { platform: context.platform, channel: context.channel }),
     ...outcomes.map((outcome) => formatOutcome(outcome, label, context.platformId ?? '', t)),

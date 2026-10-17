@@ -16,13 +16,13 @@
  * a channel the invoker cannot see.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
+import { ChannelType, MessageFlags, PermissionFlagsBits, type Message } from 'discord.js';
 import { Types } from 'mongoose';
 
 import { localizeCommandConfig } from '../../../../src/handlers/commands/command';
 import { buildCommandJsonBody } from '../../../../src/handlers/commands/command-builder';
 import FeedSubscribe from '../../../../src/handlers/commands/feed_subscribe/action';
-import { FEED_BATCH_BUDGET_MS } from '../../../../src/handlers/commands/feed_subscribe/batch-policy';
+import { FEED_BATCH_BUDGET_MS } from '../../../../src/handlers/feed-panel/batch-policy';
 import { FeedError } from '../../../../src/core/errors';
 import { err, ok } from '../../../../src/core/result';
 import {
@@ -39,9 +39,16 @@ import { buildFakeBot, echoTranslatorWithParams } from '../../../fixtures/discor
 import { buildTextChannel } from '../../../fixtures/discord/channel-builder';
 import { buildGuild } from '../../../fixtures/discord/guild-builder';
 import {
+  buildButtonInteraction,
   buildChatInputInteraction,
+  buildModalSubmitInteraction,
+  buildStringSelectInteraction,
   newInteractionSink,
 } from '../../../fixtures/discord/interaction-builder';
+import FeedPanelButton from '../../../../src/handlers/buttons/feed_panel';
+import FeedPanelModal from '../../../../src/handlers/modals/feed_panel';
+import FeedPanelSelect from '../../../../src/handlers/select-menus/feed_panel';
+import { panelComponents } from '../feed-panel/helpers';
 import { buildFakeFeedPlatform, buildFeedPost } from '../../../fixtures/social-feed/fake-platform';
 
 const GUILD_ID = 'g-1';
@@ -90,9 +97,19 @@ interface Fixture {
   readonly existing?: FeedSubscriptionDoc;
   readonly options?: Readonly<Record<string, string | null>>;
   readonly channelOption?: string;
-  /** Interaction age, which is what the batch budget is measured from. */
-  readonly createdTimestamp?: number;
+  readonly edits?: { readonly media?: string; readonly keyword?: string };
+  /** Save interaction age, which is what the batch budget is measured from. */
+  readonly saveCreatedTimestamp?: number;
 }
+
+const editorFixtures = new WeakMap<
+  ReturnType<typeof buildChatInputInteraction>,
+  {
+    sink: ReturnType<typeof newInteractionSink>;
+    edits: NonNullable<Fixture['edits']>;
+    saveCreatedTimestamp?: number;
+  }
+>();
 
 const build = (fixture: Fixture = {}) => {
   const { platform, fetchTimeline } = buildFakeFeedPlatform({
@@ -148,17 +165,77 @@ const build = (fixture: Fixture = {}) => {
     guild,
     userId: USER_ID,
     channel: { id: HOME_CHANNEL },
-    options: { platform: 'fake', target: '@SomeOne', media: 'media_only', ...fixture.options },
-    ...(fixture.createdTimestamp === undefined
-      ? {}
-      : { createdTimestamp: fixture.createdTimestamp }),
+    options: { platform: 'fake', target: '@SomeOne', ...fixture.options },
     ...(fixture.channelOption === undefined
       ? {}
       : { channels: { channel: { id: fixture.channelOption } } }),
     sink,
   });
 
+  editorFixtures.set(interaction, {
+    sink,
+    edits: fixture.edits ?? {},
+    saveCreatedTimestamp: fixture.saveCreatedTimestamp,
+  });
   return { bot, interaction, sink, find, upsert, fetchTimeline, getRepos, logger };
+};
+
+/** Drive the public editor instead of relying on retired slash filter options. */
+const executeAndSave = async (
+  interaction: ReturnType<typeof buildChatInputInteraction>,
+  bot: ReturnType<typeof buildFakeBot>['bot'],
+): Promise<void> => {
+  const context = editorFixtures.get(interaction);
+  if (!context) throw new Error('Missing editor test context');
+  const { sink, edits } = context;
+  await new FeedSubscribe().execute(interaction, bot);
+  const save = panelComponents(sink.editReplies.at(-1)).find((component) =>
+    component.custom_id?.includes('|save|'),
+  );
+  if (!save?.custom_id) return;
+  const message = { id: 'reply-1', applicationId: interaction.applicationId } as Message;
+  const common = { guild: interaction.guild!, message, userId: interaction.user.id, sink };
+  const prefix = save.custom_id.replace('|save|', '|');
+  if (edits.media !== undefined) {
+    await new FeedPanelSelect().execute(
+      buildStringSelectInteraction({
+        ...common,
+        customId: `${prefix}media|`,
+        values: [edits.media],
+      }),
+      bot,
+    );
+  }
+  if (edits.keyword !== undefined) {
+    const modalSink = newInteractionSink();
+    await new FeedPanelButton().execute(
+      buildButtonInteraction({
+        ...common,
+        customId: `${prefix}keyword|`,
+        sink: modalSink,
+      }),
+      bot,
+    );
+    const modal = modalSink.modals[0] as { toJSON(): { custom_id: string } };
+    const previousErrors = sink.followUps.length + sink.replies.length;
+    await new FeedPanelModal().execute(
+      buildModalSubmitInteraction({
+        ...common,
+        customId: modal.toJSON().custom_id,
+        textInputs: { keyword: edits.keyword },
+      }),
+      bot,
+    );
+    if (sink.followUps.length + sink.replies.length > previousErrors) return;
+  }
+  await new FeedPanelButton().execute(
+    buildButtonInteraction({
+      ...common,
+      customId: save.custom_id,
+      createdTimestamp: context.saveCreatedTimestamp ?? Date.now(),
+    }),
+    bot,
+  );
 };
 
 /**
@@ -167,10 +244,118 @@ const build = (fixture: Fixture = {}) => {
  * looked only at `editReplies` would silently stop covering the tail.
  */
 const reply = (sink: ReturnType<typeof newInteractionSink>): string =>
-  [...sink.editReplies, ...sink.followUps].map((message) => message.content ?? '').join('\n');
+  [...sink.replies, ...sink.editReplies, ...sink.followUps]
+    .map((message) => message.content ?? '')
+    .join('\n');
 
 describe('/feed subscribe', () => {
-  it('requires target, keeps media optional, and removes account from the Discord payload', () => {
+  it('opens an ephemeral draft without fetching a timeline or writing before Save', async () => {
+    const { bot, interaction, sink, fetchTimeline, upsert } = build();
+    await new FeedSubscribe().execute(interaction, bot);
+    expect(sink.defers[0]?.flags).toBe(MessageFlags.Ephemeral);
+    expect(reply(sink)).toContain('replies:feed.panel.save_notice');
+    expect(
+      panelComponents(sink.editReplies.at(-1)).map(
+        (component) => component.custom_id?.split('|')[2],
+      ),
+    ).toEqual(['media', 'keyword', 'save', 'cancel']);
+    expect(fetchTimeline).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('preloads an existing single target without resetting its filters', async () => {
+    const { bot, interaction, sink, find, fetchTimeline, upsert } = build({
+      existing: subscription({ filter: { media: 'photo_only', keyword: 'stored' } }),
+    });
+    await new FeedSubscribe().execute(interaction, bot);
+    expect(find).toHaveBeenCalledWith('fake', 'someone', HOME_CHANNEL);
+    expect(reply(sink)).toContain('stored');
+    expect(panelComponents(sink.editReplies.at(-1))[0]?.options).toContainEqual(
+      expect.objectContaining({ value: 'photo_only', default: true }),
+    );
+    expect(fetchTimeline).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it.each(['deleted', 'replaced'] as const)(
+    'rejects an existing single target %s while its draft was open',
+    async (state) => {
+      const { bot, interaction, sink, find, fetchTimeline, upsert } = build({
+        existing: subscription(),
+      });
+      await new FeedSubscribe().execute(interaction, bot);
+      find.mockResolvedValue(ok(state === 'deleted' ? undefined : subscription()));
+      const save = panelComponents(sink.editReplies.at(-1)).find((component) =>
+        component.custom_id?.includes('|save|'),
+      );
+      expect(save?.custom_id).toBeTruthy();
+      await new FeedPanelButton().execute(
+        buildButtonInteraction({
+          guild: interaction.guild!,
+          message: { id: 'reply-1', applicationId: interaction.applicationId } as Message,
+          customId: save!.custom_id!,
+          sink,
+        }),
+        bot,
+      );
+      expect(reply(sink)).toContain('replies:feed.panel.expired');
+      expect(upsert).not.toHaveBeenCalled();
+      expect(fetchTimeline).not.toHaveBeenCalled();
+    },
+  );
+
+  it('shows a shared batch filter before Save and applies it to each valid target', async () => {
+    const { bot, interaction, sink, upsert, fetchTimeline } = build({
+      options: { target: 'alpha, beta' },
+      edits: { media: 'photo_only', keyword: 'live OR album' },
+    });
+    await new FeedSubscribe().execute(interaction, bot);
+    expect(reply(sink)).toContain('replies:feed.panel.batch_notice');
+    expect(upsert).not.toHaveBeenCalled();
+    expect(fetchTimeline).not.toHaveBeenCalled();
+    // A fresh command follows the same editor path with explicit edits and Save.
+    const saved = build({
+      options: { target: 'alpha, beta' },
+      edits: { media: 'photo_only', keyword: 'live OR album' },
+    });
+    await executeAndSave(saved.interaction, saved.bot);
+    expect(saved.upsert).toHaveBeenCalledTimes(2);
+    for (const [input] of saved.upsert.mock.calls)
+      expect(input).toMatchObject({ filter: { media: 'photo_only', keyword: 'live OR album' } });
+  });
+
+  it('stops a batch on rate limits and reports the remaining targets as skipped', async () => {
+    const rateLimited = new FeedError({
+      code: 'FEED_RATE_LIMITED',
+      messageKey: 'errors:feed.rate_limited',
+      messageParams: { platform: 'Fake', account: 'beta' },
+      context: { operation: 'test' },
+    });
+    const { bot, interaction, sink, fetchTimeline, upsert } = build({
+      options: { target: 'alpha, beta, gamma' },
+    });
+    fetchTimeline.mockResolvedValueOnce(ok([NEWEST_POST])).mockResolvedValueOnce(err(rateLimited));
+    await executeAndSave(interaction, bot);
+    expect(fetchTimeline).toHaveBeenCalledTimes(2);
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(reply(sink)).toContain('replies:feed.account_failed');
+    expect(reply(sink)).toContain('replies:feed.account_skipped:{"account":"@gamma"}');
+  });
+
+  it('stops a batch on database failures without fetching later targets', async () => {
+    const { bot, interaction, sink, fetchTimeline, upsert } = build({
+      upsertFails: true,
+      options: { target: 'alpha, beta, gamma' },
+    });
+    await executeAndSave(interaction, bot);
+    expect(fetchTimeline).toHaveBeenCalledTimes(1);
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(reply(sink)).toContain('replies:feed.account_failed');
+    expect(reply(sink)).toContain('replies:feed.account_skipped:{"account":"@beta"}');
+    expect(reply(sink)).toContain('replies:feed.account_skipped:{"account":"@gamma"}');
+  });
+
+  it('exposes only platform, target, and optional channel in the Discord payload', () => {
     const body = buildCommandJsonBody(
       localizeCommandConfig(new FeedSubscribe().config, echoTranslatorWithParams()),
     ) as { readonly options?: readonly { readonly name: string; readonly required?: boolean }[] };
@@ -178,16 +363,16 @@ describe('/feed subscribe', () => {
     expect(body.options).toContainEqual(
       expect.objectContaining({ name: 'target', required: true }),
     );
+    expect(body.options?.map(({ name }) => name)).toEqual(['platform', 'target', 'channel']);
     expect(body.options).toContainEqual(
-      expect.objectContaining({ name: 'media', required: false }),
+      expect.objectContaining({ name: 'channel', required: false }),
     );
-    expect(body.options?.map(({ name }) => name)).not.toContain('account');
   });
 
   it('defaults missing media to media_only for platforms without a declared default', async () => {
-    const { bot, interaction, upsert } = build({ options: { media: null } });
+    const { bot, interaction, upsert } = build();
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({ filter: { media: 'media_only' } }),
@@ -195,11 +380,11 @@ describe('/feed subscribe', () => {
   });
 
   it.each([false, true])(
-    'defaults X to all posts when media is omitted (existing: %s)',
+    'defaults new X targets and preloads existing media (existing: %s)',
     async (existing) => {
       const x = new XPlatform({ timeoutMs: 8000, embedProxyHost: 'fxtwitter.com' });
       const { bot, interaction, upsert } = build({
-        options: { platform: 'x', media: null },
+        options: { platform: 'x' },
         existing: existing ? subscription() : undefined,
         platformOverrides: {
           id: x.id,
@@ -207,8 +392,10 @@ describe('/feed subscribe', () => {
           defaultMediaFilter: x.defaultMediaFilter,
         },
       });
-      await new FeedSubscribe().execute(interaction, bot);
-      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ filter: { media: 'any' } }));
+      await executeAndSave(interaction, bot);
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: { media: existing ? 'media_only' : 'any' } }),
+      );
       if (existing) {
         expect(upsert.mock.calls[0]?.[0]).not.toHaveProperty('last_seen_id');
         expect(upsert.mock.calls[0]?.[0]).not.toHaveProperty('last_seen_timestamp');
@@ -216,9 +403,9 @@ describe('/feed subscribe', () => {
     },
   );
 
-  it("uses Bahamut's any default and preserves an existing cursor", async () => {
+  it("preloads Bahamut's existing filter and preserves its cursor", async () => {
     const { bot, interaction, sink, upsert, fetchTimeline } = build({
-      options: { platform: 'bahamut', target: 'board:36476', media: null },
+      options: { platform: 'bahamut', target: 'board:36476' },
       existing: subscription({ account: 'board:36476', filter: { media: 'photo_only' } }),
       platformOverrides: {
         id: 'bahamut',
@@ -228,9 +415,11 @@ describe('/feed subscribe', () => {
       },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
-    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ filter: { media: 'any' } }));
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: { media: 'photo_only' } }),
+    );
     expect(upsert.mock.calls[0]?.[0]).not.toHaveProperty('last_seen_id');
     expect(upsert.mock.calls[0]?.[0]).not.toHaveProperty('last_seen_timestamp');
     expect(fetchTimeline).not.toHaveBeenCalled();
@@ -240,10 +429,10 @@ describe('/feed subscribe', () => {
 
   it('honors an explicit media filter over the platform default', async () => {
     const { bot, interaction, upsert } = build({
-      options: { media: 'video_only' },
+      edits: { media: 'video_only' },
       platformOverrides: { defaultMediaFilter: 'any' },
     });
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({ filter: { media: 'video_only' } }),
     );
@@ -253,13 +442,13 @@ describe('/feed subscribe', () => {
     const { bot, interaction, upsert } = build({
       options: { target: '@NewTarget' },
     });
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ account: 'newtarget' }));
   });
 
   it('rejects a missing target without fetching or writing', async () => {
     const { bot, interaction, sink, fetchTimeline, upsert } = build({ options: { target: null } });
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
     expect(reply(sink)).toContain('replies:feed.no_accounts');
     expect(fetchTimeline).not.toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
@@ -268,7 +457,7 @@ describe('/feed subscribe', () => {
   it('answers ephemerally, so a subscription never leaks into the channel', () => {
     const { bot, interaction, sink } = build();
 
-    return new FeedSubscribe().execute(interaction, bot).then(() => {
+    return executeAndSave(interaction, bot).then(() => {
       expect(sink.defers[0]?.flags).toBe(MessageFlags.Ephemeral);
     });
   });
@@ -276,7 +465,7 @@ describe('/feed subscribe', () => {
   it('creates the subscription with a normalised account and a seeded cursor', async () => {
     const { bot, interaction, sink, upsert } = build();
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert).toHaveBeenCalledWith({
       platform: 'fake',
@@ -301,7 +490,7 @@ describe('/feed subscribe', () => {
     try {
       const { bot, interaction, upsert } = build({ posts: [] });
 
-      await new FeedSubscribe().execute(interaction, bot);
+      await executeAndSave(interaction, bot);
 
       expect(upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -316,10 +505,10 @@ describe('/feed subscribe', () => {
 
   it('carries the chosen filter options into the stored subscription, and back to the member', async () => {
     const { bot, interaction, sink, upsert } = build({
-      options: { media: 'video_only', keyword: 'live' },
+      edits: { media: 'video_only', keyword: 'live' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({ filter: { media: 'video_only', keyword: 'live' } }),
@@ -329,22 +518,19 @@ describe('/feed subscribe', () => {
     expect(content).toContain('replies:feed.filter_keyword');
   });
 
-  it('re-subscribing with a media choice and no keyword replaces the stored filter, and says so', async () => {
-    // The repository replaces the filter wholesale, and re-running the
-    // command is the documented way to change one. Asserted so the
-    // reset stays a decision rather than becoming an accident — and so
-    // the member is told which filter they are left with rather than
-    // discovering the loss through `/feed list`.
+  it('explicit media and blank keyword edits replace the stored filter, and say so', async () => {
+    // Clearing is explicit: opening an existing target preserves its old filter.
     const { bot, interaction, sink, upsert } = build({
       existing: subscription({ filter: { media: 'video_only', keyword: 'live' } }),
+      edits: { media: 'media_only', keyword: '' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({ filter: { media: 'media_only' } }),
     );
-    const content = reply(sink);
+    const content = sink.editReplies.at(-1)?.content ?? '';
     expect(content).toContain('replies:feed.account_updated');
     expect(content).toContain('replies:feed.filter_media.media_only');
     expect(content).not.toContain('replies:feed.filter_keyword');
@@ -356,7 +542,7 @@ describe('/feed subscribe', () => {
       existing: subscription(),
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(fetchTimeline).not.toHaveBeenCalled();
     // No cursor fields, so the stored cursor survives the update.
@@ -369,7 +555,7 @@ describe('/feed subscribe', () => {
   it('subscribes the invoking channel when no channel option is given', async () => {
     const { bot, interaction, upsert } = build();
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ channel_id: HOME_CHANNEL }));
   });
@@ -377,7 +563,7 @@ describe('/feed subscribe', () => {
   it('subscribes the chosen channel when the option is given', async () => {
     const { bot, interaction, sink, upsert } = build({ channelOption: OTHER_CHANNEL });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ channel_id: OTHER_CHANNEL }));
     expect(reply(sink)).toContain(`"channel":"<#${OTHER_CHANNEL}>"`);
@@ -386,7 +572,7 @@ describe('/feed subscribe', () => {
   it('accepts a thread when the bot may post in threads', async () => {
     const { bot, interaction, upsert } = build({ channelOption: THREAD_CHANNEL });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ channel_id: THREAD_CHANNEL }));
   });
@@ -402,19 +588,19 @@ describe('/feed subscribe', () => {
       ],
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('replies:feed.permission.send_messages_in_threads');
     expect(upsert).not.toHaveBeenCalled();
   });
 
   it('refuses an unconfigured platform without touching the database', async () => {
-    const { bot, interaction, sink, upsert, getRepos } = build({ platformUnregistered: true });
+    const { bot, interaction, sink, upsert, find } = build({ platformUnregistered: true });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('errors:feed.platform_not_configured');
-    expect(getRepos).not.toHaveBeenCalled();
+    expect(find).not.toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
   });
 
@@ -423,7 +609,7 @@ describe('/feed subscribe', () => {
       homeChannelType: ChannelType.GuildCategory,
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('replies:feed.channel_not_supported');
     expect(upsert).not.toHaveBeenCalled();
@@ -434,7 +620,7 @@ describe('/feed subscribe', () => {
     // unusable a destination as a category.
     const { bot, interaction, sink, upsert } = build({ channelOption: 'chan-not-in-cache' });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('replies:feed.channel_not_supported');
     expect(upsert).not.toHaveBeenCalled();
@@ -445,7 +631,7 @@ describe('/feed subscribe', () => {
       botPermissions: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.EmbedLinks],
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     const content = reply(sink);
     expect(content).toContain('replies:feed.missing_bot_permissions');
@@ -459,7 +645,7 @@ describe('/feed subscribe', () => {
   it('says permissions are unknown rather than denied when the bot member is unresolved', async () => {
     const { bot, interaction, sink, upsert } = build({ botMemberMissing: true });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('replies:feed.permissions_unknown');
     expect(reply(sink)).not.toContain('replies:feed.missing_bot_permissions');
@@ -469,7 +655,7 @@ describe('/feed subscribe', () => {
   it('says permissions are unknown when the invoker is not in the member cache', async () => {
     const { bot, interaction, sink } = build({ invokerMemberMissing: true });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('replies:feed.invoker_permissions_unknown');
     expect(reply(sink)).not.toContain('replies:feed.invoker_cannot_view');
@@ -478,7 +664,7 @@ describe('/feed subscribe', () => {
   it('refuses a channel the invoker cannot see', async () => {
     const { bot, interaction, sink, upsert } = build({ invokerPermissions: [] });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('replies:feed.invoker_cannot_view');
     expect(upsert).not.toHaveBeenCalled();
@@ -493,7 +679,7 @@ describe('/feed subscribe', () => {
       botPermissions: [PermissionFlagsBits.ViewChannel],
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     const content = reply(sink);
     expect(content).toContain('replies:feed.invoker_cannot_view');
@@ -507,7 +693,7 @@ describe('/feed subscribe', () => {
       invalidAccounts: new Set(['someone']),
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('errors:feed.invalid_account');
     expect(fetchTimeline).not.toHaveBeenCalled();
@@ -524,7 +710,7 @@ describe('/feed subscribe', () => {
       }),
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('errors:feed.not_found');
     expect(upsert).not.toHaveBeenCalled();
@@ -536,7 +722,7 @@ describe('/feed subscribe', () => {
     // accounts that were written before and after it.
     const { bot, interaction, sink } = build({ upsertFails: true });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     const content = reply(sink);
     expect(content).toContain('replies:feed.account_failed');
@@ -544,11 +730,11 @@ describe('/feed subscribe', () => {
   });
 
   it('lets a non-admin member subscribe', async () => {
-    // Plan D4: subscriptions are ungated on purpose. This asserts the
+    // Subscriptions are ungated on purpose. This asserts the
     // absence of a gate so adding `bot.isAdmin` here fails loudly.
     const { bot, interaction, sink, upsert } = build();
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(bot.isAdmin(USER_ID)).toBe(false);
     expect(upsert).toHaveBeenCalledTimes(1);
@@ -560,7 +746,7 @@ describe('/feed subscribe', () => {
       options: { target: 'alpha, @Beta gamma' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert.mock.calls.map(([input]) => (input as { account: string }).account)).toEqual([
       'alpha',
@@ -581,7 +767,7 @@ describe('/feed subscribe', () => {
       options: { target: 'alpha, beta, gamma' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(sink.editReplies).toHaveLength(1);
     expect(reply(sink)).toContain('replies:feed.invoker_cannot_view');
@@ -594,7 +780,7 @@ describe('/feed subscribe', () => {
       options: { target: 'alpha, banned, gamma' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert.mock.calls.map(([input]) => (input as { account: string }).account)).toEqual([
       'alpha',
@@ -614,7 +800,7 @@ describe('/feed subscribe', () => {
       options: { target: 'alpha, banned' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     const logged = logger.info.mock.calls.flat().join(' ');
     expect(logged).toContain('feed.subscriptions_processed');
@@ -627,24 +813,24 @@ describe('/feed subscribe', () => {
     // the stack and the cause of an individual failure diagnosable.
     const { bot, interaction, logger } = build({
       invalidAccounts: new Set(['banned']),
-      options: { target: 'banned' },
+      options: { target: 'alpha, banned' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
-  it('attempts nothing once the interaction is too old to answer', async () => {
+  it('attempts nothing once the Save interaction is too old to answer', async () => {
     // The budget runs from when Discord created the interaction, not
     // from when the batch starts, or a slow command would spend a full
     // budget it no longer has.
     const { bot, interaction, sink, upsert } = build({
-      createdTimestamp: Date.now() - FEED_BATCH_BUDGET_MS - 1,
+      saveCreatedTimestamp: Date.now() - FEED_BATCH_BUDGET_MS - 1,
       options: { target: 'alpha, beta' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     const content = reply(sink);
     expect(content).toContain('replies:feed.account_skipped');
@@ -658,7 +844,7 @@ describe('/feed subscribe', () => {
       options: { target: tooMany.join(',') },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     const content = reply(sink);
     expect(content).toContain('replies:feed.too_many_accounts');
@@ -669,10 +855,10 @@ describe('/feed subscribe', () => {
 
   it('stores a keyword expression as typed', async () => {
     const { bot, interaction, upsert } = build({
-      options: { keyword: ' live OR (album AND tour) ' },
+      edits: { keyword: ' live OR (album AND tour) ' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -683,10 +869,10 @@ describe('/feed subscribe', () => {
 
   it('refuses a malformed keyword expression before reading or writing anything', async () => {
     const { bot, interaction, sink, upsert, fetchTimeline } = build({
-      options: { keyword: 'live OR (album' },
+      edits: { keyword: 'live OR (album' },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('replies:feed.keyword_invalid');
     expect(fetchTimeline).not.toHaveBeenCalled();
@@ -695,10 +881,10 @@ describe('/feed subscribe', () => {
 
   it('refuses an over-long keyword instead of storing a truncated expression', async () => {
     const { bot, interaction, sink, upsert } = build({
-      options: { keyword: 'a'.repeat(MAX_FEED_KEYWORD_LENGTH + 1) },
+      edits: { keyword: 'a'.repeat(MAX_FEED_KEYWORD_LENGTH + 1) },
     });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     const content = reply(sink);
     expect(content).toContain('replies:feed.keyword_too_long');
@@ -709,7 +895,7 @@ describe('/feed subscribe', () => {
   it('refuses an option that names no account at all', async () => {
     const { bot, interaction, sink, upsert } = build({ options: { target: ' , @ ' } });
 
-    await new FeedSubscribe().execute(interaction, bot);
+    await executeAndSave(interaction, bot);
 
     expect(reply(sink)).toContain('replies:feed.no_accounts');
     expect(upsert).not.toHaveBeenCalled();

@@ -18,6 +18,9 @@ import type { Result } from '../../core/result';
 import type { Logger } from '../../core/logger';
 import type { LinkPreviewFailure, RenderablePreviewResult } from '../link-preview';
 
+/** Snapshot sources must return their complete bounded window, never a cursor slice. */
+export const MAX_FEED_SNAPSHOT_POSTS = 1000;
+
 /** Feed previews must fit in one send so delivery-based cursors remain atomic. */
 export type FeedPreview = Exclude<RenderablePreviewResult, { readonly kind: 'card' }>;
 
@@ -29,7 +32,7 @@ export type FeedPreview = Exclude<RenderablePreviewResult, { readonly kind: 'car
  * config block. It is deliberately *not* the type of
  * {@link FeedPlatform.id} — see that field.
  */
-export const SUPPORTED_FEED_PLATFORMS = ['x', 'bahamut'] as const;
+export const SUPPORTED_FEED_PLATFORMS = ['x', 'bahamut', 'youtube'] as const;
 
 export type FeedPlatformId = (typeof SUPPORTED_FEED_PLATFORMS)[number];
 
@@ -50,6 +53,7 @@ export type FeedPlatformId = (typeof SUPPORTED_FEED_PLATFORMS)[number];
 export const FEED_PLATFORM_DISPLAY_NAMES: Readonly<Record<FeedPlatformId, string>> = {
   x: 'X (Twitter)',
   bahamut: 'Bahamut',
+  youtube: 'YouTube',
 };
 
 /**
@@ -87,17 +91,19 @@ export interface FeedPostMedia {
  * `id` stays a **string**. Ids are opaque to every consumer: X's are
  * 64-bit and already exceed `Number.MAX_SAFE_INTEGER` (a live sample
  * reads `2092744659667673582`), while another platform's may not be
- * numeric at all. Ordering therefore goes through
- * {@link FeedPlatform.compareIds}, never through `Number`.
+ * numeric at all. Ordered sources therefore use
+ * {@link FeedPlatform.compareIds}, never `Number`; snapshot sources use ID membership.
  */
 export interface FeedPost {
-  /** Opaque post id; order it with {@link FeedPlatform.compareIds}. */
+  /** Stable native ID; snapshot sources never order it. */
   readonly id: string;
   /**
    * Author's account name without any leading `@`. On a repost this is
    * the **original** author, not the account whose timeline was read.
    */
   readonly authorAccount: string;
+  /** Optional display name; authorAccount remains the canonical ownership key. */
+  readonly authorName?: string;
   /** Creation time in unix seconds; deleted checkpoints retain the preceding source time. */
   readonly createdTimestamp: number;
   /** A verified deletion can advance a source cursor but is never delivered. */
@@ -134,8 +140,8 @@ export interface FeedTimelineFetchOptions {
 }
 
 /**
- * One social platform the feed can follow (Strategy). Timeline ordering
- * is not guaranteed — callers sort with {@link FeedPlatform.compareIds}.
+ * One social platform the feed can follow (Strategy). Ordered sources use
+ * `compareIds`; snapshots use timestamp ordering and persistent ID membership.
  */
 export interface FeedPlatform {
   /**
@@ -153,6 +159,8 @@ export interface FeedPlatform {
   readonly displayName: string;
   /** Source feeds follow forum events by any author; absent means own original posts. */
   readonly subscriptionScope?: 'account' | 'source';
+  /** Absent uses ordered IDs; snapshots deduplicate opaque native IDs persistently. */
+  readonly trackingMode?: 'snapshot';
   /**
    * Cursor sources return the current head without afterId, and the oldest
    * next batch with afterId. The poller can pass intentionally filtered records.
@@ -174,7 +182,7 @@ export interface FeedPlatform {
     options?: FeedTimelineFetchOptions,
   ): Promise<Result<readonly FeedPost[], FeedFailure>>;
   /**
-   * Ascending comparison of two post ids, for `Array.prototype.sort`.
+   * Ascending comparison for ordered sources; snapshot consumers ignore it.
    *
    * Returns `0` when either id is unparseable, so an upstream id-format
    * change degrades to "leave the order alone" instead of throwing
@@ -183,7 +191,8 @@ export interface FeedPlatform {
   compareIds(a: string, b: string): number;
   /**
    * The lowest id a post created at `nowMs` could carry, used to anchor
-   * a cursor when a first read returns an empty timeline. It must sort
+   * an ordered cursor when a first read returns an empty timeline. Ignored
+   * for snapshots. For ordered sources it must sort
    * above everything already published and below everything published
    * afterwards — that is what makes a fresh subscription non-backfilling.
    */

@@ -108,3 +108,16 @@ describe('feedAccountRefusal', () => {
     expect(feedAccountRefusal({ kind: 'empty' })).toEqual(['replies:feed.no_accounts']);
   });
 });
+
+it('retains YouTube handles and distinct case-sensitive channel IDs', () => {
+  const first = 'UCAbCdEfGhIjKlMnOpQrStUv';
+  const second = 'UCabCdEfGhIjKlMnOpQrStUv';
+  expect(parseFeedAccounts(`@Example, ${first}, ${second}`, 'youtube')).toEqual({
+    kind: 'accounts',
+    accounts: ['@Example', first, second],
+  });
+  expect(parseFeedAccounts(`${first}, ${second}`)).toEqual({
+    kind: 'accounts',
+    accounts: [first, second],
+  });
+});

@@ -11,6 +11,10 @@ import {
   MongoFeedSubscriptionRepo,
   type FeedSubscriptionUpsertInput,
 } from '../../../src/persistence/repositories/feed-subscription.repo';
+import {
+  MAX_FEED_SEEN_IDS,
+  MAX_FEED_SEEN_ID_LENGTH,
+} from '../../../src/persistence/schemas/feed-subscription.schema';
 import { withClosedConnection, withFreshConnection } from '../helpers/mongo';
 
 const guildId = asGuildId('999999999999999999');
@@ -593,5 +597,168 @@ describe('MongoFeedSubscriptionRepo — driver failures (integration)', () => {
       expect(result.error).toBeInstanceOf(DatabaseError);
       expect(result.error.context.operation).toBe('MongoFeedSubscriptionRepo.listByChannel');
     }
+  });
+});
+
+describe('MongoFeedSubscriptionRepo — persistent snapshot ledger (integration)', () => {
+  it('distinguishes absent and seeded empty ledgers through every read path', async () => {
+    await withFreshConnection(async (connection) => {
+      const repo = await buildRepo(new StaticConnectionManager(connection));
+      unwrap(await repo.upsert(subscription()));
+      const empty = unwrap(await repo.upsert(subscription({ account: 'empty', seen_ids: [] })));
+      expect(empty.doc.seen_ids).toEqual([]);
+      expect(unwrap(await repo.find('x', 'acct', 'channel-1'))?.seen_ids).toBeUndefined();
+      expect(unwrap(await repo.find('x', 'empty', 'channel-1'))?.seen_ids).toEqual([]);
+      expect(unwrap(await repo.list()).find((doc) => doc.account === 'empty')?.seen_ids).toEqual(
+        [],
+      );
+      expect(
+        unwrap(await repo.listByChannel('channel-1')).find((doc) => doc.account === 'empty')
+          ?.seen_ids,
+      ).toEqual([]);
+    });
+  });
+
+  it('deduplicates opaque IDs and atomically saves them with displayed progress', async () => {
+    await withFreshConnection(async (connection) => {
+      const repo = await buildRepo(new StaticConnectionManager(connection));
+      const created = unwrap(await repo.upsert(subscription({ seen_ids: ['z', 'a', 'z'] })));
+      expect(created.doc.seen_ids).toEqual(['z', 'a']);
+      unwrap(await repo.advanceCursor(created.doc._id, 'late', 1, ['z', 'late', 'z']));
+      const found = unwrap(await repo.find('x', 'acct', 'channel-1'));
+      expect(found?.last_seen_id).toBe('late');
+      expect(found?.last_seen_timestamp).toBe(1);
+      expect(found?.seen_ids).toEqual(['z', 'late']);
+      unwrap(await repo.advanceCursor(created.doc._id, 'legacy', 2));
+      expect(unwrap(await repo.find('x', 'acct', 'channel-1'))?.seen_ids).toEqual(['z', 'late']);
+    });
+  });
+
+  it('preserves ledger and cursor on re-subscription while replacing keyword filters', async () => {
+    await withFreshConnection(async (connection) => {
+      const repo = await buildRepo(new StaticConnectionManager(connection));
+      unwrap(
+        await repo.upsert(
+          subscription({
+            seen_ids: ['old'],
+            last_seen_id: 'old',
+            last_seen_timestamp: 8,
+            filter: { media: 'any', keyword: 'old' },
+          }),
+        ),
+      );
+      const updated = unwrap(
+        await repo.upsert(
+          subscription({
+            seen_ids: ['replacement'],
+            last_seen_id: 'replacement',
+            last_seen_timestamp: 99,
+            filter: { media: 'any', keyword: 'new' },
+          }),
+        ),
+      );
+      expect(updated.doc.seen_ids).toEqual(['old']);
+      expect(updated.doc.last_seen_id).toBe('old');
+      expect(updated.doc.last_seen_timestamp).toBe(8);
+      expect(updated.doc.filter.keyword).toBe('new');
+      const cleared = unwrap(await repo.upsert(subscription()));
+      expect(cleared.doc.filter.keyword).toBeUndefined();
+    });
+  });
+
+  it('rejects invalid ledgers before writing any cursor change', async () => {
+    await withFreshConnection(async (connection) => {
+      const repo = await buildRepo(new StaticConnectionManager(connection));
+      const created = unwrap(
+        await repo.upsert(
+          subscription({ last_seen_id: 'old', last_seen_timestamp: 8, seen_ids: ['old'] }),
+        ),
+      );
+      for (const invalid of [
+        Array.from({ length: MAX_FEED_SEEN_IDS + 1 }, (_, i) => String(i)),
+        [''],
+        ['x'.repeat(MAX_FEED_SEEN_ID_LENGTH + 1)],
+      ]) {
+        expect(isErr(await repo.advanceCursor(created.doc._id, 'new', 9, invalid))).toBe(true);
+        expect(
+          isErr(await repo.upsert(subscription({ account: 'invalid', seen_ids: invalid }))),
+        ).toBe(true);
+      }
+      const found = unwrap(await repo.find('x', 'acct', 'channel-1'));
+      expect(found?.last_seen_id).toBe('old');
+      expect(found?.seen_ids).toEqual(['old']);
+      expect(unwrap(await repo.find('x', 'invalid', 'channel-1'))).toBeUndefined();
+    });
+  });
+
+  it('normalizes duplicate IDs without silently resetting corrupt ledgers', async () => {
+    await withFreshConnection(async (connection) => {
+      const guild = await openGuild(connection);
+      const repo = new MongoFeedSubscriptionRepo(guild);
+      await guild.models.FeedSubscription.collection.insertOne({
+        ...subscription(),
+        created_at: 1,
+        seen_ids: ['a', 'a'],
+        filter: { media: 'any' },
+      });
+      const found = unwrap(await repo.find('x', 'acct', 'channel-1'));
+      expect(found?.seen_ids).toEqual(['a']);
+      await guild.models.FeedSubscription.collection.updateOne(
+        { account: 'acct' },
+        { $set: { seen_ids: [1] } },
+      );
+      expect(isErr(await repo.list())).toBe(true);
+      expect(isErr(await repo.find('x', 'acct', 'channel-1'))).toBe(true);
+    });
+  });
+});
+
+describe('MongoFeedSubscriptionRepo — editor identity (integration)', () => {
+  it('updates only the original identity and preserves its ledger and cursor', async () => {
+    await withFreshConnection(async (connection) => {
+      const repo = await buildRepo(new StaticConnectionManager(connection));
+      const original = unwrap(
+        await repo.upsert(
+          subscription({ seen_ids: ['known'], last_seen_id: 'known', last_seen_timestamp: 42 }),
+        ),
+      );
+      const changed = unwrap(
+        await repo.upsert(
+          subscription({
+            existingId: original.doc._id,
+            filter: { media: 'any', keyword: 'release' },
+          }),
+        ),
+      );
+      expect(changed.created).toBe(false);
+      expect(changed.doc).toMatchObject({
+        seen_ids: ['known'],
+        last_seen_id: 'known',
+        last_seen_timestamp: 42,
+        filter: { media: 'any', keyword: 'release' },
+      });
+    });
+  });
+  it('never recreates a removed subscription or overwrites its replacement', async () => {
+    await withFreshConnection(async (connection) => {
+      const repo = await buildRepo(new StaticConnectionManager(connection));
+      const original = unwrap(await repo.upsert(subscription()));
+      unwrap(await repo.deleteWhere({ channelId: 'channel-1' }));
+      expect(isErr(await repo.upsert(subscription({ existingId: original.doc._id })))).toBe(true);
+      expect(unwrap(await repo.list())).toEqual([]);
+      const replacement = unwrap(
+        await repo.upsert(subscription({ filter: { media: 'photo_only' } })),
+      );
+      expect(
+        isErr(
+          await repo.upsert(
+            subscription({ existingId: original.doc._id, filter: { media: 'any' } }),
+          ),
+        ),
+      ).toBe(true);
+      const current = unwrap(await repo.find('x', 'acct', 'channel-1'));
+      expect(current?._id.toString()).toBe(replacement.doc._id.toString());
+      expect(current?.filter.media).toBe('photo_only');
+    });
   });
 });

@@ -51,9 +51,19 @@ const BahamutPlatformConfigSchema = z
   })
   .strict();
 
+const YouTubePlatformConfigSchema = z
+  .object({
+    timeoutMs: z.number().int().positive().max(MAX_TIMEOUT_MS).default(8_000),
+  })
+  .strict();
+
 /** Platforms omitted from this block are not registered. */
 export const FeedPlatformsSchema = z
-  .object({ x: XPlatformConfigSchema.optional(), bahamut: BahamutPlatformConfigSchema.optional() })
+  .object({
+    x: XPlatformConfigSchema.optional(),
+    bahamut: BahamutPlatformConfigSchema.optional(),
+    youtube: YouTubePlatformConfigSchema.optional(),
+  })
   .strict();
 
 export type FeedPlatformsConfig = z.infer<typeof FeedPlatformsSchema>;

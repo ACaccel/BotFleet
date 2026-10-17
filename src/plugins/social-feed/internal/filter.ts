@@ -10,9 +10,8 @@
  *     include original floors by any author, including replies.
  *   - **Subscription filters** combine the stored media and keyword narrowing.
  *
- * Reads {@link FeedPost} fields only; ordering and cursor comparison are
- * delegated to the platform, so no platform-specific arithmetic (X's
- * snowflake ids) leaks into the plugin. Free of I/O.
+ * Ordered sources delegate ID comparison to the platform. Snapshots sort
+ * by timestamp and stable ID without applying a cursor cutoff. Free of I/O.
  */
 import {
   compileFeedKeyword,
@@ -97,7 +96,8 @@ const matchesKeyword = (post: FeedPost, keyword: FeedKeywordExpression | null): 
 /**
  * Choose the posts a pass should forward for one subscription: the
  * original posts allowed by the platform's subscription scope that match
- * the filter and are newer than its cursor, oldest first.
+ * the filter, oldest first. Ordered sources also require a newer cursor ID;
+ * snapshot callers apply persistent ID membership separately.
  *
  * The cap takes the **oldest** eligible posts rather than the newest.
  * Because the caller advances the cursor only to the last post it
@@ -123,10 +123,16 @@ export const selectPostsToForward = (
     }
     if (!matchesMedia(post, filter.media)) return false;
     if (!matchesKeyword(post, keyword)) return false;
-    if (lastSeenId === undefined) return true;
+    if (platform.trackingMode === 'snapshot' || lastSeenId === undefined) return true;
     return platform.compareIds(post.id, lastSeenId) > 0;
   });
   // `filter` already returned a fresh array, so sorting it in place
   // cannot disturb the caller's page.
-  return eligible.sort((a, b) => platform.compareIds(a.id, b.id)).slice(0, input.maxPosts);
+  return eligible
+    .sort((a, b) =>
+      platform.trackingMode === 'snapshot'
+        ? a.createdTimestamp - b.createdTimestamp || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+        : platform.compareIds(a.id, b.id),
+    )
+    .slice(0, input.maxPosts);
 };

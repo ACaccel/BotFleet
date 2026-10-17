@@ -16,6 +16,8 @@
  * runs afterwards on every entry it got back.
  */
 
+import { YOUTUBE_CHANNEL_ID } from './platforms/youtube-target';
+
 /**
  * How many accounts one invocation may name.
  *
@@ -63,12 +65,15 @@ type ParsedFeedAccounts =
  * Handles are case-insensitive, but URL paths/query keys and explicit
  * source prefixes retain their spelling until platform normalization.
  */
-export const parseFeedAccounts = (raw: string): ParsedFeedAccounts => {
+export const parseFeedAccounts = (raw: string, platform?: string): ParsedFeedAccounts => {
   const seen = new Map<string, string>();
   for (const token of raw.split(SEPARATOR)) {
-    const account = token.replace(LEADING_AT, '');
+    const account = platform === 'youtube' ? token : token.replace(LEADING_AT, '');
     if (account === '') continue;
-    const key = /[:/]/.test(account) ? account : account.toLowerCase();
+    const key =
+      platform === 'youtube' || YOUTUBE_CHANNEL_ID.test(account) || /[:/]/.test(account)
+        ? account
+        : account.toLowerCase();
     if (!seen.has(key)) seen.set(key, account);
   }
   if (seen.size === 0) return { kind: 'empty' };

@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { Types } from 'mongoose';
 
+import { panelComponents } from '../feed-panel/helpers';
 import FeedList from '../../../../src/handlers/commands/feed_list/action';
 import { formatSubscriptionPages } from '../../../../src/handlers/commands/feed_list/format-subscriptions';
 import { err, ok } from '../../../../src/core/result';
@@ -85,8 +86,10 @@ const build = (fixture: { docs?: readonly FeedSubscriptionDoc[]; repoFails?: boo
 
 /** Everything the command put on screen, in delivery order. */
 const sentPages = (sink: ReturnType<typeof newInteractionSink>): string[] => [
-  sink.editReplies[0]?.content ?? '',
-  ...sink.followUps.map((f) => f.content ?? ''),
+  ...sink.editReplies
+    .filter((message) => message.content !== undefined)
+    .map((message) => message.content ?? ''),
+  ...sink.followUps.map((message) => message.content ?? ''),
 ];
 
 describe('/feed list', () => {
@@ -176,6 +179,39 @@ describe('/feed list', () => {
     for (const followUp of sink.followUps) {
       expect(followUp.flags).toBe(MessageFlags.Ephemeral);
     }
+  });
+
+  it('attaches only visible targets to the editor without changing the original text', async () => {
+    const visible = subscription({ account: 'visible' });
+    const hidden = subscription({ channel_id: PRIVATE_CHANNEL, account: 'secret' });
+    const { bot, interaction, sink } = build({ docs: [visible, hidden] });
+    await new FeedList().execute(interaction, bot);
+    expect(sink.editReplies).toHaveLength(2);
+    expect(sink.editReplies[1]?.content).toBeUndefined();
+    const target = panelComponents(sink.editReplies[1])[0];
+    expect(target?.options?.map((option) => option.value)).toEqual([visible._id.toString()]);
+    expect(JSON.stringify(target)).not.toContain(hidden._id.toString());
+    expect(JSON.stringify(target)).not.toContain('secret');
+  });
+
+  it('paginates the edit selector at 25 targets independently of text overflow', async () => {
+    const { bot, interaction, sink } = build({ docs: manyIn(OPEN_CHANNEL, 60) });
+    await new FeedList().execute(interaction, bot);
+    const components = panelComponents(sink.editReplies.at(-1));
+    expect(components[0]?.options).toHaveLength(25);
+    expect(
+      components.find((component) => component.custom_id?.includes('|previous|'))?.disabled,
+    ).toBe(true);
+    expect(components.find((component) => component.custom_id?.includes('|next|'))?.disabled).toBe(
+      false,
+    );
+  });
+
+  it('leaves a partial overflow reply without an active edit selector', async () => {
+    const { bot, interaction, sink } = build({ docs: manyIn(OPEN_CHANNEL, 60) });
+    vi.spyOn(interaction, 'followUp').mockRejectedValue(new Error('Discord unavailable'));
+    await new FeedList().execute(interaction, bot);
+    expect(sink.editReplies.every((reply) => panelComponents(reply).length === 0)).toBe(true);
   });
 
   it('falls back to the traced failure copy when the database refuses', async () => {

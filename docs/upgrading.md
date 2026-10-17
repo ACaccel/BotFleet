@@ -394,10 +394,11 @@ unlimited. No configuration change is required.
 `/feed subscribe` and `/feed unsubscribe` now use `target` for profile handles or
 forum sources. The old `account` option has been removed. Subscribe requires
 `target`; unsubscribe keeps it optional for channel/platform removal.
-Re-register commands after upgrading to replace the old options. The media option
-is optional: X and Bahamut default to `any`, including text-only posts. Stored
-subscription filters remain unchanged; subscribe again with `media:any` to update
-an existing media-only subscription without resetting its cursor.
+Re-register commands after upgrading to replace the old options. Media and keyword
+filters now live in the [private filter editor](configuration.md#feed-subscriptions).
+Stored filters remain unchanged; edit an existing subscription and Save to change
+its filters without resetting its cursor. X and Bahamut default to `any`, including
+text-only posts.
 Existing X and Bahamut thread subscription keys/cursors are preserved, so no
 subscription data migration is required. See [Bahamut subscriptions](configuration.md#bahamut-subscriptions)
 for board new-topic streams, thread new-floor streams, URL resolution and backlog
@@ -405,10 +406,25 @@ limits.
 
 ## Feed keyword expressions
 
-`/feed subscribe`'s `keyword` now accepts [boolean expressions](configuration.md#feed-keyword-filters)
-with `AND`, `OR`, `NOT`, `&`, `|`, `!`, parentheses and quotes. Re-register commands to
-update the option description. Stored keywords need no migration, but one that
+The filter editor's keyword field accepts [boolean expressions](configuration.md#feed-keyword-filters)
+with `AND`, `OR`, `NOT`, `&`, `|`, `!`, parentheses and quotes. Stored keywords need no migration, but one that
 contains a whole-word `and`, `or` or `not`, `&`, `|`, a word-initial `!` or balanced parentheses is now
-read as an expression; subscribe again with the text in quotes to keep a literal
+read as an expression; save the text in quotes through the editor to keep a literal
 match. A stored keyword that does not parse still matches as one substring. Input
 longer than 100 characters is refused instead of truncated.
+
+## YouTube feeds and private filter editor
+
+Re-register slash commands and restart the bot to expose YouTube and the
+private editor. `/feed subscribe` now has only required `platform` and `target`
+plus optional `channel`; remove `media` and `keyword` from saved command examples.
+Enable new platforms explicitly in `social_feed.platforms`; omitted blocks stay
+disabled. See [YouTube configuration](configuration.md#youtube-subscriptions)
+for source limits.
+
+Existing subscription data needs no destructive migration. X/Bahamut cursors
+remain unchanged; new YouTube subscriptions seed their current snapshot
+without historical delivery. Existing single subscriptions preload their filters;
+Save preserves tracking state. `/feed list` also offers filter editing. Drafts
+are private, expire after 10 minutes, and are discarded on Cancel or restart;
+no subscription change occurs before Save.

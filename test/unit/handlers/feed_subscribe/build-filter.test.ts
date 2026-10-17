@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { buildSubscriptionFilter } from '../../../../src/handlers/commands/feed_subscribe/build-filter';
+import { buildSubscriptionFilter } from '../../../../src/handlers/feed-panel/build-filter';
 import { MAX_FEED_KEYWORD_LENGTH } from '../../../../src/infra/social-feed';
 import { FEED_MEDIA_FILTERS } from '../../../../src/persistence/schemas/feed-subscription.schema';
 

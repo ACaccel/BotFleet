@@ -8,8 +8,8 @@
  * line. An operator who forgot a `social_feed.platforms` block would
  * otherwise only ever hear about it from a member.
  */
-import { FeedError } from '../../../core/errors';
-import { feedPlatformDisplayName } from '../../feed-platform-name';
+import { FeedError } from '../../core/errors';
+import { feedPlatformDisplayName } from '../feed-platform-name';
 
 export const platformNotConfiguredError = (id: string): FeedError<{ platform: string }> =>
   new FeedError({

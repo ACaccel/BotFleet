@@ -127,6 +127,7 @@ const subcommandRoute = (name: string | null | undefined, group: string | null |
 });
 
 interface BuildChatInputInteractionInput {
+  readonly applicationId?: string;
   readonly commandName?: string;
   readonly userId?: string;
   /** The invoker's `user.username`, for handlers that sign output with it. */
@@ -197,11 +198,9 @@ export const buildChatInputInteraction = (
     channel: input.channel ?? null,
     channelId: input.channel?.id ?? 'c-1',
     memberPermissions: memberPermissionsFrom(input.memberPermissions),
-    locale: 'zh-TW',
-    // Discord stamps every interaction; `/feed subscribe` measures its
-    // batch budget from this, so a fixture without it would silently
-    // disable the deadline instead of exercising it.
+    applicationId: input.applicationId ?? 'app-1',
     createdTimestamp: input.createdTimestamp ?? Date.now(),
+    locale: 'zh-TW',
     options: {
       get: (name: string) =>
         Object.prototype.hasOwnProperty.call(options, name) ? { value: options[name] } : null,
@@ -229,6 +228,8 @@ export const buildChatInputInteraction = (
 };
 
 interface BuildButtonInteractionInput {
+  readonly applicationId?: string;
+  readonly createdTimestamp?: number;
   /** `<handler>|<payload>`; the leading segment selects the handler. */
   readonly customId: string;
   /** Who pressed the button — not necessarily who created it. */
@@ -273,7 +274,13 @@ export const buildButtonInteraction = (input: BuildButtonInteractionInput): Butt
     channel: input.channel ?? null,
     channelId: input.channel?.id ?? 'c-1',
     memberPermissions: memberPermissionsFrom(input.memberPermissions),
+    applicationId: input.applicationId ?? 'app-1',
+    createdTimestamp: input.createdTimestamp ?? Date.now(),
     locale: 'zh-TW',
+    showModal: async (modal: unknown) => {
+      sink.modals.push(modal);
+      sink.acknowledged.replied = true;
+    },
     deferUpdate: async () => {
       sink.deferUpdates.push({});
       sink.acknowledged.deferred = true;
@@ -287,6 +294,8 @@ export const buildButtonInteraction = (input: BuildButtonInteractionInput): Butt
 };
 
 interface BuildAutocompleteInteractionInput {
+  readonly applicationId?: string;
+  readonly createdTimestamp?: number;
   readonly commandName?: string;
   readonly userId?: string;
   readonly guildId?: string | null;
@@ -340,6 +349,8 @@ export const buildAutocompleteInteraction = (
     guild,
     guildId: guild?.id ?? null,
     channelId: input.channel?.id ?? 'c-1',
+    applicationId: input.applicationId ?? 'app-1',
+    createdTimestamp: input.createdTimestamp ?? Date.now(),
     locale: 'zh-TW',
     options: {
       get: (name: string) =>
@@ -360,7 +371,7 @@ export const buildAutocompleteInteraction = (
 };
 
 /** The sink-recording reply surface, with live acknowledgement getters. */
-const replySurface = (sink: InteractionMockSink) => ({
+const replySurface = (sink: InteractionMockSink, original: Message) => ({
   get deferred(): boolean {
     return sink.acknowledged.deferred;
   },
@@ -377,9 +388,11 @@ const replySurface = (sink: InteractionMockSink) => ({
   },
   editReply: async (opts: SentMessage) => {
     sink.editReplies.push(opts);
+    return original;
   },
   followUp: async (opts: SentMessage) => {
     sink.followUps.push(opts);
+    return { ...original, id: `${original.id}-follow-up-${String(sink.followUps.length)}` };
   },
   deleteReply: async (message?: string) => {
     sink.deletes.push(message ?? '@original');
@@ -409,7 +422,14 @@ const withReplies = <T extends object>(sink: InteractionMockSink, fields: T): T 
       },
       fields,
     ),
-    Object.getOwnPropertyDescriptors(replySurface(sink)),
+    Object.getOwnPropertyDescriptors(
+      replySurface(sink, {
+        id:
+          ('message' in fields ? (fields.message as Message | undefined)?.id : undefined) ??
+          'reply-1',
+        applicationId: ('applicationId' in fields ? fields.applicationId : undefined) ?? 'app-1',
+      } as Message),
+    ),
   );
 
 /** discord.js throws when a modal field is absent; a fixture returning '' would hide that. */
@@ -418,6 +438,10 @@ const missingField = (id: string): never => {
 };
 
 interface BuildModalSubmitInteractionInput {
+  readonly applicationId?: string;
+  readonly createdTimestamp?: number;
+  /** The message that opened this component or modal. */
+  readonly message?: Message;
   /** `<handler>|<payload>`; the leading segment selects the handler. */
   readonly customId: string;
   readonly userId?: string;
@@ -447,7 +471,13 @@ export const buildModalSubmitInteraction = (
   const guild =
     input.guild ?? (input.guildId === null ? null : buildGuild({ id: input.guildId ?? 'g-1' }));
   return withReplies(sink, {
+    message: input.message,
+    isFromMessage: () => input.message !== undefined,
     isModalSubmit: () => true,
+    deferUpdate: async () => {
+      sink.deferUpdates.push({});
+      sink.acknowledged.deferred = true;
+    },
     isChatInputCommand: () => false,
     isButton: () => false,
     customId: input.customId,
@@ -456,6 +486,8 @@ export const buildModalSubmitInteraction = (
     guildId: guild?.id ?? null,
     channel: input.channel ?? null,
     channelId: input.channel?.id ?? 'c-1',
+    applicationId: input.applicationId ?? 'app-1',
+    createdTimestamp: input.createdTimestamp ?? Date.now(),
     locale: 'zh-TW',
     fields: {
       getTextInputValue: (id: string) => textInputs[id] ?? missingField(id),
@@ -465,6 +497,10 @@ export const buildModalSubmitInteraction = (
 };
 
 interface BuildStringSelectInteractionInput {
+  readonly applicationId?: string;
+  readonly createdTimestamp?: number;
+  /** The message that opened this component or modal. */
+  readonly message?: Message;
   /** `<handler>|<payload>`; the leading segment selects the handler. */
   readonly customId: string;
   readonly values: readonly string[];
@@ -507,6 +543,7 @@ export const buildStringSelectInteraction = (
           },
         };
   return withReplies(sink, {
+    message: input.message,
     isStringSelectMenu: () => true,
     isChatInputCommand: () => false,
     isButton: () => false,
@@ -518,6 +555,8 @@ export const buildStringSelectInteraction = (
     channel,
     channelId: channel?.id ?? null,
     memberPermissions: memberPermissionsFrom(input.memberPermissions),
+    applicationId: input.applicationId ?? 'app-1',
+    createdTimestamp: input.createdTimestamp ?? Date.now(),
     locale: 'zh-TW',
     client: {
       user: { username: 'Test Bot', displayAvatarURL: () => 'https://example.test/bot.png' },
@@ -547,6 +586,8 @@ interface ContextMenuTargetMember {
 }
 
 interface BuildUserContextMenuInteractionInput {
+  readonly applicationId?: string;
+  readonly createdTimestamp?: number;
   readonly commandName?: string;
   readonly targetUser: ContextMenuTargetUser;
   /**
@@ -603,6 +644,8 @@ export const buildUserContextMenuInteraction = (
     },
     guild,
     guildId,
+    applicationId: input.applicationId ?? 'app-1',
+    createdTimestamp: input.createdTimestamp ?? Date.now(),
     locale: 'zh-TW',
   }) as unknown as UserContextMenuCommandInteraction;
 };

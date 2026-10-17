@@ -161,9 +161,12 @@ Upgrading from standalone commands such as `/feed_subscribe`, or from the remove
 [message statistics commands](docs/upgrading.md#message-statistics-commands).
 To add a command, follow [adding a slash command](docs/contributing/adding-a-command.md).
 
-`/feed` follows X accounts, Bahamut boards (new topics), and Bahamut threads
-(new floors). Subscribe requires a profile handle or forum URL through `target`;
-Both platforms include text posts by default. See [feed configuration and examples](docs/configuration.md#bahamut-subscriptions).
+`/feed` follows X accounts, Bahamut boards (new topics) and threads (new floors),
+and YouTube channel videos. `/feed subscribe`
+requires `platform` and `target`, with an optional destination `channel`, then
+opens a private filter editor. Nothing is stored until **Save**. `/feed list`
+lists visible-channel subscriptions and offers a paginated filter editor.
+See [feed configuration and examples](docs/configuration.md#feed-subscriptions).
 
 ## Project layout
 

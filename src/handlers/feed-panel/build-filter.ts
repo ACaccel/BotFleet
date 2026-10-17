@@ -1,19 +1,11 @@
-/**
- * Turns `/feed subscribe`'s two filter option values into the shape the
- * repository stores.
- *
- * Takes the values, not the interaction: reading options is the
- * handler's job, and a helper that reached into an interaction could
- * only be tested by building one. This way every option combination is
- * one function call.
- */
-import { feedKeywordRefusal, parseFeedKeyword } from '../../../infra/social-feed';
-import type { FeedSubscriptionFilterInput } from '../../../persistence/repositories';
+/** Validate editor input with the same keyword grammar the poller uses. */
+import { feedKeywordRefusal, parseFeedKeyword } from '../../infra/social-feed';
+import type { FeedSubscriptionFilterInput } from '../../persistence/repositories';
 import {
   DEFAULT_FEED_MEDIA_FILTER,
   isFeedMediaFilter,
   type FeedMediaFilter,
-} from '../../../persistence/schemas/feed-subscription.schema';
+} from '../../persistence/schemas/feed-subscription.schema';
 
 /**
  * The filter to store, or the reply arguments refusing a keyword that

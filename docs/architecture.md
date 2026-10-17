@@ -272,9 +272,30 @@ replaying the existing members' backlog. Verified deleted opening floors produce
 anchored to the preceding source time so later reply timestamps cannot reorder
 new-topic events. Source notifications include bounded
 body excerpts because forum unfurls can show a different floor. Media and
-keyword filters remain generic; no content-specific recognition runs. The boolean
+keyword filters use platform-specific editor controls; no content-specific recognition runs. The boolean
 keyword grammar lives in [`infra/social-feed`](../src/infra/social-feed/keyword-expression.ts)
-so `/feed subscribe` validation and plugin matching share one parser.
+so editor validation and plugin matching share one parser.
+
+YouTube reads the official channel Atom feed without an API key. Its
+`trackingMode: snapshot` uses native video IDs rather than ordered timestamps.
+Each subscription persists a `seen_ids` ledger capped at 2000 IDs;
+source snapshots are capped at 1000. Current snapshot IDs are pinned against
+reordering replay. Filtered IDs and successful deliveries are recorded, while
+unsent matches remain pending. Unseen IDs can deliver despite older publication
+timestamps. Initial seeding records the whole current snapshot without delivery,
+including an explicit empty baseline when the source is empty. Filter edits
+preserve tracking state and do not replay excluded history. Retention and source
+windows bound recovery; see [source limits](configuration.md#snapshot-delivery-limits).
+
+The private filter editor holds a 10-minute in-memory draft scoped to user,
+application, guild and message. Subscribe writes only on Save; an existing single
+subscription preloads its filters, and a batch uses one displayed shared filter.
+The list retains visible-channel text output and offers a 25-row paginated
+selector that loads current filters. Save rechecks access and bot permissions;
+list edits update the original subscription `_id` with upsert disabled, so stale
+panels cannot recreate removed records or overwrite their replacements. Cancel, expiry and restart discard drafts. Supported controls
+are defined in [feed subscriptions](configuration.md#feed-subscriptions).
+
 Threads retains validated proxy OpenGraph metadata for custom cards instead of
 depending on a second fetch by Discord's URL crawler. Facebook retains metadata
 from proxies or the source site. Both preserve the complete image list. The renderer
@@ -287,8 +308,11 @@ for either source and falls back if Discord rejects the upload.
 Missing or failed media delivery keeps the card and adds a fallback link. See
 [preview configuration](configuration.md#social-previews-and-feeds) for supported
 media, limits and metadata availability.
-Feed polling shares account reads; delivery and cursors remain per subscription.
-Cursors advance after successful delivery; post IDs stay strings.
+Feed polling shares source reads within each bot process; delivery and tracking
+state remain per subscription. X/Bahamut retain ordered cursors; snapshot sources
+retain seen IDs. Native IDs stay strings. Discord sends and database persistence
+are not transactional, so a crash or database failure after sending may duplicate
+a notification.
 
 nhentai and wnacg links are gallery providers in the same registry, so they share
 URL extraction, the provider kill-switch and per-guild provider preferences, but
@@ -370,7 +394,8 @@ See [daily fun readings](fun-readings.md) for the calculation and fallback contr
 
 Feed commands use Discord visibility without rank gating and fail closed when
 visibility cannot be resolved. Threads use parent checks; removal rechecks access
-at confirmation and subscription checks the bot's ability to post.
+at confirmation and filter-editor Save rechecks channel access and the bot's
+ability to post.
 
 Rank gates govern Discord disclosure, not host storage: logs and attachment caches
 may contain private-channel data. See [attachment storage](configuration.md#attachment-storage).

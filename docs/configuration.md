@@ -119,7 +119,7 @@ Plugin settings are validated at startup; strict schemas reject unknown keys.
 | `llm_auto_reply`                | gopher         | Self-hosted endpoint, reply probability, context, cooldown and timeout                     |
 | `identity_sync`                 | gopher         | Avatar/nickname sync; requires `sourceUserId` when sync is enabled                         |
 | `social_link_preview`           | nijika, tomori | Disabled; provider/proxy lists and request limits                                          |
-| `social_feed`                   | nijika, tomori | Enabled feeds require a nonempty `platforms` map (`x` and `bahamut` supported)             |
+| `social_feed`                   | nijika, tomori | Enabled feeds require a nonempty `platforms` map (`x`, `bahamut`, `youtube` supported)     |
 | `guild_events.attachment_cache` | nijika, tomori | Enabled; see attachment storage below                                                      |
 | `level_roles`                   | nijika         | `level_<n>` to role-ID map for `/role sync`; a non-ID value disables the command           |
 | `temp_role.maxActivePerMember`  | nijika, tomori | Active temporary roles per creator in a guild; default `3`, integer `1`–`50`               |
@@ -323,13 +323,33 @@ Other bot messages are ignored, and the preview bot always ignores its own messa
 even if its ID is listed. Allowed bot messages still require enabled previews and
 must pass the existing guild, channel privacy and Discord permission checks.
 
+#### Feed subscriptions
+
 `/feed subscribe`, `/feed unsubscribe` and `/feed list` manage database-backed
-subscriptions in visible channels. Use `target` for an X handle or a Bahamut
-forum URL. Subscribe requires `target`; unsubscribe can omit it to remove a
-platform's subscriptions or request confirmation to clear the channel.
-Media is optional: X and Bahamut default to `any`, including text-only posts. Repeating a
-subscription replaces its filters; omitting a keyword clears the old value.
-New subscriptions start at the current source head without replaying old posts.
+subscriptions in visible channels. Subscribe has only required `platform` and
+`target` options and an optional destination `channel`; media and keyword filters
+are edited in a private panel, not slash options. Unsubscribe can omit `target`
+to remove a platform's subscriptions or request confirmation to clear the channel.
+
+The ephemeral editor lasts 10 minutes and is bound to the invoking user,
+application, guild and message. Nothing is written before **Save**. An existing
+single subscription preloads its filters; saving edits preserves its cursor.
+Comma-separated batch targets share one explicitly displayed filter. **Cancel**,
+expiry and bot restarts discard only the draft. A blank keyword clears the filter.
+
+| Platform   | Editor filters                                                  |
+| ---------- | --------------------------------------------------------------- |
+| X, Bahamut | Media (`any` by default, including text-only posts) and keyword |
+| YouTube    | Keyword only                                                    |
+
+`/feed list` keeps its visible-channel-only text listing and adds an edit selector
+with 25 subscriptions per page. Selecting a row loads its current filters.
+**Save** rechecks channel access and bot posting permissions. A stale list editor
+cannot recreate a removed subscription.
+
+New subscriptions seed the current source without historical delivery. Changing
+filters does not replay excluded history. Omitted platform blocks are disabled;
+restart after enabling them and re-register slash commands after upgrading.
 `maxPostsPerPoll` defaults to `5` per subscription (maximum `20`); polling defaults
 to `300000` ms with a full sweep every `12` polls.
 
@@ -352,8 +372,8 @@ preceding deliveries succeed, so filtered batches cannot block newer posts.
 
 #### Feed keyword filters
 
-`keyword` narrows a subscription on either platform to posts whose text matches a
-boolean expression. It combines with the media filter using AND.
+The editor's keyword field narrows a subscription to entries whose text matches a
+boolean expression. It combines with the platform's other filters using AND.
 
 | Syntax                     | Matches                                                                     |
 | -------------------------- | --------------------------------------------------------------------------- |
@@ -414,8 +434,8 @@ while the platform is disabled; a Co link requires an enabled, reachable resolve
 targets can be comma-separated. The former `account` command option has been
 removed; use `target` for every platform.
 
-Both platforms' default `media:any` includes text-only posts. Optional `keyword`
-follows the [feed keyword filters](#feed-keyword-filters) syntax.
+The private editor's default media setting includes text-only posts; its keyword
+field follows the [feed keyword filters](#feed-keyword-filters) syntax.
 
 The adapter reads public HTML without login or paid APIs. Blocked requests or
 unrecognized pages produce feed errors and retry on the next poll. Each read
@@ -431,6 +451,39 @@ Cancel and create a new subscription only when intentionally discarding backlog.
 Notifications include the source author, canonical post link and a bounded body
 excerpt. Private/login-only boards, search results, author feeds and the essence
 archive are outside this adapter's scope.
+
+#### YouTube subscriptions
+
+Add `"youtube": {}` to `social_feed.platforms`. The adapter reads the official
+channel Atom feed without an API key. Use a canonical `UC...` channel ID or
+`https://www.youtube.com/channel/ID` as `target`. Handle resolution, when
+available, also accepts `@handle` and `https://www.youtube.com/@handle`.
+
+| `social_feed.platforms.youtube` field | Default | Constraints     |
+| ------------------------------------- | ------- | --------------- |
+| `timeoutMs`                           | `8000`  | Integer 1–30000 |
+
+Notifications track new video entries by native video ID. Keywords match the
+title and description; editing either does not notify again. The feed does not
+guarantee live-state or Shorts classification, or community posts. Its public
+recent-entry window cannot guarantee a full backfill after downtime. See
+[snapshot delivery limits](#snapshot-delivery-limits).
+
+#### Snapshot delivery limits
+
+YouTube uses persistent seen-ID tracking. A new subscription seeds the
+entire current snapshot without sending history; an empty `[]` baseline allows
+the next first event to deliver. Later unseen native IDs can deliver even with
+older publication timestamps. Intentionally filtered IDs and successful sends
+are recorded; unsent matches remain pending. Filter changes do not replay entries
+already excluded.
+
+Each source snapshot is capped at 1000 entries and each subscription's seen-ID
+ledger at 2000. Current snapshot IDs stay pinned to prevent replay after source
+reordering. Data outside the bounded retained window cannot be recovered.
+Source requests are shared only within one bot process. X and Bahamut keep their
+existing ordered cursors. Discord delivery and database persistence are not
+transactional, so a crash or database failure after sending can cause duplicates.
 
 ### Giveaway destination
 

@@ -2,13 +2,33 @@
 
 For service commands and rollback, see [deployment](deployment.md).
 
-For X accounts and Bahamut board/thread subscriptions, target URLs, cursor
-recovery and command registration after upgrades, see
-[feed configuration](../configuration.md#bahamut-subscriptions).
+For X, Bahamut and YouTube targets and filters, see
+[feed configuration](../configuration.md#feed-subscriptions).
 
 For `/gay` archive inputs, daily score persistence and fallback behavior, see
 [daily fun readings](../fun-readings.md). No archive setup is required to use its
 basic reading; score snapshots expire automatically.
+
+## Social feeds
+
+Enable each desired platform in `social_feed.platforms`, re-register slash
+commands and restart the bot when upgrading to the private editor and new
+platforms. Existing subscriptions require no destructive data migration.
+Source requests are shared within each bot
+process, not across bots; default polling remains five minutes.
+
+Use `/feed subscribe` or the visible-channel selector in `/feed list` to edit
+filters, then Save. Repeating subscribe preserves an existing cursor. Cancel,
+10-minute expiry or restart discards an unsaved draft. Check destination access
+and bot posting permissions if Save fails.
+
+For X/Bahamut backlog recovery, follow the
+[cursor limits](../configuration.md#bahamut-subscriptions). YouTube uses
+[bounded snapshot tracking](../configuration.md#snapshot-delivery-limits): new
+subscriptions do not backfill, and downtime beyond the source/retention window
+can lose events. A crash or database failure between Discord delivery and tracking
+persistence can duplicate a notification. Filter edits do not replay excluded
+history; do not remove and recreate subscriptions to recover backlog.
 
 ## Command logs
 

@@ -144,6 +144,9 @@
         "baseUrl": "https://forum.gamer.com.tw",
         "timeoutMs": 8000,
         "maxPages": 5
+      },
+      "youtube": {
+        "timeoutMs": 8000
       }
     }
   },

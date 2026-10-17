@@ -50,6 +50,20 @@ const samplePost = buildFeedPost({
 const { platform: fakePlatform } = buildFakeFeedPlatform();
 
 describe('buildFeedMessage', () => {
+  it('bounds source display names as well as the text excerpt', async () => {
+    const message = buildFeedMessage(
+      await realTranslator(),
+      {
+        ...fakePlatform,
+        id: 'youtube',
+        subscriptionScope: 'source',
+      },
+      { ...samplePost, authorName: '*'.repeat(3000), text: 'video title' },
+    );
+    expect(message.length).toBeLessThanOrEqual(2000);
+    expect(message).toContain(fakePlatform.toEmbedUrl(samplePost));
+  });
+
   it('includes thread floor text because forum unfurls can show the opening post', async () => {
     const message = buildFeedMessage(
       await realTranslator(),
@@ -249,3 +263,23 @@ describe('prepareFeedPreview', () => {
     },
   );
 });
+
+it.each(['youtube'])(
+  'renders source-specific %s notifications with display names and bounded excerpts',
+  async (id) => {
+    const message = buildFeedMessage(
+      await realTranslator(),
+      { ...fakePlatform, id, subscriptionScope: 'source' },
+      {
+        ...samplePost,
+        authorName: 'Public channel',
+        text: 'Video title\n' + 'x'.repeat(5000),
+      },
+    );
+    expect(message).toContain('Public channel');
+    expect(message).toContain('YouTube');
+    expect(message).toContain('Video title');
+    expect(message).not.toContain('{{');
+    expect(message.length).toBeLessThanOrEqual(2000);
+  },
+);

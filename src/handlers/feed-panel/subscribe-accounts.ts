@@ -1,31 +1,11 @@
-/**
- * Runs `/feed subscribe`'s per-account work for a whole invocation and
- * reports what happened to each one.
- *
- * Failure isolation is the reason this exists as its own loop. A handle
- * that is misspelled, suspended, or momentarily unreachable must cost
- * that account only — aborting would drop the accounts behind it after
- * the ones ahead had already been written, leaving the member unable to
- * tell which. Every account therefore ends in an outcome record, the
- * unexpected ones included: a throw anywhere in one account's sequence
- * is caught here rather than at the handler boundary. Because that
- * hides the failure from `replyForError`, every caught value goes to
- * `logFailure` — isolation must not cost the operator channel. The two
- * conditions that stop the loop instead of isolating live in
- * `batch-policy.ts`, and an account never reached is reported as
- * `skipped` rather than passed over in silence.
- *
- * Sequential on purpose: a new subscription reads the platform once,
- * and firing twenty of those at once would turn one command into a
- * burst against an upstream the poller has to keep using. It holds no
- * Discord types, so the whole matrix of outcomes is exercised without
- * an interaction; rendering them is `format-outcomes.ts`'s job.
- */
-import { prepareFeedSubscription, type FeedPlatform } from '../../../infra/social-feed';
+/** Isolate target failures and preserve progress when filters are edited. */
+import type { Types } from 'mongoose';
+import { ok } from '../../core/result';
+import { prepareFeedSubscription, type FeedPlatform } from '../../infra/social-feed';
 import type {
   FeedSubscriptionFilterInput,
   FeedSubscriptionRepo,
-} from '../../../persistence/repositories';
+} from '../../persistence/repositories';
 import { isSystemicFailure } from './batch-policy';
 
 interface FeedSubscribeSuccess {
@@ -64,6 +44,7 @@ export type FeedSubscribeOutcome =
   | FeedSubscribeSkipped;
 
 interface SubscribeAccountsRequest {
+  readonly existingId?: Types.ObjectId;
   readonly platform: FeedPlatform;
   readonly repo: FeedSubscriptionRepo;
   /** Parsed handles, still to be canonicalised by the platform. */
@@ -97,18 +78,27 @@ const subscribeOne = async (
     return { account, status: 'failed', cause };
   };
   try {
-    const prepared = await prepareFeedSubscription(request.platform, raw, {
-      nowMs: Date.now(),
-      isNew: async (account) => {
-        const found = await request.repo.find(request.platform.id, account, request.channelId);
-        if (!found.ok) throw found.error;
-        return found.value === undefined;
-      },
-    });
+    const prepared =
+      request.existingId !== undefined
+        ? ok({ account: raw, cursor: undefined })
+        : await prepareFeedSubscription(request.platform, raw, {
+            nowMs: Date.now(),
+            isNew: async (account) => {
+              if (request.existingId !== undefined) return false;
+              const found = await request.repo.find(
+                request.platform.id,
+                account,
+                request.channelId,
+              );
+              if (!found.ok) throw found.error;
+              return found.value === undefined;
+            },
+          });
     if (!prepared.ok) return failed(raw, prepared.error);
     const { account, cursor } = prepared.value;
 
     const result = await request.repo.upsert({
+      ...(request.existingId === undefined ? {} : { existingId: request.existingId }),
       platform: request.platform.id,
       account,
       channel_id: request.channelId,
@@ -119,7 +109,11 @@ const subscribeOne = async (
       // survive a filter change.
       ...(cursor === undefined
         ? {}
-        : { last_seen_id: cursor.lastSeenId, last_seen_timestamp: cursor.lastSeenTimestamp }),
+        : {
+            last_seen_id: cursor.lastSeenId,
+            last_seen_timestamp: cursor.lastSeenTimestamp,
+            ...(cursor.seenIds !== undefined ? { seen_ids: cursor.seenIds } : {}),
+          }),
     });
     if (!result.ok) return failed(account, result.error);
     return { account, status: result.value.created ? 'created' : 'updated' };

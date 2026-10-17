@@ -80,7 +80,11 @@ describe('createDefaultFeedPlatformRegistry', () => {
     // so an id on it with no branch in the factory would offer users a
     // subscription nothing could ever serve. The exhaustive record makes
     // adding an id without a config block a compile error too.
-    const platforms: Record<FeedPlatformId, Record<string, never>> = { x: {}, bahamut: {} };
+    const platforms: Record<FeedPlatformId, Record<string, never>> = {
+      x: {},
+      bahamut: {},
+      youtube: {},
+    };
 
     const registry = createDefaultFeedPlatformRegistry(parseFeedPlatformsConfig({ platforms }));
 
@@ -135,5 +139,23 @@ describe('createDefaultFeedPlatformRegistry', () => {
     const post = buildFeedPost({ id: '1', url: 'https://x.com/a/status/1' });
 
     expect(registry.get('x')?.toEmbedUrl(post)).toBe('https://proxy.example.invalid/a/status/1');
+  });
+});
+
+describe('YouTube platform configuration', () => {
+  it('supplies bounded defaults and snapshot tracking for videos', () => {
+    const config = parseFeedPlatformsConfig({ platforms: { youtube: {} } });
+    expect(config).toEqual({
+      youtube: { timeoutMs: 8000 },
+    });
+    const registry = createDefaultFeedPlatformRegistry(config);
+    expect(registry.get('youtube')?.trackingMode).toBe('snapshot');
+  });
+  it.each([
+    { youtube: { timeoutMs: 30001 } },
+    { youtube: { timeoutMs: 0 } },
+    { youtube: { unknown: true } },
+  ])('rejects invalid settings in config JSON: %j', (platforms) => {
+    expect(() => parseFeedPlatformsConfig({ platforms })).toThrow(z.ZodError);
   });
 });

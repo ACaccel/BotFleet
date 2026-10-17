@@ -112,3 +112,45 @@ describe('resolveBaselineCursor', () => {
     expect(cursor).toEqual({ lastSeenId: String(NOW_MS), lastSeenTimestamp: 1_700_000_500 });
   });
 });
+
+describe('resolveBaselineCursor — snapshots', () => {
+  const platform = {
+    ...buildFakeFeedPlatform().platform,
+    trackingMode: 'snapshot' as const,
+    compareIds: (): number => {
+      throw new Error('Opaque ID comparison');
+    },
+    baselineIdAt: (): string => {
+      throw new Error('Opaque clock floor');
+    },
+  };
+  it('seeds all distinct IDs and uses timestamp plus stable ID for displayed progress', () => {
+    const posts = [
+      buildFeedPost({ id: 'z', createdTimestamp: 1 }),
+      buildFeedPost({ id: 'a', createdTimestamp: 2 }),
+      buildFeedPost({ id: 'b', createdTimestamp: 2 }),
+      buildFeedPost({ id: 'a', createdTimestamp: 2 }),
+    ];
+    expect(resolveBaselineCursor(platform, posts, NOW_MS)).toEqual({
+      lastSeenId: 'b',
+      lastSeenTimestamp: 2,
+      seenIds: ['z', 'a', 'b'],
+    });
+  });
+  it('distinguishes a seeded empty window from an absent ledger', () => {
+    expect(resolveBaselineCursor(platform, [], NOW_MS)).toEqual({
+      lastSeenId: `snapshot:${NOW_MS}`,
+      lastSeenTimestamp: Math.floor(NOW_MS / 1000),
+      seenIds: [],
+    });
+  });
+  it('rejects an oversized source instead of silently discarding IDs', () => {
+    expect(() =>
+      resolveBaselineCursor(
+        platform,
+        Array.from({ length: 1001 }, (_, i) => buildFeedPost({ id: String(i) })),
+        NOW_MS,
+      ),
+    ).toThrow('bounded source window');
+  });
+});

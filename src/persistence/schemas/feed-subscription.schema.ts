@@ -33,6 +33,9 @@ export const FEED_MEDIA_FILTERS = ['media_only', 'photo_only', 'video_only', 'an
 
 export type FeedMediaFilter = (typeof FEED_MEDIA_FILTERS)[number];
 
+/** Twice the largest snapshot window, leaving room for recently absent IDs. */
+export const MAX_FEED_SEEN_IDS = 2000;
+export const MAX_FEED_SEEN_ID_LENGTH = 1024;
 /** Filter applied when a subscription does not state one. */
 export const DEFAULT_FEED_MEDIA_FILTER = 'media_only' as const satisfies FeedMediaFilter;
 
@@ -74,6 +77,16 @@ export const feedSubscriptionSchema = new Schema({
   filter: { type: feedSubscriptionFilterSchema, required: true, default: () => ({}) },
   /** Newest processed record; cursor sources also include deliberately excluded records. */
   last_seen_id: { type: String, required: false },
+  /** Undefined means unseeded; an empty array is an initialized snapshot ledger. */
+  seen_ids: {
+    type: [{ type: String, required: true, maxlength: MAX_FEED_SEEN_ID_LENGTH }],
+    default: undefined,
+    validate: {
+      validator: (ids: string[] | null | undefined): boolean =>
+        ids === null || ids === undefined || ids.length <= MAX_FEED_SEEN_IDS,
+      message: 'Snapshot ledger exceeds its bounded capacity',
+    },
+  },
   /** Timestamp of `last_seen_id`, unix **seconds** — the upstream unit. */
   last_seen_timestamp: { type: Number, required: false },
 });
@@ -106,12 +119,13 @@ export interface FeedSubscriptionFilter {
  */
 export type FeedSubscriptionDoc = Omit<
   InferredFeedSubscription,
-  'filter' | 'last_seen_id' | 'last_seen_timestamp'
+  'filter' | 'last_seen_id' | 'last_seen_timestamp' | 'seen_ids'
 > & {
   readonly _id: Types.ObjectId;
   filter: FeedSubscriptionFilter;
   last_seen_id?: string;
   last_seen_timestamp?: number;
+  seen_ids?: string[];
 };
 
 /**
@@ -126,10 +140,11 @@ export type FeedSubscriptionDoc = Omit<
  */
 export type StoredFeedSubscription = Omit<
   InferredFeedSubscription,
-  'filter' | 'last_seen_id' | 'last_seen_timestamp'
+  'filter' | 'last_seen_id' | 'last_seen_timestamp' | 'seen_ids'
 > & {
   readonly _id: Types.ObjectId;
   filter?: { media?: string | null; keyword?: string | null } | null;
   last_seen_id?: string | null;
   last_seen_timestamp?: number | null;
+  seen_ids?: unknown;
 };

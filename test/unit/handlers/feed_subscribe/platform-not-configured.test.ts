@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DomainError } from '../../../../src/core/errors';
-import { platformNotConfiguredError } from '../../../../src/handlers/commands/feed_subscribe/platform-not-configured';
+import { platformNotConfiguredError } from '../../../../src/handlers/feed-panel/platform-not-configured';
 import { FEED_PLATFORM_DISPLAY_NAMES } from '../../../../src/infra/social-feed';
 
 describe('platformNotConfiguredError', () => {
