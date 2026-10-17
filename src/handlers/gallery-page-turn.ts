@@ -2,10 +2,11 @@
  * The page turn the gallery buttons and the jump form share, plus the
  * checks both run first.
  *
- * Any member may turn a reader's page. The interaction is acknowledged
- * before anything slow, then the turn runs under the reader's per-message
- * lock so two members pressing at once edit the message one after the
- * other. A page that cannot be loaded leaves the message as it was and
+ * Any member may turn a reader's page. A page already staged is shown in
+ * the interaction's single response; otherwise the interaction is
+ * acknowledged before anything slow. Either way the turn runs under the
+ * reader's per-message lock so two members pressing at once edit the
+ * message one after the other. A page that cannot be loaded leaves the message as it was and
  * tells only the presser.
  */
 import {
@@ -54,9 +55,25 @@ export const turnGalleryPage = async (
   page: number,
   t: BoundTranslate,
 ): Promise<void> => {
+  const lockKey = interaction.message.id;
+  // A staged page needs no network wait, so the turn is answered in one
+  // response instead of an acknowledgement plus an edit. Behind another
+  // turn it could wait past the acknowledgement window, so only when idle.
+  const staged = reader.isBusy(lockKey)
+    ? undefined
+    : reader.stagedPage(target.source, target.id, page);
+  if (staged?.status === 'ok') {
+    await reader.serialize(lockKey, () =>
+      interaction.update({
+        ...buildGalleryMessage(staged.gallery, staged.page, staged.media, t),
+        attachments: [],
+      }),
+    );
+    return;
+  }
   // A cold page means a download, which can outlast the acknowledgement window.
   await interaction.deferUpdate();
-  await reader.serialize(interaction.message.id, async () => {
+  await reader.serialize(lockKey, async () => {
     const outcome = await reader.loadPage(target.source, target.id, page);
     if (outcome.status !== 'ok') {
       await interaction.followUp({

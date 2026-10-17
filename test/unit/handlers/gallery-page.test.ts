@@ -1,8 +1,8 @@
 /**
  * Unit tests for the `gallery_page` button and jump-form handlers: the
  * inactive-reader and age-restriction refusals, opening the jump form, a
- * page turn that replaces the previous upload, a page that fails to load,
- * and jump-form validation.
+ * page turn that replaces the previous upload, the single-response turn to
+ * a staged page, a page that fails to load, and jump-form validation.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { MessageFlags, type Message } from 'discord.js';
@@ -33,11 +33,22 @@ const loaded = (page: number): GalleryPageOutcome => ({
   media: { kind: 'file', image: { data: Buffer.from([1]), extension: 'webp' } },
 });
 
-const fakeReader = (outcome: GalleryPageOutcome) => ({
+const fakeReader = (
+  outcome: GalleryPageOutcome,
+  opts: { staged?: GalleryPageOutcome; busy?: boolean } = {},
+) => ({
   supports: (source: string) => source === 'nhentai',
+  isBusy: vi.fn(() => opts.busy ?? false),
+  stagedPage: vi.fn(() => opts.staged),
   loadPage: vi.fn(async () => outcome),
   serialize: vi.fn(async <T>(_key: string, task: () => Promise<T>) => task()),
 });
+const stagedOutcome: GalleryPageOutcome = {
+  status: 'ok',
+  gallery,
+  page: 2,
+  media: { kind: 'url', url: 'https://cdn.discordapp.com/attachments/1/2/p.webp' },
+};
 
 const channel = (nsfw: boolean) => ({ id: 'c-1', isThread: () => false, nsfw });
 const message = { id: 'm-1' } as unknown as Message;
@@ -92,13 +103,37 @@ describe('gallery_page button handler', () => {
     expect(edit.files).toHaveLength(1);
   });
 
+  it('answers a staged page in one update under the lock, without deferring', async () => {
+    const reader = fakeReader(loaded(2), { staged: stagedOutcome });
+    const { sink } = await press('gallery_page|nhentai|1|2|n', { reader });
+    expect(reader.stagedPage).toHaveBeenCalledWith('nhentai', '1', 2);
+    expect(reader.serialize).toHaveBeenCalledWith('m-1', expect.any(Function));
+    expect(reader.loadPage).not.toHaveBeenCalled();
+    expect(sink.deferUpdates).toHaveLength(0);
+    expect(sink.editReplies).toHaveLength(0);
+    const update = sink.updates[0] as {
+      attachments: unknown[];
+      files: unknown[];
+      embeds: Array<{ toJSON(): { image?: { url: string } } }>;
+    };
+    expect(update.files).toEqual([]);
+    expect(update.attachments).toEqual([]);
+    expect(update.embeds[0]?.toJSON().image?.url).toBe(
+      'https://cdn.discordapp.com/attachments/1/2/p.webp',
+    );
+  });
+
+  it('defers first when another turn holds the lock, even for a staged page', async () => {
+    const reader = fakeReader(stagedOutcome, { staged: stagedOutcome, busy: true });
+    const { sink } = await press('gallery_page|nhentai|1|2|n', { reader });
+    expect(reader.stagedPage).not.toHaveBeenCalled();
+    expect(sink.deferUpdates).toHaveLength(1);
+    expect(sink.updates).toHaveLength(0);
+    expect(sink.editReplies).toHaveLength(1);
+  });
+
   it('shows a staged page by URL without uploading and drops the old attachment', async () => {
-    const reader = fakeReader({
-      status: 'ok',
-      gallery,
-      page: 2,
-      media: { kind: 'url', url: 'https://cdn.discordapp.com/attachments/1/2/p.webp' },
-    });
+    const reader = fakeReader(stagedOutcome);
     const { sink } = await press('gallery_page|nhentai|1|2|n', { reader });
     const edit = sink.editReplies[0] as {
       attachments: unknown[];

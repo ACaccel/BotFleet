@@ -305,8 +305,10 @@ because source image URLs carry expiring signatures. Uploading during a turn
 dominates its latency, so with a staging channel the reader uploads prefetched
 pages ahead through a `GalleryStagingPort`, implemented by
 [`DiscordGalleryStaging`](../src/infra/discord/gallery-staging.ts), warms
-Discord's media proxy for each, and turns to a staged page by swapping the embed
-URL; unstaged pages are attached to the edit. The adapter validates the channel
+Discord's media proxy for each in the background, and turns to a staged page by
+swapping the embed URL in the interaction's single response (deferring first
+only when another turn holds the message lock); unstaged pages are attached to
+the edit. The adapter validates the channel
 at use time and deletes its own messages after a day.
 
 ## Errors, logs and localization

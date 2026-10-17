@@ -10,7 +10,8 @@
  *
  * After an upload the bot requests each page once through Discord's media
  * proxy, the URL an embed displays, so the first reader to reach the page
- * does not wait for the proxy to fetch it.
+ * does not wait for the proxy to fetch it. Warming runs in the background:
+ * an unwarmed URL is still faster to show than uploading the page again.
  */
 import {
   AttachmentBuilder,
@@ -122,15 +123,13 @@ export class DiscordGalleryStaging {
           allowedMentions: { parse: [] },
         });
         const expiryCap = sentAt + this.options.retentionMs;
-        const warming: Array<Promise<void>> = [];
         for (const attachment of message.attachments.values()) {
           staged.set(attachment.name, {
             url: attachment.url,
             expiresAt: Math.min(signedExpiry(attachment.url) ?? expiryCap, expiryCap),
           });
-          warming.push(this.warm(attachment.proxyURL).catch(() => undefined));
+          void this.warm(attachment.proxyURL).catch(() => undefined);
         }
-        await Promise.all(warming);
       } catch (error) {
         // Re-check the channel next time: it may have been deleted or its permissions changed.
         this.channel = undefined;

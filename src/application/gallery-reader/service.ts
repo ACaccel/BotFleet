@@ -14,8 +14,10 @@
  * Discord ahead of time, so turning to one only swaps the embed's image URL
  * instead of uploading during the turn. Staging runs in batches: once any
  * page in the prefetch window lacks a usable upload, the window is doubled
- * and every missing page in it is uploaded, nearest first, a few pages per
- * message. A page with no usable
+ * and every missing page in it is uploaded, nearest first, in messages that
+ * grow from one page. A staged page whose gallery is cached is served
+ * synchronously through {@link GalleryReaderService.stagedPage}, so the
+ * caller can answer the turn in a single response. A page with no usable
  * upload is returned as bytes for the caller to attach directly.
  *
  * Page URLs can carry expiring signatures. When every candidate URL of a
@@ -44,8 +46,12 @@ const MAX_QUEUED_PREFETCHES = 48;
 const MAX_STAGED_ENTRIES = 4096;
 /** A staged URL is reused only while it stays valid at least this long. */
 const STAGED_URL_MARGIN_MS = 60 * 60 * 1000;
-/** Pages per staging upload: small enough that the next page is ready early. */
-const STAGE_CHUNK_PAGES = 3;
+/**
+ * Largest staging upload. Uploads start at one page and double up to this,
+ * so the nearest pages are ready early and a long window needs few messages
+ * under the channel's send rate limit.
+ */
+const STAGE_MAX_CHUNK_PAGES = 8;
 
 /** A page already uploaded to Discord; `expiresAt` is when its URL stops working. */
 export interface StagedPage {
@@ -142,6 +148,21 @@ export class GalleryReaderService {
     this.metadata.set(key, { gallery, expiresAt: this.now() + METADATA_TTL_MS });
   }
 
+  /**
+   * The page at once, without any network wait, when its gallery is cached
+   * and the page already staged; `undefined` otherwise. Schedules its
+   * neighbours like {@link loadPage}.
+   */
+  public stagedPage(
+    source: GallerySourceName,
+    id: string,
+    page: number,
+  ): GalleryPageOutcome | undefined {
+    const cached = this.metadata.get(galleryKey(source, id));
+    if (cached === undefined || cached.expiresAt <= this.now()) return undefined;
+    return this.servedStaged(cached.gallery, this.clampIndex(cached.gallery, page));
+  }
+
   /** Load one page (clamped to the gallery) and schedule its neighbours. */
   public async loadPage(
     source: GallerySourceName,
@@ -151,11 +172,8 @@ export class GalleryReaderService {
     let gallery = await this.lookup(source, id);
     if (typeof gallery === 'string') return { status: gallery };
     let index = this.clampIndex(gallery, page);
-    const staged = this.stagedUrl(gallery, index);
-    if (staged !== undefined) {
-      this.prefetchAround(gallery, index);
-      return { status: 'ok', gallery, page: index + 1, media: { kind: 'url', url: staged } };
-    }
+    const staged = this.servedStaged(gallery, index);
+    if (staged !== undefined) return staged;
     let image = await this.fetchImage(gallery, index, 'foreground');
     if (image === 'gone') {
       this.forget(gallery);
@@ -167,6 +185,11 @@ export class GalleryReaderService {
     if (image === undefined || image === 'gone') return { status: 'unavailable' };
     this.prefetchAround(gallery, index);
     return { status: 'ok', gallery, page: index + 1, media: { kind: 'file', image } };
+  }
+
+  /** Whether a task queued under `key` is still running or waiting. */
+  public isBusy(key: string): boolean {
+    return this.locks.has(key);
   }
 
   /** Run `task` after every earlier task queued under `key` has settled. */
@@ -182,6 +205,13 @@ export class GalleryReaderService {
       if (this.locks.get(key) === settled) this.locks.delete(key);
     });
     return run;
+  }
+
+  private servedStaged(gallery: Gallery, index: number): GalleryPageOutcome | undefined {
+    const url = this.stagedUrl(gallery, index);
+    if (url === undefined) return undefined;
+    this.prefetchAround(gallery, index);
+    return { status: 'ok', gallery, page: index + 1, media: { kind: 'url', url } };
   }
 
   private clampIndex(gallery: Gallery, page: number): number {
@@ -310,8 +340,8 @@ export class GalleryReaderService {
   }
 
   /**
-   * Download every unstaged page in `targets` and upload them in order, a
-   * few per message, so the nearest pages become usable before the whole
+   * Download every unstaged page in `targets` and upload them in order, in
+   * growing batches, so the nearest pages become usable before the whole
    * window has downloaded. All downloads start at once; later chunks keep
    * downloading while earlier ones upload.
    */
@@ -327,12 +357,12 @@ export class GalleryReaderService {
     const downloads = pending.map((target) =>
       this.fetchImage(gallery, target, 'prefetch').catch(() => undefined),
     );
-    // The next page goes up alone so it is ready soonest; the rest in small batches.
-    for (let offset = 0; offset < pending.length; ) {
-      const size = offset === 0 ? 1 : STAGE_CHUNK_PAGES;
+    // The next page goes up alone so it is ready soonest; later batches grow.
+    for (let offset = 0, size = 1; offset < pending.length; ) {
       const chunk = pending.slice(offset, offset + size);
       const chunkDownloads = downloads.slice(offset, offset + size);
       offset += size;
+      size = Math.min(size * 2, STAGE_MAX_CHUNK_PAGES);
       try {
         const images = await Promise.all(chunkDownloads);
         const ready = chunk.flatMap((target, position) => {

@@ -114,6 +114,14 @@ describe('DiscordGalleryStaging.stage', () => {
     expect(result[0]?.expiresAt).toBe(NOW + DAY);
   });
 
+  it('returns uploaded URLs without waiting for the proxy to warm', async () => {
+    const { staging, warm } = build();
+    warm.mockImplementation(() => new Promise<undefined>(() => undefined));
+    const result = await staging.stage([file('p0.webp')]);
+    expect(warm).toHaveBeenCalledTimes(1);
+    expect(result[0]?.url).toBeDefined();
+  });
+
   it('keeps a shorter signed expiry and splits by size', async () => {
     const ex = Math.floor((NOW + 60 * 60 * 1000) / 1000);
     const { staging, send } = build({ send: async (payload) => sentMessage(payload, ex) });

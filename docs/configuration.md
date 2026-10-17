@@ -283,12 +283,14 @@ lost on restart. Image hosts named by the sites pass the same HTTPS, DNS and
 redirect screening as video downloads, and at most four downloads run at once.
 
 With `stagingChannelId` set, prefetched pages (up to twice `prefetchPages`
-ahead) are also uploaded to that channel, the next page alone and the rest a
-few per message, and requested once through Discord's media proxy. A turn to a
-staged page then only changes the embed's image URL; other pages are attached
-to the edit. In a measurement on the deployment host, a URL turn took about
-0.3–0.5 seconds against 1–1.9 seconds for an attached one. Turns made within a
-few seconds of the preview appearing may still attach.
+ahead) are also uploaded to that channel, the next page alone and later pages
+in batches that double up to eight, and requested once through Discord's media
+proxy in the background. A turn to a staged page then only changes the embed's
+image URL, answered in a single response when no other turn on that message is
+running; other pages are attached to the edit. In a measurement on the
+deployment host, a URL turn took about 0.3–0.5 seconds against 1–1.9 seconds
+for an attached one. Turns made within a few seconds of the preview appearing
+may still attach.
 
 The staging channel must be age-restricted and let the bot view it, send
 messages, attach files and read history; Manage Messages enables bulk cleanup.

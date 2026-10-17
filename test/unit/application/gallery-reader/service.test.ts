@@ -249,10 +249,13 @@ describe('GalleryReaderService', () => {
       order.push('other');
     });
     await other;
+    expect(service.isBusy('m')).toBe(true);
     release();
     await expect(first).rejects.toThrow('boom');
     expect(await second).toBe(2);
     expect(order).toEqual(['other', 'first', 'second']);
+    await flush();
+    expect(service.isBusy('m')).toBe(false);
   });
 });
 
@@ -292,8 +295,8 @@ describe('GalleryReaderService staging', () => {
     await flush();
     expect(staging.calls).toEqual([
       ['nhentai-1-2.webp'],
-      ['nhentai-1-3.webp', 'nhentai-1-4.webp', 'nhentai-1-5.webp'],
-      ['nhentai-1-1.webp'],
+      ['nhentai-1-3.webp', 'nhentai-1-4.webp'],
+      ['nhentai-1-5.webp', 'nhentai-1-1.webp'],
     ]);
 
     const second = await service.loadPage('nhentai', '1', 2);
@@ -310,6 +313,39 @@ describe('GalleryReaderService staging', () => {
       ['nhentai-1-6.webp'],
       ['nhentai-1-7.webp', 'nhentai-1-8.webp'],
     ]);
+  });
+
+  it('grows upload batches from one page up to eight', async () => {
+    const staging = stagingFake();
+    const service = new GalleryReaderService({
+      sources: [sourceReturning(gallery(30))],
+      http: { getImage: vi.fn(okImage) },
+      prefetchPages: 10,
+      cacheMaxBytes: 1024,
+      maxImageBytes: 64,
+      imageTimeoutMs: 1000,
+      metadataTimeoutMs: 1000,
+      staging,
+      now: () => 0,
+    });
+    await service.loadPage('nhentai', '1', 1);
+    await flush();
+    expect(staging.calls.map((call) => call.length)).toEqual([1, 2, 4, 8, 6]);
+  });
+
+  it('serves a staged page synchronously only once its gallery is cached', async () => {
+    const staging = stagingFake();
+    const service = stagedReader(staging);
+    expect(service.stagedPage('nhentai', '1', 2)).toBeUndefined();
+    await service.loadPage('nhentai', '1', 1);
+    await flush();
+    expect(service.stagedPage('nhentai', '1', 2)).toEqual({
+      status: 'ok',
+      gallery: expect.objectContaining({ id: '1' }),
+      page: 2,
+      media: { kind: 'url', url: 'https://cdn.discordapp.com/nhentai-1-2.webp' },
+    });
+    expect(service.stagedPage('nhentai', '1', 9)).toBeUndefined();
   });
 
   it('does not start another upload while the window is still being staged', async () => {
